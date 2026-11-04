@@ -446,8 +446,10 @@ macOS arm64 qualification (B1-M1, rwc-01, 2026-11-04, published `88a6729`):
   mock, not the client. A BSD `accept()` inherits the listener's
   non-blocking flag, so the mock read `WouldBlock` as end of stream and
   dropped the request. With accepted sockets set blocking
-  (`I0f6b2d8a4c1e93a7b5d4`), it passes 40 of 40 runs, and the macOS
-  workspace passes 190 with 1 ignored.
+  (`I0f6b2d8a4c1e93a7b5d4`), it passes 40 of 40 runs. The full macOS
+  workspace at local master `a93c13c` passes 190 with 1 ignored. That tree
+  includes unpublished peer drafts, such as the sign-in tests, so the count
+  differs from the 181 above.
 - **Serve:** `serve` on a scratch loopback port reports commit `88a6729`
   and a non-null `web_id`, served from the hydrated embedded tree.
 - **UI:** `html/e2e/daemon-flow.ts` passes 17 checks with no unexpected
@@ -479,7 +481,7 @@ of `{project, report}` and exits 1 if a report fails. Directory and
 `.ap-workbook` targets work. URL targets use Remote with the same SDK calls,
 pairing-key authentication and per-investigation stream cursors.
 
-B1-M1 (**agent-chosen, confirmed by the operator 2026-11-04; macOS check still owed**): macOS packaging relinks from
+B1-M1 (**agent-chosen, confirmed by the operator 2026-11-04; macOS check passed the same day**): macOS packaging relinks from
 the source checkout with `-sectcreate`, preserving the compiled release guard
 and commit stamp; `AUTOPHYS_PROJECT_ROOT` can select that checkout. This keeps
 the native linker's signature valid. The alternative is an explicit build-time
@@ -705,8 +707,8 @@ message was rewritten: the closed-loop commit got
 
 The fourth publication, `7ffea22..88a6729`, carried that record and the
 Rust Remote HTTP transport (`I287f159ad3181d7b0a76`), sunk directly onto
-the base with patch-ids unchanged. Seventeen peer drafts stay local above
-it, including both sign-in commits. An independent Codex review returned
+the base with patch-ids unchanged. Twenty-two peer drafts stayed local above
+it at the push, including both sign-in commits. An independent Codex review returned
 ready. Its one note: the `attach_data` rustdoc should say the single
 transaction is Local-only. At the prefix: Rust 185 passed / 2 ignored,
 Python 606 passed / 6 skipped, html 70 passed. Receipt:
