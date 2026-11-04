@@ -214,19 +214,10 @@ fn axis(lo: f64, hi: f64, value: f64, points: usize) -> Result<Vec<f64>> {
     if let Some(i) = vals.iter().position(|v| (v - value).abs() <= tol) {
         vals[i] = value;
     } else {
+        // Off the grid, the proposed value is inserted, so the axis has
+        // `points + 1` values (E-1b: 12-13 with the default grid), as Python.
         vals.push(value);
         vals.sort_by(f64::total_cmp);
-        if vals.len() > OUTLOOK_POINTS {
-            let i = (1..vals.len() - 1)
-                .filter(|i| vals[*i] != value)
-                .min_by(|a, b| {
-                    (vals[*a] - value)
-                        .abs()
-                        .total_cmp(&(vals[*b] - value).abs())
-                })
-                .unwrap();
-            vals.remove(i);
-        }
     }
     Ok(vals)
 }
@@ -367,12 +358,16 @@ pub fn outlook_axes(
 mod tests {
     use super::*;
     #[test]
-    fn axis_cap() {
+    fn axis_inserts_an_off_grid_value() {
+        // 0.5 is not one of the 12 evenly spaced points over [0, 1].
         let a = axis(0., 1., 0.5, 12).unwrap();
-        assert_eq!(a.len(), 12);
+        assert_eq!(a.len(), 13);
         assert!(a.contains(&0.5));
         assert_eq!(a[0], 0.);
         assert_eq!(*a.last().unwrap(), 1.);
+        assert!(a.windows(2).all(|w| w[0] < w[1]));
+        // An on-grid value replaces its grid point.
+        assert_eq!(axis(0., 1., 1. / 11., 12).unwrap().len(), 12);
     }
     #[test]
     fn outlook_limits_preflight_and_shrink() {

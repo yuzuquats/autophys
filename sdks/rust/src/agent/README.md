@@ -53,12 +53,9 @@ private file/environment credentials, response schemas, token budgets and
 bounded rate-limit retries. Mock HTTP tests cover requests, retry exhaustion,
 billing errors and response parsing without an external request.
 
-One intentional contract difference remains: Python inserts the proposed value
-into an outlook axis and may produce 13 values with the default 12-point grid.
-The requested Rust contract caps each axis at 12; for an off-grid proposal it
-replaces the nearest interior grid value while preserving both endpoints and
-the proposal. Explicit axes retain their supplied order. This is a settings-grid
-shape difference, not a fitted or ranked decision mismatch.
+Outlook axes match Python (E-1b): 12 evenly spaced values, with an off-grid
+proposed value inserted, so an axis has 12 or 13 values. Explicit axes retain
+their supplied order.
 
 Rust types are available in their named public modules. Phase-1's root `Project`
 and `Investigation` remain the record types; executable types are
