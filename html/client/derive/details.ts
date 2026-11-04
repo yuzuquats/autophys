@@ -272,7 +272,7 @@ function proposalDetails(s: State, project: Project, inv: Investigation, p: Prop
   const invalid = drafts.some(Boolean);
   return {
     icon: "proposal", title: spec.label, cardName: true, status, sections,
-    footnote: `${simulatorLabel(c)} · seed ${Number.isFinite(inv.seed) ? inv.seed : "not recorded"} · ranked at Fit #${p.atFit}`,
+    footnote: `${simulatorLabel(c)} · seed ${Number.isFinite(inv.seed) ? inv.seed : "not recorded"} · config v${c.version} · ${shortHash(c.hash)} · ranked at Fit #${p.atFit}`,
     decision: p.status === "proposed" ? [{ name: "approve", label: "Approve", variant: "primary", disabled: invalid, title: invalid ? "Fix the marked field first" : undefined }, { name: "reject", label: "Reject" }] : undefined,
     actions: p.status === "approved" && !delivered(inv, p) && allows(s, "unapproved") ? [{ name: "withdraw", label: "Withdraw approval" }]
       : p.status === "rejected" && allows(s, "restored") ? [{ name: "restore", label: "Restore proposal" }] : undefined,

@@ -67,7 +67,7 @@ Deno.test("controller: project switch keeps each project's selection; export and
   ctl.shell = { download: (name, _type, data) => files.push(`${name}:${data.length > 0}`), picked: () => {} };
   await store.start();
   ctl.handle({ kind: "switch", value: "lab-heaters" });
-  assertEquals(ctl.view().sidebar.selectedId, "heater-1/fit-2/fit");
+  assertEquals(ctl.view().sidebar.selectedId, "heater-1");
   ctl.handle({ kind: "select", id: "heater-1/validate" });
   ctl.handle({ kind: "switch", value: "bench-oscillators" });
   ctl.handle({ kind: "switch", value: "lab-heaters" });

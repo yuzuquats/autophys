@@ -3,6 +3,7 @@ import { fixtures, replay } from "../fixtures/source.ts";
 import { initialSelection, reduce } from "../controller.ts";
 import { investigationRounds, investigationAnchor } from "./rounds.ts";
 import { parseSel } from "./shared.ts";
+import { expectedMeasurement } from "../proposal.ts";
 import { mainModel } from "./main.ts";
 import { detailsModel } from "./details.ts";
 
@@ -66,4 +67,17 @@ Deno.test("investigation decisions: edits and approval work from investigation, 
     assert(effect.kind === "post");
     assertEquals(effect.body, { event: "edited", by: "operator", at: "now", fields: { amplitude: 1.5 } });
   }
+});
+
+Deno.test("approved experiment addresses: awaiting data stays on the investigation with a real target", () => {
+  const workspace = structuredClone(ws), prj = workspace.projects[0], inv = prj.investigations[0], proposal = inv.proposals[0];
+  proposal.status = "approved"; proposal.delivered = false; inv.state = "awaiting-data";
+  const address = `${inv.id}/data/${expectedMeasurement(inv, proposal)}`;
+  const selection = parseSel(prj, address);
+  assert(selection?.kind === "awaiting");
+  const model = mainModel({ ...state(address), ws: workspace });
+  assert(model.body.kind === "investigation");
+  const anchor = model.body.anchor;
+  assertEquals(anchor, investigationAnchor(selection));
+  assert(model.body.rounds[0].rows.flat().some(c => c.id === anchor && c.heading === "Awaiting data"));
 });
