@@ -6,7 +6,7 @@
 import type * as Types from "./types.ts";
 import { cookbookClasses, mountHost, placeholderDeck as placeholder, type ShellOptions } from "./shell.ts";
 import type * as DeckTypes from "./deck-data.ts";
-import { shellSteps as steps, type TutorialStep } from "./tutorial.ts";
+import { shellSteps as steps, type TutorialSource, type TutorialStep, type TutorialTarget } from "./tutorial.ts";
 import {
   describeHealth as describe,
   type Health,
@@ -75,6 +75,8 @@ export namespace Cookbook {
 
   export namespace Tutorial {
     export type Step = TutorialStep;
+    export type Target = TutorialTarget;
+    export type Source = TutorialSource;
     /** Steps that point only at the shell's own pieces (the default). */
     export const shellSteps = steps;
   }

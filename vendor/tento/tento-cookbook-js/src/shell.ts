@@ -7,7 +7,7 @@ import type { Stage } from "./model.ts";
 import { createPanels } from "./panels.ts";
 import { describeHealth, readHealthz, type StatusLine } from "./status.ts";
 import { cookbookCss } from "./styles.ts";
-import { createTutorial, shellSteps, type TutorialStep } from "./tutorial.ts";
+import { createTutorial, shellSteps, type TutorialSource } from "./tutorial.ts";
 import type {
   CookbookApp,
   CookbookClasses,
@@ -18,8 +18,8 @@ import type {
 export type ShellOptions = {
   /** The pitch deck for an app; default: placeholderDeck(app.title). */
   deck?: (app: CookbookApp) => readonly DeckSlide[];
-  /** Tutorial steps; default: shellSteps, which point only at shell pieces. */
-  tutorial?: readonly TutorialStep[];
+  /** Tutorial steps, or a tour built when it starts; default: shellSteps, which point only at shell pieces. */
+  tutorial?: TutorialSource;
   /** Path prefix of the open app (default /app). The server must answer it with index.html. */
   appPath?: string;
   /** Sidebar status line; default reads GET /api/healthz. null hides it. */
@@ -321,6 +321,7 @@ export function mountHost(options: ShellOptions = {}): CookbookHost {
         },
         setCrumb: (text) => header.setCrumb(text),
         reflow: (change) => panels.reflow(change),
+        startTour: () => drawer.tour(),
       };
       let slotsNow = panels.freshSlots();
       const tutorial = createTutorial(options.tutorial ?? shellSteps);
