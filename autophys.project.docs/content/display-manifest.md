@@ -509,3 +509,10 @@ Still open in step 4:
   sine proposal label in `shared.ts`, and the product-word guard test;
 - the Fit and proposal views reading `preview` and the renamed views;
 - the Details panel still lists configuration in its older flat form.
+
+Published 2026-11-04 to origin/master (533cc58..f3ef7d4) with the
+Configuration card work before it, after two rounds of independent agent
+review (Codex; round 1 found two issues, fixed in
+Ibfc2caff76a476c33d824d255be4cedbab998cf3; round 2 ready). Each published
+commit passed `deno test --allow-read html/` in a clean export (75 at the
+top). Not an operator verdict.
