@@ -67,5 +67,41 @@ navigation contract. Build/serve under ~/.cache/autophys on an unused 47950–47
 loopback port; stop the server afterward. Evidence and receipts remain at
 `fleet/evidence/autophys/investigation-page-20261104/implementation/`.
 
-Implementation and verification are in progress. Task board was not used because
-this task explicitly forbids board and other-thread messaging.
+## Verified implementation — 2026-11-04
+
+Implemented on rwc-dev-01 master. Source commits: `6b2030f` (composition and
+legacy anchors), `0b7f331` (test narrowing), `969f56e` (full-width cards, overview
+entry and tour assertions), `2c7f9e8` (verdict/provenance and awaiting-data test).
+The separate cover/decision record is `8650f1e`.
+
+- Clean `git archive 2c7f9e8` export: **106 passed, 0 failed** for
+  `deno test --allow-read html/`; `deno check routes/index.root.ts` passes.
+- Scratch build of that export: **25 browser checks**, no console/page errors;
+  awaiting approval and validated screenshots at **1440×1000** and **1024×1000**.
+- Guided-tour acceptance: **139 checks, 20 captures**, desktop **1280×800** and
+  mobile **390×844**, no browser console/page errors. The tour still selects all
+  the original child ids and restores selection, expansion, panels, scroll and
+  source on Esc, Close and Done. Only the Main breadcrumb assertions were changed
+  to assert the unified investigation and visible section anchors.
+- Awaiting experiment data has a real page target after approval. Controller tests
+  verify edits and approval from root, fit and data selections.
+
+Screenshots are `implementation/awaiting-{1440,1024}.png`,
+`implementation/validated-{1440,1024}.png`, and `implementation/proposal-1440.png`
+under the evidence directory above. Logs: `clean-tests-qualified.log`,
+`clean-check-qualified.log`, `browser.json`, and `tour.log`.
+The throwaway loopback server on **47987** has been stopped. No deployment or push.
+
+Existing staged entries for `html/client/derive/{main,details,shared}.ts` were
+preserved because they differed from the old HEAD. They must be reconciled before
+using the shared index for another commit; no unmerged working-tree entries exist.
+All workstream commits were assembled from scoped blobs through private indexes.
+Other sessions' work and the sidebar tree were preserved.
+
+Differences from the mock: measurement plots start collapsed in Data cards; chart
+pairs stack when the Main pane is narrow; extra recorded envelope/frequency/edge
+views remain available on the same page. Illustrative round times and per-round
+simulation totals are omitted. All displayed uncertainties and total budgets come
+from the records/fixture calculations. No implementation work remains in this scope.
+Task board was not used because the task explicitly forbids board and other-thread
+messaging.
