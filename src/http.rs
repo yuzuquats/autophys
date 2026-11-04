@@ -21,6 +21,7 @@
 //! and `/stream` use a collection cursor, `prj_…:<gseq>,prj_…:<gseq>`.
 
 pub mod auth;
+mod display;
 mod sse;
 
 use std::collections::BTreeMap;
@@ -153,6 +154,7 @@ pub fn scope(api: Api) -> actix_web::Scope {
             "/projects/{pid}/config_versions/{version}",
             web::put().to(put_config_version),
         )
+        .route("/projects/{pid}/display", web::put().to(display::put))
         .route("/projects/{pid}/blobs/{sha256}", web::put().to(put_blob))
         .route("/projects/{pid}/blobs/{sha256}", web::get().to(get_blob))
         .route("/investigations", web::get().to(investigations))
@@ -362,7 +364,10 @@ async fn workspace(
                 json!({"project_id": s.project.id, "version": c.version, "config": c.config}),
             );
         }
-        projects.push(s.project);
+        let mut project = serde_json::to_value(&s.project)
+            .map_err(|e| ApiError::Internal(format!("project JSON: {e}")))?;
+        project["display"] = s.display.map(|d| d.body).unwrap_or(Value::Null);
+        projects.push(project);
         invs.extend(s.investigations);
         props.extend(s.proposals);
         records.extend(s.records);

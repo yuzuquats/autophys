@@ -11,8 +11,9 @@ reproduce exactly, are:
 - `sdks/rust/src/models/fixtures/display/thermal_rc.json`
   (`e19385e061d7fa85fd0fffc66a21c549976d337d9098606c7105ffd5d0442e11`).
 
-`python generate.py --display` regenerates them. Steps 2–4 (daemon, Rust SDK,
-UI) can start from these. Rev 3 settles four points the implementation had to
+`python generate.py --display` regenerates them. Step 2 (daemon/store) is implemented: format-only uploads, persisted latest
+manifest, workspace display and replay-on-connect display events. Rust SDK
+and UI work can start from these. Rev 3 settles four points the implementation had to
 decide; they are in "The contract between the two SDKs".
 
 The operator asked for the decoupling ("autophys should be generic") and for
@@ -386,3 +387,26 @@ flat, named settings. One example is an arbitrary uploaded current profile:
 profile, but roles would say nothing useful about it, and the manifest would
 need a structured-settings extension before format 1 is worth freezing.
 ```
+
+
+## Daemon step 2 implementation (2026-11-04)
+
+The keyed PUT returns 201 on a changed manifest, 200 on a canonical duplicate,
+with `{project_id, digest}`. Each object in `/workspace.projects` has a
+`display` manifest or null. `event: display` carries
+`{project_id, digest, display}`; see [store.md](store.md). The current
+manifest is resent on each stream connection and changed digests are polled
+for external writers as well as sent on daemon wakeups. Record cursors do
+not change. New uploads replace the current row transactionally; reverting
+to an earlier body is a new upload.
+
+**DM-D1 — agent-chosen, pending operator review.** Store display as an optional
+format-1 table, created on the first PUT, rather than incrementing the core
+workbook version. Current Python readers refuse a version above 1; they
+preserve unknown tables, so this additive extension keeps both SDKs usable.
+The alternative is a coordinated format-2 migration of both SDKs. Reversal:
+add that migration once both readers support it; existing table bodies can
+be retained. This choice does not alter the records or hash contract.
+
+Task-board CLI was unavailable on rwc-dev-01; implementation, archived-tree
+gates and independent review are tracked in these two spec pages.

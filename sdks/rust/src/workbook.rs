@@ -8,6 +8,9 @@
 //! by id, the investigation exists, the proposal transition, the `edited`
 //! limits, then seq, hash, insert and the projection fold.
 
+mod manifest;
+pub use manifest::{MAX_DISPLAY_BYTES, StoredDisplay};
+
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -84,6 +87,7 @@ pub struct Snapshot {
     pub cursor: i64,
     pub project: Project,
     pub config_versions: Vec<ConfigVersion>,
+    pub display: Option<StoredDisplay>,
     pub investigations: Vec<InvestigationInfo>,
     pub proposals: Vec<Proposal>,
     /// Every record in `gseq` order.
@@ -411,6 +415,7 @@ impl Workbook {
             cursor,
             project: self.project().clone(),
             config_versions: list_configs(&tx)?,
+            display: manifest::read(&tx, self.id())?,
             investigations: projections::investigations(&tx)?,
             proposals: projections::proposals(&tx, None)?,
             records: records::after(&tx, 0, cursor, None)?

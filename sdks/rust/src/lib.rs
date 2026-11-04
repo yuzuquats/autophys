@@ -43,20 +43,20 @@ pub use records::{Logged, Record};
 pub use schema::{APPLICATION_ID, VERSION as FORMAT_VERSION};
 pub use validate::{Envelope, Event, Kind, MAX_ID_LEN, MAX_PAYLOAD_BYTES};
 pub use workbook::{
-    Appended, ChainError, ConfigVersion, Head, Investigation, Project, Snapshot, VerifyReport,
-    Workbook,
+    Appended, ChainError, ConfigVersion, Head, Investigation, MAX_DISPLAY_BYTES, Project, Snapshot,
+    StoredDisplay, VerifyReport, Workbook,
 };
 
-pub mod simulator;
-pub mod models;
-pub mod data;
-pub mod fit;
-pub mod sensitivity;
-pub mod design;
-pub mod project;
 pub mod agent;
+pub mod data;
+pub mod design;
+pub mod fit;
+pub mod models;
+pub mod project;
 pub mod reasoner;
+pub mod sensitivity;
+pub mod simulator;
 pub mod synthetic;
 
-pub mod usage;
 pub mod playbook;
+pub mod usage;

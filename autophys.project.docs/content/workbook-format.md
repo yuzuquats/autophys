@@ -107,6 +107,34 @@ way. The payload is the client's meta with `project_id`, `config_version` and
 `overrides` (default `{}`) set; the pinned config version must be stored
 (`unknown_config_version`).
 
+## Optional display extension (DM-1)
+
+The core `user_version` stays 1. A daemon/store that accepts a display creates
+this optional table on its first upload; readers without display support
+preserve it. It is authoritative presentation data, outside the record log
+and projection rebuild, and does not affect config or source hashes.
+
+```sql
+CREATE TABLE display (
+  project TEXT PRIMARY KEY REFERENCES projects(id),
+  digest TEXT NOT NULL, body TEXT NOT NULL, created REAL NOT NULL
+);
+```
+
+There is one latest row per project. `body` is canonical JSON; `digest` is
+the bare lowercase sha256 of those bytes. Both uploaded bytes and canonical
+bytes must fit 256 KiB. Only an object with integer `format: 1` is accepted;
+all other fields are opaque. An identical canonical digest is a no-op,
+including its creation timestamp. A different upload replaces the row in
+`BEGIN IMMEDIATE` order, including a return to an earlier digest.
+
+`Workbook::snapshot` reads the optional display in the same transaction as
+records/configs. `/workspace.projects[]` includes `display: <manifest|null>`.
+`/stream` sends `event: display` with
+`{project_id, digest, display}` and no event id: records keep their cursors.
+The latest display is sent on reconnect, then when its digest changes.
+Intermediate uploads may coalesce; the latest committed upload wins.
+
 ## Payload validation
 
 | Kind | Rule |

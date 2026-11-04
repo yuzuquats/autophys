@@ -64,6 +64,7 @@ projections, commit, broadcast.
 | `GET /whoami`                                           | key            | account, workspace, key_id, device_name |
 | `GET/POST /projects`                                    | key            | idempotent by name: 201 new, 200 existing |
 | `GET /projects/{pid}/config_versions`, `PUT …/{version}` | key           | 422 hash_mismatch unless version = sha256 of the body bytes |
+| `PUT /projects/{pid}/display`                         | key            | format 1 only, 256 KiB uploaded/canonical cap; 201 changed, 200 duplicate; returns {project_id, digest} |
 | `GET/POST /investigations`                              | key            | 409 unknown_config_version; Idempotency-Key replays to the same id |
 | `GET /investigations/{id}/records?kind=`                | key            | the SDK's 8 Record fields |
 | `POST …/{measurements,runs,steps,outcome}`              | key            | append → `{record, gseq}`; 400 if the envelope kind is not the route's |
@@ -407,3 +408,21 @@ frame unbuffered. The SDK live run is recorded above (AX-11).
 - An open SSE response holds a graceful stop until actix's 10 s shutdown
   timeout. The stream does not yet end on shutdown.
 - SSE fan-out and the single writer are unmeasured beyond the test suite.
+
+
+### Project display manifests (DM-1)
+
+`PUT /api/v1/projects/{pid}/display` takes the manifest itself as JSON,
+requires a valid key, and returns `{project_id, digest}`. Unsupported,
+missing or non-integer format and malformed JSON return 422; oversized
+uploaded or canonical bytes return 413. Unknown projects return 404.
+The latest upload replaces the current manifest; canonical duplicates return
+200 without a write. The daemon reads only `format`.
+
+Each project in `GET /workspace` has `display: <manifest|null>`. Each workbook
+snapshot includes it atomically with the records. In all stream scopes,
+including `?investigation=`, `event: display` carries
+`{project_id, digest, display}` for that scope's projects, without an `id:`.
+It resends the current manifest on connection/reconnection, then sends changes
+on wakeup or the one-second external-writer poll. Display events leave
+Last-Event-ID and record cursors intact. Intermediate uploads can coalesce.

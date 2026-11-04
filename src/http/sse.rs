@@ -126,6 +126,8 @@ pub(crate) async fn stream(
         only,
         cursors,
         backlog: VecDeque::new(),
+        displays: VecDeque::new(),
+        display_digests: BTreeMap::new(),
         dirty: true,
         quiet_since: Instant::now(),
     };
@@ -153,6 +155,8 @@ struct Tail {
     /// The last `gseq` sent (or skipped) per workbook, by project id.
     cursors: BTreeMap<String, i64>,
     backlog: VecDeque<(String, Logged)>,
+    displays: VecDeque<(String, autophys::StoredDisplay)>,
+    display_digests: BTreeMap<String, String>,
     /// Re-read the workbooks before waiting again.
     dirty: bool,
     quiet_since: Instant,
@@ -181,10 +185,24 @@ impl Tail {
                 };
                 return Some(frame(&id, &l));
             }
+            if let Some((pid, display)) = self.displays.pop_front() {
+                if self.display_digests.get(&pid) == Some(&display.digest) {
+                    continue;
+                }
+                self.display_digests
+                    .insert(pid.clone(), display.digest.clone());
+                self.quiet_since = Instant::now();
+                // No id: presentation never moves the record resume cursor.
+                let data = serde_json::json!({
+                    "project_id": pid, "digest": display.digest, "display": display.body,
+                });
+                return Some(Bytes::from(format!("event: display\ndata: {data}\n\n")));
+            }
             if self.dirty {
-                let page = self.read().await.ok()?;
+                let (page, displays) = self.read().await.ok()?;
                 self.dirty = page.len() as i64 >= PAGE;
                 self.backlog.extend(page);
+                self.displays.extend(displays);
                 continue;
             }
             let keep_alive = self.quiet_since + KEEP_ALIVE;
@@ -206,7 +224,12 @@ impl Tail {
     }
 
     /// Up to a page of unsent records from each workbook in scope.
-    async fn read(&self) -> Result<Vec<(String, Logged)>> {
+    async fn read(
+        &self,
+    ) -> Result<(
+        Vec<(String, Logged)>,
+        Vec<(String, autophys::StoredDisplay)>,
+    )> {
         let scoped = self.scoped.clone();
         let client = self.api.client.clone();
         let cursors = self.cursors.clone();
@@ -216,13 +239,17 @@ impl Tail {
                 None => client.workbooks()?,
             };
             let mut out = Vec::new();
+            let mut displays = Vec::new();
             for wb in wbs {
+                if let Some(display) = wb.display()? {
+                    displays.push((wb.id().to_string(), display));
+                }
                 let after = cursors.get(wb.id()).copied().unwrap_or(0);
                 for l in wb.records_after(after, PAGE)? {
                     out.push((wb.id().to_string(), l));
                 }
             }
-            Ok(out)
+            Ok((out, displays))
         })
         .await
     }
