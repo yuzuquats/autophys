@@ -33,8 +33,16 @@ async fn main() -> ExitCode {
             }
         }
         Some(command @ ("pair" | "keys" | "db")) => {
-            eprintln!("autophys {command}: not yet available; it lands with the record store");
-            ExitCode::FAILURE
+            let command = command.to_string();
+            let default = || autophys::default_db().map_err(|e| format!("{e:#}"));
+            autophys::admin::run(
+                &command,
+                args,
+                default,
+                &mut std::io::stdout(),
+                &mut std::io::stderr(),
+            )
+            .await
         }
         Some("-h" | "--help" | "help") => {
             println!("{USAGE}");

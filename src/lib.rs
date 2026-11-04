@@ -3,8 +3,9 @@
 //! file-based router over `html/routes` (built on start, or prebuilt by
 //! `autophys build-web`). The record store sits beside them: `store` (the
 //! SQLite log, projections, keys and pairing), `ingest` (the one append
-//! path) and `http` (`/api/v1` on actix).
+//! path), `http` (`/api/v1` on actix) and `admin` (`pair | keys | db`).
 
+pub mod admin;
 pub mod app;
 pub mod http;
 pub mod ingest;

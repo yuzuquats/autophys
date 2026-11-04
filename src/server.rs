@@ -21,7 +21,9 @@ pub const DEFAULT_ADDR: &str = "127.0.0.1:4794";
 
 pub const USAGE: &str = "usage: autophys serve [--addr 127.0.0.1:4794] [--web-root DIR] [--db FILE]
        autophys build-web [--out DIR]
-       autophys pair | keys | db      (not yet available: they land with the store)";
+       autophys pair list | pair approve <CODE> | pair deny <CODE>   [--db FILE]
+       autophys keys list [--json] | keys revoke <KEY_ID>          [--db FILE]
+       autophys db check [--rebuild] [--json]                      [--db FILE]";
 
 /// Parse a listen address and refuse anything that is not a literal loopback
 /// IP. Host names are refused too: `localhost` can resolve to a routable

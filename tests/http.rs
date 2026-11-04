@@ -235,11 +235,17 @@ fn binary_lists_its_subcommands() {
         help.contains("autophys serve") && help.contains("autophys build-web"),
         "{help}"
     );
+    // The store's commands exist; with no subcommand each is a usage error
+    // that opens no database (tests/store_admin.rs covers them working).
     for command in ["pair", "keys", "db"] {
-        let out = Command::new(bin).arg(command).output().unwrap();
-        assert_eq!(out.status.code(), Some(1), "{command}");
+        let out = Command::new(bin)
+            .arg(command)
+            .env("AUTOPHYS_DB", "/nonexistent/autophys.db")
+            .output()
+            .unwrap();
+        assert_eq!(out.status.code(), Some(2), "{command}");
         assert!(
-            String::from_utf8_lossy(&out.stderr).contains("not yet available"),
+            String::from_utf8_lossy(&out.stderr).contains("usage: autophys pair list"),
             "{command}"
         );
     }
