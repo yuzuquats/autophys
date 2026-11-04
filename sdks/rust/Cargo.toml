@@ -1,0 +1,22 @@
+[package]
+name = "autophys"
+description = "autophys-rs: read and write .ap-workbook files (the record side of the autophys SDK)"
+version = "0.1.0"
+edition = "2024"
+license = "UNLICENSED"
+publish = false
+
+# No tento, actix or async runtime: this crate builds without vendor/.
+[dependencies]
+hex = "0.4.3"
+getrandom = "0.2"
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { version = "1.0.216", features = ["derive"] }
+# float_roundtrip: a float parsed from a stored payload must print back to
+# the same Python repr, or the canonical text and the hash would differ.
+serde_json = { version = "1.0.133", features = ["float_roundtrip"] }
+sha2 = "0.10.8"
+thiserror = "1.0.61"
+
+[dev-dependencies]
+tempfile = "3"

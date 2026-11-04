@@ -1,0 +1,820 @@
+//! One project's workbook (`<slug>.ap-workbook`) and its investigations: the
+//! append path, the reads, the approval verbs and verification.
+//!
+//! A [`Workbook`] owns one read-write connection behind a mutex, so the
+//! threads of one process take turns; other processes open their own and
+//! SQLite serialises the writers (`BEGIN IMMEDIATE`, 5 s busy timeout). Every
+//! append is one transaction, in workbook-format.md's order: validate, replay
+//! by id, the investigation exists, the proposal transition, the `edited`
+//! limits, then seq, hash, insert and the projection fold.
+
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+use rusqlite::{Connection, OpenFlags, OptionalExtension, TransactionBehavior};
+use serde::Serialize;
+use serde_json::{Map, Value};
+
+use crate::canonical::{self, GENESIS, canonical, chain_hash};
+use crate::error::{Error, Result};
+use crate::projections::{self, InvestigationInfo, Proposal};
+use crate::records::{self, Logged, Record};
+use crate::schema;
+use crate::validate::{self, Envelope, Kind};
+
+/// A workbook's one project (`projects` holds exactly this row).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct Project {
+    pub id: String,
+    pub name: String,
+}
+
+/// A stored config version: its hash and the parsed body.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ConfigVersion {
+    pub version: String,
+    pub config: Value,
+}
+
+/// The result of an append: the record, its position in this workbook, and
+/// whether it is new (`false` for an idempotent replay of an existing id).
+/// Serialises as `{record, gseq}`, the daemon's append answer.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct Appended {
+    pub record: Record,
+    pub gseq: i64,
+    #[serde(skip)]
+    pub created: bool,
+}
+
+/// One record whose chain link is broken.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct ChainError {
+    pub investigation: String,
+    pub seq: i64,
+    pub id: String,
+    /// What is wrong with it (Rust adds this field; Python's has the other three).
+    pub problem: String,
+}
+
+/// [`Workbook::verify`]'s findings: the same five fields as Python's `wb.verify()`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct VerifyReport {
+    pub ok: bool,
+    pub records: usize,
+    pub investigations: usize,
+    pub chain_errors: Vec<ChainError>,
+    /// The projection tables equal a fresh replay of the records.
+    pub projections_match: bool,
+}
+
+/// The last record of one investigation's chain.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct Head {
+    pub seq: i64,
+    pub hash: String,
+}
+
+/// Everything in one workbook, read in one transaction. `cursor` is the
+/// highest `gseq` in it; [`Workbook::records_after`] resumes from there.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct Snapshot {
+    pub cursor: i64,
+    pub project: Project,
+    pub config_versions: Vec<ConfigVersion>,
+    pub investigations: Vec<InvestigationInfo>,
+    pub proposals: Vec<Proposal>,
+    /// Every record in `gseq` order.
+    pub records: Vec<Record>,
+}
+
+/// Unix seconds at microsecond precision: `floor(ns / 1000) / 1e6`.
+pub(crate) fn now_ts() -> f64 {
+    let ns = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    (ns / 1000) as f64 / 1e6
+}
+
+/// `bytes` random bytes as lowercase hex.
+pub(crate) fn random_hex(bytes: usize) -> Result<String> {
+    let mut buf = vec![0u8; bytes];
+    getrandom::getrandom(&mut buf).map_err(|e| Error::Internal(format!("random: {e}")))?;
+    Ok(hex::encode(buf))
+}
+
+fn idempotency_conflict(id: &str) -> Error {
+    Error::conflict(
+        "idempotency_conflict",
+        format!("record id {id} was already used for a different record"),
+    )
+}
+
+fn configure(conn: &Connection) -> Result<()> {
+    conn.busy_timeout(Duration::from_secs(5))?;
+    conn.pragma_update(None, "foreign_keys", "ON")?;
+    Ok(())
+}
+
+struct Inner {
+    path: PathBuf,
+    project: Project,
+    conn: Mutex<Connection>,
+}
+
+/// One project's workbook. Cheap to clone; clones share the connection.
+#[derive(Clone)]
+pub struct Workbook {
+    inner: Arc<Inner>,
+}
+
+impl std::fmt::Debug for Workbook {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Workbook")
+            .field("path", &self.inner.path)
+            .field("project", &self.inner.project.name)
+            .finish()
+    }
+}
+
+impl Workbook {
+    /// Open the workbook at `path`. With `name`, the file is created when
+    /// missing and its project row is inserted when absent; a file that holds
+    /// a different project is refused (a slug collision). Without `name` the
+    /// file must exist and hold its project. Returns whether the project row
+    /// was created by this call.
+    pub(crate) fn open(path: &Path, name: Option<&str>) -> Result<(Workbook, bool)> {
+        let shown = path.display().to_string();
+        if name.is_none() && !path.is_file() {
+            return Err(Error::NotFound("workbook"));
+        }
+        if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
+            std::fs::create_dir_all(dir)
+                .map_err(|e| Error::Io(format!("create {}: {e}", dir.display())))?;
+        }
+        let mut conn = Connection::open_with_flags(
+            path,
+            OpenFlags::SQLITE_OPEN_READ_WRITE
+                | OpenFlags::SQLITE_OPEN_CREATE
+                | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )?;
+        configure(&conn)?;
+        let mode: String = conn.query_row("PRAGMA journal_mode = WAL", [], |r| r.get(0))?;
+        if !mode.eq_ignore_ascii_case("wal") {
+            return Err(Error::Format(format!(
+                "{shown}: journal_mode is {mode}, not wal"
+            )));
+        }
+        conn.pragma_update(None, "synchronous", "NORMAL")?;
+        schema::migrate(&mut conn, &shown)?;
+        let (project, created) = match name {
+            Some(name) => ensure_project_row(&mut conn, &shown, name)?,
+            None => (
+                read_project(&conn)?
+                    .ok_or_else(|| Error::Format(format!("{shown} holds no project row")))?,
+                false,
+            ),
+        };
+        Ok((
+            Workbook {
+                inner: Arc::new(Inner {
+                    path: path.to_path_buf(),
+                    project,
+                    conn: Mutex::new(conn),
+                }),
+            },
+            created,
+        ))
+    }
+
+    fn conn(&self) -> Result<MutexGuard<'_, Connection>> {
+        self.inner
+            .conn
+            .lock()
+            .map_err(|_| Error::Internal("workbook connection poisoned".into()))
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.inner.path
+    }
+
+    /// The workbook's project (`id` is `prj_` + 16 hex).
+    pub fn project(&self) -> &Project {
+        &self.inner.project
+    }
+
+    pub fn id(&self) -> &str {
+        &self.inner.project.id
+    }
+
+    pub fn name(&self) -> &str {
+        &self.inner.project.name
+    }
+
+    // --- config versions -----------------------------------------------------
+
+    /// The project's config versions, oldest first.
+    pub fn config_versions(&self) -> Result<Vec<ConfigVersion>> {
+        list_configs(&*self.conn()?)
+    }
+
+    /// Store `body` as config version `v`. `v` must be `sha256:<hex of body>`
+    /// (`hash_mismatch`) and the body JSON. Returns whether it was new;
+    /// re-putting identical bytes is a no-op.
+    pub fn put_config_version(&self, v: &str, body: &[u8]) -> Result<bool> {
+        let want = format!("sha256:{}", canonical::sha256_hex([body]));
+        if want != v {
+            return Err(Error::HashMismatch);
+        }
+        let text = std::str::from_utf8(body)
+            .ok()
+            .filter(|t| serde_json::from_str::<Value>(t).is_ok())
+            .ok_or_else(|| Error::invalid("$", "the config body must be JSON"))?;
+        let mut conn = self.conn()?;
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let n = tx.execute(
+            "INSERT OR IGNORE INTO config_versions (project, version, body, created)
+             VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![self.id(), v, text, now_ts()],
+        )?;
+        tx.commit()?;
+        Ok(n == 1)
+    }
+
+    // --- investigations ------------------------------------------------------
+
+    /// Every investigation's projection row, oldest first.
+    pub fn investigations(&self) -> Result<Vec<InvestigationInfo>> {
+        projections::investigations(&*self.conn()?)
+    }
+
+    /// The investigation `id`, for its records and the approval verbs.
+    pub fn investigation(&self, id: &str) -> Result<Investigation> {
+        if !projections::investigation_exists(&*self.conn()?, id)? {
+            return Err(Error::NotFound("investigation"));
+        }
+        Ok(Investigation {
+            wb: self.clone(),
+            id: id.to_string(),
+        })
+    }
+
+    /// Append a new investigation's seq-0 record. `meta` is the client's
+    /// object; `project_id` (this workbook's, when absent), `config_version`
+    /// and `overrides` (default `{}`) are set in it, and the pinned config
+    /// version must be stored (`unknown_config_version`). `record_id` is the
+    /// idempotency key: replaying it returns the same investigation with
+    /// `false`.
+    pub fn create_investigation(
+        &self,
+        meta: Value,
+        record_id: Option<&str>,
+    ) -> Result<(Investigation, bool)> {
+        let record_id = match record_id {
+            Some(id) => {
+                validate::check_id("Idempotency-Key", id)?;
+                id.to_string()
+            }
+            None => random_hex(16)?,
+        };
+        let mut payload = match meta {
+            Value::Null => Map::new(),
+            Value::Object(m) => m,
+            _ => return Err(Error::invalid("meta", "must be an object")),
+        };
+        match payload.get("overrides") {
+            None | Some(Value::Null) => {
+                payload.insert("overrides".into(), Value::Object(Map::new()));
+            }
+            Some(Value::Object(_)) => {}
+            Some(_) => return Err(Error::invalid("overrides", "must be an object")),
+        }
+        match payload.get("project_id") {
+            None | Some(Value::Null) => {
+                payload.insert("project_id".into(), Value::String(self.id().into()));
+            }
+            Some(Value::String(p)) if p == self.id() => {}
+            Some(_) => return Err(Error::NotFound("project")),
+        }
+        let payload = Value::Object(payload);
+        validate::payload_shape(Kind::Investigation, &payload).map_err(|_| {
+            Error::invalid(
+                "project_id",
+                "project_id and config_version are required strings",
+            )
+        })?;
+        let text = canonical(&payload);
+        if text.len() > validate::MAX_PAYLOAD_BYTES {
+            return Err(Error::TooLarge(validate::MAX_PAYLOAD_BYTES));
+        }
+        let version = payload["config_version"].as_str().unwrap_or_default();
+        let mut conn = self.conn()?;
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        if let Some((existing, stored)) = records::by_id(&tx, &record_id)? {
+            if existing.record.kind == Kind::Investigation.as_str() && stored == text {
+                drop(tx);
+                drop(conn);
+                return Ok((
+                    Investigation {
+                        wb: self.clone(),
+                        id: existing.record.investigation,
+                    },
+                    false,
+                ));
+            }
+            return Err(idempotency_conflict(&record_id));
+        }
+        let pinned = tx
+            .query_row(
+                "SELECT 1 FROM config_versions WHERE project = ?1 AND version = ?2",
+                [self.id(), version],
+                |_| Ok(()),
+            )
+            .optional()?
+            .is_some();
+        if !pinned {
+            return Err(Error::conflict(
+                "unknown_config_version",
+                "store the config version first",
+            ));
+        }
+        let inv = format!("inv_{}", random_hex(8)?);
+        insert_record(&tx, &inv, &record_id, Kind::Investigation, &text)?;
+        tx.commit()?;
+        drop(conn);
+        Ok((
+            Investigation {
+                wb: self.clone(),
+                id: inv,
+            },
+            true,
+        ))
+    }
+
+    /// Every proposal's folded state, by investigation.
+    pub fn proposals(&self) -> Result<Vec<Proposal>> {
+        projections::proposals(&*self.conn()?, None)
+    }
+
+    // --- the log -------------------------------------------------------------
+
+    /// The highest `gseq` in this workbook (0 when it has no records).
+    pub fn cursor(&self) -> Result<i64> {
+        records::cursor(&*self.conn()?)
+    }
+
+    /// Up to `limit` records after `gseq`, in `gseq` order (Rust only: the
+    /// daemon's `/stream`). `gseq` orders records within this workbook only.
+    pub fn records_after(&self, gseq: i64, limit: i64) -> Result<Vec<Logged>> {
+        records::after(&*self.conn()?, gseq, limit, None)
+    }
+
+    /// The whole workbook in one read transaction.
+    pub fn snapshot(&self) -> Result<Snapshot> {
+        let conn = self.conn()?;
+        let tx = conn.unchecked_transaction()?;
+        let cursor = records::cursor(&tx)?;
+        let snap = Snapshot {
+            cursor,
+            project: self.project().clone(),
+            config_versions: list_configs(&tx)?,
+            investigations: projections::investigations(&tx)?,
+            proposals: projections::proposals(&tx, None)?,
+            records: records::after(&tx, 0, cursor, None)?
+                .into_iter()
+                .map(|l| l.record)
+                .collect(),
+        };
+        tx.finish()?;
+        Ok(snap)
+    }
+
+    /// `{investigation: Head}` of every chain's last record.
+    pub fn heads(&self) -> Result<BTreeMap<String, Head>> {
+        let conn = self.conn()?;
+        let mut stmt = conn.prepare(
+            "SELECT investigation, seq, hash FROM records r
+              WHERE seq = (SELECT MAX(seq) FROM records WHERE investigation = r.investigation)
+              ORDER BY investigation",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                Head {
+                    seq: r.get(1)?,
+                    hash: r.get(2)?,
+                },
+            ))
+        })?;
+        rows.map(|r| r.map_err(Error::from)).collect()
+    }
+
+    /// The projection rows as stored, shaped like the conformance files.
+    pub fn projection_rows(&self) -> Result<Value> {
+        projections::rows(&*self.conn()?)
+    }
+
+    // --- integrity -----------------------------------------------------------
+
+    /// Verify every chain (seq, `prev_hash`, canonical payload text, hash) and
+    /// that the projection tables equal a fresh replay of the records. The
+    /// file is not changed.
+    pub fn verify(&self) -> Result<VerifyReport> {
+        let conn = self.conn()?;
+        let tx = conn.unchecked_transaction()?;
+        let replay = Connection::open_in_memory()?;
+        projections::create_tables(&replay)?;
+        let mut stmt = tx.prepare(&format!(
+            "SELECT {} FROM records ORDER BY gseq",
+            records::COLUMNS
+        ))?;
+        let mut rows = stmt.query([])?;
+        let mut heads: BTreeMap<String, (i64, String)> = BTreeMap::new();
+        let (mut count, mut chain_errors) = (0usize, Vec::new());
+        while let Some(row) = rows.next()? {
+            let (l, text) = records::from_row(row)?;
+            let r = l.record;
+            count += 1;
+            let (seq, prev) = heads
+                .get(&r.investigation)
+                .cloned()
+                .unwrap_or((-1, GENESIS.to_string()));
+            let mut problems = Vec::new();
+            if r.seq != seq + 1 {
+                problems.push(format!("seq {} where {} was expected", r.seq, seq + 1));
+            }
+            if r.prev_hash != prev {
+                problems.push("prev_hash does not match the previous record's hash".to_string());
+            }
+            if canonical(&r.payload) != text {
+                problems.push("stored payload is not canonical JSON".to_string());
+            }
+            if chain_hash(&prev, &r.id, &r.kind, &r.payload) != r.hash {
+                problems.push(
+                    "hash does not match sha256(prev_hash || canonical{id, kind, payload})".into(),
+                );
+            }
+            if !problems.is_empty() {
+                chain_errors.push(ChainError {
+                    investigation: r.investigation.clone(),
+                    seq: r.seq,
+                    id: r.id.clone(),
+                    problem: problems.join("; "),
+                });
+            }
+            projections::apply(&replay, &r)?;
+            heads.insert(r.investigation.clone(), (r.seq, r.hash.clone()));
+        }
+        drop(rows);
+        drop(stmt);
+        let projections_match = projections::dump(&tx)? == projections::dump(&replay)?;
+        tx.finish()?;
+        Ok(VerifyReport {
+            ok: chain_errors.is_empty() && projections_match,
+            records: count,
+            investigations: heads.len(),
+            chain_errors,
+            projections_match,
+        })
+    }
+
+    /// Replace the projection tables by a replay of the records (they are
+    /// derived data; the records are never changed), then verify.
+    pub fn rebuild_projections(&self) -> Result<VerifyReport> {
+        {
+            let mut conn = self.conn()?;
+            let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+            projections::rebuild(&tx)?;
+            tx.commit()?;
+        }
+        self.verify()
+    }
+
+    /// Open a second, read-only connection to this file (for watching).
+    fn watcher(&self) -> Result<Connection> {
+        let conn = Connection::open_with_flags(
+            &self.inner.path,
+            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )?;
+        configure(&conn)?;
+        Ok(conn)
+    }
+}
+
+fn read_project(conn: &Connection) -> Result<Option<Project>> {
+    let mut stmt = conn.prepare("SELECT id, name FROM projects ORDER BY created, id")?;
+    let mut rows = stmt.query_map([], |r| {
+        Ok(Project {
+            id: r.get(0)?,
+            name: r.get(1)?,
+        })
+    })?;
+    match rows.next() {
+        Some(p) => {
+            let project = p?;
+            if rows.next().is_some() {
+                return Err(Error::Format(
+                    "a workbook must hold exactly one project row".into(),
+                ));
+            }
+            Ok(Some(project))
+        }
+        None => Ok(None),
+    }
+}
+
+fn ensure_project_row(conn: &mut Connection, shown: &str, name: &str) -> Result<(Project, bool)> {
+    if name.trim().is_empty() || name.chars().count() > 200 {
+        return Err(Error::invalid(
+            "name",
+            "required string of 1 to 200 characters",
+        ));
+    }
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    if let Some(p) = read_project(&tx)? {
+        if p.name != name {
+            return Err(Error::conflict(
+                "conflict",
+                format!("{shown} holds project {:?}, not {name:?}", p.name),
+            ));
+        }
+        return Ok((p, false));
+    }
+    let id = format!("prj_{}", random_hex(8)?);
+    tx.execute(
+        "INSERT INTO projects (id, name, created) VALUES (?1, ?2, ?3)",
+        rusqlite::params![id, name, now_ts()],
+    )?;
+    tx.commit()?;
+    Ok((
+        Project {
+            id,
+            name: name.to_string(),
+        },
+        true,
+    ))
+}
+
+fn list_configs(conn: &Connection) -> Result<Vec<ConfigVersion>> {
+    let mut stmt =
+        conn.prepare_cached("SELECT version, body FROM config_versions ORDER BY created, version")?;
+    let rows = stmt.query_map([], |r| {
+        let body: String = r.get(1)?;
+        Ok(ConfigVersion {
+            version: r.get(0)?,
+            config: serde_json::from_str(&body).unwrap_or(Value::Null),
+        })
+    })?;
+    rows.map(|r| r.map_err(Error::from)).collect()
+}
+
+/// If `id` exists: the stored record when it is the same record (replay),
+/// else `idempotency_conflict`. `None` when the id is new.
+fn replay(
+    conn: &Connection,
+    id: &str,
+    inv: &str,
+    kind: Kind,
+    text: &str,
+) -> Result<Option<Appended>> {
+    let Some((existing, stored)) = records::by_id(conn, id)? else {
+        return Ok(None);
+    };
+    let r = &existing.record;
+    if r.investigation == inv && r.kind == kind.as_str() && stored == text {
+        return Ok(Some(Appended {
+            gseq: existing.gseq,
+            record: existing.record,
+            created: false,
+        }));
+    }
+    Err(idempotency_conflict(id))
+}
+
+/// Chain, insert and fold one record inside the caller's transaction.
+fn insert_record(conn: &Connection, inv: &str, id: &str, kind: Kind, text: &str) -> Result<Logged> {
+    let (seq, prev) = match records::head(conn, inv)? {
+        Some((seq, hash)) => (seq + 1, hash),
+        None => (0, GENESIS.to_string()),
+    };
+    let payload: Value = serde_json::from_str(text)
+        .map_err(|e| Error::Internal(format!("canonical payload reparse: {e}")))?;
+    let hash = chain_hash(&prev, id, kind.as_str(), &payload);
+    let record = Record {
+        id: id.to_string(),
+        investigation: inv.to_string(),
+        seq,
+        kind: kind.as_str().to_string(),
+        ts: now_ts(),
+        payload,
+        prev_hash: prev,
+        hash,
+    };
+    let gseq = records::insert(conn, &record, text)?;
+    projections::apply(conn, &record)?;
+    Ok(Logged { gseq, record })
+}
+
+/// One investigation in a workbook: its records and the approval verbs.
+#[derive(Clone, Debug)]
+pub struct Investigation {
+    wb: Workbook,
+    /// `inv_` + 16 hex.
+    pub id: String,
+}
+
+impl Investigation {
+    pub fn workbook(&self) -> &Workbook {
+        &self.wb
+    }
+
+    /// The investigation's projection row now.
+    pub fn info(&self) -> Result<InvestigationInfo> {
+        projections::investigations(&*self.wb.conn()?)?
+            .into_iter()
+            .find(|i| i.id == self.id)
+            .ok_or(Error::NotFound("investigation"))
+    }
+
+    /// Append a record of `kind` (any kind but `investigation`). `id` is the
+    /// client's idempotency key (32 random hex when `None`): replaying it with
+    /// the same kind and payload returns the stored record with
+    /// `created = false`; the same id with other content is
+    /// `idempotency_conflict`.
+    pub fn append(&self, kind: &str, payload: Value, id: Option<&str>) -> Result<Appended> {
+        let kind = Kind::parse(kind)
+            .ok_or_else(|| Error::invalid("kind", format!("unknown kind {kind:?}")))?;
+        if kind == Kind::Investigation {
+            return Err(Error::BadRequest(
+                "investigation records are created by create_investigation".into(),
+            ));
+        }
+        let id = match id {
+            Some(id) => {
+                validate::check_id("id", id)?;
+                id.to_string()
+            }
+            None => random_hex(16)?,
+        };
+        validate::payload_shape(kind, &payload)?;
+        let text = canonical(&payload);
+        if text.len() > validate::MAX_PAYLOAD_BYTES {
+            return Err(Error::TooLarge(validate::MAX_PAYLOAD_BYTES));
+        }
+        let env = Envelope { id, kind, payload };
+        let mut conn = self.wb.conn()?;
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        if let Some(replayed) = replay(&tx, &env.id, &self.id, kind, &text)? {
+            return Ok(replayed);
+        }
+        if !projections::investigation_exists(&tx, &self.id)? {
+            return Err(Error::NotFound("investigation"));
+        }
+        projections::check(&tx, &self.id, &env)?;
+        let logged = insert_record(&tx, &self.id, &env.id, kind, &text)?;
+        tx.commit()?;
+        Ok(Appended {
+            gseq: logged.gseq,
+            record: logged.record,
+            created: true,
+        })
+    }
+
+    /// The investigation's records in seq order, optionally one kind only.
+    pub fn records(&self, kind: Option<&str>) -> Result<Vec<Record>> {
+        if let Some(k) = kind {
+            Kind::parse(k).ok_or_else(|| Error::invalid("kind", format!("unknown kind {k:?}")))?;
+        }
+        let conn = self.wb.conn()?;
+        if !projections::investigation_exists(&conn, &self.id)? {
+            return Err(Error::NotFound("investigation"));
+        }
+        records::of_investigation(&conn, &self.id, kind)
+    }
+
+    /// This investigation's records after workbook position `gseq`, in order
+    /// (Rust only: `/stream?investigation=` and `…/records?after=`).
+    pub fn records_after(&self, gseq: i64) -> Result<Vec<Logged>> {
+        records::after(&*self.wb.conn()?, gseq, i64::MAX, Some(&self.id))
+    }
+
+    /// Proposal `pid`'s folded state.
+    pub fn proposal(&self, pid: &str) -> Result<Proposal> {
+        proposal_in(&*self.wb.conn()?, &self.id, pid)
+    }
+
+    /// Approve proposal `pid` as proposed, or, with `settings`, as edited
+    /// (each setting that is an outlook axis must stay inside the axis; the
+    /// others must keep their proposed values).
+    pub fn approve(&self, pid: &str, by: &str, settings: Option<Value>) -> Result<Appended> {
+        let mut payload = serde_json::json!({
+            "proposal_id": pid,
+            "event": if settings.is_some() { "edited" } else { "approved" },
+            "by": by,
+        });
+        if let Some(s) = settings {
+            payload["settings"] = s;
+        }
+        self.append("proposal", payload, None)
+    }
+
+    /// Reject proposal `pid`.
+    pub fn reject(&self, pid: &str, by: &str, reason: &str) -> Result<Appended> {
+        self.append(
+            "proposal",
+            serde_json::json!({"proposal_id": pid, "event": "rejected", "by": by, "reason": reason}),
+            None,
+        )
+    }
+
+    /// Record the measurement taken for approved proposal `pid`: a
+    /// `measurement` record `{observation}`, then the proposal's
+    /// `data_attached` event, whose `measurement_version` is that
+    /// measurement record's hash. Both records commit in one transaction.
+    /// Returns the `data_attached` record.
+    pub fn attach_data(&self, pid: &str, observation: Value) -> Result<Appended> {
+        validate::check_id("payload.proposal_id", pid)?;
+        let payload = serde_json::json!({ "observation": observation });
+        validate::payload_shape(Kind::Measurement, &payload)?;
+        let text = canonical(&payload);
+        if text.len() > validate::MAX_PAYLOAD_BYTES {
+            return Err(Error::TooLarge(validate::MAX_PAYLOAD_BYTES));
+        }
+        let mut conn = self.wb.conn()?;
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let state = proposal_in(&tx, &self.id, pid)?.status;
+        if state != "approved" && state != "edited" {
+            return Err(Error::conflict(
+                "conflict",
+                format!("proposal is {state}; data_attached is not allowed"),
+            ));
+        }
+        let m = insert_record(&tx, &self.id, &random_hex(16)?, Kind::Measurement, &text)?;
+        let payload = serde_json::json!({
+            "proposal_id": pid, "event": "data_attached", "measurement_version": m.record.hash,
+        });
+        let logged = insert_record(
+            &tx,
+            &self.id,
+            &random_hex(16)?,
+            Kind::Proposal,
+            &canonical(&payload),
+        )?;
+        tx.commit()?;
+        Ok(Appended {
+            record: logged.record,
+            gseq: logged.gseq,
+            created: true,
+        })
+    }
+
+    /// Block until this investigation's pending proposal (the newest one in
+    /// `proposed`) leaves `proposed`, whoever decides it: this process, the
+    /// browser through the daemon, or another process on the same file. The
+    /// file is re-read only when `PRAGMA data_version` says another
+    /// connection committed. `NotFound` when nothing is pending, `Timeout`
+    /// after `timeout`.
+    pub fn wait_for_approval(&self, timeout: Duration) -> Result<Proposal> {
+        let pending = projections::proposals(&*self.wb.conn()?, None)?
+            .into_iter()
+            .filter(|p| p.investigation == self.id && p.status == "proposed")
+            .max_by(|a, b| a.updated.total_cmp(&b.updated))
+            .ok_or(Error::NotFound("pending proposal"))?;
+        let watch = self.wb.watcher()?;
+        let deadline = Instant::now() + timeout;
+        let mut seen: Option<i64> = None;
+        loop {
+            let version: i64 = watch.query_row("PRAGMA data_version", [], |r| r.get(0))?;
+            if seen != Some(version) {
+                seen = Some(version);
+                let p = proposal_in(&watch, &self.id, &pending.proposal_id)?;
+                if p.status != "proposed" {
+                    return Ok(p);
+                }
+            }
+            let now = Instant::now();
+            if now >= deadline {
+                return Err(Error::Timeout(format!(
+                    "proposal {} still awaiting approval",
+                    pending.proposal_id
+                )));
+            }
+            std::thread::sleep(WATCH_INTERVAL.min(deadline - now));
+        }
+    }
+}
+
+/// How often `wait_for_approval` checks `PRAGMA data_version`.
+const WATCH_INTERVAL: Duration = Duration::from_millis(100);
+
+fn proposal_in(conn: &Connection, inv: &str, pid: &str) -> Result<Proposal> {
+    if !projections::investigation_exists(conn, inv)? {
+        return Err(Error::NotFound("investigation"));
+    }
+    projections::proposals(conn, Some((inv, pid)))?
+        .into_iter()
+        .next()
+        .ok_or(Error::NotFound("proposal"))
+}

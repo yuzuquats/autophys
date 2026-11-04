@@ -271,3 +271,17 @@ title: Not settled yet
   results that match within 1e-6 on the example models may still drift on
   stiff user models.
 ```
+
+
+## Phase-1 record library
+
+`sdks/rust` now implements the Rust-column record API: local connect,
+Client, Workbook and Investigation; config versions, approvals, data,
+data-version watching and verification. Workbooks use format v1 (APWB,
+WAL, one project, blobs, no server auth tables). Appends are transactional
+and preserve replay/conflict semantics; data attachment commits both records
+together. Canonical numbers follow Python's shortest ties-to-even form.
+Repeated outlook axis names use the last axis, as the operator confirmed.
+
+The crate's unit and file tests cover the API and invariants. Daemon wiring
+and shared workbook conformance follow in separate scoped commits.
