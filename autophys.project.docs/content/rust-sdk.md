@@ -662,6 +662,29 @@ Only commit messages were rewritten, to merge split trailer blocks and give
 the two battery commits a Change-Id. An independent review returned ready
 with no findings. Receipt: `fleet/evidence/autophys/sink-20261104b/`.
 
+The third publication, `85ae558..7ffea22` (43 commits), carried:
+
+- the Rust display manifests, fit curves with the evaluator reveal, the
+  battery test-hour budgets and the null-cost check;
+- the daemon's display storage, its reveal route and display streaming;
+- py's display manifests, fit curves, M-4 plot attachments, first-pairing
+  `AUTOPHYS_SERVER` and the closed loop in `examples/battery_fit`;
+- the ui's curve, residual and ground-truth views and its configuration
+  cards;
+- the docs Reference section and its judge rounds.
+
+It went out above autoloop's loops-docs publication (`5ca4c51..85ae558`).
+The first review round (Codex) required four fixes: Rust-attached test-hour
+charges, local `run.curves` limits, the Ground truth tree entry and
+default-noise residuals. py and ui fixed them, and the second round
+returned ready. Four commits were left out and are still local: the sign-in
+commit (no Change-Id and unreviewed) and the three pitch-deck commits that
+autoloop did not publish (the deck hero ratio depends on them). Only one
+message was rewritten: the closed-loop commit got
+`Change-Id: I74541ff903052abd3ae7`. At the prefix: Rust 170 passed, Python
+606 passed / 6 skipped, html 70 passed. Receipt:
+`fleet/evidence/autophys/sink-20261104c/`.
+
 ## Battery case suite (MQ-5, Rust landing, 2026-11-04)
 
 Rust implementation `f5ad648` (`I80eae9dd2c2e790f9b2c`) mirrors the Python
