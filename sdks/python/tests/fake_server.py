@@ -41,6 +41,8 @@ class FakeAutophys:
         self.keys: dict[str, dict] = {}
         self.projects: dict[str, dict] = {}
         self.blobs = {}
+        self.displays = {}
+        self.display_status = None
         self.configs: dict[str, dict[str, bytes]] = {}
         self.investigations: dict[str, dict] = {}
         self.records: dict[str, list[dict]] = {}
@@ -298,6 +300,23 @@ class FakeAutophys:
                         self.end_headers()
                         self.wfile.write(data)
                         return
+                display = re.fullmatch(r"/projects/([^/]+)/display", path)
+                if display and method == "PUT":
+                    pid = display.group(1)
+                    if pid not in fake.projects:
+                        return self._err(404, "not_found")
+                    if fake.display_status:
+                        return self._err(fake.display_status, "display_rejected", "untrusted server text")
+                    if len(raw) > 256 * 1024:
+                        return self._err(413, "too_large")
+                    if not isinstance(body, dict) or type(body.get("format")) is not int or body["format"] != 1:
+                        return self._err(422, "invalid_format")
+                    digest = "sha256:" + hashlib.sha256(raw).hexdigest()
+                    versions = fake.displays.setdefault(pid, {})
+                    if digest not in versions:
+                        versions[digest] = raw
+                        fake.projects[pid]["display"] = json.loads(raw)
+                    return self._send(200, {"digest": digest})
                 m = re.fullmatch(r"/projects/([^/]+)/config_versions(?:/([^/]+))?", path)
                 if m:
                     pid, ver = m.group(1), m.group(2)

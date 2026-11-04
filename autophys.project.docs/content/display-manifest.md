@@ -1,11 +1,19 @@
 # The UI should render what the simulator declares and know nothing about batteries
 
-Status: rev 2 (2026-11-04). **Approved by the operator for implementation
-(DM-1 in [decisions.md](decisions.md)).** Steps 1–3 are handed to
-autophys/py and autophys/rs; step 4 (the UI) starts once step 1's golden
-manifests exist. Nothing is implemented yet. Rev 2 makes Python the source
-of the bench manifests, in line with AX-2, and pins the preview sampling so
-that both SDKs can produce identical bytes.
+Status: rev 3 (2026-11-04). **Approved by the operator for implementation
+(DM-1 in [decisions.md](decisions.md)).** Step 1 (Python SDK) is implemented
+(I6e0c3a9f2d8b51c7e4a2). Its golden manifests, the canonical bytes Rust must
+reproduce exactly, are:
+- `sdks/rust/src/models/fixtures/display/battery_ecm.json` (sha256
+  `e1aea0cbe6f8065c8b642d4aeb895509290ae3b30eb6496373c2a17d70c3f5fd`);
+- `sdks/rust/src/models/fixtures/display/oscillator.json`
+  (`824b945f5f05e47112940e0dfddbafc42a05e6bd0e3f40e9759b3b91ef3abe96`);
+- `sdks/rust/src/models/fixtures/display/thermal_rc.json`
+  (`e19385e061d7fa85fd0fffc66a21c549976d337d9098606c7105ffd5d0442e11`).
+
+`python generate.py --display` regenerates them. Steps 2–4 (daemon, Rust SDK,
+UI) can start from these. Rev 3 settles four points the implementation had to
+decide; they are in "The contract between the two SDKs".
 
 The operator asked for the decoupling ("autophys should be generic") and for
 a spec, after seeing a mock of two products rendered by one UI.
@@ -298,6 +306,35 @@ revising this page, not by one side diverging.
   `[0, duration]`. Each `u` channel is the simulated input, linearly
   interpolated onto `t` and rounded to 6 significant figures. The simulation
   runs at the project's `initial` parameters with default options.
+- **Hashes stay unchanged (rev 3).** `source_hash` hashes the function
+  source *including its decorator lines*. So the three bench models attach
+  their `Display` below the decorated function (`sim.with_display(...)`),
+  never in `@simulator(...)`. Their input channels come from an input function
+  declared in the `Display`, `(settings, t) -> values` (battery: its existing
+  `current(experiment)`), not from a new return value. New simulators may use
+  `@simulator(..., display=)` and return inputs directly. The display is
+  never part of `schema()`, `config()` or either hash.
+- **`u` (rev 3):** Python's result is the same `{t, outputs}` dict as
+  before, with inputs on a separate `.u` mapping (`SimulationResult`), so no
+  reader of the outputs changes.
+- **Preview numbers (rev 3):**
+  - Initial parameters are `Project.initial_value()`: the declared `initial`,
+    else the geometric midpoint for positive bounds, else the arithmetic
+    midpoint.
+  - `t` is 64 points spaced evenly over `[0, duration]` (the trajectory's
+    last time when `duration` is absent).
+  - Inputs are interpolated onto the unrounded `t`. Then every time and input
+    value is rounded with Python's `float(f"{x:.6g}")`.
+  - The manifest is serialised with the store's canonical encoder as UTF-8,
+    with no trailing newline.
+- **Undeclared settings (rev 3):** every catalog setting appears in
+  `settings`. One the simulator does not declare (`kind` included) is listed
+  explicitly with its raw name as label, an empty unit and role `other`, so
+  the UI never infers anything.
+- **Upload (rev 3):** `HttpStore` PUTs the manifest when a project is
+  registered over HTTP. A daemon without the route (404/405) gets one warning
+  per store, and registration still succeeds. Local stores neither compute
+  nor store a manifest until the daemon's workbook table exists (step 2).
 - **Validation in both SDKs:**
   - every key in `settings` must exist in some experiment in the catalog;
   - every `output` channel must be in `outputs`;

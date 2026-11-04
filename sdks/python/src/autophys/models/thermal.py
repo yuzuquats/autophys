@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from ..display import Display
 from ..simulator import FIT_OPTIONS, SimOptions, simulator, time_grid
 from ._ode import integrate
 
@@ -53,3 +54,28 @@ def thermal_rc(params, experiment, options: SimOptions = FIT_OPTIONS):
 
     y = integrate(rhs, (float(experiment.get("T0", ta)),), t, options, max_step=max_step)
     return {"t": t, "T": y[0]}
+
+
+# Attach below the decorated function: presentation never changes its source hash.
+
+def _display_input(experiment, t):
+    drive = power(experiment)
+    return np.array([drive(tt) for tt in t])
+
+
+thermal_rc.with_display(Display(
+    channels={'T': {'label': 'Temperature', 'unit': '°C', 'role': 'output'},
+     'power': {'label': 'Power', 'unit': 'W', 'role': 'input'}},
+    settings={'power': {'label': 'Power', 'unit': 'W', 'role': 'drive'},
+     'on': {'label': 'On', 'unit': 's', 'role': 'drive'},
+     'period': {'label': 'Period', 'unit': 's', 'role': 'drive'},
+     'duration': {'label': 'Duration', 'unit': 's', 'role': 'sampling'},
+     'rate': {'label': 'Rate', 'unit': 'Hz', 'role': 'sampling'}},
+    experiments={'step_short': {'label': 'Short step', 'description': '', 'views': []},
+     'step_long': {'label': 'Long step', 'description': '', 'views': []},
+     'pulse': {'label': 'Power pulse', 'description': '', 'views': ['edges']},
+     'sine_slow': {'label': 'Slow sine', 'description': '', 'views': ['spectrum']},
+     'sine_fast': {'label': 'Fast sine', 'description': '', 'views': ['spectrum']}},
+    default_view='fit',
+    inputs={'power': _display_input},
+))

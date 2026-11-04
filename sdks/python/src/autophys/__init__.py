@@ -18,6 +18,7 @@ from .agent import (
     ScriptedPolicy,
     render_facts,
 )
+from .display import Display
 from .client import Client, LocalClient, RemoteClient, Workbook, connect
 from .data import Dataset, Observation
 from .design import rank_experiments
@@ -34,7 +35,7 @@ from .workbook import WorkbookError, WorkbookStore
 __version__ = "0.1.0"
 
 __all__ = [
-    "ModelSpec", "MUSE_SPARK", "MUSE_WONDER", "BudgetError", "ChatReasoner", "Playbook", "load_playbook",
+    "Display", "ModelSpec", "MUSE_SPARK", "MUSE_WONDER", "BudgetError", "ChatReasoner", "Playbook", "load_playbook",
     "RecordingReasoner", "ReplayReasoner", "reasoner_for", "reasoner_from_env",
     "ACTIONS", "DECISION_SCHEMA", "DEFAULT_RULE", "Budgets", "Client", "Dataset", "Decision", "FIT_OPTIONS", "FakeReasoner",
     "FitResult", "HttpReasoner", "IdentifiabilityRule", "Investigation", "JsonlStore", "LocalClient", "MemoryStore", "NoiseConfig",

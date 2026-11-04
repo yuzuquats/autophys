@@ -16,6 +16,17 @@ def clean(x):
     if isinstance(x,np.ndarray):return clean(x.tolist())
     if isinstance(x,(float,np.floating)):return x if np.isfinite(x) else None
     return x
+# --display is independent: it must never rewrite the numerical python.json.
+import sys
+if "--display" in sys.argv:
+    from autophys.project import Project
+    directory = pathlib.Path(__file__).with_name("display")
+    directory.mkdir(exist_ok=True)
+    for sim in (battery_ecm, oscillator, thermal_rc):
+        project = Project(sim.name, sim)
+        (directory / (sim.name + ".json")).write_bytes(sim.display.canonical(project))
+    raise SystemExit(0)
+
 cases=[]
 for name,sim,theta,experiments,sigma in [
  ('thermal',thermal_rc,{'C':500.,'R':2.},['step_long','sine_fast'],{'T':.05}),

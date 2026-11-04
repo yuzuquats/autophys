@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from ..display import Display
 from ..simulator import FIT_OPTIONS, SimOptions, simulator, time_grid
 from ._ode import integrate
 
@@ -68,3 +69,28 @@ def battery_ecm(params, experiment, options: SimOptions = FIT_OPTIONS):
     y = integrate(rhs, (float(experiment.get("soc0", KNOWN["soc0"])), 0.0), t, options, max_step=max_step)
     i_t = np.array([cur(tt) for tt in t])
     return {"t": t, "v": ocv(y[0]) - y[1] - i_t * r0}
+
+
+# Attach below the decorated function: presentation never changes its source hash.
+
+def _display_input(experiment, t):
+    drive = current(experiment)
+    return np.array([drive(tt) for tt in t])
+
+
+battery_ecm.with_display(Display(
+    channels={'v': {'label': 'Terminal voltage', 'unit': 'V', 'role': 'output'},
+     'i': {'label': 'Current', 'unit': 'A', 'role': 'input'}},
+    settings={'current': {'label': 'Current', 'unit': 'A', 'role': 'drive'},
+     'on': {'label': 'On', 'unit': 's', 'role': 'drive'},
+     'off': {'label': 'Off', 'unit': 's', 'role': 'drive'},
+     'duration': {'label': 'Duration', 'unit': 's', 'role': 'sampling'},
+     'rate': {'label': 'Rate', 'unit': 'Hz', 'role': 'sampling'},
+     'capacity_ah': {'label': 'Capacity', 'unit': 'Ah', 'role': 'known'},
+     'soc0': {'label': 'SOC₀', 'unit': '', 'role': 'known'}},
+    experiments={'discharge_1A': {'label': 'Discharge at 1 A', 'description': '', 'views': []},
+     'pulse_2A': {'label': 'Pulse at 2 A', 'description': '', 'views': ['edges']},
+     'pulse_train': {'label': 'Pulse train', 'description': '', 'views': ['edges']}},
+    default_view='fit',
+    inputs={'i': _display_input},
+))

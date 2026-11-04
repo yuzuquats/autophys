@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from ..display import Display
 from ..simulator import FIT_OPTIONS, SimOptions, simulator, time_grid
 from ._ode import integrate
 
@@ -55,3 +56,31 @@ def oscillator(params, experiment, options: SimOptions = FIT_OPTIONS):
 
     y = integrate(rhs, (x0, v0), t, options)
     return {"t": t, "x": y[0]}
+
+
+# Attach below the decorated function: presentation never changes its source hash.
+# amplitude has no shared unit: step/sine use N, but ideal impulse uses N s.
+
+def _display_input(experiment, t):
+    drive = force(experiment)
+    return np.array([drive(tt) for tt in t])
+
+
+oscillator.with_display(Display(
+    channels={'x': {'label': 'Displacement', 'unit': 'm', 'role': 'output'},
+     'force': {'label': 'Force', 'unit': 'N', 'role': 'input'}},
+    settings={'amplitude': {'label': 'Amplitude', 'unit': '', 'role': 'drive'},
+     'freq': {'label': 'Frequency', 'unit': 'Hz', 'role': 'drive'},
+     'x0': {'label': 'Initial displacement', 'unit': 'm', 'role': 'known'},
+     'v0': {'label': 'Initial velocity', 'unit': 'm/s', 'role': 'known'},
+     'duration': {'label': 'Duration', 'unit': 's', 'role': 'sampling'},
+     'rate': {'label': 'Rate', 'unit': 'Hz', 'role': 'sampling'}},
+    experiments={'free': {'label': 'Free response', 'description': '', 'views': ['envelope', 'spectrum']},
+     'step_2N': {'label': 'Step at 2 N', 'description': '', 'views': ['envelope', 'spectrum']},
+     'impulse': {'label': 'Impulse', 'description': 'Amplitude is momentum in N s, applied as initial velocity; the force channel is zero.', 'views': ['envelope', 'spectrum']},
+     'sine_0.1Hz': {'label': 'Sine at 0.1 Hz', 'description': '', 'views': ['spectrum']},
+     'sine_0.44Hz': {'label': 'Sine at 0.44 Hz', 'description': '', 'views': ['spectrum']},
+     'sine_2Hz': {'label': 'Sine at 2 Hz', 'description': '', 'views': ['spectrum']}},
+    default_view='landscape',
+    inputs={'force': _display_input},
+))

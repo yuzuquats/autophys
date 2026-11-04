@@ -220,6 +220,7 @@ class Investigation:
         self._setup(project, dataset, runner, policy=policy, reasoner=reasoner, free=free, store=store, seed=seed)
         self.project_id = self.store.ensure_project(project.name)
         self.config_version = self.store.put_config_version(self.project_id, project.config_version, project.config())
+        self.store.register_display(self.project_id, project)
         meta = {
             "project_id": self.project_id,
             "config_version": self.config_version,

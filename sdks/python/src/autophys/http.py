@@ -29,6 +29,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+import warnings
 from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Any, Iterable, Iterator
@@ -281,6 +282,7 @@ class HttpStore(Store):
         self.cursors: dict[str, int] = {}
         self.last_wait: str | None = None
         self._project_id: str | None = None
+        self._display_warned = False
 
     def _see(self, investigation: str, rec: dict) -> dict:
         g = rec.get("gseq")
@@ -350,6 +352,33 @@ class HttpStore(Store):
             status = error.code
             error.close()
             raise HttpError(status, "blob_read_failed") from None
+
+    def register_display(self, project_id: str, project) -> None:
+        if project.simulator.display is not None:
+            self.put_display(project_id, project.simulator.display.canonical(project))
+
+    def put_display(self, project_id: str, body: bytes) -> None:
+        """Upload exact canonical bytes independently of config identity."""
+        pid = urllib.parse.quote(project_id, safe="")
+        req = urllib.request.Request(self.base + f"/projects/{pid}/display", data=body, method="PUT",
+                                     headers={"Content-Type": "application/json", "Authorization": f"Bearer {self._key}",
+                                              "User-Agent": USER_AGENT})
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout):
+                pass
+        except urllib.error.HTTPError as error:
+            status = error.code
+            error.close()
+            if status in (404, 405):
+                if not self._display_warned:
+                    self._display_warned = True
+                    warnings.warn("daemon too old for display manifests (HTTP 404/405)", RuntimeWarning, stacklevel=2)
+                return
+            if status == 413:
+                raise StoreError("display manifest exceeds 256 KiB limit") from None
+            if status == 422:
+                raise StoreError("display manifest rejected: expected format 1 (HTTP 422)") from None
+            raise HttpError(status, "display_upload_failed") from None
 
     def put_config_version(self, project_id: str, version: str, config: dict) -> str:
         """PUT the canonical config bytes; the server checks sha256(body) == version."""

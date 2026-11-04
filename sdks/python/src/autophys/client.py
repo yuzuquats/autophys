@@ -140,7 +140,12 @@ class RemoteClient(Client):
         name = project.name if isinstance(project, Project) else project
         if not isinstance(project, Project) and name not in {p["name"] for p in self.projects()}:
             raise StoreError(f"no project {name!r} on {self.store!r}")
-        return Workbook(self.store, project if isinstance(project, Project) else None, name)
+        workbook = Workbook(self.store, project if isinstance(project, Project) else None, name)
+        if isinstance(project, Project):
+            pid = workbook.project_id
+            self.store.put_config_version(pid, project.config_version, project.config())
+            self.store.register_display(pid, project)
+        return workbook
 
 
 class Workbook:

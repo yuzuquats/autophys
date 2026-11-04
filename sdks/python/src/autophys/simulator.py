@@ -24,6 +24,17 @@ from typing import Any, Callable, Mapping
 import numpy as np
 
 
+class SimulationResult(dict):
+    """The historical t/output dict, with input channels kept separately.
+
+    A plain dict subclass keeps mapping equality and pickle behaviour unchanged.
+    """
+
+    def __init__(self, *args, u=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.u = {} if u is None else u
+
+
 class SimulationError(RuntimeError):
     """The simulator failed or returned an unusable result."""
 
@@ -134,6 +145,15 @@ class Simulator:
     budget: CallBudget | None = field(default=None, compare=False, repr=False)
     _hash: str = field(default="", compare=False, repr=False)
 
+    display: Any = field(default=None, compare=False, repr=False)
+
+    def with_display(self, display) -> "Simulator":
+        """Attach presentation only; schema, hashes and equality are unchanged."""
+        display = copy.deepcopy(display)
+        display.validate(self)
+        self.display = display
+        return self
+
     # --- schema -----------------------------------------------------------
     @property
     def param_names(self) -> list[str]:
@@ -226,14 +246,16 @@ class Simulator:
             raise
         except Exception as exc:  # noqa: BLE001 - user code
             raise SimulationError(f"{self.name} raised {type(exc).__name__}: {exc}") from exc
-        return self._check_result(result)
+        return self._check_result(result, experiment=exp)
 
-    def _check_result(self, result: Any) -> dict[str, np.ndarray]:
+    def _check_result(self, result: Any, *, experiment=None, display=None) -> dict[str, np.ndarray]:
         if not isinstance(result, Mapping) or "t" not in result:
             raise SimulationError(f"{self.name}: simulate must return a dict with 't'")
         t = np.asarray(result["t"], dtype=float)
-        out = {"t": t}
-        channels = self.outputs or tuple(k for k in result if k != "t")
+        out = SimulationResult({"t": t})
+        display = display if display is not None else self.display
+        inputs = {ch for ch, spec in display.channels.items() if spec["role"] == "input"} if display else set()
+        channels = self.outputs or tuple(k for k in result if k != "t" and k not in inputs)
         for ch in channels:
             if ch not in result:
                 raise SimulationError(f"{self.name}: missing output channel {ch!r}")
@@ -243,6 +265,17 @@ class Simulator:
             if not np.all(np.isfinite(y)):
                 raise SimulationError(f"{self.name}: channel {ch!r} has non-finite values")
             out[ch] = y
+        for ch in sorted(inputs):
+            if ch in result:
+                values = result[ch]
+            elif ch in display.inputs and experiment is not None:
+                values = display.inputs[ch](experiment, t)
+            else:
+                raise SimulationError(f"{self.name}: missing input channel {ch!r}")
+            u = np.asarray(values, dtype=float)
+            if u.shape != t.shape or not np.all(np.isfinite(u)):
+                raise SimulationError(f"{self.name}: invalid input channel {ch!r}")
+            out.u[ch] = u
         return out
 
     def check_determinism(self, params: Mapping[str, float], experiment: str | Mapping, seed: int | None = None) -> bool:
@@ -310,6 +343,7 @@ def simulator(
     outputs: tuple[str, ...] | list[str] = (),
     stochastic: bool = False,
     name: str | None = None,
+    display=None,
 ) -> Callable[[Callable[..., dict]], Simulator]:
     """Decorator: ``@simulator(params={"k": ("N/m", 0.5, 100)}, experiments={...})``."""
     specs = {}
@@ -321,7 +355,7 @@ def simulator(
     catalog = {n: _validate_experiment(n, s) for n, s in (experiments or {}).items()}
 
     def wrap(fn: Callable[..., dict]) -> Simulator:
-        return Simulator(
+        sim = Simulator(
             fn=fn,
             params=specs,
             experiments=catalog,
@@ -330,5 +364,6 @@ def simulator(
             stochastic=stochastic,
             description=(inspect.getdoc(fn) or "").split("\n")[0],
         )
+        return sim.with_display(display) if display is not None else sim
 
     return wrap

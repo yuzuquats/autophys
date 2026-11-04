@@ -110,6 +110,16 @@ def config_hash(config: dict) -> str:
 
 
 class Store(ABC):
+    def register_display(self, project_id: str, project) -> None:
+        """Local stores do not generate or persist display previews yet."""
+
+    def put_display(self, project_id: str, body: bytes) -> None:
+        """Local stores intentionally do not persist display manifests yet.
+
+        Memory, Jsonl and Workbook inherit this no-op; daemon storage is separate.
+        """
+
+
     @abstractmethod
     def ensure_project(self, name: str) -> str: ...
 
