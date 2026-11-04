@@ -200,6 +200,8 @@ struct Worker {
 // Return an absolute spelling without resolving the final symlink: a venv's
 // bin/python may link to the system binary, but its spelling selects the venv.
 fn find_python(python: &Path, search_path: Option<&std::ffi::OsStr>) -> Result<PathBuf> {
+    use std::os::unix::fs::PermissionsExt;
+
     let candidates: Vec<PathBuf> = if python.components().count() > 1 || python.is_absolute() {
         vec![python.to_path_buf()]
     } else {
@@ -211,7 +213,10 @@ fn find_python(python: &Path, search_path: Option<&std::ffi::OsStr>) -> Result<P
             .collect()
     };
     for candidate in candidates {
-        if candidate.is_file() {
+        if candidate
+            .metadata()
+            .is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+        {
             return Ok(if candidate.is_absolute() {
                 candidate
             } else {
@@ -1094,10 +1099,15 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let system = temp.path().join("system-python");
         std::fs::write(&system, "").unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&system, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let blocked = temp.path().join("not-executable");
+        std::fs::create_dir(&blocked).unwrap();
+        std::fs::write(blocked.join("python3"), "").unwrap();
         let venv = temp.path().join("venv/bin");
         std::fs::create_dir_all(&venv).unwrap();
         std::os::unix::fs::symlink(&system, venv.join("python3")).unwrap();
-        let path = std::env::join_paths([&venv]).unwrap();
+        let path = std::env::join_paths([&blocked, &venv]).unwrap();
         assert_eq!(
             find_python(Path::new("python3"), Some(&path)).unwrap(),
             venv.join("python3")

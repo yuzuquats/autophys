@@ -315,7 +315,7 @@ The environment lives outside the checkout:
 ```sh
 python3 -m venv ~/.cache/autophys/venv
 ~/.cache/autophys/venv/bin/pip install numpy scipy pytest
-cd ~/workspace/autophys/sdks/python
+cd sdks/python  # from the repository root
 
 PYTHONDONTWRITEBYTECODE=1 ~/.cache/autophys/venv/bin/python -m pytest -q
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src ~/.cache/autophys/venv/bin/python -c 'from autophys.cli import main; import sys; sys.exit(main(sys.argv[1:]))' bench --seeds 5

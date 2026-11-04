@@ -20,9 +20,9 @@ Cases: `thermal-validated` (a scripted run with a direct runner),
 run to the end), `events-and-values` (every proposal event and the canonical
 JSON edge values: non-ASCII text, Python float repr, a u64, NaN as null).
 
-Regenerate (on rwc-dev-01, from `sdks/python`):
+Regenerate from `sdks/python` with your SDK environment active:
 
-    PYTHONPATH=src ~/.cache/autophys/venv/bin/python tests/conformance_cases.py ../../tests/conformance/python
+    PYTHONPATH=src python tests/conformance_cases.py ../../tests/conformance/python
 
 Rust checks all three Python cases on temporary copies and its own checked-in
 cases with `cargo test` in `sdks/rust`. It compares format pragmas, project,
