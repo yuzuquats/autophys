@@ -254,7 +254,7 @@ $P mcp --project mypkg.module:project --workbook ~/autophys
 
 | Command | Options |
 | --- | --- |
-| \`pair\` | Pair this device with a daemon by device code. The daemon's operator then approves it with \`pair approve\`. \`--server URL\`, \`--name\` (the name shown on the approval page). Pass \`--server\` the first time you pair: until this device has saved credentials, the command uses \`http://127.0.0.1:4794\` and ignores \`AUTOPHYS_SERVER\`. |
+| \`pair\` | Pair this device with a daemon by device code. The daemon's operator then approves it with \`pair approve\`. \`--server URL\` (default \`$AUTOPHYS_SERVER\`, then the saved server, then \`http://127.0.0.1:4794\`), \`--name\` (the name shown on the approval page). |
 | \`whoami\` | Show the account and workspace this device's key belongs to. \`--server\`, \`--json\`. |
 | \`bench\` | Run the synthetic benchmark. \`--jobs N\` (default 1), \`--seeds N\` (default 3), \`--case NAME\` (repeatable; default all cases), \`--policy scripted\\|fake-reasoner\\|reason\` (repeatable; default \`scripted\` and \`fake-reasoner\`), \`--json\`. For \`--policy reason\`, \`--model\` is required; \`--route meta\\|baseten\\|lane\`, \`--effort\`, \`--playbook\`, \`--replay FILE\` and \`--record FILE\` configure the model. |
 | \`research\` | Improve a playbook. \`--output-dir DIR\` is required and must not exist yet. The defaults are one iteration, one job, the \`reason\` policy and the API researcher. The options are listed below. |
@@ -275,7 +275,7 @@ $P mcp --project mypkg.module:project --workbook ~/autophys
 | --- | --- |
 | \`AUTOPHYS_HOME\` | The collection \`ap.connect()\` opens when it is given no target (default \`~/autophys\`). |
 | \`AUTOPHYS_API_KEY\` | The key for \`whoami\` and for a remote \`ap.connect\`. When it is unset, the credentials saved by \`pair\` are used. |
-| \`AUTOPHYS_SERVER\` | The daemon \`whoami\` uses once this device has credentials. |
+| \`AUTOPHYS_SERVER\` | The daemon \`pair\` and \`whoami\` talk to when \`--server\` is not given; it wins over the saved server. |
 | \`AUTOPHYS_ALLOW_LIVE_REASON\` | Set it to \`1\` to let \`bench\` and \`research\` make live model calls. Without it, they need a replay. SDK reasoners you build yourself are not gated. |
 | \`AUTOPHYS_REASON_REPLAY\`, \`AUTOPHYS_REASON_RECORD\` | Replay or record the policy model's replies as a JSONL cassette. |
 | \`AUTOPHYS_REASON_ROUTE\`, \`AUTOPHYS_REASON_MODEL\` | Configure \`ap.reasoner_from_env()\`. The route is \`meta\` (the default; key in \`MODEL_API_KEY\`), \`baseten\` (key in \`BASETEN_API_KEY\`; set the model too) or \`lane\`. The CLI ignores these; pass \`--route\` and \`--model\` instead. |
