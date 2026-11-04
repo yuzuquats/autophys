@@ -22,7 +22,9 @@ Deno.test("connection: only Main owns the failure; loaded tree, viewer and Detai
 });
 
 Deno.test("connection: controller retains Main notice, pauses approvals and clears it on recovery", async () => {
-  const store = new Store(fixtures([])), ctl = new Controller(store, { user: "test", now: () => "10:00" });
+  const source = fixtures([]);
+  const live = { ...source, name: "daemon" as const, load: async () => ({ ...await source.load(), source: "daemon" as const }) };
+  const store = new Store(live), ctl = new Controller(store, { user: "test", now: () => "10:00" });
   try {
     await store.start();
     ctl.handle({ kind: "select", id: "bench-a/prop/p1" });

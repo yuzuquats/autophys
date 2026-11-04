@@ -19,6 +19,7 @@ import { breadcrumbText } from "../ui/breadcrumb.ts";
 import { autophysStyles } from "../ui/styles.ts";
 import { placeholderStyles } from "../ui/placeholder-styles.ts";
 import { deck, tutorial } from "./content.ts";
+import { mountGuidedTour } from "./guided-tour.ts";
 import { landingDocs } from "./docs.ts";
 import { quietLoading, signedOutView } from "../client/derive/signed-out.ts";
 import { signInInPlace } from "./sign-in-in-place.ts";
@@ -55,7 +56,7 @@ const source: Source & { chosen?: Promise<Source> } = forced === "fixtures" ? fi
   : daemon({ user: USER, reauth });
 
 const clock = () => new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-const ctl = new Controller(new Store(source), { user: USER, now: clock });
+let ctl = new Controller(new Store(source), { user: USER, now: clock });
 // `serve --login` marks a signed-out page (the Sign in badge). The landing page stays usable:
 // the app makes no API calls (no 401, no reload) and its main pane asks to sign in.
 let SIGNED_OUT = forced !== "fixtures" && document.getElementById("ap-account")?.dataset.signedIn === "false";
@@ -64,6 +65,7 @@ const baseView = ctl.view.bind(ctl);
 ctl.view = () => SIGNED_OUT ? signedOutView(baseView(), DEMO) : quietLoading(baseView());
 
 let teardown: (() => void) | null = null;
+let guided: ReturnType<typeof mountGuidedTour> | null = null;
 
 const app: Cookbook.App = {
   id: "autophys",
@@ -118,6 +120,7 @@ const app: Cookbook.App = {
       shell.setCrumb?.(breadcrumbText(view.main.crumb));
     };
     const unsubscribe = ctl.subscribe(redraw);
+    guided = mountGuidedTour({ get: () => ctl, set: (next) => { ctl = next; }, redraw });
     redraw();
     let poll: ReturnType<typeof setInterval> | undefined;
     // Store exposes the failure through the view.
@@ -126,7 +129,7 @@ const app: Cookbook.App = {
     let stopSignIn: (() => void) | undefined;
     if (SIGNED_OUT) stopSignIn = signInInPlace(() => { SIGNED_OUT = false; start(); redraw(); });
     else start();
-    teardown = () => { stopSignIn?.(); clearInterval(poll); unsubscribe(); views.forEach((v) => v.dispose()); removeStyles(); };
+    teardown = () => { guided?.dispose(); guided = null; stopSignIn?.(); clearInterval(poll); unsubscribe(); views.forEach((v) => v.dispose()); removeStyles(); };
   },
   unmount() {
     teardown?.();
@@ -136,7 +139,7 @@ const app: Cookbook.App = {
 };
 
 const docs = landingDocs();
-Cookbook.mount({ deck, onStage: docs.onStage, tutorial: [...Cookbook.Tutorial.shellSteps, ...tutorial], status: null, labels: { sidebar: "Workspace" } }).run(app);
+Cookbook.mount({ deck, onStage: (stage) => { docs.onStage(stage); if (stage === "tour") queueMicrotask(() => guided?.offer()); }, tutorial: [...Cookbook.Tutorial.shellSteps, ...tutorial], status: null, labels: { sidebar: "Workspace" } }).run(app);
 mountAccount();
 docs.mount();
 

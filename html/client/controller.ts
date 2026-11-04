@@ -33,6 +33,7 @@ import { type Decision, parseField } from "./proposal.ts";
 import type { Store } from "./store.ts";
 import type { Action } from "../ui/view-model.ts";
 import type { Intent } from "../ui/intent.ts";
+import { demoWrite, demoView } from "./tutorial.ts";
 
 export type Env = { user: string; now: () => string; daemonOrigin?: string };
 
@@ -377,6 +378,7 @@ export class Controller {
         sections: view.details.sections.map((s) => ({ ...s, blocks: s.blocks.map((b) => b.kind === "pairing" ? { ...b, decision: pair(b.decision) } : b) })) };
 
     }
+    view = demoView(view, snap?.source ?? this.store.source.name);
     return { ...view, sidebar: { ...view.sidebar,
       creatingProject: !!this.setup,
     } };
@@ -398,6 +400,7 @@ export class Controller {
   handle = (intent: Intent): void => {
     const snap = this.store.snapshot(), sel = this.selection;
     if (!snap || !sel) return;
+    if (intent.kind === "action" && demoWrite(snap.source, intent.name)) return;
     if (intent.kind === "action" && intent.name === "start-investigation") {
       const project = snap.workspace.projects.find(p => p.id === sel.projectId);
       const config = project?.configs.at(-1), projects = this.store.source.projects;

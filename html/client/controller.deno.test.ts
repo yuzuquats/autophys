@@ -13,7 +13,10 @@ const find = (nodes: TreeNode[], id: string): TreeNode | undefined => {
 };
 
 Deno.test("controller: edit, refused values, approve (posted as edited), withdraw, reject, restore", async () => {
-  const src = fixtures(), store = new Store(src), ctl = new Controller(store, env);
+  const src = fixtures();
+  // Exercise a writable source using the in-memory transport; actual demo data is read-only.
+  const live = { ...src, name: "daemon" as const, load: async () => ({ ...await src.load(), source: "daemon" as const }) };
+  const store = new Store(live), ctl = new Controller(store, env);
   let redraws = 0;
   ctl.subscribe(() => redraws++);
   await store.start();

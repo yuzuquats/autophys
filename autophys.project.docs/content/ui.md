@@ -428,3 +428,58 @@ and logs live at `rwc-dev-01:~/workspace/fleet/evidence/autophys/new-project-ste
 The installed task-board CLI is unavailable on PATH; task state is retained in the
 workstream cache, with no direct task-database edits. Remaining work is the
 operator's wizard/SDK/both decision; this commit does not redesign that choice.
+
+
+### Guided tutorial — UI-TOUR-01, 2026-11-04
+
+**Agent-chosen, pending operator review.** The tour runs on demo data, uses
+Autophys-local modules, is available from the app bar's Menu and the empty
+workspace, and places previews on the left. Before this change the cookbook
+offered text and a manual Show me ring; now nine lessons select real rows,
+replay enter actions on Back, and keep Fit/Residuals inside the two-part fifth
+lesson. The other lessons follow the mock's project/configuration, investigation,
+data, sensitivity, proposed-experiment, validation and New project/Devices path.
+The final lesson highlights both entry rows. The approved Autophys-blue halo
+remains unchanged.
+
+The recommendation uses a separate fixture Controller/Store while retaining the
+user's Controller (including selection, expansions, unsent drafts, setup and data
+source). Exit restores it, panel visibility, focus and scroll in open shadow trees.
+Esc and close restore without marking seen; Done also records the per-account
+seen flag. The existing cookbook transition is completed through its dismiss
+control, then a local sheet takes over; vendor/tento is unchanged. Preview clips
+copy the live component's rendered DOM, SVG plots, computed styles and slotted
+shadow content into an inert left-hand viewport. No preview is hand-drawn.
+Approve/Reject and other decision intents are disabled for all demo data, with a
+controller guard behind the buttons. The tour has no live write-capable source.
+
+Adaptations from the approved mocks: the current UI has no header Export and no
+Demo data / Back to live data strip, so neither is recreated or targeted. A small
+amber “Demo data · tour” chip communicates the temporary source. Approve/Reject
+currently belong to the proposal's Details panel rather than the investigation
+overview; that lesson selects the actual proposal and opens Details. On phones,
+sidebar/Details lessons expose the actual target panel rather than highlighting
+hidden rows or skipping lessons: this keeps every lesson and the final pair of
+entry-row halos usable at 390×844. Main lessons show Main; desktop Fit opens
+Details alongside it. Panels reserve 212px above the 200px sheet (272px/260px on
+phones), and each enter action scrolls the live component into view.
+
+Strongest alternative: extend the shared cookbook tutorial API and use
+pre-captured image assets, with phone-only lesson skips. That would benefit other
+apps but couples this work to an upstream contract and makes previews stale as
+components change. Reversal: remove guided-tour*.ts, the pure client tutorial
+module/tests and the root integration hooks; restore the old tutorial option and
+remove the demo decision guard only if interactive demo mutations are desired.
+This is a small local presentation/controller change, without a data migration.
+Changing source choice, entry points or preview placement is similarly local.
+No other session's wizard/sidebar drafts are adopted.
+
+Validation is recorded in
+`rwc-dev-01:~/workspace/fleet/evidence/autophys/tutorial-tour-20261104/`;
+`html/e2e/tutorial-flow.ts` checks every step at 1280×800 and 390×844, actual
+selection, halo bounds, preview content, Back, all exit paths and the empty live
+workspace. Unit coverage exercises navigation/substeps, replayed Back actions,
+complete snapshot restoration and read-only demo decisions. Clean-archive
+qualification and deployment receipts accompany the captures. The installed task
+CLI is unavailable on this host; live task state is in
+`~/.cache/autophys/tutorial-tour-20261104/tasks.json`.
