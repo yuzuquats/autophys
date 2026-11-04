@@ -68,6 +68,7 @@ projections, commit, broadcast.
 | `GET/POST /investigations`                              | key            | 409 unknown_config_version; Idempotency-Key replays to the same id |
 | `GET /investigations/{id}/records?kind=`                | key            | the SDK's 8 Record fields |
 | `POST …/{measurements,runs,steps,outcome}`              | key            | append → `{record, gseq}`; 400 if the envelope kind is not the route's |
+| `POST …/reveal`                                         | key            | append opaque reveal after outcome; 409 outcome_required before, already_revealed for a second distinct reveal; retries replay |
 | `POST …/proposals`                                      | key            | event proposed or withdrawn |
 | `GET …/proposals/{pid}`                                 | key            | proposal_id, status, experiment, settings |
 | `POST …/proposals/{pid}/approvals`                      | key or browser | approved, edited (settings inside the outlook, AX-15), rejected; 409 unless proposed |
@@ -88,7 +89,7 @@ for a new record, 200 for a replay, which reports the stored `gseq`.
 | `id`            | client-chosen, 1 to 128 of `[A-Za-z0-9_.:-]`; unique across the workspace |
 | `investigation` | `inv_` + 16 hex, assigned by `POST /investigations` |
 | `seq`           | integer, per investigation, **starting at 0** (the investigation record) and contiguous; assigned by the store |
-| `kind`          | investigation, measurement, run, step, proposal, outcome |
+| `kind`          | investigation, measurement, run, step, proposal, outcome, reveal |
 | `ts`            | JSON number, **unix seconds as a float** with microsecond resolution, taken by the store at insert; stored as SQLite REAL; not hashed |
 | `payload`       | JSON object, returned as parsed from its stored canonical text |
 | `prev_hash`     | the previous record's `hash`; 64 zeros at seq 0 |
@@ -426,3 +427,20 @@ including `?investigation=`, `event: display` carries
 It resends the current manifest on connection/reconnection, then sends changes
 on wakeup or the one-second external-writer poll. Display events leave
 Last-Event-ID and record cursors intact. Intermediate uploads can coalesce.
+
+
+### Ground-truth reveal and recorded curves (GT-1 / FC-1)
+
+`POST /api/v1/investigations/{inv}/reveal` uses the ordinary
+`{id, kind: "reveal", payload: {...}}` envelope and keyed authentication.
+It returns `{record, gseq}` (201 new, 200 identical retry). It requires an
+outcome in that investigation (`409 outcome_required`) and refuses a second
+distinct reveal (`409 already_revealed`). A reused id with changed content
+is `409 idempotency_conflict`. Payload fields are opaque to the daemon.
+Reveal records appear in records/workspace and `event: record` streams.
+
+`POST …/runs` validates optional `payload.curves` per
+[workbook-format.md](workbook-format.md): finite per-channel arrays, matching
+lengths including optional downsampled `t`, at most 2000 points, and a
+256 KiB canonical whole-run cap when curves is present. Invalid shape is
+422, excess bytes 413. Runs without curves keep the 1 MiB payload cap.

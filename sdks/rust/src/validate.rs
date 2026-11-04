@@ -2,6 +2,7 @@
 //! touches the database. Every refusal is a 422 naming the field path
 //! (`payload.outlook.axes[0].values[3]`), so the SDK can say which field.
 
+mod curves;
 mod trace;
 use serde_json::{Map, Value};
 
@@ -12,7 +13,7 @@ pub const MAX_PAYLOAD_BYTES: usize = 1 << 20;
 /// The largest client-chosen id (record ids, proposal ids).
 pub const MAX_ID_LEN: usize = 128;
 
-/// A record kind. The SDK's six, in its order.
+/// A record kind, including the post-outcome ground-truth reveal.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Kind {
     Investigation,
@@ -21,16 +22,18 @@ pub enum Kind {
     Step,
     Proposal,
     Outcome,
+    Reveal,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 6] = [
+    pub const ALL: [Kind; 7] = [
         Kind::Investigation,
         Kind::Measurement,
         Kind::Run,
         Kind::Step,
         Kind::Proposal,
         Kind::Outcome,
+        Kind::Reveal,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -41,6 +44,7 @@ impl Kind {
             Kind::Step => "step",
             Kind::Proposal => "proposal",
             Kind::Outcome => "outcome",
+            Kind::Reveal => "reveal",
         }
     }
 
@@ -163,7 +167,8 @@ pub fn payload_shape(kind: Kind, payload: &Value) -> Result<()> {
                 return Err(Error::invalid("payload.observation", "required object"));
             }
         }
-        Kind::Run | Kind::Step => {}
+        Kind::Run => curves::shape(payload)?,
+        Kind::Step | Kind::Reveal => {}
         Kind::Outcome => {
             string_field(obj, "payload", "status")?;
         }

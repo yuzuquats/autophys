@@ -100,7 +100,12 @@ One `BEGIN IMMEDIATE` transaction, in this order:
    edited setting that is an axis must be a number within the axis's
    `[min, max]` (slack `1e-9 * max(|lo|, |hi|, 1)`); every other setting must
    equal the proposed value (compared as canonical JSON).
-6. `seq` and `prev_hash` from the investigation's head, `hash`, insert, fold.
+6. For `reveal`, an `outcome` record must exist in this investigation
+   (`409 outcome_required`) and no earlier `reveal` may exist
+   (`409 already_revealed`). This check and append share the same
+   `BEGIN IMMEDIATE`. Idempotent replay is checked first, so the same
+   id/kind/payload succeeds after the first reveal.
+7. `seq` and `prev_hash` from the investigation's head, `hash`, insert, fold.
 
 Creating an investigation appends its seq-0 `investigation` record the same
 way. The payload is the client's meta with `project_id`, `config_version` and
@@ -143,7 +148,8 @@ Intermediate uploads may coalesce; the latest committed upload wins.
 | `investigation` | `project_id`, `config_version` non-empty strings |
 | `measurement` | `observation` is an object |
 | `outcome` | `status` non-empty string |
-| `run` | none |
+| `run` | optional `curves`: object keyed by measurement record ids; each value has `fit` and `initial` objects of per-output-channel finite-number arrays, with equal lengths across both and optional `t`; at most 2000 points per array; canonical whole run payload at most 256 KiB when curves is present. SDKs include `t` only when downsampled, otherwise arrays use the measurement sample order. The store validates shape and id syntax; it does not simulate, check source grids, or resolve measurement references. Runs without curves retain the existing 1 MiB limit |
+| `reveal` | opaque object, with the common payload/id/size rules; accepted only after an outcome for this investigation; a second distinct reveal is refused |
 | `investigation` (optional trace metadata) | `playbook {name, version, sha256}`: name/version strings, sha256 64 hex; `model {role, route, model, effort, max_tokens}`: role policy/researcher, route/model strings, effort string or null, max_tokens nonnegative integer or null; `price {model, input_per_mtok, output_per_mtok, as_of}`: strings and finite numeric rates |
 | `step` (optional trace fields) | `usage` object: known route/model keys strings, input_tokens/output_tokens/total_tokens/reasoning_tokens/cached_input_tokens nonnegative integers, latency_ms finite number, cost_usd finite number or null; unknown keys allowed for older raw provider dictionaries. `images` list of {sha256, media_type, caption?}: hash (64 hex, optional sha256: blob prefix), media_type string, optional caption string. `replayed` boolean. Top-level `model` and `elapsed_ms` stay unchanged |
 | `outcome` (optional totals) | `usage_total` object: calls/input_tokens/output_tokens nonnegative integers, cost_usd finite number or null. Readers skip raw usage dictionaries without input_tokens entirely (they add no calls, tokens or cost and never null the total); a counted call with a missing/null cost_usd makes the total null |
@@ -168,7 +174,7 @@ For each record in `gseq` order:
   investigation's status becomes `awaiting_approval` (proposed),
   `awaiting_data` (approved, edited) or `open` (rejected, withdrawn,
   data_attached).
-- `run`, `step`: nothing.
+- `run`, `step`, `reveal`: nothing.
 - Every kind except `investigation` then sets the investigation's
   `updated = ts`.
 

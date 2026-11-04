@@ -7,7 +7,9 @@ implemented (I8c41e7a95d2f03b6c1e8). The goldens for Rust are under
 `.json` expectation, and `thermal-curves-fit.json` and
 `thermal-curves-initial.json`. Rev 2 fixes the rules in "Rules both SDKs
 follow (rev 2)" and replaces rev 1's byte-identical curves with a tolerance
-comparison.
+comparison. The daemon/store portion of step 2 is implemented: outcome-gated
+single reveal, opaque reveal storage, and FC-1 run-curve shape/size validation.
+SDK curve generation, reveal writing and resume behavior remain separate work.
 
 ## What the operator asked for
 
@@ -192,3 +194,21 @@ Then the agent could read it from its first step, and the benchmark would
 measure nothing. Appending it after the outcome keeps "truth hidden from the
 agent" true by construction, not by convention.
 ```
+
+
+## Daemon/store step 2 implementation (2026-11-04)
+
+The shared validator recognises `reveal`; the append transaction checks for
+an outcome and refuses a second distinct reveal after checking idempotent
+replay. The keyed HTTP route is `POST /investigations/{inv}/reveal`.
+The daemon stores reveal fields opaquely, per this implementation task's
+explicit scope; the stricter rev-2 reveal payload contract is owned by SDK
+writers. This is the operator's scope ruling, not a new agent decision.
+Recorded `run.curves` shape, finite arrays, equal lengths, 2000-point bound
+and the 256 KiB canonical run limit are enforced by the shared store.
+Store validation does not compute curves or verify measurement sample grids.
+
+Tests cover HTTP gating/retry/conflict and stream delivery, local append
+gating, curve acceptance/refusal/cap, and the Python reveal workbook's chain,
+projection replay and curve payloads. The fitted/initial curve JSON files
+are read as recorded fixtures; no SDK numerics behavior is added here.

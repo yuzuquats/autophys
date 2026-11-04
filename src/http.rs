@@ -167,6 +167,7 @@ pub fn scope(api: Api) -> actix_web::Scope {
         .route("/investigations/{inv}/runs", web::post().to(runs))
         .route("/investigations/{inv}/steps", web::post().to(steps))
         .route("/investigations/{inv}/outcome", web::post().to(outcome))
+        .route("/investigations/{inv}/reveal", web::post().to(reveal))
         .route("/investigations/{inv}/proposals", web::post().to(proposals))
         .route(
             "/investigations/{inv}/proposals/{pid}",
@@ -710,6 +711,16 @@ async fn outcome(
     b: web::Payload,
 ) -> Result<HttpResponse> {
     ingest(&s, &inv, &r, b, Rule::Kind(Kind::Outcome)).await
+}
+
+async fn reveal(
+    _: Keyed,
+    s: Data,
+    inv: web::Path<String>,
+    r: HttpRequest,
+    b: web::Payload,
+) -> Result<HttpResponse> {
+    ingest(&s, &inv, &r, b, Rule::Kind(Kind::Reveal)).await
 }
 
 async fn proposals(

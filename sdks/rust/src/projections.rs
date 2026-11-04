@@ -69,6 +69,29 @@ pub(crate) fn proposal_state(conn: &Connection, inv: &str, pid: &str) -> Result<
 /// `proposed → approved | edited | rejected | withdrawn`,
 /// `approved | edited → data_attached`.
 pub fn check(conn: &Connection, inv: &str, env: &Envelope) -> Result<()> {
+    if env.kind == Kind::Reveal {
+        // Called under append's BEGIN IMMEDIATE after idempotent replay.
+        // Query the authoritative log, not the outcome's arbitrary status.
+        let has = |kind: &str| -> Result<bool> {
+            Ok(conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM records WHERE investigation = ?1 AND kind = ?2)",
+                [inv, kind],
+                |r| r.get(0),
+            )?)
+        };
+        if !has("outcome")? {
+            return Err(Error::conflict(
+                "outcome_required",
+                "reveal requires an outcome record for this investigation",
+            ));
+        }
+        if has("reveal")? {
+            return Err(Error::conflict(
+                "already_revealed",
+                "this investigation already has a reveal record",
+            ));
+        }
+    }
     let Some((pid, ev)) = env.proposal() else {
         return Ok(());
     };
@@ -205,7 +228,7 @@ pub fn apply(conn: &Connection, rec: &Record) -> Result<()> {
             }
         }
         Some(Kind::Proposal) => apply_proposal(conn, rec)?,
-        Some(Kind::Run | Kind::Step) | None => {}
+        Some(Kind::Run | Kind::Step | Kind::Reveal) | None => {}
     }
     conn.execute(
         "UPDATE investigations SET updated = ?2 WHERE id = ?1",
