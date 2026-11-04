@@ -495,7 +495,10 @@ mod macos {
         // A signed Mach-O cannot be modified by appending data. Relink the
         // native binary with sectcreate; the linker emits its ad-hoc signature.
         // Packaging on macOS therefore runs from this product's source checkout.
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let root = std::env::var_os("AUTOPHYS_PROJECT_ROOT")
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")));
         ensure!(
             root.join("Cargo.toml").is_file(),
             "macOS pack requires the autophys source checkout for native relinking"
@@ -513,9 +516,22 @@ mod macos {
         );
         let target = std::env::var_os("CARGO_TARGET_DIR")
             .map(PathBuf::from)
-            .unwrap_or_else(|| root.join("target"));
+            .or_else(|| {
+                std::env::var_os("HOME")
+                    .map(|home| PathBuf::from(home).join(".cache/autophys/target"))
+            })
+            .context("set CARGO_TARGET_DIR for macOS packaging")?;
         let status = std::process::Command::new("cargo")
-            .current_dir(root)
+            .current_dir(&root)
+            .env("CARGO_TARGET_DIR", &target)
+            .env(
+                "AUTOPHYS_RELEASE",
+                option_env!("AUTOPHYS_RELEASE").unwrap_or("0"),
+            )
+            .env(
+                "AUTOPHYS_COMMIT",
+                option_env!("AUTOPHYS_COMMIT").unwrap_or("dev"),
+            )
             .args(["rustc", "--locked", "--release", "--bin", "autophys", "--"])
             .arg(format!(
                 "-Clink-arg=-Wl,-sectcreate,__AUTOPHYS,__web,{}",

@@ -658,6 +658,7 @@ dependencies = [
  "sha2",
  "tempfile",
  "tento-dirs",
+ "tento-sh",
  "tento-web",
  "thiserror 1.0.69",
  "tokio",

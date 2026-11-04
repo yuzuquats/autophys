@@ -218,10 +218,10 @@ autophys/
   "autophys-rs" is the project name.
 - The root package is `autophys-cli` (operator, 2026-11-04), shaped like
   tento-garmin. Its binary stays `autophys`, and its commands are a
-  `tento_sh` `Scripts` tree: `serve`, `build-web`, `pair`, `keys` and `db`
+  `tento_sh` `Scripts` tree: `serve`, `build-web`, `pack`, `pair`, `keys` and `db`
   operate the daemon, and `projects`, `investigations`, `records`, `approve`,
   `reject` and `verify` are the SDK through `autophys::connect`, so they work
-  on a local folder or a URL. The parser moves to `tento_sh` after phase 1.
+  on a local folder or a URL. The command tree is implemented with `tento_sh::Scripts` and `command!`.
 - `sdks/rust` depends on `rusqlite`, `serde_json`, `sha2` and, for Remote,
   a blocking HTTP client. It does not depend on tento or actix, so it builds
   without `vendor/`.
@@ -431,3 +431,35 @@ prunes complete entries older than seven days.
 the payload SHA-256 when serving embedded assets and null for an explicit
 web root or a dev build. The existing routes and document session cookie
 remain in force.
+
+## CLI command tree
+
+`src/main.rs` composes the `src/scripts.rs` registry. Constructing it reads no
+environment or database, so `autophys --help --json` reflects the full tree
+without HOME or credentials. The daemon adapters retain their existing flag
+and environment parsers, including aliases and repeatable browser origins.
+Usage errors exit 2; operational failures exit 1.
+
+The SDK commands all call `autophys::connect` with `--target`, defaulting to
+`AUTOPHYS_HOME` or `~/autophys`; all accept `--json`:
+
+- `projects`
+- `investigations [--project NAME]`
+- `records INVESTIGATION [--kind KIND]`
+- `approve INVESTIGATION PROPOSAL [--by NAME] [--settings JSON]`
+- `reject INVESTIGATION PROPOSAL [--by NAME] [--reason TEXT]`
+- `verify [--project NAME]`
+
+Review decisions default `--by` to `operator`. Verification returns an array
+of `{project, report}` and exits 1 if a report fails. Directory and
+`.ap-workbook` targets work. URL targets are forwarded unchanged; the current
+SDK reports `Unsupported` for Remote, so those calls fail clearly until its
+Remote client is implemented. CLI routing does not substitute a local
+collection for a URL.
+
+B1-M1 (**agent-chosen, pending operator review**): macOS packaging relinks from
+the source checkout with `-sectcreate`, preserving the compiled release guard
+and commit stamp; `AUTOPHYS_PROJECT_ROOT` can select that checkout. This keeps
+the native linker's signature valid. The alternative is an explicit build-time
+ZIP/link step instead of `pack`; switching costs a small command/build change.
+The section and relink implementation remains untested on macOS.

@@ -13,6 +13,7 @@ pub mod embedded;
 pub mod error;
 pub mod http;
 pub mod keys;
+pub mod scripts;
 pub mod server;
 
 pub use app::{APP_ID, AppConfig, BuildInfo, TENTO, domain};

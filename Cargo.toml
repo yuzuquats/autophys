@@ -22,6 +22,7 @@ autophys = { path = "sdks/rust" }
 # bundler, tento-dirs the app dirs.
 tento-web = { path = "vendor/tento/tento-web" }
 tento-dirs = { path = "vendor/tento/tento-dirs" }
+tento-sh = { path = "vendor/tento/tento-sh" }
 # The same versions the vendored tento crates resolve to.
 actix-web = "4.9.0"
 anyhow = "1.0.94"
