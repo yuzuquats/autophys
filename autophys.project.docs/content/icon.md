@@ -1,7 +1,8 @@
 # Autophys icon
 
 Current selection: R2 Response with the lower dot (operator, 2026-11-04).
-The plain mark is served as /brand.svg in the header and opening slide.
+The plain mark is served as /brand.svg in the header. The first slide starts
+with its title: brand.ts removes its icon container before first paint.
 The favicon uses /favicon.svg, including the Lona family's white 32-unit tile,
 6-unit corner radius, fine border and soft shadow, inside a 44-unit canvas.
 Both are vector-only. The favicon has a local SVG filter; neither asset uses

@@ -1,6 +1,6 @@
-/** App-owned branding for the cookbook's retained header and first-slide mark.
+/** App-owned header branding; the first slide starts directly with its title.
  * The shell mounts synchronously after this module's import. One microtask
- * applies the mark before the first paint; drawer navigation keeps these nodes.
+ * applies branding before the first paint; drawer navigation keeps these nodes.
  */
 function mark(size: number): HTMLImageElement {
   const image = document.createElement("img");
@@ -26,6 +26,6 @@ queueMicrotask(() => {
   for (
     const eyebrow of document.querySelectorAll(".ck-hook .ck-slide-eyebrow")
   ) {
-    eyebrow.replaceChildren(mark(40));
+    eyebrow.remove();
   }
 });
