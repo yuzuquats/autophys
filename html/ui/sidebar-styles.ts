@@ -14,7 +14,7 @@ export function sidebarStyles(w: string): string {
 .ck-app[data-cookbook]:has(.ap-sidebar) .ck-details .ck-panel-heading { padding-right:40px; }
 .ck-app[data-cookbook]:has(.ap-sidebar) .ck-panels[data-details] .ck-details-toggle { right:8px; }
 .ck-app[data-cookbook]:has(.ap-sidebar) .ap-crumb { flex-wrap:nowrap;overflow:hidden;font:600 13px/18px var(--ap-font); }
-.ck-app[data-cookbook]:has(.ap-sidebar) .ap-crumb > * { white-space:nowrap; }
+.ck-app[data-cookbook]:has(.ap-sidebar) .ap-crumb > :not(.ap-sep) { white-space:nowrap; }
 .ck-app[data-cookbook]:has(.ap-sidebar) .ap-crumb b { padding-left:0;overflow:hidden;text-overflow:ellipsis; }
 .ck-app[data-cookbook]:has(.ap-sidebar) .ck-panels:not([data-sidebar]) .ap-toolbar { padding-left:44px; }
 .ck-app[data-cookbook]:has(.ap-sidebar) .ck-panels:not([data-details]) .ap-toolbar { padding-right:44px; }
