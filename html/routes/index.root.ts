@@ -18,7 +18,8 @@ import { autophysStyles } from "../ui/styles.ts";
 import { placeholderStyles } from "../ui/placeholder-styles.ts";
 import { deck, tutorial } from "./content.ts";
 import { landingDocs } from "./docs.ts";
-import { signedOutView } from "../client/derive/signed-out.ts";
+import { quietLoading, signedOutView } from "../client/derive/signed-out.ts";
+import { signInInPlace } from "../client/sign-in-in-place.ts";
 import "./brand.ts";
 
 const USER = "james";
@@ -46,8 +47,9 @@ const clock = () => new Date().toLocaleTimeString("en-GB", { hour: "2-digit", mi
 const ctl = new Controller(new Store(source), { user: USER, now: clock });
 // `serve --login` marks a signed-out page (the Sign in badge). The landing page stays usable:
 // the app makes no API calls (no 401, no reload) and its main pane asks to sign in.
-const SIGNED_OUT = forced !== "fixtures" && document.getElementById("ap-account")?.dataset.signedIn === "false";
-if (SIGNED_OUT) { const base = ctl.view.bind(ctl); ctl.view = () => signedOutView(base()); }
+let SIGNED_OUT = forced !== "fixtures" && document.getElementById("ap-account")?.dataset.signedIn === "false";
+const baseView = ctl.view.bind(ctl);
+ctl.view = () => SIGNED_OUT ? signedOutView(baseView()) : quietLoading(baseView());
 
 let teardown: (() => void) | null = null;
 
@@ -105,8 +107,12 @@ const app: Cookbook.App = {
     };
     const unsubscribe = ctl.subscribe(redraw);
     redraw();
-    if (!SIGNED_OUT) void ctl.store.start().catch(() => {}); // Store exposes the failure through the view.
-    const poll = SIGNED_OUT ? undefined : setInterval(() => void ctl.store.refreshPairings(), PAIRING_POLL_MS);
+    let poll: ReturnType<typeof setInterval> | undefined;
+    // Store exposes the failure through the view.
+    const start = () => { void ctl.store.start().catch(() => {}); poll = setInterval(() => void ctl.store.refreshPairings(), PAIRING_POLL_MS); };
+    // Signed out: the card signs in without a page load, then the workspace starts in place.
+    if (SIGNED_OUT) signInInPlace(() => { SIGNED_OUT = false; start(); redraw(); });
+    else start();
     teardown = () => { clearInterval(poll); unsubscribe(); views.forEach((v) => v.dispose()); removeStyles(); };
   },
   unmount() {

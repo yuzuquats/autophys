@@ -15,7 +15,8 @@ ${w} .ap-ph i.card { height:96px;border-radius:10px;margin:6px 0; }
 ${w} .ap-ph-details { padding:4px 0; }
 @keyframes ap-ph-shimmer { 0% { background-position:100% 0; } 100% { background-position:-200% 0; } }
 @media (prefers-reduced-motion: reduce) { ${w} .ap-ph i { animation:none; } }
-${w} .ap-side-notice [data-ap-empty][data-title=""] { display:none; }
+${w} [data-ap-empty][data-title=""] { display:none; }
+${w} .ap-viewer.ap-state > .ap-ph { max-width:420px; }
 ${w} :has(> .ap-signin-wrap) > .ap-toolbar, ${w} :has(> * > .ap-signin-wrap) > .ap-toolbar { visibility:hidden; }
 ${w} .ap-signin-wrap { container-type:size;display:grid;place-content:safe center;place-items:center;
   height:100%;box-sizing:border-box;padding:16px;overflow:auto; }
@@ -34,6 +35,7 @@ ${w} .ap-signin button { margin-top:1em;padding:.8em;border:0;border-radius:.55e
   font:inherit;font-weight:600;cursor:pointer; }
 ${w} .ap-signin .ap-signin-alt { margin:.85em 0 0;font-size:.93em;color:var(--ap-sec,#5b5b5b); }
 ${w} .ap-signin .ap-signin-alt a { color:inherit; }
+${w} .ap-signin .ap-signin-err { background:#fdecec;color:#9b1c1c;border-radius:.55em;padding:.55em .75em;font-size:.93em;margin:.2em 0 .1em; }
 /* A short pane (a small window with the tutorial open): drop the subtitle and tighten. */
 @container (max-height: 300px) {
   ${w} .ap-signin { padding:1.1em 1.4em;gap:.3em; }
