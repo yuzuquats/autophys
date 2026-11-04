@@ -708,3 +708,20 @@ Logs, final commit identity and exact counts are retained under
 is part of this review. Private indexes and compare-and-swap commits preserve
 concurrent source and staged work. The supported task-board CLI is unavailable
 on this host; the external task record carries the review steps instead.
+
+
+## Fit curves and ground truth (Rust step 2, 2026-11-04)
+
+Implementation `17d84f989c43` (`I84635c971ba4f5375689`) adds uncounted
+truth-accuracy run curves and `Evaluator::reveal`, including current-fit
+uncertainty and post-reveal resume/continuation refusal. The shared store
+validates curves and reveal ordering/idempotency. The Python workbook and
+numeric fixtures pass (`rtol=1e-5, atol=1e-8`); canonical metadata and stored
+records stay exact. No existing golden or config/source hash changes.
+
+The archived implementation passes Rust workspace 170/0/2
+(passed/failed/ignored), Python 590 passed/6 skipped. Independent GPT-6.1 Sol
+review returned ready with no actionable findings. The final archived-tree
+rerun and cleanup receipt are linked from
+[fit-curves-and-truth.md](fit-curves-and-truth.md#rust-qualification-and-independent-review-receipt).
+Remaining SDK implementation work: **Remote transport only**.

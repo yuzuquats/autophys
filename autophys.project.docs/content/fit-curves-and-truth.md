@@ -268,3 +268,30 @@ zero simulation budget, uncertainty cancellation and reveal refusal.
 No new consequential design choice is introduced: the public evaluator hook,
 sampling, caps and numerical tolerances follow rev 2. FC-1/GT-1 remain
 **agent-chosen, pending operator review** as recorded above.
+
+
+### Rust qualification and independent review receipt
+
+Implementation `17d84f989c43` (`I84635c971ba4f5375689`) passed a clean
+`git archive` gate: Rust workspace **170 passed, 0 failed, 2 ignored**;
+Python **590 passed, 6 skipped**. Existing hashes, goldens and conformance
+inputs were unchanged. The new tests include both thermal curve fixtures,
+all golden run curves and canonical reveal fields at the reference estimate.
+
+A separate GPT-6.1 Sol reviewer (no credits model) returned **ready**, with
+no actionable correctness/contract findings or likely-defect test gaps.
+The reviewer checked committed blobs and the archive, excluded dirty peer
+changes, and confirmed the evaluator-only writer matches rev 2 and Python.
+No finding remains unresolved. Review task: `autophys-rs-fcgt-review-round-1`.
+
+The final receipt commit is requalified from its own `git archive` export
+with `CARGO_TARGET_DIR=~/.cache/autophys/rs-fcgt-target`, running
+`cargo test --workspace --locked` and the full Python suite. Logs, exact final
+commit identity and counts are retained on rwc-dev-01 under
+`~/.cache/autophys/rs-fcgt-work/` (`receipt.json`, `rust-gate-final.log`,
+`python-gate-final.log`). The disposable target is removed after the gate;
+the pre-existing repository-root target is left alone. No push or deploy.
+
+The installed task CLI lacks `task`; external `tasks.json` tracks this work.
+Remote Rust transport remains outside this step. FC-1/GT-1 operator design
+review remains pending, as before.
