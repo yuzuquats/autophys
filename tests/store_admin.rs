@@ -17,6 +17,7 @@ async fn cli(db: &Path, line: &str) -> (ExitCode, String, String) {
         Defaults {
             collection: db.clone(),
             server_db: db.join("server.db"),
+            public_url: None,
         },
         &mut out,
         &mut err,

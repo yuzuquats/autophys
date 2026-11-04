@@ -100,6 +100,11 @@ pub fn domain(config: &AppConfig, info: BuildInfo) -> DomainConfig {
             cfg.app_data(sessions.clone());
             cfg.route("/api/healthz", web::get().to(healthz));
             configure_api_v1(cfg, store.as_ref());
+            // Sign-in pages and /api/auth (used when `serve --login`).
+            if let Some(api) = store.as_ref() {
+                cfg.app_data(web::Data::new(api.clone()));
+                crate::login::configure(cfg, api.clone());
+            }
             // Anything else under /api is a JSON 404, never the page.
             cfg.route("/api", web::route().to(api_not_found));
             cfg.route("/api/{tail:.*}", web::route().to(api_not_found));
@@ -142,17 +147,122 @@ async fn api_not_found(req: HttpRequest) -> HttpResponse {
 }
 
 async fn app_document(
+    req: HttpRequest,
     shell: web::Data<Shell>,
     sessions: web::Data<crate::http::auth::BrowserSessions>,
+    api: Option<web::Data<Api>>,
 ) -> Result<HttpResponse, crate::error::ApiError> {
+    // `serve --login`: signed out, only the landing page and the read-only
+    // recorded demo (bundled fixtures, no API reads) are served; the API
+    // stays closed. Anything else redirects to the sign-in page.
+    let mut badge = None;
+    let mut demo = false;
+    if let Some(api) = api.filter(|a| a.options().login) {
+        match crate::http::auth::signed_in(&api, &req).await? {
+            Some(user) => badge = Some(crate::login::badge(&user)),
+            None if req.path() == "/" => {
+                badge = Some(crate::login::anonymous_badge("Not signed in"))
+            }
+            None if demo_requested(&req) => {
+                badge = Some(crate::login::anonymous_badge("Read-only demo"));
+                demo = true;
+            }
+            // The cookbook drops `?source=fixtures` from the address once the
+            // app opens, so a reload inside the demo arrives without it.
+            None if req.cookie(DEMO_COOKIE).is_some() => {
+                let sep = if req.query_string().is_empty() {
+                    "?"
+                } else {
+                    "&"
+                };
+                let to = format!("{}{}{sep}source=fixtures", req.path(), query_of(&req));
+                return Ok(HttpResponse::SeeOther()
+                    .insert_header((actix_web::http::header::LOCATION, to))
+                    .insert_header((actix_web::http::header::CACHE_CONTROL, "no-store"))
+                    .finish());
+            }
+            None => {
+                let path = req.uri().path_and_query().map_or("/app", |p| p.as_str());
+                let next: String = path
+                    .bytes()
+                    .map(|b| match b {
+                        b'A'..=b'Z'
+                        | b'a'..=b'z'
+                        | b'0'..=b'9'
+                        | b'-'
+                        | b'_'
+                        | b'.'
+                        | b'~'
+                        | b'/' => (b as char).to_string(),
+                        b => format!("%{b:02X}"),
+                    })
+                    .collect();
+                return Ok(HttpResponse::SeeOther()
+                    .insert_header((
+                        actix_web::http::header::LOCATION,
+                        format!("/login?next={next}"),
+                    ))
+                    .insert_header((actix_web::http::header::CACHE_CONTROL, "no-store"))
+                    .finish());
+            }
+        }
+    }
     match tokio::fs::read(&shell.0).await {
         Ok(html) => Ok(HttpResponse::Ok()
             .cookie(sessions.issue_cookie()?)
+            .cookie(demo_cookie(demo))
             .insert_header((actix_web::http::header::CACHE_CONTROL, "no-store"))
             .content_type("text/html; charset=utf-8")
-            .body(html)),
+            .body(match badge {
+                Some(badge) => with_badge(html, &badge),
+                None => html,
+            })),
         Err(error) => Ok(HttpResponse::InternalServerError()
             .content_type("text/plain; charset=utf-8")
             .body(format!("the built shell is missing ({error})\n"))),
+    }
+}
+
+/// Set while a signed-out visitor is in the recorded demo (`serve --login`),
+/// so a reload returns them to it. It grants nothing: the demo reads only
+/// bundled fixtures and the API still requires a sign-in.
+const DEMO_COOKIE: &str = "autophys_demo";
+
+/// A request for the read-only recorded demo: `/app...?source=fixtures`.
+fn demo_requested(req: &HttpRequest) -> bool {
+    let path = req.path();
+    (path == "/app" || path.starts_with("/app/"))
+        && req
+            .query_string()
+            .split('&')
+            .any(|kv| kv == "source=fixtures")
+}
+
+fn query_of(req: &HttpRequest) -> String {
+    match req.query_string() {
+        "" => String::new(),
+        q => format!("?{q}"),
+    }
+}
+
+/// The demo cookie: set when the demo is served, cleared by any other page.
+fn demo_cookie(on: bool) -> actix_web::cookie::Cookie<'static> {
+    let mut c = actix_web::cookie::Cookie::build(DEMO_COOKIE, "1")
+        .path("/")
+        .http_only(true)
+        .same_site(actix_web::cookie::SameSite::Lax)
+        .finish();
+    if !on {
+        c.make_removal();
+    }
+    c
+}
+
+/// Put the account badge just before `</body>` (or at the end).
+fn with_badge(html: Vec<u8>, badge: &str) -> Vec<u8> {
+    let text = String::from_utf8_lossy(&html);
+    match text.rfind("</body>") {
+        Some(at) => format!("{}{badge}{}", &text[..at], &text[at..]).into_bytes(),
+        None => format!("{text}{badge}").into_bytes(),
     }
 }

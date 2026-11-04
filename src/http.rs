@@ -654,7 +654,18 @@ async fn ingest(
     body: web::Payload,
     rule: Rule<'_>,
 ) -> Result<HttpResponse> {
-    let env = Envelope::from_value(body_json(body).await?)?;
+    ingest_value(api, inv, req, body_json(body).await?, rule).await
+}
+
+/// [`ingest`] over a body already parsed (and possibly stamped by the server).
+async fn ingest_value(
+    api: &Api,
+    inv: &str,
+    req: &HttpRequest,
+    body: Value,
+    rule: Rule<'_>,
+) -> Result<HttpResponse> {
+    let env = Envelope::from_value(body)?;
     if idempotency_key(req)?.is_some_and(|k| k != env.id) {
         return Err(ApiError::bad_request(
             "Idempotency-Key differs from the envelope id",
@@ -734,14 +745,21 @@ async fn proposals(
 }
 
 async fn approvals(
-    _: KeyOrBrowser,
+    KeyOrBrowser(caller): KeyOrBrowser,
     s: Data,
     path: web::Path<(String, String)>,
     r: HttpRequest,
     b: web::Payload,
 ) -> Result<HttpResponse> {
     let (inv, pid) = path.into_inner();
-    ingest(&s, &inv, &r, b, Rule::Decide(&pid)).await
+    let mut body = body_json(b).await?;
+    // A signed-in person decides as themselves, whatever the page sent.
+    if let Some(by) = caller.person() {
+        if let Some(payload) = body.get_mut("payload").and_then(Value::as_object_mut) {
+            payload.insert("by".into(), json!(by));
+        }
+    }
+    ingest_value(&s, &inv, &r, body, Rule::Decide(&pid)).await
 }
 
 async fn data(

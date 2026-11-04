@@ -15,6 +15,7 @@ pub fn scripts() -> Scripts<()> {
         .add_command(pack)
         .add_subcommand("pair", pair_commands())
         .add_subcommand("keys", keys_commands())
+        .add_subcommand("users", users_commands())
         .add_subcommand("db", db_commands())
         .add_command(projects)
         .add_command(investigations)
@@ -37,6 +38,12 @@ fn keys_commands() -> Scripts<()> {
         .add_command(keys_list)
         .add_command(keys_revoke)
 }
+fn users_commands() -> Scripts<()> {
+    Scripts::new(())
+        .add_command(users_list)
+        .add_command(users_add)
+        .add_command(users_remove)
+}
 fn db_commands() -> Scripts<()> {
     Scripts::new(())
         .add_command(db_verify)
@@ -50,6 +57,7 @@ fn description(root: &Scripts<()>) -> Value {
     for (name, group) in [
         ("pair", pair_commands()),
         ("keys", keys_commands()),
+        ("users", users_commands()),
         ("db", db_commands()),
     ] {
         doc["commands"][name] = tento_sh::command_index_value(&group);
@@ -121,10 +129,13 @@ fn admin(group: &str, action: &str, args: Vec<String>) -> tento_sh::Result<Value
             .map(std::path::PathBuf::from)
             .map(Ok)
             .unwrap_or_else(crate::default_server_db)?,
+        public_url: std::env::var("AUTOPHYS_PUBLIC_URL")
+            .ok()
+            .filter(|v| !v.is_empty()),
     };
     let mut argv = vec![action.to_string()];
     argv.extend(args);
-    if group == "db" || (group == "keys" && action == "list") {
+    if group == "db" || (matches!(group, "keys" | "users") && action == "list") {
         argv.push("--json".into());
     }
     let (mut out, mut err) = (Vec::new(), Vec::new());
@@ -205,6 +216,27 @@ admin_command!(
     "verify"
 );
 admin_command!(db_check, "check", "Alias of db verify", "db", "check");
+admin_command!(
+    users_list,
+    "list",
+    "List browser accounts; --server-db",
+    "users",
+    "list"
+);
+admin_command!(
+    users_add,
+    "add",
+    "Invite EMAIL (or re-invite: a password reset); prints a one-time link; --public-url, --server-db",
+    "users",
+    "add"
+);
+admin_command!(
+    users_remove,
+    "remove",
+    "Delete EMAIL's account and end its sessions; --server-db",
+    "users",
+    "remove"
+);
 
 #[derive(CommandArg, Deserialize, Clone, Debug)]
 #[serde(deny_unknown_fields)]
@@ -417,7 +449,7 @@ pub async fn run(mut argv: Vec<String>, out: &mut impl Write) -> u8 {
     if !help
         && matches!(
             argv.get(1).map(String::as_str),
-            Some("pair" | "keys" | "db")
+            Some("pair" | "keys" | "users" | "db")
         )
         && argv.get(2).is_none_or(|word| word.starts_with('-'))
     {

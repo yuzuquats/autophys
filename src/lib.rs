@@ -5,14 +5,17 @@
 //! `/api/v1` ([`http`]) maps each route to one call into the `autophys`
 //! crate (`sdks/rust`) over a collection of `.ap-workbook` files; [`keys`]
 //! holds the server's own database of API keys and pairings; [`admin`] is
-//! `autophys pair | keys | db`.
+//! `autophys pair | keys | db | users`; [`accounts`] and [`login`] are the
+//! invite-only browser sign-in of `serve --login`.
 
+pub mod accounts;
 pub mod admin;
 pub mod app;
 pub mod embedded;
 pub mod error;
 pub mod http;
 pub mod keys;
+pub mod login;
 pub mod scripts;
 pub mod server;
 

@@ -9,6 +9,10 @@
 //! autophys pair deny WXYZ-1234
 //! autophys keys list [--json]              id, device, created, last used, revoked
 //! autophys keys revoke k_7f3a…
+//! autophys users list                      browser accounts (`serve --login`)
+//! autophys users add ada@lab.org           create or re-invite; prints a
+//!                                          one-time link (valid 7 days)
+//! autophys users remove ada@lab.org        delete and sign out everywhere
 //! autophys db verify [--rebuild] [--json] [--project NAME]
 //!                                          verify every workbook's chains and
 //!                                          projections (`wb.verify()`); with
@@ -16,7 +20,9 @@
 //! ```
 //! `db check` is the same as `db verify`. Every command takes
 //! `--collection <dir>` (alias `--db`) and `--server-db <file>`; the caller
-//! supplies the defaults.
+//! supplies the defaults. `users add` also takes `--public-url <origin>` for
+//! the link it prints. Only `users add` prints a secret: the invite link,
+//! which is the point of the command.
 
 use std::io::Write;
 use std::path::PathBuf;
@@ -31,6 +37,7 @@ use crate::keys::KeyStore;
 pub const USAGE: &str = "\
 usage: autophys pair list | pair approve <CODE> | pair deny <CODE>
        autophys keys list [--json] | keys revoke <KEY_ID>
+       autophys users list [--json] | users add <EMAIL> [--public-url URL] | users remove <EMAIL>
        autophys db verify [--rebuild] [--json] [--project NAME]   (db check is the same)
        (each also takes --collection <dir> (alias --db) and --server-db <file>)";
 
@@ -39,6 +46,7 @@ struct Args {
     collection: Option<PathBuf>,
     server_db: Option<PathBuf>,
     project: Option<String>,
+    public_url: Option<String>,
     json: bool,
     rebuild: bool,
 }
@@ -49,6 +57,7 @@ fn parse(args: impl IntoIterator<Item = String>) -> Result<Args, String> {
         collection: None,
         server_db: None,
         project: None,
+        public_url: None,
         json: false,
         rebuild: false,
     };
@@ -70,6 +79,7 @@ fn parse(args: impl IntoIterator<Item = String>) -> Result<Args, String> {
             "--collection" | "--db" => out.collection = Some(value(&key)?.into()),
             "--server-db" => out.server_db = Some(value(&key)?.into()),
             "--project" => out.project = Some(value(&key)?),
+            "--public-url" => out.public_url = Some(value(&key)?),
             s if s.starts_with("--") => return Err(format!("unknown flag {s:?}")),
             _ => out.words.push(arg),
         }
@@ -82,6 +92,9 @@ pub struct Defaults {
     pub collection: PathBuf,
     /// The server database in app data (or an explicitly configured path).
     pub server_db: PathBuf,
+    /// Where `users add` links point (`AUTOPHYS_PUBLIC_URL`); without it the
+    /// link is a path for the operator to complete.
+    pub public_url: Option<String>,
 }
 
 /// Run `command` (`pair`, `keys` or `db`) with its remaining arguments.
@@ -103,6 +116,7 @@ pub fn run(
         (command, words.as_slice()),
         ("pair", ["list"] | ["approve" | "deny", _])
             | ("keys", ["list"] | ["revoke", _])
+            | ("users", ["list"] | ["add" | "remove", _])
             | ("db", ["verify" | "check"])
     );
     if !valid {
@@ -176,6 +190,66 @@ pub fn run(
                     "was already revoked"
                 }
             );
+            ExitCode::SUCCESS
+        }),
+        ("users", ["list"]) => keys.users_list().map(|list| {
+            if args.json {
+                let _ = writeln!(
+                    out,
+                    "{}",
+                    serde_json::to_string_pretty(&list).unwrap_or_default()
+                );
+            } else {
+                if list.is_empty() {
+                    let _ = writeln!(out, "no accounts (add one with `autophys users add EMAIL`)");
+                }
+                for u in list {
+                    let state = if u.active { "active" } else { "invited" };
+                    let _ = writeln!(
+                        out,
+                        "{}  {}  {}  created {}",
+                        u.id, u.email, state, u.created
+                    );
+                }
+            }
+            ExitCode::SUCCESS
+        }),
+        ("users", ["add", email]) => keys.users_invite(email).map(|inv| {
+            let base = args
+                .public_url
+                .clone()
+                .or(defaults.public_url.clone())
+                .unwrap_or_default();
+            let base = base.trim_end_matches('/');
+            let verb = if inv.user.active {
+                "re-invited"
+            } else {
+                "invited"
+            };
+            let _ = writeln!(
+                out,
+                "{verb} {} ({}). Send them this one-time link (valid {} days):\n  {base}/invite#{}",
+                inv.user.email,
+                inv.user.id,
+                crate::accounts::INVITE_TTL.num_days(),
+                inv.token
+            );
+            if base.is_empty() {
+                let _ = writeln!(
+                    out,
+                    "  (prefix it with the daemon's public URL, or pass --public-url)"
+                );
+            }
+            if inv.user.active {
+                let _ = writeln!(
+                    out,
+                    "  their current password keeps working until they use it"
+                );
+            }
+            ExitCode::SUCCESS
+        }),
+        ("users", ["remove", email]) => keys.users_remove(email).map(|u| {
+            let _ = writeln!(out, "removed {} ({}) and ended its sessions", u.email, u.id);
             ExitCode::SUCCESS
         }),
         _ => unreachable!("checked above"),

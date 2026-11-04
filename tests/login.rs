@@ -1,0 +1,406 @@
+//! `serve --login`: invite-only browser accounts gate the app document and
+//! every keyless `/api/v1` call; API keys are unaffected; a signed-in
+//! person's approvals are recorded under their email.
+
+mod common;
+
+use std::path::PathBuf;
+
+use actix_web::{App, test, web};
+use autophys::sha256_hex;
+use autophys_cli::keys::Options;
+use autophys_cli::{AppConfig, BuildInfo, webapp};
+use common::*;
+use serde_json::{Value, json};
+
+const PUBLIC: &str = "https://autophys.example.org";
+const CONFIG: &[u8] = br#"{"name":"thermal","x":1.5}"#;
+
+fn web_root() -> PathBuf {
+    let dir = tempfile::tempdir().unwrap().keep();
+    std::fs::create_dir_all(dir.join("routes")).unwrap();
+    std::fs::write(
+        dir.join("routes/index.anon.html"),
+        "<!doctype html><title>autophys</title><body></body></html>",
+    )
+    .unwrap();
+    dir
+}
+
+macro_rules! app {
+    ($api:expr) => {{
+        let config = AppConfig {
+            project_root: PathBuf::from(env!("CARGO_MANIFEST_DIR")),
+            web_root: web_root(),
+            store: Some($api.clone()),
+        };
+        let info = BuildInfo {
+            version: "0.1.0".into(),
+            commit: "test".into(),
+            web_id: None,
+        };
+        let webapp = std::sync::Arc::new(webapp(&config, info, false).unwrap());
+        test::init_service(App::new().configure(move |cfg| webapp.configure(cfg, web::scope(""))))
+            .await
+    }};
+}
+
+fn login_fixture() -> Fixture {
+    fixture_with(Options {
+        login: true,
+        public_url: Some(PUBLIC.into()),
+        ..options()
+    })
+}
+
+/// A request as it arrives through the public proxy (Host is not local).
+fn public(req: test::TestRequest) -> test::TestRequest {
+    req.insert_header(("host", "autophys.example.org"))
+        .peer_addr("127.0.0.1:50000".parse().unwrap())
+}
+
+fn form(path: &str, body: &str, origin: Option<&str>) -> test::TestRequest {
+    let req = public(test::TestRequest::post().uri(path))
+        .insert_header(("content-type", "application/x-www-form-urlencoded"))
+        .set_payload(body.to_string());
+    match origin {
+        Some(o) => req.insert_header(("origin", o)),
+        None => req,
+    }
+}
+
+/// (status, Location, the named Set-Cookie value, body)
+async fn send<S, B>(
+    app: &S,
+    req: test::TestRequest,
+    cookie: &str,
+) -> (u16, String, Option<String>, String)
+where
+    S: actix_web::dev::Service<
+            actix_http::Request,
+            Response = actix_web::dev::ServiceResponse<B>,
+            Error = actix_web::Error,
+        >,
+    B: actix_web::body::MessageBody,
+{
+    let resp = test::call_service(app, req.to_request()).await;
+    let status = resp.status().as_u16();
+    let location = resp
+        .headers()
+        .get("location")
+        .map(|v| v.to_str().unwrap().to_string())
+        .unwrap_or_default();
+    let set = resp
+        .response()
+        .cookies()
+        .find(|c| c.name() == cookie)
+        .map(|c| c.value().to_string());
+    let body = String::from_utf8_lossy(&test::read_body(resp).await).to_string();
+    (status, location, set, body)
+}
+
+#[actix_web::test]
+async fn sign_in_gates_the_app_and_the_browser_api() {
+    let f = login_fixture();
+    let app = app!(f.api);
+
+    // Signed out: the document redirects, keyless reads are refused even
+    // with a document session and a local Host.
+    let (s, to, _, _) = send(
+        &app,
+        public(test::TestRequest::get().uri("/app/inv_1?x=1")),
+        "x",
+    )
+    .await;
+    assert_eq!((s, to.as_str()), (303, "/login?next=/app/inv_1%3Fx%3D1"));
+    assert_eq!(
+        call(
+            &app,
+            browser(&f.api, get("/workspace", None), false).to_request()
+        )
+        .await
+        .0,
+        401
+    );
+    let (s, _, _, page) = send(&app, public(test::TestRequest::get().uri("/login")), "x").await;
+    assert!(
+        s == 200
+            && page.contains("action=\"/api/auth/login\"")
+            && page.contains("href=\"/app?source=fixtures\""),
+        "{page}"
+    );
+
+    // Signed out, the landing page and the recorded demo are public and say
+    // so; the live workbench is not, and the fixtures flag is matched exactly.
+    for (uri, label) in [
+        ("/", "Not signed in"),
+        ("/app?source=fixtures", "Read-only demo"),
+        ("/app/inv_1?x=1&source=fixtures", "Read-only demo"),
+    ] {
+        let (s, _, _, page) = send(&app, public(test::TestRequest::get().uri(uri)), "x").await;
+        assert!(
+            s == 200 && page.contains(label) && !page.contains("Sign out"),
+            "{uri}: {s}"
+        );
+    }
+    // Inside the demo, a reload (the address has lost ?source=fixtures)
+    // returns to the demo rather than to the sign-in page.
+    let (s, to, _, _) = send(
+        &app,
+        public(test::TestRequest::get().uri("/app/inv_1?x=1"))
+            .cookie(actix_web::cookie::Cookie::new("autophys_demo", "1")),
+        "x",
+    )
+    .await;
+    assert_eq!((s, to.as_str()), (303, "/app/inv_1?x=1&source=fixtures"));
+    assert_eq!(
+        call(
+            &app,
+            browser(&f.api, get("/workspace", None), false)
+                .cookie(actix_web::cookie::Cookie::new("autophys_demo", "1"))
+                .to_request()
+        )
+        .await
+        .0,
+        401,
+        "the demo cookie grants no API access"
+    );
+    for uri in ["/app", "/app?source=fixturesX", "/app?xsource=fixtures"] {
+        let (s, to, _, _) = send(&app, public(test::TestRequest::get().uri(uri)), "x").await;
+        assert!(
+            s == 303 && to.starts_with("/login?next="),
+            "{uri}: {s} {to}"
+        );
+    }
+
+    // Accept an invite: password rules, then a session cookie.
+    let invite = f.api.keys.users_invite("Ada@Lab.org").unwrap();
+    let body =
+        |pw: &str, confirm: &str| format!("token={}&password={pw}&confirm={confirm}", invite.token);
+    let (s, _, _, page) = send(
+        &app,
+        form(
+            "/api/auth/invite",
+            &body("longenough1", "different11"),
+            Some(PUBLIC),
+        ),
+        "x",
+    )
+    .await;
+    assert!(s == 400 && page.contains("don&#39;t match"), "{page}");
+    let (s, _, _, _) = send(
+        &app,
+        form(
+            "/api/auth/invite",
+            &body("longenough1", "longenough1"),
+            None,
+        ),
+        "x",
+    )
+    .await;
+    assert_eq!(s, 403, "a form POST needs an Origin");
+    let (s, _, _, _) = send(
+        &app,
+        form(
+            "/api/auth/invite",
+            &body("longenough1", "longenough1"),
+            Some("https://evil.example"),
+        ),
+        "x",
+    )
+    .await;
+    assert_eq!(s, 403, "a foreign Origin");
+    let (s, to, login, _) = send(
+        &app,
+        form(
+            "/api/auth/invite",
+            &body("longenough1", "longenough1"),
+            Some(PUBLIC),
+        ),
+        "autophys_login",
+    )
+    .await;
+    assert_eq!((s, to.as_str()), (303, "/app"));
+    let login = login.expect("sign-in cookie");
+    // The invite is spent.
+    let (s, _, _, page) = send(
+        &app,
+        form(
+            "/api/auth/invite",
+            &body("longenough1", "longenough1"),
+            Some(PUBLIC),
+        ),
+        "x",
+    )
+    .await;
+    assert!(s == 400 && page.contains("expired"), "{page}");
+
+    // Signed in: the document carries the badge and a document session.
+    let doc = public(test::TestRequest::get().uri("/app")).cookie(actix_web::cookie::Cookie::new(
+        "autophys_login",
+        login.clone(),
+    ));
+    let (s, _, session, page) = send(&app, doc, "autophys_session").await;
+    assert_eq!(s, 200, "{page}");
+    assert!(page.contains("ada@lab.org") && page.contains("/api/auth/logout"));
+    let session = session.expect("document session");
+    let both = |req: test::TestRequest| {
+        public(req)
+            .cookie(actix_web::cookie::Cookie::new(
+                "autophys_login",
+                login.clone(),
+            ))
+            .cookie(actix_web::cookie::Cookie::new(
+                "autophys_session",
+                session.clone(),
+            ))
+    };
+    assert_eq!(
+        call(&app, both(get("/workspace", None)).to_request())
+            .await
+            .0,
+        200
+    );
+    let (s, me) = call(
+        &app,
+        both(test::TestRequest::get().uri("/api/auth/me")).to_request(),
+    )
+    .await;
+    assert_eq!(
+        (s, me["user"]["email"].as_str()),
+        (200, Some("ada@lab.org"))
+    );
+    // The sign-in cookie alone (no document session) is not enough for the API.
+    let only_login = public(get("/workspace", None)).cookie(actix_web::cookie::Cookie::new(
+        "autophys_login",
+        login.clone(),
+    ));
+    assert_eq!(call(&app, only_login.to_request()).await.0, 401);
+
+    // Password sign-in.
+    let (s, _, _, _) = send(
+        &app,
+        form(
+            "/api/auth/login",
+            "email=ada%40lab.org&password=wrongwrong1&next=%2Fapp",
+            Some(PUBLIC),
+        ),
+        "x",
+    )
+    .await;
+    assert_eq!(s, 401);
+    let (s, to, again, _) = send(
+        &app,
+        form(
+            "/api/auth/login",
+            "email=ADA%40lab.org&password=longenough1&next=%2F%2Fevil.example",
+            Some(PUBLIC),
+        ),
+        "autophys_login",
+    )
+    .await;
+    assert_eq!((s, to.as_str()), (303, "/app"), "next is same-site only");
+    assert!(again.is_some());
+
+    // Sign out ends the session.
+    let out = form("/api/auth/logout", "", Some(PUBLIC)).cookie(actix_web::cookie::Cookie::new(
+        "autophys_login",
+        login.clone(),
+    ));
+    let (s, to, _, _) = send(&app, out, "x").await;
+    assert_eq!((s, to.as_str()), (303, "/login"));
+    assert_eq!(
+        call(&app, both(get("/workspace", None)).to_request())
+            .await
+            .0,
+        401
+    );
+}
+
+#[actix_web::test]
+async fn api_keys_still_work_and_approvals_record_the_person() {
+    let f = login_fixture();
+    let app = app!(f.api);
+    // Pairing and keyed calls are untouched by --login.
+    let key = pair(&app, &f.api, "lab-pc").await;
+    let k = Some(key.as_str());
+    let (_, p) = call(
+        &app,
+        post("/projects", k, &json!({"name": "thermal"})).to_request(),
+    )
+    .await;
+    let pid = p["project"]["id"].as_str().unwrap().to_string();
+    let version = format!("sha256:{}", sha256_hex([CONFIG]));
+    let (s, _) = call(
+        &app,
+        put_raw(
+            &format!("/projects/{pid}/config_versions/{version}"),
+            k,
+            CONFIG,
+        )
+        .to_request(),
+    )
+    .await;
+    assert_eq!(s, 201);
+    let body = json!({"project_id": pid, "config_version": version, "overrides": {"free": ["C"]}, "meta": {"name": "thermal"}});
+    let (s, inv) = call(&app, post("/investigations", k, &body).to_request()).await;
+    assert_eq!(s, 201, "{inv}");
+    let inv = inv["id"].as_str().unwrap().to_string();
+    let base = format!("/investigations/{inv}/proposals");
+    let proposed = json!({"id": "r1", "kind": "proposal", "payload": {"proposal_id": "p1", "event": "proposed", "experiment": "sine", "settings": {"f": 0.44}}});
+    assert_eq!(
+        call(&app, post(&base, k, &proposed).to_request()).await.0,
+        201
+    );
+
+    // A signed-in browser approves; the page claims to be "james".
+    let invite = f.api.keys.users_invite("ada@lab.org").unwrap();
+    let user = f
+        .api
+        .keys
+        .users_accept(&invite.token, "longenough1")
+        .unwrap();
+    let login = f.api.keys.session_start(&user).unwrap();
+    let approve = json!({"id": "a1", "kind": "proposal", "payload": {"proposal_id": "p1", "event": "approved", "by": "james"}});
+    let req = public(post(&format!("{base}/p1/approvals"), None, &approve))
+        .insert_header(("origin", PUBLIC))
+        .cookie(actix_web::cookie::Cookie::new("autophys_login", login))
+        .cookie(f.api.sessions.issue_cookie().unwrap());
+    let (s, out) = call(&app, req.to_request()).await;
+    assert_eq!(s, 201, "{out}");
+    let (_, records) = call(
+        &app,
+        get(&format!("/investigations/{inv}/records?kind=proposal"), k).to_request(),
+    )
+    .await;
+    let approved: Vec<&Value> = records["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| r["payload"]["event"] == "approved")
+        .collect();
+    assert_eq!(approved.len(), 1, "{records}");
+    assert_eq!(approved[0]["payload"]["by"], "ada@lab.org");
+}
+
+#[actix_web::test]
+async fn without_login_the_local_browser_rules_are_unchanged() {
+    let f = fixture();
+    let app = app!(f.api);
+    let (s, _, session, page) = send(
+        &app,
+        public(test::TestRequest::get().uri("/app")),
+        "autophys_session",
+    )
+    .await;
+    assert!(s == 200 && session.is_some() && !page.contains("ap-account"));
+    assert_eq!(
+        call(
+            &app,
+            browser(&f.api, get("/workspace", None), false).to_request()
+        )
+        .await
+        .0,
+        200
+    );
+}

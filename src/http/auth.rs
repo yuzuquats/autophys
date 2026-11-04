@@ -4,6 +4,11 @@
 //! no exemption. Browser writes additionally keep the JSON + Origin guard
 //! (O-3). A known peer must be loopback and browser read Hosts stay local.
 //! API keys work independently of the browser session and its headers.
+//!
+//! With `serve --login` ([`Options::login`]) a browser must also carry a
+//! sign-in cookie ([`LOGIN_COOKIE`], `crate::accounts`), and the caller is
+//! that [`Caller::Member`]. The local-Host rule is then dropped: the sign-in,
+//! not the machine, is what admits a browser, so a public proxy works.
 
 use actix_web::cookie::{Cookie, SameSite};
 use std::collections::HashSet;
@@ -15,12 +20,17 @@ use actix_web::http::{Method, header};
 use actix_web::{FromRequest, HttpRequest, web};
 use futures_util::future::LocalBoxFuture;
 
+use crate::accounts::User;
 use crate::error::ApiError;
 use crate::http::{Api, blocking};
 use crate::keys::{KeyInfo, Options};
 
 /// Host-only browser session, sent to API routes only.
 pub const SESSION_COOKIE: &str = "autophys_session";
+
+/// The sign-in cookie of `serve --login`: a session in the server database,
+/// so it survives restarts (the document cookie above does not).
+pub const LOGIN_COOKIE: &str = "autophys_login";
 
 /// Valid document sessions in this server process. Nothing is persisted.
 #[derive(Clone, Default)]
@@ -54,7 +64,30 @@ impl BrowserSessions {
 #[derive(Clone, Debug)]
 pub enum Caller {
     Key(KeyInfo),
+    /// A local browser (no `--login`).
     Browser,
+    /// A signed-in browser (`--login`).
+    Member(User),
+}
+
+impl Caller {
+    /// Who to record as having acted, when the server knows better than the
+    /// client: a signed-in person's email.
+    pub fn person(&self) -> Option<&str> {
+        match self {
+            Caller::Member(user) => Some(&user.email),
+            _ => None,
+        }
+    }
+}
+
+/// The signed-in account behind the request's [`LOGIN_COOKIE`], if any.
+pub async fn signed_in(api: &Api, req: &HttpRequest) -> Result<Option<User>, ApiError> {
+    let Some(token) = req.cookie(LOGIN_COOKIE).map(|c| c.value().to_string()) else {
+        return Ok(None);
+    };
+    let keys = api.keys.clone();
+    blocking(move || keys.session_user(&token)).await
 }
 
 /// Extractor: a live bearer key, else 401.
@@ -108,11 +141,21 @@ impl FromRequest for KeyOrBrowser {
             (Ok(a), None) => Some(browser(req, a)),
             _ => None,
         };
+        let req = req.clone();
         Box::pin(async move {
             let store = store?;
             match (token, keyless) {
                 (Some(token), _) => Ok(KeyOrBrowser(Caller::Key(by_key(store, token).await?))),
-                (None, Some(verdict)) => verdict.map(|()| KeyOrBrowser(Caller::Browser)),
+                (None, Some(verdict)) => {
+                    verdict?;
+                    if !store.options().login {
+                        return Ok(KeyOrBrowser(Caller::Browser));
+                    }
+                    match signed_in(&store, &req).await? {
+                        Some(user) => Ok(KeyOrBrowser(Caller::Member(user))),
+                        None => Err(ApiError::Unauthorized),
+                    }
+                }
                 (None, None) => Err(ApiError::Unauthorized),
             }
         })
@@ -128,7 +171,7 @@ pub fn browser(req: &HttpRequest, api: &Api) -> Result<(), ApiError> {
     }
     if !matches!(*req.method(), Method::GET | Method::HEAD) {
         same_origin_write(req, api.options())?;
-    } else {
+    } else if !api.options().login {
         let local = req
             .headers()
             .get(header::HOST)
@@ -142,6 +185,25 @@ pub fn browser(req: &HttpRequest, api: &Api) -> Result<(), ApiError> {
         .accepts(req)
         .then_some(())
         .ok_or(ApiError::Unauthorized)
+}
+
+/// A sign-in form's POST must come from one of the daemon's origins.
+pub fn form_origin(req: &HttpRequest, opts: &Options) -> Result<(), ApiError> {
+    let origin = req
+        .headers()
+        .get(header::ORIGIN)
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| ApiError::Forbidden("a sign-in form needs an Origin header".into()))?;
+    if own_origins(req, opts)
+        .iter()
+        .any(|o| o.eq_ignore_ascii_case(origin))
+    {
+        Ok(())
+    } else {
+        Err(ApiError::Forbidden(format!(
+            "origin {origin} is not this daemon's"
+        )))
+    }
 }
 
 /// O-3: a keyless write must be JSON from the daemon's own Origin.
@@ -180,6 +242,7 @@ fn own_origins(req: &HttpRequest, opts: &Options) -> Vec<String> {
         format!("http://[::1]:{port}"),
     ];
     out.extend(opts.browser_origins.iter().cloned());
+    out.extend(opts.public_url.iter().cloned());
     out
 }
 

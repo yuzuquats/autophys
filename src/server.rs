@@ -23,10 +23,12 @@ pub const DEFAULT_ADDR: &str = "127.0.0.1:4794";
 pub const USAGE: &str =
     "usage: autophys serve [--addr 127.0.0.1:4794] [--web-root DIR] [--collection DIR]
                       [--server-db FILE] [--browser-origin ORIGIN]...
+                      [--login] [--public-url https://host]
        autophys build-web [--out DIR] [--bundle FILE]
        autophys pack --web-root DIR --out FILE [--no-maps]
        autophys pair list | pair approve <CODE> | pair deny <CODE>
        autophys keys list [--json] | keys revoke <KEY_ID>
+       autophys users list | users add <EMAIL> | users remove <EMAIL>
        autophys db verify [--rebuild] [--json] [--project NAME]   (db check is the same)
        (pair, keys and db also take --collection DIR and --server-db FILE;
         --db DIR is an alias of --collection)";
@@ -61,6 +63,11 @@ pub struct ServeConfig {
     /// Extra origins whose keyless browser writes are admitted (O-3), such as
     /// `http://autophys.rwc-dev-01.tento.localhost`.
     pub browser_origins: Vec<String>,
+    /// `--login` / `AUTOPHYS_LOGIN=1`: browsers sign in with invited accounts.
+    pub login: bool,
+    /// `--public-url` / `AUTOPHYS_PUBLIC_URL`: the origin people use, such as
+    /// `https://autophys.lona.so` (pairing and invite links point there).
+    pub public_url: Option<String>,
 }
 
 /// Split a comma-separated origin list; each must be `http(s)://host[:port]`.
@@ -91,7 +98,9 @@ fn origins(text: &str) -> Result<Vec<String>, String> {
 
 /// `serve` flags: `--addr` / `AUTOPHYS_ADDR` (default [`DEFAULT_ADDR`]),
 /// `--web-root` / `AUTOPHYS_WEB_ROOT`, `--collection` (alias `--db`) /
-/// `AUTOPHYS_HOME` (default [`default_collection`]), `--server-db` /
+/// `AUTOPHYS_HOME` (default [`default_collection`]), `--login` /
+/// `AUTOPHYS_LOGIN` (`1`, `true` or `yes`), `--public-url` /
+/// `AUTOPHYS_PUBLIC_URL` (an origin), `--server-db` /
 /// `AUTOPHYS_SERVER_DB`, and `--browser-origin` (repeatable,
 /// comma-separated) / `AUTOPHYS_BROWSER_ORIGINS`. Flags win over the
 /// environment.
@@ -108,6 +117,9 @@ pub fn parse_serve(
         Some(list) => origins(&list)?,
         None => Vec::new(),
     };
+    let mut login = nonempty("AUTOPHYS_LOGIN")
+        .is_some_and(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes"));
+    let mut public_url = nonempty("AUTOPHYS_PUBLIC_URL");
     let mut flagged_origins = Vec::new();
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
@@ -117,6 +129,8 @@ pub fn parse_serve(
             "--web-root" => web_root = Some(flag_value(&key, inline, &mut args)?),
             "--collection" | "--db" => collection = Some(flag_value(&key, inline, &mut args)?),
             "--server-db" => server_db = Some(flag_value(&key, inline, &mut args)?),
+            "--login" if inline.is_none() => login = true,
+            "--public-url" => public_url = Some(flag_value(&key, inline, &mut args)?),
             "--browser-origin" => {
                 flagged_origins.extend(origins(&flag_value(&key, inline, &mut args)?)?)
             }
@@ -131,12 +145,24 @@ pub fn parse_serve(
     if let Some(root) = &web_root {
         check_route_tree(root)?;
     }
+    let public_url = match public_url {
+        Some(url) => Some(
+            origins(&url)
+                .map_err(|e| e.replace("--browser-origin", "--public-url"))?
+                .into_iter()
+                .next()
+                .ok_or("--public-url is empty")?,
+        ),
+        None => None,
+    };
     Ok(ServeConfig {
         addr,
         web_root,
         collection: collection.map(PathBuf::from),
         server_db: server_db.map(PathBuf::from),
         browser_origins,
+        login,
+        public_url,
     })
 }
 
@@ -398,8 +424,14 @@ pub async fn run(serve_config: ServeConfig) -> Result<()> {
         None => default_server_db()?,
     };
     let options = Options {
-        verification_url: format!("http://{}/pair", listener.local_addr()?),
+        // The app lists devices waiting to pair; that is where a code is approved.
+        verification_url: match &serve_config.public_url {
+            Some(url) => format!("{url}/app"),
+            None => format!("http://{}/app", listener.local_addr()?),
+        },
         browser_origins: serve_config.browser_origins,
+        login: serve_config.login,
+        public_url: serve_config.public_url,
         ..Options::default()
     };
     let api = Api::open(&collection, &server_db, options).with_context(|| {
@@ -435,6 +467,13 @@ pub async fn run(serve_config: ServeConfig) -> Result<()> {
     } else {
         None
     };
+    if let Some(api) = config.store.as_ref().filter(|a| a.options().login) {
+        let users = api.keys.users_list().map(|u| u.len()).unwrap_or(0);
+        eprintln!(
+            "autophys: --login: browsers must sign in ({users} account(s); add one with \
+             `autophys users add EMAIL`)"
+        );
+    }
     eprintln!(
         "autophys {} ({}) serving {} {} and collection {} on http://{}",
         info.version,

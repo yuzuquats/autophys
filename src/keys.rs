@@ -364,7 +364,11 @@ pub(crate) fn touch(conn: &Connection, id: &str, now: DateTime<Utc>) -> Result<(
 // --- the server database ------------------------------------------------------
 
 /// Migrations of the server database, keyed by its schema version.
-const MIGRATIONS: &[&str] = &[include_str!("../sql/keys/schema_v1.sql")];
+const MIGRATIONS: &[&str] = &[
+    include_str!("../sql/keys/schema_v1.sql"),
+    // v2: browser sign-in accounts and sessions (`crate::accounts`).
+    include_str!("../sql/keys/schema_v2.sql"),
+];
 
 fn migrate(conn: &mut Connection) -> Result<()> {
     let current: i64 = conn.query_row(include_str!("../sql/keys/schema_version.sql"), [], |r| {
@@ -400,6 +404,13 @@ pub struct Options {
     /// `AUTOPHYS_BROWSER_ORIGINS`, for example a tento.localhost proxy origin
     /// such as `http://autophys.rwc-dev-01.tento.localhost`.
     pub browser_origins: Vec<String>,
+    /// `serve --login`: browsers must sign in with an invited account
+    /// (`crate::accounts`); being on this machine is no longer enough.
+    pub login: bool,
+    /// `serve --public-url`: the origin people reach the daemon at, such as
+    /// `https://autophys.lona.so`. Pairing and invite links point there, and
+    /// an https URL makes the sign-in cookie `Secure`.
+    pub public_url: Option<String>,
 }
 
 impl Default for Options {
@@ -412,6 +423,8 @@ impl Default for Options {
             poll_interval: Duration::from_secs(5),
             browser_hosts: Vec::new(),
             browser_origins: Vec::new(),
+            login: false,
+            public_url: None,
         }
     }
 }
@@ -559,5 +572,54 @@ impl KeyStore {
             }
         }
         Ok(found)
+    }
+
+    // --- browser accounts (`crate::accounts`) ---------------------------------
+
+    /// `autophys users add EMAIL`: create or re-invite; the token is the link.
+    pub fn users_invite(&self, email: &str) -> Result<crate::accounts::Invite> {
+        crate::accounts::invite(&*self.conn()?, email, Utc::now())
+    }
+
+    /// Who an unexpired invite token was issued to.
+    pub fn users_invitee(&self, token: &str) -> Result<Option<crate::accounts::User>> {
+        crate::accounts::invitee(&*self.conn()?, token, Utc::now())
+    }
+
+    /// Accept an invite with the chosen password.
+    pub fn users_accept(&self, token: &str, password: &str) -> Result<crate::accounts::User> {
+        crate::accounts::accept(&mut *self.conn()?, token, password, Utc::now())
+    }
+
+    /// The active account with this email and password.
+    pub fn users_check(
+        &self,
+        email: &str,
+        password: &str,
+    ) -> Result<Option<crate::accounts::User>> {
+        crate::accounts::check_password(&*self.conn()?, email, password)
+    }
+
+    pub fn users_list(&self) -> Result<Vec<crate::accounts::User>> {
+        crate::accounts::list(&*self.conn()?)
+    }
+
+    /// Delete an account and end its sessions.
+    pub fn users_remove(&self, email: &str) -> Result<crate::accounts::User> {
+        crate::accounts::remove(&mut *self.conn()?, email)
+    }
+
+    /// Start a sign-in session; the token goes in the cookie.
+    pub fn session_start(&self, user: &crate::accounts::User) -> Result<String> {
+        crate::accounts::session_start(&*self.conn()?, user, Utc::now())
+    }
+
+    /// The signed-in account behind a session cookie.
+    pub fn session_user(&self, token: &str) -> Result<Option<crate::accounts::User>> {
+        crate::accounts::session_user(&*self.conn()?, token, Utc::now())
+    }
+
+    pub fn session_end(&self, token: &str) -> Result<()> {
+        crate::accounts::session_end(&*self.conn()?, token)
     }
 }
