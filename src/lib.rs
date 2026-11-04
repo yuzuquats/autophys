@@ -1,10 +1,14 @@
 //! The autophys daemon, a tento-web app. `autophys serve` runs one loopback
 //! actix listener: `/api/healthz`, the `/api/v1` hook in [`app`], and the
 //! file-based router over `html/routes` (built on start, or prebuilt by
-//! `autophys build-web`). The record store lands beside these modules.
+//! `autophys build-web`). The record store sits beside them: `store` (the
+//! SQLite log, projections, keys and pairing) and `ingest` (the one append
+//! path).
 
 pub mod app;
+pub mod ingest;
 pub mod server;
+pub mod store;
 
 pub use app::{APP_ID, AppConfig, BuildInfo, TENTO, domain};
 pub use server::{

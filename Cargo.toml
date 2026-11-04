@@ -24,7 +24,19 @@ actix-web = "4.9.0"
 anyhow = "1.0.94"
 serde = { version = "1.0.216", features = ["derive"] }
 serde_json = "1.0.133"
-tokio = { version = "1.44.2", features = ["rt-multi-thread", "macros", "signal", "fs", "time"] }
+tokio = { version = "1.44.2", features = ["rt-multi-thread", "macros", "signal", "fs", "time", "sync"] }
+# The record store (src/store, src/ingest.rs, src/http.rs; store.md).
+chrono = { version = "0.4.40", default-features = false, features = ["clock", "std"] }
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+getrandom = "0.2"
+hex = "0.4.3"
+rusqlite = { version = "0.32", features = ["bundled"] }
+sha2 = "0.10.8"
+thiserror = "1.0.61"
+
+[dev-dependencies]
+actix-http = "3"
+tempfile = "3"
 
 # Replaces three crates.io packages, wherever they appear in the dependency
 # graph, with the patched copies in vendor/tento/vendor.
