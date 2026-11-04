@@ -119,7 +119,8 @@ ev("run.terminal.completed", {"terminal": "completed", "text": "done", "reason":
     proposed = adapter.propose(text, {})
     assert "cheaper" in proposed
     assert "test-secret" not in recording.read_text()
-    assert MuseCLIResearcher(binary="never-run", replay=recording).propose(text, {}) == proposed
+    assert MuseCLIResearcher(binary="never-run", replay=recording, spec=adapter.spec,
+                             max_model_steps=3).propose(text, {}) == proposed
     assert adapter.last_events == {"message": "done", "terminal": "completed", "usage": {
         "calls": 1, "input_tokens": 12, "output_tokens": 4, "cached_input_tokens": 2,
         "reasoning_tokens": 1, "models": ["muse-wonder-1.0"]}}
@@ -159,6 +160,8 @@ print(json.dumps({"schema_version": 1, "payload_type": "run.terminal.failed", "p
 ])
 def test_muse_failures(tmp_path, monkeypatch, body, error):
     monkeypatch.setenv("AUTOPHYS_ALLOW_LIVE_REASON", "1")
+    if error in ("unchanged", "frontmatter"):
+        body += "\nprint(" + repr(json.dumps({"payload_type": "run.terminal.completed", "payload": {"terminal": "completed"}})) + ")"
     with pytest.raises((ValueError, ReasonerError), match=error):
         MuseCLIResearcher(binary=fake_muse(tmp_path, body), timeout=.2).propose(load_playbook().data.decode(), {})
 

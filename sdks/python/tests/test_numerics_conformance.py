@@ -29,6 +29,8 @@ def test_numerics_generator_is_current():
     for path in CASES:
         saved = json.loads(path.read_text())
         current = generated[str(path.relative_to(ROOT))]
+        compare(current["inputs"], {"value": saved["inputs"], "atol": 1e-10, "rtol": 1e-8})
+        compare(saved["inputs"], {"value": current["inputs"], "atol": 1e-10, "rtol": 1e-8})
         assert saved["expect"].keys() == current["expect"].keys()
         for key, rule in saved["expect"].items():
             fresh = current["expect"][key]

@@ -32,7 +32,7 @@ def trajectories(source):
                     yield {"investigation": inv["id"], "seq": record.seq,
                            "system_prompt_sha256": meta.get("system_prompt_sha256"),
                            "playbook": meta.get("playbook"), "model": step.get("model", meta.get("model")),
-                           "messages": step.get("messages"), "raw_response": step.get("raw_output"),
+                           "prompt": step.get("evidence_text"), "messages": step.get("messages"), "raw_response": step.get("raw_output"),
                            "decision": step.get("decision"), "valid": step.get("valid", False),
                            "usage": step.get("usage") if normalized["calls"] else None,
                            "replayed": step.get("replayed", False),

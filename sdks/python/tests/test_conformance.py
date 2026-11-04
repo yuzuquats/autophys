@@ -7,6 +7,7 @@
   verify them.
 """
 
+from collections import Counter
 import json
 import shutil
 from pathlib import Path
@@ -14,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from autophys.store import canonical, chain_hash
-from autophys.workbook import APPLICATION_ID, SCHEMA_VERSION, WorkbookStore, projection_rows
+from autophys.workbook import APPLICATION_ID, SCHEMA_VERSION, WorkbookStore, append_payload, investigation_payload, projection_rows
 
 import conformance_cases
 
@@ -59,10 +60,21 @@ def test_rust_written_workbooks_verify(path, tmp_path):
     copy = tmp_path / path.name
     shutil.copy(path, copy)
     with WorkbookStore(copy, readonly=True) as wb:
-        assert wb.check()["ok"]
+        report = wb.check()
+        assert report["ok"]
+        records = [r for inv in wb.investigations() for r in wb.records(inv["id"])]
+        for record in records:
+            if record.kind == "investigation":
+                investigation_payload(record.payload, record.id)
+            else:
+                append_payload(record.kind, record.payload, record.id)
         side = path.with_suffix(".json")
         if side.exists():
             exp = json.loads(side.read_text())
+            if "records" in exp:
+                assert len(records) == report["records"] == exp["records"]
+            if "kinds" in exp:
+                assert dict(Counter(r.kind for r in records)) == exp["kinds"]
             assert wb.heads() == exp["heads"] and projection_rows(wb._conn) == exp["projections"]
 
 

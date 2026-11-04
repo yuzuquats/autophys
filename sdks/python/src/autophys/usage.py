@@ -12,16 +12,25 @@ def price_for(model):
 
 def normalize_usage(reply):
     raw = reply.usage
-    inp, out = raw.get("prompt_tokens", 0), raw.get("completion_tokens", 0)
+    def valid(value):
+        return type(value) is int and value >= 0
+    inp = raw.get("prompt_tokens", raw.get("input_tokens"))
+    out = raw.get("completion_tokens", raw.get("output_tokens"))
+    known = valid(inp) and valid(out)
+    inp, out = inp if valid(inp) else 0, out if valid(out) else 0
     price = price_for(reply.model)
+    total = raw.get("total_tokens")
     result = {"route": reply.route or "unknown", "model": reply.model or "unknown",
-              "input_tokens": inp, "output_tokens": out, "total_tokens": raw.get("total_tokens", inp + out),
+              "input_tokens": inp, "output_tokens": out,
+              "total_tokens": total if valid(total) else inp + out,
               "latency_ms": reply.elapsed_ms if reply.elapsed_ms is not None else 0,
-              "cost_usd": (inp * price["input_per_mtok"] + out * price["output_per_mtok"]) / 1e6 if price else None}
+              "cost_usd": (inp * price["input_per_mtok"] + out * price["output_per_mtok"]) / 1e6 if price and known else None}
     for source, key, target in (("completion_tokens_details", "reasoning_tokens", "reasoning_tokens"),
                                 ("prompt_tokens_details", "cached_tokens", "cached_input_tokens")):
-        if key in (raw.get(source) or {}):
-            result[target] = raw[source][key]
+        details = raw.get(source)
+        value = details.get(key) if isinstance(details, dict) else None
+        if valid(value):
+            result[target] = value
     return result
 
 

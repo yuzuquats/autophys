@@ -12,10 +12,11 @@ from __future__ import annotations
 
 import json
 import warnings
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, wait, FIRST_COMPLETED
 import os
 import re
 import statistics
+import threading
 import time
 from dataclasses import asdict, dataclass
 from typing import Callable
@@ -181,14 +182,42 @@ def run_units(units, jobs=1):
     for model_bound, executor in ((False, ProcessPoolExecutor), (True, ThreadPoolExecutor)):
         selected = [(i, u) for i, u in enumerate(units) if (u[1] == "reason") == model_bound]
         if selected:
-            with executor(max_workers=jobs) as pool:
+            pool = executor(max_workers=jobs)
+            pending = {}
+            remaining = iter(selected)
+            stopped = threading.Event()
+            def guarded_unit(unit):
+                if stopped.is_set():
+                    return None
                 try:
-                    for (index, _), row in zip(selected, pool.map(_run_unit, (u for _, u in selected))):
-                        results[index] = row
+                    return _run_unit(unit)
                 except BaseException:
-                    # MQ-6: a BudgetError (or any failure) stops the run; queued units never start.
-                    pool.shutdown(wait=False, cancel_futures=True)
+                    stopped.set()
                     raise
+            def submit_next():
+                if stopped.is_set():
+                    return
+                item = next(remaining, None)
+                if item is not None:
+                    index, unit = item
+                    pending[pool.submit(guarded_unit if model_bound else _run_unit, unit)] = index
+            try:
+                for _ in range(jobs):
+                    submit_next()
+                while pending:
+                    done, _ = wait(pending, return_when=FIRST_COMPLETED)
+                    # Observe all failures before scheduling any more work.
+                    rows = [(future, future.result()) for future in done]
+                    for future, row in rows:
+                        results[pending.pop(future)] = row
+                    for _ in rows:
+                        submit_next()
+            except BaseException:
+                for future in pending:
+                    future.cancel()
+                raise
+            finally:
+                pool.shutdown(wait=True, cancel_futures=True)
     return results
 
 

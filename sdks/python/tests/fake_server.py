@@ -40,6 +40,7 @@ class FakeAutophys:
         self.pairings: dict[str, dict] = {}
         self.keys: dict[str, dict] = {}
         self.projects: dict[str, dict] = {}
+        self.blobs = {}
         self.configs: dict[str, dict[str, bytes]] = {}
         self.investigations: dict[str, dict] = {}
         self.records: dict[str, list[dict]] = {}
@@ -169,7 +170,7 @@ class FakeAutophys:
             def _body(self) -> tuple[bytes, dict]:
                 n = int(self.headers.get("Content-Length") or 0)
                 raw = self.rfile.read(n) if n else b""
-                return raw, (json.loads(raw) if raw else {})
+                return raw, (json.loads(raw) if raw and "/blobs/" not in self.path else {})
 
             def do_GET(self):
                 self._route("GET")
@@ -271,6 +272,32 @@ class FakeAutophys:
                     fake.projects[pid] = {"id": pid, "name": body["name"], "workspace": who["workspace"]}
                     fake.configs[pid] = {}
                     return self._send(201, {"project": fake.projects[pid]})
+                blob = re.fullmatch(r"/projects/([^/]+)/blobs/([0-9a-f]{64})", path)
+                if blob:
+                    pid, digest = blob.groups()
+                    if pid not in fake.projects:
+                        return self._err(404, "not_found")
+                    key = (pid, digest)
+                    if method == "PUT":
+                        if len(raw) > 16 * 1024 * 1024:
+                            return self._err(413, "too_large")
+                        if not self.headers.get("Content-Type"):
+                            return self._err(422, "invalid", path="Content-Type")
+                        if hashlib.sha256(raw).hexdigest() != digest:
+                            return self._err(422, "hash_mismatch")
+                        created = key not in fake.blobs
+                        fake.blobs.setdefault(key, (raw, self.headers["Content-Type"]))
+                        return self._send(201 if created else 200, {})
+                    if method == "GET":
+                        if key not in fake.blobs:
+                            return self._err(404, "not_found")
+                        data, media_type = fake.blobs[key]
+                        self.send_response(200)
+                        self.send_header("Content-Type", media_type)
+                        self.send_header("Content-Length", str(len(data)))
+                        self.end_headers()
+                        self.wfile.write(data)
+                        return
                 m = re.fullmatch(r"/projects/([^/]+)/config_versions(?:/([^/]+))?", path)
                 if m:
                     pid, ver = m.group(1), m.group(2)

@@ -50,25 +50,32 @@ def improves(candidate, baseline):
             and candidate["cost_usd"] < baseline["cost_usd"])
 
 
+class _InvalidEdit(ValueError):
+    """A completed researcher returned an unusable strategy edit."""
+
+
 def validate_edit(original, proposed):
     """Only a strategy skill is editable; the executable contract stays in code."""
     if proposed == original:
-        raise ValueError("researcher left SKILL.md unchanged")
+        raise _InvalidEdit("researcher left SKILL.md unchanged")
     with tempfile.TemporaryDirectory(prefix="autophys-validate-") as directory:
         path = Path(directory) / "SKILL.md"
         path.write_text(proposed, encoding="utf-8")
-        load_playbook(path)
+        try:
+            load_playbook(path)
+        except ValueError as error:
+            raise _InvalidEdit(str(error)) from None
     # A proposed full system prompt is not a strategy skill.
     from .agent import CONTRACT
     if CONTRACT.strip() in proposed:
-        raise ValueError("fixed contract must not be included or edited in SKILL.md")
+        raise _InvalidEdit("fixed contract must not be included or edited in SKILL.md")
     return proposed
 
 
 def proposal_prompt(playbook_text, report):
     # Remove volatile record identities/timing from cassette request keys.
     def stable(value):
-        volatile = {"investigation", "id", "ts", "hash", "prev_hash", "wall_s", "elapsed_ms", "latency_ms"}
+        volatile = {"investigation", "project_id", "id", "ts", "hash", "prev_hash", "wall_s", "elapsed_ms", "latency_ms", "reasoner"}
         if isinstance(value, dict):
             return {k: stable(v) for k, v in value.items() if k not in volatile}
         if isinstance(value, (list, tuple)):
@@ -156,7 +163,9 @@ class MuseCLIResearcher:
     def propose(self, playbook_text, report):
         # CLI replay is local: Muse has no documented replay flag.
         prompt_text = proposal_prompt(playbook_text, report)
-        key = hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()
+        from .store import canonical
+        key = hashlib.sha256(canonical({"model": self.spec.model, "effort": self.spec.effort,
+                                       "max_model_steps": self.max_model_steps, "prompt": prompt_text}).encode()).hexdigest()
         if self.replay:
             recorded = Path(self.replay).read_text(encoding="utf-8")
             if recorded.startswith("---"):
@@ -198,7 +207,7 @@ class MuseCLIResearcher:
             if result.returncode:
                 raise ReasonerError(f"Muse researcher exited with status {result.returncode}")
             self.last_events = parse_muse_events(result.stdout)
-            if self.last_events["terminal"] not in (None, "completed"):
+            if self.last_events["terminal"] != "completed":
                 raise ReasonerError(f"Muse researcher run ended {self.last_events['terminal']}")
             proposed = validate_edit(playbook_text, skill.read_text(encoding="utf-8"))
             if self.record:
@@ -284,7 +293,7 @@ def research(*, researcher, output_dir, playbook="default", cases=None, train_se
             proposed = validate_edit(text, researcher.propose(text, report))
         except BudgetError:
             raise
-        except (ReasonerError, ValueError) as error:
+        except _InvalidEdit as error:
             # An unusable proposal is a rejected iteration, not the end of the run.
             history.append({"iteration": index, "playbook": None, "sha256": None, "accepted": False,
                             "error": f"{type(error).__name__}: {error}", "score": None,

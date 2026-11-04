@@ -107,13 +107,17 @@ class HttpReasoner:
     route = "lane"
     model = None
 
-    def __init__(self, base_url: str, *, api_key: str | None = None, timeout: float = 150.0, path: str = REASON_PATH) -> None:
+    def __init__(self, base_url: str, *, api_key: str | None = None, timeout: float = 150.0, path: str = REASON_PATH,
+                 sleep=time.sleep, max_attempts=4, jitter=random.random) -> None:
         self.url = base_url.rstrip("/") + path
         self._key = api_key
         self.timeout = timeout
+        if type(max_attempts) is not int or max_attempts < 1:
+            raise ValueError("max_attempts must be >= 1")
+        self._sleep, self.max_attempts, self._jitter = sleep, max_attempts, jitter
 
     def __repr__(self) -> str:
-        return f"HttpReasoner({self.url!r})"
+        return f"HttpReasoner(route={self.route!r}, model={self.model!r})"
 
     def complete(self, messages, *, response_schema=None, effort=None, max_tokens=None) -> ReasonReply:
         for m in messages:
@@ -121,10 +125,7 @@ class HttpReasoner:
             if not (isinstance(c, str) or (isinstance(c, list) and all(p.get("type") == "text" for p in c))):
                 raise ReasonerError("the reason lane is text-only")
         body = request_body("lane", None, messages, response_schema=response_schema, effort=effort, max_tokens=max_tokens)
-        try:
-            _, j = request_json("POST", self.url, body, api_key=self._key, timeout=self.timeout)
-        except HttpError as e:
-            raise ReasonerError(f"reason lane: {e.status} {e.error}") from None
+        j = _request_with_retry(self, body, "reason lane")
         if j.get("content") is None:
             raise ReasonerError("reason lane returned no content (completion budget exhausted?)")
         return ReasonReply(j["content"], j.get("model"), j.get("usage") or {}, j.get("route"), j.get("elapsed_ms"))
@@ -179,6 +180,25 @@ def _retry_delay(error: HttpError | None, attempt=0, jitter=random.random) -> fl
     return min(30.0, 2 ** attempt * (0.5 + jitter()))
 
 
+def _request_with_retry(reasoner, body, label):
+    for attempt in range(reasoner.max_attempts):
+        try:
+            return request_json("POST", reasoner.url, body, api_key=reasoner._key, timeout=reasoner.timeout)[1]
+        except HttpError as error:
+            if error.status in (429, 500, 502, 503, 504) and attempt + 1 < reasoner.max_attempts:
+                reasoner._sleep(_retry_delay(error, attempt, reasoner._jitter))
+                continue
+            detail = " (billing_not_configured)" if error.status == 402 else ""
+            raise (BudgetError if error.status == 402 else ReasonerError)(f"{label}: HTTP {error.status}{detail}") from None
+        except OSError:
+            if attempt + 1 < reasoner.max_attempts:
+                reasoner._sleep(_retry_delay(None, attempt, reasoner._jitter))
+                continue
+            raise ReasonerError(f"{label} request failed") from None
+        except ValueError:
+            raise ReasonerError(f"{label} request failed") from None
+
+
 class ChatReasoner:
     """Text-only Meta/Baseten chat completions using stdlib HTTP.
 
@@ -219,7 +239,7 @@ class ChatReasoner:
 
     def __repr__(self) -> str:
         # URLs can contain credentials and servers can echo request values.
-        return f"ChatReasoner(route={self.route!r})"
+        return f"ChatReasoner(route={self.route!r}, model={self.model!r})"
 
     def complete(
         self,
@@ -233,24 +253,7 @@ class ChatReasoner:
             raise ReasonerError("chat completions are text-only; message content must be a string")
         body = request_body(self.route, self.model, messages, response_schema=response_schema, effort=effort, max_tokens=max_tokens)
         started = time.perf_counter()
-        for attempt in range(self.max_attempts):
-            try:
-                _, reply = request_json("POST", self.url, body, api_key=self._key, timeout=self.timeout)
-                break
-            except HttpError as error:
-                if error.status in (429, 500, 502, 503, 504) and attempt + 1 < self.max_attempts:
-                    self._sleep(self._delay(error, attempt))
-                    continue
-                # Never include untrusted server errors/messages: they may echo keys.
-                detail = " (billing_not_configured)" if error.status == 402 else ""
-                raise (BudgetError if error.status == 402 else ReasonerError)(f"chat completions: HTTP {error.status}{detail}") from None
-            except OSError:
-                if attempt + 1 < self.max_attempts:
-                    self._sleep(self._delay(None, attempt))
-                    continue
-                raise ReasonerError("chat completions request failed") from None
-            except ValueError:
-                raise ReasonerError("chat completions request failed") from None
+        reply = _request_with_retry(self, body, "chat completions")
         try:
             choice = reply["choices"][0]
             content = choice["message"]["content"]
@@ -274,6 +277,9 @@ def _cassette_key(body):
 
 
 class RecordingReasoner:
+    def __repr__(self):
+        return f"{type(self).__name__}(route={getattr(self, 'route', 'fake')!r}, model={self.model!r})"
+
     def __init__(self, inner, path):
         self.inner, self.path = inner, Path(path)
         self.route = getattr(inner, "route", "meta")
@@ -292,6 +298,9 @@ class RecordingReasoner:
 
 
 class ReplayReasoner:
+    def __repr__(self):
+        return f"{type(self).__name__}(route={getattr(self, 'route', 'fake')!r}, model={self.model!r})"
+
     def __init__(self, path, *, route="meta", model=MUSE_SPARK):
         self.route, self.model = route, model
         self.replies = {}
@@ -307,6 +316,9 @@ class ReplayReasoner:
 
 
 class _ConfiguredReasoner:
+    def __repr__(self):
+        return f"{type(self).__name__}(route={getattr(self, 'route', 'fake')!r}, model={self.model!r})"
+
     def __init__(self, inner, spec):
         self.inner, self.spec = inner, spec
         self.route, self.model = spec.route, spec.model
@@ -358,6 +370,9 @@ def reasoner_from_env() -> Reasoner:
 
 class FakeReasoner:
     """Answers with ``responder(messages) -> str | dict``; records every call."""
+
+    def __repr__(self):
+        return f"{type(self).__name__}(route={getattr(self, 'route', 'fake')!r}, model={self.model!r})"
 
     def __init__(self, responder: Callable[[list[dict]], Any], model: str = "fake") -> None:
         self.responder = responder

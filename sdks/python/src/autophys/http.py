@@ -19,6 +19,7 @@ Waiting for an approval: :meth:`HttpStore.wait_for_approval` consumes
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import socket
@@ -104,11 +105,15 @@ class StreamEvent:
     data: str
 
 
+#: Statuses a wait retries until its deadline (as the reasoners do).
+_TRANSIENT_STATUS = (429, 500, 502, 503, 504)
+
+
 class StreamUnavailable(RuntimeError):
     """The server has no usable ``/stream``; callers fall back to polling."""
 
 
-def iter_sse(lines: Iterable[bytes]) -> Iterator[StreamEvent]:
+def iter_sse(lines: Iterable[bytes], *, keep_alive=False) -> Iterator[StreamEvent]:
     """Parse a ``text/event-stream`` body (WHATWG HTML, "event stream
     interpretation"): ``data:`` lines join with newlines, a blank line
     dispatches, ``:`` lines are comments (keep-alives)."""
@@ -121,6 +126,8 @@ def iter_sse(lines: Iterable[bytes]) -> Iterator[StreamEvent]:
             event, data = "", []
             continue
         if line.startswith(":"):
+            if keep_alive:
+                yield StreamEvent("keep-alive", eid, "")
             continue
         name, _, value = line.partition(":")
         if value.startswith(" "):
@@ -157,7 +164,7 @@ def credentials_path() -> Path:
 class Credentials:
     server: str
     api_key: str
-    key_id: str = ""
+    key_id: str | None = ""
     account: str = ""
     device_name: str = ""
 
@@ -194,7 +201,7 @@ def load_credentials(server: str | None = None) -> Credentials | None:
         file_creds = Credentials(d["server"], d["api_key"], d.get("key_id", ""), d.get("account", ""), d.get("device_name", ""))
     resolved_server = server or os.environ.get("AUTOPHYS_SERVER") or (file_creds.server if file_creds else DEFAULT_SERVER)
     if env_key:
-        return Credentials(resolved_server, env_key, key_id="(AUTOPHYS_API_KEY)")
+        return Credentials(resolved_server, env_key, key_id=None)
     if file_creds:
         file_creds.server = resolved_server
         return file_creds
@@ -273,6 +280,7 @@ class HttpStore(Store):
         self.stream_idle = stream_idle
         self.cursors: dict[str, int] = {}
         self.last_wait: str | None = None
+        self._project_id: str | None = None
 
     def _see(self, investigation: str, rec: dict) -> dict:
         g = rec.get("gseq")
@@ -284,10 +292,64 @@ class HttpStore(Store):
         return f"HttpStore({self.base!r})"
 
     def _req(self, method: str, path: str, body: Any = None, **kw) -> Any:
-        return request_json(method, self.base + path, body, api_key=self._key, timeout=self.timeout, **kw)[1]
+        return request_json(method, self.base + path, body, api_key=self._key, timeout=kw.pop("timeout", self.timeout), **kw)[1]
 
     def ensure_project(self, name: str) -> str:
-        return self._req("POST", "/projects", {"name": name})["project"]["id"]
+        self._project_id = self._req("POST", "/projects", {"name": name})["project"]["id"]
+        return self._project_id
+
+    def _blob_url(self, key):
+        digest = key.removeprefix("sha256:")
+        if len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
+            raise StoreError("invalid blob hash")
+        if self._project_id is None:
+            raise StoreError("select a project with ensure_project before accessing blobs")
+        return f"{self.base}/projects/{urllib.parse.quote(self._project_id, safe='')}/blobs/{digest}"
+
+    def put_blob(self, data: bytes, media_type: str = "application/octet-stream") -> str:
+        if len(data) > 16 * 1024 * 1024:
+            raise StoreError("blob exceeds 16 MiB limit")
+        if not isinstance(media_type, str) or not media_type.strip():
+            raise StoreError("blob requires Content-Type")
+        key = "sha256:" + hashlib.sha256(data).hexdigest()
+        req = urllib.request.Request(self._blob_url(key), data=data, method="PUT",
+                                     headers={"Content-Type": media_type, "Authorization": f"Bearer {self._key}",
+                                              "User-Agent": USER_AGENT})
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout):
+                pass
+        except urllib.error.HTTPError as error:
+            status = error.code
+            try:
+                detail = json.load(error)
+            except (ValueError, TypeError):
+                detail = {}
+            finally:
+                error.close()
+            if status == 413:
+                raise StoreError("blob exceeds 16 MiB limit") from None
+            if status == 422:
+                # Interpret only known codes/paths, never echo server text.
+                if isinstance(detail, dict) and detail.get("error") == "hash_mismatch":
+                    message = "blob hash mismatch"
+                elif isinstance(detail, dict) and detail.get("path") == "Content-Type":
+                    message = "blob requires Content-Type"
+                else:
+                    message = "blob rejected (HTTP 422)"
+                raise StoreError(message) from None
+            raise HttpError(status, "blob_upload_failed") from None
+        return key
+
+    def get_blob(self, key: str) -> tuple[bytes, str]:
+        req = urllib.request.Request(self._blob_url(key), headers={"Authorization": f"Bearer {self._key}",
+                                                                 "User-Agent": USER_AGENT})
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as response:
+                return response.read(), response.headers["Content-Type"]
+        except urllib.error.HTTPError as error:
+            status = error.code
+            error.close()
+            raise HttpError(status, "blob_read_failed") from None
 
     def put_config_version(self, project_id: str, version: str, config: dict) -> str:
         """PUT the canonical config bytes; the server checks sha256(body) == version."""
@@ -304,6 +366,8 @@ class HttpStore(Store):
         return self._req("GET", "/projects")["projects"]
 
     def create_investigation(self, meta: dict) -> str:
+        from .workbook import canonical_payload
+        meta, _ = canonical_payload(meta)
         body = {"project_id": meta.get("project_id"), "config_version": meta.get("config_version"),
                 "overrides": meta.get("overrides", {}), "meta": meta}
         j = self._req("POST", "/investigations", body, headers={"Idempotency-Key": uuid.uuid4().hex})
@@ -311,6 +375,8 @@ class HttpStore(Store):
         return j["id"]
 
     def append(self, investigation, kind, payload, *, record_id=None) -> Record:
+        from .workbook import canonical_payload
+        payload, _ = canonical_payload(payload)
         rid = record_id if record_id is not None else uuid.uuid4().hex
         inv = urllib.parse.quote(investigation, safe="")
         envelope = {"id": rid, "kind": kind, "payload": payload}
@@ -341,9 +407,9 @@ class HttpStore(Store):
     def investigations(self):
         return self._req("GET", "/investigations")["investigations"]
 
-    def proposal(self, investigation: str, proposal_id: str) -> dict:
+    def proposal(self, investigation: str, proposal_id: str, *, timeout=None) -> dict:
         inv = urllib.parse.quote(investigation, safe="")
-        return self._req("GET", f"/investigations/{inv}/proposals/{urllib.parse.quote(proposal_id, safe='')}")
+        return self._req("GET", f"/investigations/{inv}/proposals/{urllib.parse.quote(proposal_id, safe='')}", timeout=self.timeout if timeout is None else timeout)
 
     def stream(self, investigation: str, after: int | None = None, *, idle: float | None = None):
         """Open ``GET /stream?investigation=<inv>&after=<gseq>``; returns the open response.
@@ -362,7 +428,7 @@ class HttpStore(Store):
             resp = urllib.request.urlopen(req, timeout=idle or self.stream_idle)
         except urllib.error.HTTPError as e:
             err = _http_error(e)
-            if isinstance(err, AuthError):
+            if err.status in (401, 403):
                 raise err from None
             raise StreamUnavailable(str(err)) from None
         ctype = resp.headers.get("Content-Type", "")
@@ -384,56 +450,87 @@ class HttpStore(Store):
 
     def wait_for_approval(self, investigation: str, proposal_id: str, *, timeout: float = 3600, interval: float = 5,
                           sleep=time.sleep, clock=time.monotonic, stream: bool = True) -> dict:
-        """Block until the proposal leaves ``proposed`` (approved, edited or rejected).
-
-        Consumes the investigation's record stream from its cursor and returns as soon as
-        an approval, edit or rejection of this proposal arrives. If the stream
-        is unavailable (or ``stream=False``) it polls the proposal every
-        ``interval`` seconds instead. Sets :attr:`last_wait`.
-        """
+        """Wait through transient disconnects, bounded by one absolute deadline."""
         deadline = clock() + timeout
         if stream:
             try:
-                p = self._wait_streaming(investigation, proposal_id, deadline, clock)
+                result = self._wait_streaming(investigation, proposal_id, deadline, clock, sleep)
                 self.last_wait = "stream"
-                return p
+                return result
             except StreamUnavailable:
                 pass
         self.last_wait = "poll"
+        attempt = 0
         while True:
-            p = self.proposal(investigation, proposal_id)
-            if p["status"] != "proposed":
-                return p
-            if clock() >= deadline:
-                raise TimeoutError(f"proposal {proposal_id} still awaiting approval")
-            sleep(interval)
-
-    def _wait_streaming(self, investigation: str, proposal_id: str, deadline: float, clock) -> dict:
-        decided = ("approved", "edited", "rejected", "withdrawn")
-        while True:
-            remaining = deadline - clock()
-            if remaining <= 0:
-                raise TimeoutError(f"proposal {proposal_id} still awaiting approval")
-            # Subscribe first, then read the state once: a decision made in
-            # between is replayed by the stream (after=cursor), and one made
-            # before the cursor shows in the GET.
+            remaining = self._remaining(deadline, clock, proposal_id)
             try:
-                resp = self.stream(investigation, idle=min(self.stream_idle, remaining))
-            except OSError as e:  # refused, reset, DNS: no stream here
-                raise StreamUnavailable(str(e)) from None
-            with resp:
-                p = self.proposal(investigation, proposal_id)
+                p = self.proposal(investigation, proposal_id, timeout=min(self.timeout, remaining))
                 if p["status"] != "proposed":
                     return p
-                try:
-                    for rec in self.stream_records(resp):
-                        pl = rec.get("payload") or {}
-                        if (rec.get("investigation") == investigation and rec.get("kind") == "proposal"
-                                and pl.get("proposal_id") == proposal_id and pl.get("event") in decided):
-                            return self.proposal(investigation, proposal_id)
-                        if clock() >= deadline:
-                            break
-                except (socket.timeout, TimeoutError, ConnectionError):
-                    pass  # idle past stream_idle or dropped: reconnect from the cursor
-            # end of stream: reconnect from the cursor
+                delay = interval
+                attempt = 0
+            except HttpError as error:
+                if error.status not in _TRANSIENT_STATUS:
+                    raise  # 401/403/404/4xx will not clear by waiting
+                delay = min(5, .1 * 2 ** min(attempt, 6))
+                attempt += 1
+            except OSError:
+                delay = min(5, .1 * 2 ** min(attempt, 6))
+                attempt += 1
+            sleep(min(delay, self._remaining(deadline, clock, proposal_id)))
 
+    @staticmethod
+    def _remaining(deadline, clock, proposal_id):
+        remaining = deadline - clock()
+        if remaining <= 0:
+            raise TimeoutError(f"proposal {proposal_id} still awaiting approval")
+        return remaining
+
+    def _wait_streaming(self, investigation: str, proposal_id: str, deadline: float, clock, sleep=time.sleep) -> dict:
+        attempt = 0
+        while True:
+            remaining = self._remaining(deadline, clock, proposal_id)
+            try:
+                # Subscribe before checking state so decisions cannot fall in a gap.
+                with self.stream(investigation, idle=min(self.stream_idle, remaining)) as resp:
+                    p = self.proposal(investigation, proposal_id,
+                                      timeout=min(self.timeout, self._remaining(deadline, clock, proposal_id)))
+                    if p["status"] != "proposed":
+                        return p
+                    def lines():
+                        while True:
+                            remaining = self._remaining(deadline, clock, proposal_id)
+                            # HTTPResponse.readline otherwise retains its original
+                            # idle timeout even as keep-alives renew it forever.
+                            sock = getattr(getattr(getattr(resp, "fp", None), "raw", None), "_sock", None)
+                            if sock is not None:  # CPython internals; without them reads keep the connect-time idle
+                                sock.settimeout(min(self.stream_idle, remaining))
+                            line = resp.readline()
+                            if not line:
+                                return
+                            yield line
+                    for event in iter_sse(lines(), keep_alive=True):
+                        self._remaining(deadline, clock, proposal_id)
+                        if event.event not in ("message", "record"):
+                            continue
+                        rec = json.loads(event.data)
+                        if event.id.isdigit():
+                            self._see(investigation, {"gseq": int(event.id)})
+                        payload = rec.get("payload") or {}
+                        if (rec.get("investigation") == investigation and rec.get("kind") == "proposal"
+                                and payload.get("proposal_id") == proposal_id
+                                and payload.get("event") != "proposed"):
+                            return self.proposal(investigation, proposal_id,
+                                                 timeout=min(self.timeout, self._remaining(deadline, clock, proposal_id)))
+                attempt = 0
+            except HttpError as error:
+                if error.status not in _TRANSIENT_STATUS:
+                    raise  # 401/403/404/4xx will not clear by waiting
+            except socket.timeout:
+                # An idle stream is usable; immediately reconnect with its cursor.
+                self._remaining(deadline, clock, proposal_id)
+                continue
+            except OSError:
+                pass  # refused/reset: retry from the last cursor
+            sleep(min(.1 * 2 ** min(attempt, 6), 5, self._remaining(deadline, clock, proposal_id)))
+            attempt += 1

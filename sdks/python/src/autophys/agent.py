@@ -308,6 +308,10 @@ class Investigation:
         overrides = head.get("overrides") or {}
         self._setup(project, initial, runner if runner is not None else ProposalRunner(), policy=policy,
                     reasoner=reasoner, free=overrides.get("free"), store=store, seed=int(head.get("seed", 0)))
+        pinned_playbook = head.get("playbook") or {}
+        playbook = getattr(self.policy, "playbook", None)
+        if playbook is not None and pinned_playbook.get("sha256") not in (None, playbook.sha256):
+            raise StoreError("cannot resume: policy playbook sha256 differs from the pinned playbook")
         self.id = investigation_id
         self.project_id = head["project_id"]
         self.config_version = head["config_version"]
@@ -365,6 +369,17 @@ class Investigation:
                     self.history.append(f"{d['action']}: " + (f"error {res['error']}" if "error" in res else "ok"))
             elif r.kind == "outcome":
                 self.outcome = Outcome(**p)
+                # Outcomes include simulations spent by _finish outside a step.
+                self.call_budget.used = int(p["simulations"])
+                if (self.fit is not None and self.fit_model == self.model
+                        and not any("no simulations left to check" in reason for reason in p.get("reasons", []))):
+                    # Rebuild the sensitivity cache already paid for by _finish.
+                    budget = self.sim.budget
+                    try:
+                        self.sim.budget = None
+                        self.tool_analyze_sensitivity()
+                    finally:
+                        self.sim.budget = budget
                 self.wall = float(p.get("wall_s", 0.0))
         settle()
         for pid, st in proposals.items():
@@ -700,17 +715,35 @@ class Investigation:
     def attach_data(self, proposal_id: str, observation: Observation) -> None:
         self._require_pending(proposal_id)
         status = self.store.proposal_status(self.id, proposal_id)["status"]
+        observation.split = "train"
+        if status == "data_attached":
+            event = next(r.payload for r in reversed(self.records("proposal"))
+                         if r.payload.get("proposal_id") == proposal_id and r.payload.get("event") == "data_attached")
+            if event.get("digest") == observation.digest():
+                # The last POST may have committed before its response was lost.
+                self._apply_wait_state({"status": status})
+                return
         if status not in ("approved", "edited"):
             raise ToolError(f"proposal {proposal_id} is {status}; approve it before attaching data")
-        observation.split = "train"
+        pending_dataset = Dataset([*self.dataset, observation])
+        measurement = {"version": pending_dataset.version, "digest": pending_dataset.digest(),
+                       "observation": observation.to_dict()}
+        attached = {"proposal_id": proposal_id, "event": "data_attached", "measurement_version": pending_dataset.version,
+                    "digest": observation.digest()}
+        items = [("measurement", measurement), ("proposal", attached)]
+        from .http import HttpStore
+        if isinstance(self.store, HttpStore):
+            # The daemon has no batch route. Stable ids let retries finish a
+            # partial two-POST attach without duplicating the measurement.
+            from .store import canonical
+            for kind, payload in items:
+                identity = canonical({"investigation": self.id, "proposal_id": proposal_id,
+                                      "kind": kind, "payload": payload})
+                rid = hashlib.sha256(identity.encode()).hexdigest()
+                self.store.append(self.id, kind, payload, record_id=rid)
+        else:
+            self.store.append_batch(self.id, items)
         self.dataset.add(observation)
-        # The measurement and its data_attached event commit together, so a
-        # crash cannot leave a measurement without its attribution.
-        self.store.append_batch(self.id, [
-            ("measurement", self._measurement_payload(observation)),
-            ("proposal", {"proposal_id": proposal_id, "event": "data_attached", "measurement_version": self.dataset.version,
-                          "digest": observation.digest()}),
-        ])
         self.experiments_used += 1
         name = self.pending_experiment
         self.pending_experiment = None
@@ -732,20 +765,30 @@ class Investigation:
         waiter = getattr(self.store, "wait_for_approval", None)
         if waiter is not None:
             st = waiter(self.id, self.pending, timeout=timeout, interval=interval, sleep=sleep, clock=clock)
-            if st["status"] in ("rejected", "withdrawn"):
-                self.pending = self.pending_experiment = None
+            self._apply_wait_state(st)
             return st
         deadline = clock() + timeout
         while True:
             st = self.store.proposal_status(self.id, self.pending)
 
             if st["status"] != "proposed":
-                if st["status"] in ("rejected", "withdrawn"):
-                    self.pending = self.pending_experiment = None
+                self._apply_wait_state(st)
                 return st
             if clock() >= deadline:
                 raise TimeoutError(f"proposal {self.pending} still awaiting approval")
             sleep(interval)
+
+    def _apply_wait_state(self, state):
+        if state["status"] == "data_attached":
+            # Another writer may have both approved and attached during wait.
+            # Replay into a fresh handle, preserving this handle's dataset.
+            restored = type(self).resume(self.project, self.store, self.id, self.runner, policy=self.policy)
+            self.dataset._obs[:] = list(restored.dataset)
+            self.dataset.version = restored.dataset.version
+            restored.dataset = self.dataset
+            self.__dict__.update(restored.__dict__)
+        elif state["status"] in ("rejected", "withdrawn"):
+            self.pending = self.pending_experiment = None
 
     def _require_pending(self, proposal_id: str) -> None:
         if self.pending != proposal_id:

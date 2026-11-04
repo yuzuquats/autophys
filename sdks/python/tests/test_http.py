@@ -193,8 +193,8 @@ def test_http_reasoner_errors():
         lane.close()
     lane = _ReasonLane(lambda b: (503, {"error": "route_disabled", "message": "off"}))
     try:
-        with pytest.raises(ReasonerError, match="503 route_disabled"):
-            HttpReasoner(lane.url).complete([{"role": "user", "content": "hi"}])
+        with pytest.raises(ReasonerError, match="HTTP 503"):
+            HttpReasoner(lane.url, sleep=lambda _: None).complete([{"role": "user", "content": "hi"}])
     finally:
         lane.close()
 

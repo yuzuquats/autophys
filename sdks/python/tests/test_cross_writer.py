@@ -61,7 +61,30 @@ def daemon(tmp_path):
         subprocess.run([BIN, "pair", "approve", start.user_code, "--collection", str(coll), "--server-db", str(db)],
                        check=True, capture_output=True)
         creds = pair_poll(url, start, "cross-writer-test", sleep=lambda s: time.sleep(min(s, 0.2)))
-        yield {"url": url, "coll": coll, "db": db, "key": creds.api_key, "key_id": creds.key_id}
+        def stop():
+            # Simulate a crash, including active SSE connections. Graceful
+            # shutdown deliberately waits for those connections to drain.
+            proc.kill()
+            proc.wait(10)
+
+        def restart():
+            nonlocal proc
+            proc = subprocess.Popen([BIN, "serve", "--addr", f"127.0.0.1:{port}", "--collection", str(coll),
+                                     "--server-db", str(db)]
+                                    + (["--web-root", WEB_ROOT] if WEB_ROOT and Path(WEB_ROOT).is_dir() else []),
+                                    stdout=log, stderr=subprocess.STDOUT)
+            deadline = time.monotonic() + 10
+            while True:
+                try:
+                    urllib.request.urlopen(url + "/api/healthz", timeout=.2).close()
+                    break
+                except OSError:
+                    if time.monotonic() > deadline:
+                        raise TimeoutError("daemon did not restart")
+                    time.sleep(.05)
+
+        yield {"url": url, "coll": coll, "db": db, "key": creds.api_key, "key_id": creds.key_id,
+               "stop": stop, "restart": restart}
     finally:
         proc.terminate()
         try:
@@ -147,3 +170,51 @@ def test_rust_daemon_and_python_share_one_workbook(daemon):
         assert rust["project"] == "p" and not rust["rebuilt"], rust
         assert rust["report"] == {"ok": True, "records": len(recs), "investigations": 1,
                                   "chain_errors": [], "projections_match": True}, rust
+
+
+def test_B1_real_daemon_wait_deadline(daemon):
+    http = HttpStore(daemon["url"], daemon["key"], stream_idle=30)
+    inv = _pinned(http)
+    http.append(inv, "proposal", _proposed("p1"))
+    start = time.monotonic()
+    with pytest.raises(TimeoutError):
+        http.wait_for_approval(inv, "p1", timeout=3)
+    assert 2.9 <= time.monotonic() - start < 4
+
+
+@pytest.mark.parametrize("stream", [True, False])
+def test_B6_real_daemon_wait_survives_restart(daemon, stream):
+    http = HttpStore(daemon["url"], daemon["key"], stream_idle=.2, timeout=.3)
+    inv = _pinned(http)
+    http.append(inv, "proposal", _proposed("p1"))
+    errors, result = [], []
+    def wait():
+        try:
+            result.append(http.wait_for_approval(inv, "p1", timeout=15, interval=.1, stream=stream))
+        except BaseException as error:
+            errors.append(error)
+    thread = threading.Thread(target=wait)
+    thread.start()
+    try:
+        time.sleep(.1)
+        daemon["stop"]()
+        time.sleep(.3)
+        daemon["restart"]()
+        http.append(inv, "proposal", {"proposal_id": "p1", "event": "approved", "by": "test"})
+    finally:
+        thread.join(16)
+    assert not thread.is_alive() and not errors
+    assert result[0]["status"] == "approved"
+
+
+def test_A5_real_daemon_blob_route_when_available(daemon):
+    from autophys.http import HttpError
+    http = HttpStore(daemon["url"], daemon["key"])
+    _pinned(http)
+    try:
+        key = http.put_blob(b"playbook bytes", "text/markdown")
+    except HttpError as error:
+        if error.status in (404, 405):
+            pytest.skip("installed daemon does not expose project blob PUT yet")
+        raise
+    assert http.get_blob(key) == (b"playbook bytes", "text/markdown")

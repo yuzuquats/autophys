@@ -26,6 +26,8 @@ record) and, in :mod:`autophys.http`, ``HttpStore`` against a daemon's
 
 from __future__ import annotations
 
+import fcntl
+from contextlib import contextmanager
 import hashlib
 import json
 import os
@@ -157,11 +159,11 @@ class Store(ABC):
             raise WorkbookError("unknown_config_version", "config version is not stored; store the config version first")
         return rid, payload, None
 
-    def _prepare_append(self, investigation: str, kind: str, payload: dict, record_id: str | None):
+    def _prepare_append(self, investigation: str, kind: str, payload: dict, record_id: str | None, pending=()):
         from .workbook import WorkbookError, append_payload, check_transition
 
         rid, payload, text = append_payload(kind, payload, record_id)
-        old = self._find_record(rid)
+        old = next((r for r in pending if r.id == rid), None) or self._find_record(rid)
         if old:
             if old.investigation == investigation and old.kind == kind and canonical(old.payload) == text:
                 return rid, payload, old
@@ -169,7 +171,7 @@ class Store(ABC):
         if investigation not in {i["id"] for i in self.investigations()}:
             raise WorkbookError("not_found", f"unknown investigation {investigation}")
         if kind == "proposal":
-            events = [r.payload for r in self.records(investigation, "proposal")
+            events = [r.payload for r in [*self.records(investigation, "proposal"), *(r for r in pending if r.kind == "proposal")]
                       if r.payload["proposal_id"] == payload["proposal_id"]]
             state = events[-1]["event"] if events else None
             proposed = events[0] if events else None
@@ -211,11 +213,21 @@ def _check_config(version: str, config: dict) -> None:
 
 class MemoryStore(Store):
     def __init__(self) -> None:
+        self._blobs = {}
         self._logs: dict[str, list[Record]] = {}
         self._meta: dict[str, dict] = {}
         self._projects: dict[str, dict] = {}
         self._configs: dict[str, list[dict]] = {}
         self._lock = threading.Lock()
+
+    def put_blob(self, data: bytes, media_type: str = "application/octet-stream") -> str:
+        key = "sha256:" + hashlib.sha256(data).hexdigest()
+        with self._lock:
+            self._blobs.setdefault(key, (bytes(data), media_type))
+        return key
+
+    def get_blob(self, key: str) -> tuple[bytes, str]:
+        return self._blobs[key]
 
     def ensure_project(self, name: str) -> str:
         with self._lock:
@@ -301,20 +313,77 @@ class JsonlStore(Store):
             raise StoreError(f"bad investigation id {inv!r}")
         return self.root / f"{inv}.jsonl"
 
+    @contextmanager
+    def _write_lock(self):
+        with self._lock:
+            with (self.root / ".write.lock").open("a+b") as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                try:
+                    yield
+                finally:
+                    fcntl.flock(lock, fcntl.LOCK_UN)
+
+    def put_blob(self, data: bytes, media_type: str = "application/octet-stream") -> str:
+        digest = hashlib.sha256(data).hexdigest()
+        with self._write_lock():
+            blobs = self.root / "blobs"
+            blobs.mkdir(exist_ok=True)
+            path = blobs / digest
+            if not path.exists():
+                # Sidecar first, then the blob by rename: a present blob is complete.
+                for target, content in ((path.with_suffix(".json"), canonical({"media_type": media_type}).encode()),
+                                        (path, bytes(data))):
+                    tmp = target.with_name(target.name + ".tmp")
+                    tmp.write_bytes(content)
+                    os.replace(tmp, target)
+        return "sha256:" + digest
+
+    def get_blob(self, key: str) -> tuple[bytes, str]:
+        digest = key.removeprefix("sha256:")
+        if len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
+            raise StoreError("invalid blob hash")
+        path = self.root / "blobs" / digest
+        data = path.read_bytes()
+        if hashlib.sha256(data).hexdigest() != digest:
+            raise StoreError("blob content does not match its hash")
+        return data, json.loads(path.with_suffix(".json").read_text())["media_type"]
+
+    @staticmethod
+    def _read_lines(data):
+        lines, end = [], 0
+        chunks = data.splitlines(keepends=True)
+        for index, line in enumerate(chunks):
+            if not line.endswith(b"\n"):
+                break  # a torn final write, even if its JSON happens to parse
+            try:
+                item = json.loads(line) if line.strip() else None
+            except ValueError:
+                if index != len(chunks) - 1:
+                    raise
+                break
+            end += len(line)
+            if item is not None:
+                lines.append(item)
+        return lines, end
+
     def _lines(self, name: str) -> list[dict]:
         p = self.root / name
-        if not p.exists():
-            return []
-        return [json.loads(line) for line in p.read_text().splitlines() if line.strip()]
+        return self._read_lines(p.read_bytes())[0] if p.exists() else []
 
-    def _append_line(self, name: str, obj: dict) -> None:
-        with open(self.root / name, "a") as f:
-            f.write(canonical(obj) + "\n")
+    def _append_lines(self, name, objects):
+        with (self.root / name).open("a+b") as f:
+            f.seek(0)
+            _, end = self._read_lines(f.read())
+            f.truncate(end)
+            f.write("".join(canonical(obj) + "\n" for obj in objects).encode())
             f.flush()
             os.fsync(f.fileno())
 
+    def _append_line(self, name: str, obj: dict) -> None:
+        self._append_lines(name, [obj])
+
     def ensure_project(self, name: str) -> str:
-        with self._lock:
+        with self._write_lock():
             for p in self._lines("projects.jsonl"):
                 if p["name"] == name:
                     return p["id"]
@@ -324,7 +393,7 @@ class JsonlStore(Store):
 
     def put_config_version(self, project_id, version, config):
         _check_config(version, config)
-        with self._lock:
+        with self._write_lock():
             if project_id not in {p["id"] for p in self._lines("projects.jsonl")}:
                 raise StoreError(f"unknown project {project_id}")
             if version not in {c["version"] for c in self.config_versions(project_id)}:
@@ -340,7 +409,7 @@ class JsonlStore(Store):
     def create_investigation(self, meta: dict, *, record_id: str | None = None) -> str:
         from .workbook import now_ts
 
-        with self._lock:
+        with self._write_lock():
             rid, payload, replay = self._prepare_create(meta, record_id)
             if replay is not None:
                 return replay
@@ -362,12 +431,12 @@ class JsonlStore(Store):
         """Validate every item, then write all new lines with one write and fsync."""
         from .workbook import now_ts
 
-        with self._lock:
+        with self._write_lock():
             existing = self.records(investigation)
             out: list[Record] = []
             new: list[Record] = []
             for kind, payload, record_id in items:
-                rid, payload, replay = self._prepare_append(investigation, kind, payload, record_id)
+                rid, payload, replay = self._prepare_append(investigation, kind, payload, record_id, new)
                 if replay is not None:
                     out.append(replay)
                     continue
@@ -377,24 +446,14 @@ class JsonlStore(Store):
                 new.append(rec)
                 out.append(rec)
             if new:
-                with open(self.root / f"{investigation}.jsonl", "a") as f:
-                    f.write("".join(canonical(r.to_dict()) + "\n" for r in new))
-                    f.flush()
-                    os.fsync(f.fileno())
+                self._append_lines(f"{investigation}.jsonl", [r.to_dict() for r in new])
             return out
 
     def records(self, investigation, kind=None):
         path = self._path(investigation)
         if not path.exists():
             return []
-        out = []
-        with open(path) as f:
-            for line in f:
-                if line.strip():
-                    r = Record(**json.loads(line))
-                    if kind is None or r.kind == kind:
-                        out.append(r)
-        return out
+        return [Record(**r) for r in self._lines(path.name) if kind is None or r["kind"] == kind]
 
     def investigations(self):
         return self._lines("investigations.jsonl")

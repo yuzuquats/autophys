@@ -29,7 +29,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
-from .store import GENESIS, Record, Store, StoreError, canonical, chain_hash
+from ._text import rust_trim
+from .store import _clean, GENESIS, Record, Store, StoreError, canonical, chain_hash
 
 #: ``PRAGMA application_id`` of a workbook: ASCII ``APWB``.
 APPLICATION_ID = 0x41505742
@@ -268,12 +269,25 @@ def _trace_shape(kind: str, payload: dict) -> None:
                numbers=("cost_usd",), nullable=("cost_usd",))
 
 
+def check_integer_range(value: Any, path: str = "payload") -> None:
+    """serde_json represents integers only in the i64/u64 union."""
+    if isinstance(value, int) and not isinstance(value, bool) and not -(2 ** 63) <= value <= 2 ** 64 - 1:
+        raise _invalid(path, "integer must be in -2**63 .. 2**64-1")
+    if isinstance(value, dict):
+        for key, item in value.items():
+            check_integer_range(item, f"{path}.{key}")
+    elif isinstance(value, (list, tuple)):
+        for index, item in enumerate(value):
+            check_integer_range(item, f"{path}[{index}]")
+
+
 def payload_shape(kind: str, payload: Any) -> None:
     """Validate a payload for its kind (only what projections read, plus E-1's outlook)."""
     if kind not in KINDS:
         raise _invalid("kind", f"unknown kind {kind!r}")
     if not isinstance(payload, dict):
         raise _invalid("payload", "must be a JSON object")
+    check_integer_range(payload)
     _trace_shape(kind, payload)
     if kind == "investigation":
         _string(payload, "payload", "project_id")
@@ -314,8 +328,10 @@ def append_payload(kind: str, payload: Any, record_id: str | None) -> tuple[str,
 
 
 def canonical_payload(payload: Any) -> tuple[Any, str]:
-    clean = json.loads(canonical(payload))
-    return clean, canonical(clean)
+    clean = _clean(payload)
+    check_integer_range(clean)
+    text = canonical(clean)
+    return json.loads(text), text
 
 
 def check_payload_size(text: str) -> None:
@@ -511,10 +527,10 @@ class WorkbookStore(Store):
             self._conn.execute("BEGIN IMMEDIATE")
             try:
                 yield self._conn
+                self._conn.execute("COMMIT")
             except BaseException:
                 self._conn.execute("ROLLBACK")
                 raise
-            self._conn.execute("COMMIT")
             self._writes += 1
 
     def close(self) -> None:
@@ -545,7 +561,7 @@ class WorkbookStore(Store):
         return rows[0][0] if rows else None
 
     def ensure_project(self, name: str) -> str:
-        if not isinstance(name, str) or not name.strip() or len(name) > 200:
+        if not isinstance(name, str) or not rust_trim(name) or len(name) > 200:
             raise _invalid("name", "required string of 1 to 200 characters")
         with self._tx() as c:
             rows = c.execute("SELECT id, name FROM projects").fetchall()
