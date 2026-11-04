@@ -1,13 +1,13 @@
 # Rendered by ops/deploy.sh into ~/.config/systemd/user/autophys.service.
-# @RELEASE@, @ADDR@ and @COMMIT@ are filled in; edit this template, not the
-# rendered unit.
+# @RELEASE@, @ADDR@, @COMMIT@ and @TENTO@ are filled in; edit this template,
+# not the rendered unit.
 [Unit]
-Description=autophys @COMMIT@ on @ADDR@ (experiments/autophys)
+Description=autophys serve @COMMIT@ (cookbook tento @TENTO@) on @ADDR@ (experiments/autophys)
 
 [Service]
 Type=simple
 WorkingDirectory=@RELEASE@
-ExecStart=@RELEASE@/bin/autophys-server --addr @ADDR@ --web @RELEASE@/web
+ExecStart=@RELEASE@/bin/autophys serve --addr @ADDR@ --web @RELEASE@/web
 # A crash or kill restarts; a deliberate SIGTERM stop stays stopped (AP-4).
 Restart=on-failure
 RestartSec=2
