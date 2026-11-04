@@ -53,7 +53,7 @@ Found in the first real-data run, Onori M50T HPPC
 ```review-table
 | # | Improvement | Found in | Owner | State |
 | - | ----------- | -------- | ----- | ----- |
-| 12 | Find and fix the suspected flaky Python test (operator request); a 10-run loop is in progress | `~/.local/state/autophys/evidence/flaky-20261104/` | autophys/py | in progress |
+| 12 | Find and fix the suspected flaky Python test (operator request). Not reproduced in 42 runs (serial, cross-writer, 4x parallel, shuffled order); no fix without a failure. Reopen with a failing run | `~/.local/state/autophys/evidence/flaky-20261104/`, [sdk.md](sdk.md) | autophys/py | done |
 | 13 | The opt-in cross-writer tests rely on wall-clock windows (`2.9 <= elapsed < 4`) and a fixed 0.3 s sleep before a waiter subscribes | `sdks/python/tests/test_cross_writer.py:123,182` | autophys/py | open |
 | 14 | Headless UI checks on rwc-dev-01 (ARM64): the cached `chrome-headless-shell` is x86-64, so only Playwright's Chromium with `--no-sandbox` runs | 717980d | autophys/ui | open |
 | 15 | Agents can't confirm views in the live UI since `/app` requires an email and password sign-in | 717980d | operator + autophys/ui | open |

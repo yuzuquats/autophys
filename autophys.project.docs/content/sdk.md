@@ -555,6 +555,29 @@ Its numbers are not Muse results (MQ-9).
   manifests are in `~/.local/state/autophys/evidence/muse-smoke-20261104/`
   on rwc-dev-01 (SHA256SUMS).
 
+## Flaky-test search (Python), 2026-11-04
+
+The operator asked for the suspected flaky Python test to be found and fixed.
+No record names the test or a failing run, so the search tried to reproduce one
+on frozen `git archive` exports of master, run from the venv with no bytecode
+or pytest cache. Every run passed.
+
+| Pass | Revision | Runs | Result |
+| --- | --- | --- | --- |
+| Full suite, serial | 717980d | 10 | 606 passed, 6 skipped each |
+| Cross-writer tests against the installed daemon (`106c35c-20261104`) | 2814d07 | 20 | 5 passed each |
+| 4 full suites at once (cross-writer included), twice | 2814d07 | 8 | 617 passed, 1 skipped each |
+| Shuffled order (seeds 1, 2, 3) and reversed order | 36ed4d5 | 4 | 625 passed, 1 skipped each |
+
+So no fix was made: without a failure there is no root cause, and the operator
+ruled out retries and skips. The windows most likely to fail under heavier load
+are kept in [improvements.md](improvements.md) item 13:
+`test_review_regressions.py:279` (`1.1 <= elapsed < 2`), the cross-writer
+`test_B1_real_daemon_wait_deadline` (`2.9 <= elapsed < 4`) and the 0.2 s Muse
+timeout in `test_research.py:159`. Under 4x load none of them failed. If a
+failure is seen, keep its pytest output and reopen item 12 with it. Logs:
+`~/.local/state/autophys/evidence/flaky-20261104/` on rwc-dev-01.
+
 ## How the loops nest (research and investigation)
 
 Added 2026-11-04 at the operator's request, to show how `autophys research`
