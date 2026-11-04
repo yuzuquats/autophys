@@ -162,9 +162,8 @@ fn login_form(next: &str, email: &str, error: Option<&str>) -> String {
              <input id=\"email\" name=\"email\" type=\"email\" autocomplete=\"username\" required value=\"{}\" autofocus>\
              <label for=\"password\">Password</label>\
              <input id=\"password\" name=\"password\" type=\"password\" autocomplete=\"current-password\" required>\
-             <button type=\"submit\">Sign in</button></form>\
-             <p class=\"alt\">No account? <a href=\"/app?source=fixtures\">View the recorded demo</a> \
-             (read-only), or go back to <a href=\"/\">the overview</a>.</p>",
+             <button type=\"submit\">Sign in</button></form>\\
+             <p class=\"alt\"><a href=\"/\">Back to the overview</a></p>",
             escape(next),
             escape(email)
         ),
@@ -445,6 +444,7 @@ transform:none;transition-delay:0s}\
 #ap-account .ap-acct-card{background:#fff;border-radius:10px;padding:10px 12px;\
 box-shadow:0 8px 24px rgb(0 0 0/12%),0 0 0 1px rgb(0 0 0/5%);display:grid;gap:8px}\
 #ap-account .ap-acct-email{color:#5b5b5b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px}\
+#ap-account .ap-acct-mode{justify-self:start;font-size:11px;font-weight:600;color:#7a4a05;background:#fff3d6;border-radius:5px;padding:2px 6px}\
 #ap-account .ap-acct-card form{margin:0}\
 #ap-account .ap-acct-card button{width:100%;border:0;border-radius:7px;background:#f1f1f1;color:#141414;\
 font:600 13px/1 inherit;font-family:inherit;padding:8px 10px;cursor:pointer;text-align:left}\
@@ -465,12 +465,17 @@ pub fn badge(user: &User) -> String {
             .to_uppercase()
             .to_string(),
     );
+    let mode = if user.read_only {
+        "<span class=\"ap-acct-mode\">Read-only</span>"
+    } else {
+        ""
+    };
     format!(
         "<div id=\"ap-account\" data-signed-in=\"true\">\
          <button type=\"button\" class=\"ap-acct-btn\" aria-label=\"Account: {email}\" aria-haspopup=\"true\">\
          <span class=\"ap-acct-avatar\" aria-hidden=\"true\">{initial}</span></button>\
          <div class=\"ap-acct-tip\"><div class=\"ap-acct-card\">\
-         <span class=\"ap-acct-email\" title=\"{email}\">{email}</span>\
+         <span class=\"ap-acct-email\" title=\"{email}\">{email}</span>{mode}\
          <form method=\"post\" action=\"/api/auth/logout\"><button type=\"submit\">Sign out</button></form>\
          </div></div></div>{ACCOUNT_STYLE}"
     )
@@ -540,6 +545,7 @@ mod tests {
             email: "a<b>@x.org".into(),
             created: String::new(),
             active: true,
+            read_only: false,
         };
         let html = badge(&user);
         assert!(html.contains("a&lt;b&gt;@x.org") && !html.contains("a<b>"));

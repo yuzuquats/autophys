@@ -152,6 +152,12 @@ impl FromRequest for KeyOrBrowser {
                         return Ok(KeyOrBrowser(Caller::Browser));
                     }
                     match signed_in(&store, &req).await? {
+                        Some(user)
+                            if user.read_only
+                                && !matches!(*req.method(), Method::GET | Method::HEAD) =>
+                        {
+                            Err(ApiError::Forbidden("This account is read-only.".into()))
+                        }
                         Some(user) => Ok(KeyOrBrowser(Caller::Member(user))),
                         None => Err(ApiError::Unauthorized),
                     }

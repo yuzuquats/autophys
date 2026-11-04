@@ -37,6 +37,8 @@ pub struct User {
     pub created: String,
     /// False until the invite has been accepted and a password chosen.
     pub active: bool,
+    /// May read but not change anything (`autophys users set EMAIL --read-only`).
+    pub read_only: bool,
 }
 
 /// `users add`: the account and its one-time invite token.
@@ -105,10 +107,11 @@ fn user_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<User> {
         email: r.get(1)?,
         created: r.get(2)?,
         active: r.get::<_, Option<String>>(3)?.is_some(),
+        read_only: r.get::<_, i64>(4)? != 0,
     })
 }
 
-const USER_COLS: &str = "id, email, created, password";
+const USER_COLS: &str = "id, email, created, password, read_only";
 
 /// Create the account for `email` if it is new, and issue a fresh invite
 /// (replacing any earlier one). An existing password keeps working until the
@@ -260,6 +263,23 @@ pub(crate) fn check_password(
     Ok(verify_row(password_row(conn, email)?, password))
 }
 
+/// Mark an account read-only, or read-write again.
+pub(crate) fn set_read_only(conn: &Connection, email: &str, read_only: bool) -> Result<User> {
+    let email = normalize_email(email)?;
+    let n = conn.execute(
+        "UPDATE users SET read_only = ?2 WHERE email = ?1",
+        params![email, read_only as i64],
+    )?;
+    if n == 0 {
+        return Err(ApiError::not_found("account"));
+    }
+    Ok(conn.query_row(
+        &format!("SELECT {USER_COLS} FROM users WHERE email = ?1"),
+        [&email],
+        user_row,
+    )?)
+}
+
 /// Start a session for `user`; returns the token for the cookie.
 pub(crate) fn session_start(conn: &Connection, user: &User, now: DateTime<Utc>) -> Result<String> {
     // Housekeeping: expired sessions go on the next sign-in.
@@ -285,7 +305,7 @@ pub(crate) fn session_user(
 ) -> Result<Option<User>> {
     Ok(conn
         .query_row(
-            "SELECT u.id, u.email, u.created, u.password FROM sessions s
+            "SELECT u.id, u.email, u.created, u.password, u.read_only FROM sessions s
              JOIN users u ON u.id = s.user_id
              WHERE s.sha256 = ?1 AND s.expires > ?2 AND u.password IS NOT NULL",
             params![sha256_hex([token.as_bytes()]), now_text(now)],

@@ -37,7 +37,8 @@ use crate::keys::KeyStore;
 pub const USAGE: &str = "\
 usage: autophys pair list | pair approve <CODE> | pair deny <CODE>
        autophys keys list [--json] | keys revoke <KEY_ID>
-       autophys users list [--json] | users add <EMAIL> [--public-url URL] | users remove <EMAIL>
+       autophys users list [--json] | users add <EMAIL> [--public-url URL] [--read-only] | users remove <EMAIL>
+       autophys users set <EMAIL> --read-only | --read-write
        autophys db verify [--rebuild] [--json] [--project NAME]   (db check is the same)
        (each also takes --collection <dir> (alias --db) and --server-db <file>)";
 
@@ -47,6 +48,8 @@ struct Args {
     server_db: Option<PathBuf>,
     project: Option<String>,
     public_url: Option<String>,
+    /// `users add|set --read-only` / `--read-write`.
+    read_only: Option<bool>,
     json: bool,
     rebuild: bool,
 }
@@ -58,6 +61,7 @@ fn parse(args: impl IntoIterator<Item = String>) -> Result<Args, String> {
         server_db: None,
         project: None,
         public_url: None,
+        read_only: None,
         json: false,
         rebuild: false,
     };
@@ -80,6 +84,8 @@ fn parse(args: impl IntoIterator<Item = String>) -> Result<Args, String> {
             "--server-db" => out.server_db = Some(value(&key)?.into()),
             "--project" => out.project = Some(value(&key)?),
             "--public-url" => out.public_url = Some(value(&key)?),
+            "--read-only" => out.read_only = Some(true),
+            "--read-write" => out.read_only = Some(false),
             s if s.starts_with("--") => return Err(format!("unknown flag {s:?}")),
             _ => out.words.push(arg),
         }
@@ -116,7 +122,7 @@ pub fn run(
         (command, words.as_slice()),
         ("pair", ["list"] | ["approve" | "deny", _])
             | ("keys", ["list"] | ["revoke", _])
-            | ("users", ["list"] | ["add" | "remove", _])
+            | ("users", ["list"] | ["add" | "remove" | "set", _])
             | ("db", ["verify" | "check"])
     );
     if !valid {
@@ -204,7 +210,12 @@ pub fn run(
                     let _ = writeln!(out, "no accounts (add one with `autophys users add EMAIL`)");
                 }
                 for u in list {
-                    let state = if u.active { "active" } else { "invited" };
+                    let state = match (u.active, u.read_only) {
+                        (true, true) => "active, read-only",
+                        (true, false) => "active",
+                        (false, true) => "invited, read-only",
+                        (false, false) => "invited",
+                    };
                     let _ = writeln!(
                         out,
                         "{}  {}  {}  created {}",
@@ -214,7 +225,24 @@ pub fn run(
             }
             ExitCode::SUCCESS
         }),
-        ("users", ["add", email]) => keys.users_invite(email).map(|inv| {
+        ("users", ["set", email]) => match args.read_only {
+            None => {
+                let _ = writeln!(err, "autophys: users set needs --read-only or --read-write");
+                return ExitCode::from(2);
+            }
+            Some(on) => keys.users_set_read_only(email, on).map(|u| {
+                let mode = if u.read_only { "read-only" } else { "read-write" };
+                let _ = writeln!(out, "{} ({}) is now {mode}", u.email, u.id);
+                ExitCode::SUCCESS
+            }),
+        },
+        ("users", ["add", email]) => keys
+            .users_invite(email)
+            .and_then(|inv| match args.read_only {
+                Some(on) => keys.users_set_read_only(email, on).map(|user| crate::accounts::Invite { user, ..inv }),
+                None => Ok(inv),
+            })
+            .map(|inv| {
             let base = args
                 .public_url
                 .clone()

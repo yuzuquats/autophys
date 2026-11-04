@@ -159,7 +159,7 @@ export function deck(app: Cookbook.App, appPath = "/app"): Cookbook.Deck.Slide[]
           { title: "Read the verdict", detail: "Which parameters the data pins down to ±10%, and which sit on a ridge." },
           { title: "Approve the next test", detail: "Edit the proposed settings if you like, then approve or reject it." },
         ],
-        primary: { label: "Open the demo", href: `${appPath}?source=fixtures` },
+        primary: { label: "Open the workbench", href: appPath },
       },
     },
     {

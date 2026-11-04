@@ -127,46 +127,18 @@ async fn sign_in_gates_the_app_and_the_browser_api() {
     assert!(
         s == 200
             && page.contains("action=\"/api/auth/login\"")
-            && page.contains("href=\"/app?source=fixtures\""),
+            && !page.contains("source=fixtures"),
         "{page}"
     );
 
-    // Signed out, the landing page and the recorded demo are public and say
-    // so; the live workbench is not, and the fixtures flag is matched exactly.
-    for (uri, label) in [
-        ("/", "data-signed-in=\"false\""),
-        ("/app?source=fixtures", "data-signed-in=\"false\""),
-        ("/app/inv_1?x=1&source=fixtures", "data-signed-in=\"false\""),
+    // Signed out, only the landing page is public; there is no demo mode.
+    let (s, _, _, page) = send(&app, public(test::TestRequest::get().uri("/")), "x").await;
+    assert!(s == 200 && page.contains("data-signed-in=\"false\"") && !page.contains("Sign out"));
+    for uri in [
+        "/app",
+        "/app?source=fixtures",
+        "/app/inv_1?x=1&source=fixtures",
     ] {
-        let (s, _, _, page) = send(&app, public(test::TestRequest::get().uri(uri)), "x").await;
-        assert!(
-            s == 200 && page.contains(label) && !page.contains("Sign out"),
-            "{uri}: {s}"
-        );
-    }
-    // Inside the demo, a reload (the address has lost ?source=fixtures)
-    // returns to the demo rather than to the sign-in page.
-    let (s, to, _, _) = send(
-        &app,
-        public(test::TestRequest::get().uri("/app/inv_1?x=1"))
-            .cookie(actix_web::cookie::Cookie::new("autophys_demo", "1")),
-        "x",
-    )
-    .await;
-    assert_eq!((s, to.as_str()), (303, "/app/inv_1?x=1&source=fixtures"));
-    assert_eq!(
-        call(
-            &app,
-            browser(&f.api, get("/workspace", None), false)
-                .cookie(actix_web::cookie::Cookie::new("autophys_demo", "1"))
-                .to_request()
-        )
-        .await
-        .0,
-        401,
-        "the demo cookie grants no API access"
-    );
-    for uri in ["/app", "/app?source=fixturesX", "/app?xsource=fixtures"] {
         let (s, to, _, _) = send(&app, public(test::TestRequest::get().uri(uri)), "x").await;
         assert!(
             s == 303 && to.starts_with("/login?next="),
@@ -305,6 +277,30 @@ async fn sign_in_gates_the_app_and_the_browser_api() {
         s == 200 && frag.contains("ada@lab.org") && frag.contains("/api/auth/logout"),
         "{frag}"
     );
+    // A read-only account reads but cannot write, and the popover says so.
+    f.api.keys.users_set_read_only("ada@lab.org", true).unwrap();
+    assert_eq!(
+        call(&app, only_login(get("/workspace", None)).to_request())
+            .await
+            .0,
+        200
+    );
+    let write = only_login(test::TestRequest::post().uri("/api/v1/pairings/ABCD-1234/approve"))
+        .insert_header(("origin", PUBLIC))
+        .insert_header(("content-type", "application/json"))
+        .set_payload("{}");
+    assert_eq!(call(&app, write.to_request()).await.0, 403);
+    let (_, _, _, frag) = send(
+        &app,
+        only_login(test::TestRequest::get().uri("/api/auth/badge")),
+        "x",
+    )
+    .await;
+    assert!(frag.contains("Read-only"), "{frag}");
+    f.api
+        .keys
+        .users_set_read_only("ada@lab.org", false)
+        .unwrap();
     // Writes still need one of the daemon's own origins.
     let foreign = only_login(test::TestRequest::post().uri("/api/v1/pairings/ABCD-1234/approve"))
         .insert_header(("origin", "https://evil.example"))

@@ -152,33 +152,13 @@ async fn app_document(
     sessions: web::Data<crate::http::auth::BrowserSessions>,
     api: Option<web::Data<Api>>,
 ) -> Result<HttpResponse, crate::error::ApiError> {
-    // `serve --login`: signed out, only the landing page and the read-only
-    // recorded demo (bundled fixtures, no API reads) are served; the API
+    // `serve --login`: signed out, only the landing page is served; the API
     // stays closed. Anything else redirects to the sign-in page.
     let mut badge = None;
-    let mut demo = false;
     if let Some(api) = api.filter(|a| a.options().login) {
         match crate::http::auth::signed_in(&api, &req).await? {
             Some(user) => badge = Some(crate::login::badge(&user)),
             None if req.path() == "/" => badge = Some(crate::login::anonymous_badge()),
-            None if demo_requested(&req) => {
-                badge = Some(crate::login::anonymous_badge());
-                demo = true;
-            }
-            // The cookbook drops `?source=fixtures` from the address once the
-            // app opens, so a reload inside the demo arrives without it.
-            None if req.cookie(DEMO_COOKIE).is_some() => {
-                let sep = if req.query_string().is_empty() {
-                    "?"
-                } else {
-                    "&"
-                };
-                let to = format!("{}{}{sep}source=fixtures", req.path(), query_of(&req));
-                return Ok(HttpResponse::SeeOther()
-                    .insert_header((actix_web::http::header::LOCATION, to))
-                    .insert_header((actix_web::http::header::CACHE_CONTROL, "no-store"))
-                    .finish());
-            }
             None => {
                 let path = req.uri().path_and_query().map_or("/app", |p| p.as_str());
                 let next: String = path
@@ -208,7 +188,6 @@ async fn app_document(
     match tokio::fs::read(&shell.0).await {
         Ok(html) => Ok(HttpResponse::Ok()
             .cookie(sessions.issue_cookie()?)
-            .cookie(demo_cookie(demo))
             .insert_header((actix_web::http::header::CACHE_CONTROL, "no-store"))
             // `serve --login` pages carry a password form: refuse framing.
             .insert_header((
@@ -236,41 +215,6 @@ async fn app_document(
             .content_type("text/plain; charset=utf-8")
             .body(format!("the built shell is missing ({error})\n"))),
     }
-}
-
-/// Set while a signed-out visitor is in the recorded demo (`serve --login`),
-/// so a reload returns them to it. It grants nothing: the demo reads only
-/// bundled fixtures and the API still requires a sign-in.
-const DEMO_COOKIE: &str = "autophys_demo";
-
-/// A request for the read-only recorded demo: `/app...?source=fixtures`.
-fn demo_requested(req: &HttpRequest) -> bool {
-    let path = req.path();
-    (path == "/app" || path.starts_with("/app/"))
-        && req
-            .query_string()
-            .split('&')
-            .any(|kv| kv == "source=fixtures")
-}
-
-fn query_of(req: &HttpRequest) -> String {
-    match req.query_string() {
-        "" => String::new(),
-        q => format!("?{q}"),
-    }
-}
-
-/// The demo cookie: set when the demo is served, cleared by any other page.
-fn demo_cookie(on: bool) -> actix_web::cookie::Cookie<'static> {
-    let mut c = actix_web::cookie::Cookie::build(DEMO_COOKIE, "1")
-        .path("/")
-        .http_only(true)
-        .same_site(actix_web::cookie::SameSite::Lax)
-        .finish();
-    if !on {
-        c.make_removal();
-    }
-    c
 }
 
 /// Put the account badge just before `</body>` (or at the end).

@@ -368,6 +368,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../sql/keys/schema_v1.sql"),
     // v2: browser sign-in accounts and sessions (`crate::accounts`).
     include_str!("../sql/keys/schema_v2.sql"),
+    include_str!("../sql/keys/schema_v3.sql"),
 ];
 
 fn migrate(conn: &mut Connection) -> Result<()> {
@@ -593,6 +594,15 @@ impl KeyStore {
         crate::accounts::accept_check(&*self.conn()?, token, password, Utc::now())?;
         let phc = crate::accounts::password_hash(password)?;
         crate::accounts::accept_commit(&mut *self.conn()?, token, &phc, Utc::now())
+    }
+
+    /// Mark an account read-only (or read-write again).
+    pub fn users_set_read_only(
+        &self,
+        email: &str,
+        read_only: bool,
+    ) -> Result<crate::accounts::User> {
+        crate::accounts::set_read_only(&*self.conn()?, email, read_only)
     }
 
     /// The active account with this email and password.
