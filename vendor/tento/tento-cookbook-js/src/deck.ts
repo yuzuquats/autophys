@@ -201,6 +201,7 @@ export function createDeck(slides: readonly DeckSlide[]): Deck {
     endDrag();
     const to = clampSlide(target, count);
     if (to !== index) {
+      views[index].show(build, false);
       build = landing ?? (to < index ? builds[to] - 1 : 0);
       views[to].show(build, false);
     }
@@ -460,7 +461,12 @@ function renderSlide(slide: DeckSlide): SlideView {
   return {
     el,
     show(to, animate) {
-      if (to === current) return;
+      if (to === current) {
+        // A non-animated show (the deck leaving or landing on this slide) also
+        // finishes any build still in flight, so nothing is left mid-fade.
+        if (!animate) settle();
+        return;
+      }
       settle();
       const from = current;
       current = to;
@@ -501,9 +507,12 @@ function renderSlide(slide: DeckSlide): SlideView {
         if (t) running.push(n.animate([{ transform: t }, { transform: "none" }], { duration: 560, easing: ease }));
       });
       const mine = running;
-      void Promise.allSettled(mine.map((a) => a.finished)).then(() => {
+      const done = () => {
         if (running === mine) settle();
-      });
+      };
+      void Promise.allSettled(mine.map((a) => a.finished)).then(done);
+      // Fallback for engines that never settle a finished promise (the longest animation is 560 ms).
+      setTimeout(done, 1000);
     },
   };
 }
