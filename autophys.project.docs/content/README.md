@@ -11,8 +11,9 @@ below is kept as the batch-1 record; "Shape after the restructure" and
 Pages: [decisions.md](decisions.md) (operator rulings and pending agent
 choices), [repo.md](repo.md) and [architecture.md](architecture.md) (moved
 from tento's record, unchanged), [tento-plan.md](tento-plan.md) (tento's
-cover, moved and renamed), [sdk.md](sdk.md), [display-manifest.md](display-manifest.md) (the plan to make the UI generic), and the batch-1 verification
-pages.
+cover, moved and renamed), [sdk.md](sdk.md), [display-manifest.md](display-manifest.md) (the plan to make the UI generic),
+[improvements.md](improvements.md) (a running list of improvements not yet scheduled), and the batch-1
+verification pages.
 
 ## Shape after the restructure
 
