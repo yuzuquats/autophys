@@ -25,7 +25,7 @@ Deno.test("controller: edit, refused values, approve (posted as edited), withdra
   assert(ctl.selection === sel, "typing does not change the selection");
   ctl.handle({ kind: "field", name: "amplitude", raw: "1.5", commit: true });
   ctl.handle({ kind: "field", name: "rate", raw: "5000", commit: true });
-  const fieldOf = (name: string) => (ctl.view().details.sections[0].blocks[0] as { fields: { name: string; value: string; invalid?: string }[] }).fields.find((f) => f.name === name)!;
+  const fieldOf = (name: string) => (ctl.view().details.sections.find((x) => x.heading === "Experiment")!.blocks[0] as { fields: { name: string; value: string; invalid?: string }[] }).fields.find((f) => f.name === name)!;
   assertEquals([fieldOf("rate").value, fieldOf("rate").invalid], ["5000", "10 to 1000 Hz"]);
   ctl.handle({ kind: "field", name: "rate", raw: "200", commit: true });
   assertEquals(fieldOf("rate").invalid, "fixed at 100 Hz in this outlook", "the outlook has no rate axis");

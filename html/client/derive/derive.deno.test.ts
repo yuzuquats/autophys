@@ -158,16 +158,39 @@ Deno.test("derive: a fit on a ridge greys its raw parameters and tags the combin
   assertEquals(quality.rows.find((r) => r.label === "Residuals"), { label: "Residuals", value: "structured", tone: "warn" });
 });
 
-Deno.test("derive: the proposal panel carries the phone-card decision row and the ranking", () => {
+Deno.test("derive: the proposal details carry previews, settings, the decision row and provenance; the ranking lives in main", () => {
   const d = detailsModel(at("bench-oscillators", "bench-a/prop/p1"));
   assertEquals([d.title, d.cardName, d.status.text], ["Sine force", true, "Awaiting approval"]);
   assertEquals(d.decision!.map((a) => a.name), ["approve", "reject"]);
-  const fields = d.sections[0].blocks[0];
+  assertEquals(d.sections.map((x) => x.heading), ["Preview", "Experiment", "Expected"]);
+  assertEquals(d.sections[0].blocks.map((b) => b.kind === "wave" ? b.caption : b.kind), ["Input · Force (N)", "Predicted · Displacement (m) at Fit #1"]);
+  const fields = d.sections[1].blocks[0];
   assert(fields.kind === "fields");
   assertEquals(fields.fields.map((f) => [f.name, f.value, f.unit]), [["amplitude", "2.00", "N"], ["frequency", "0.440", "Hz"], ["duration", "10.0", "s"], ["rate", "100", "Hz"]]);
-  const bars = d.sections[2].blocks[0];
-  assert(bars.kind === "bars");
-  assertEquals([bars.rows[0].label, bars.rows[0].fraction, bars.rows.at(-1)!.value], ["Sine 0.44 Hz", 1, "≈ 0"]);
+  const fixed = d.sections[1].blocks[1];
+  assert(fixed.kind === "facts");
+  assertEquals(fixed.rows, [{ label: "Initial displacement", value: "0 m" }], "a fixed setting reads with its manifest label and unit");
+  assert(!JSON.stringify(d).includes("\"bars\""), "the ranking is not repeated in Details");
+  assertStringIncludes(d.footnote ?? "", "ranked at Fit #1");
+});
+
+Deno.test("derive: the proposal main view is the candidates table and the agent's reasoning", () => {
+  const m = mainModel(at("bench-oscillators", "bench-a/prop/p1"));
+  assert(m.body.kind === "decision");
+  const [candidates, reasoning] = m.body.cards;
+  assertEquals([candidates.heading, reasoning.heading], ["Candidates", "Reasoning"]);
+  const table = candidates.blocks[0];
+  assert(table.kind === "table");
+  const rows = table.rows.slice(1);
+  assertEquals([rows[0].strong, rows[0].cells[0].text, rows[0].cells.at(-1)!.text], [true, "Sine 0.44 Hz", rows[0].cells.at(-1)!.text]);
+  assertEquals(rows.filter((r) => r.strong).length, 1);
+  assertEquals(rows.at(-1)!.cells.at(-1)!.text, "≈ 0");
+  const trace = reasoning.blocks[0];
+  assert(trace.kind === "trace");
+  assertEquals(trace.steps.map((x) => x.title), ["Inspect data", "Optimize parameters", "Analyze sensitivity", "Rank experiments", "Propose experiment"]);
+  const last = trace.steps.at(-1)!;
+  assertEquals([last.current, last.evidence?.length, Boolean(last.expected)], [true, 3, true]);
+  assertEquals(m.credit, "", "provenance moved to the Details footnote");
 });
 
 Deno.test("derive: interpolation returns a grid node's own value exactly, and is multilinear between nodes", () => {

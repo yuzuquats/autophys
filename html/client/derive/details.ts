@@ -6,7 +6,6 @@ import type { Action, DetailsModel, Fact, Section, TableRow } from "../../ui/vie
 import { shortHash, int, pct, plural, sig } from "./fmt.ts";
 import { configurationSections } from "./configuration.ts";
 import { pairingExpiry } from "./pairing.ts";
-import { rankingBars } from "./main.ts";
 import { displayedFields, outlookAt } from "./outlook.ts";
 import {
   configFor, investigationLabel, defaultSelection, draftKey, experimentsUsed, ids, latestConfig, latestFit, parseSel, plusMinus, projectOf, proposalLabel, rankOf, type State, statusText, unitOf,
@@ -226,12 +225,26 @@ function proposalDetails(s: State, project: Project, inv: Investigation, p: Prop
   const drafts = p.fields.map((f) => s.drafts[draftKey(inv, p, f.name)]);
   const look = outlookAt(p, shown);
   const sections: Section[] = [];
+  {
+    const blocks: Section["blocks"] = [];
+    if (!p.preview.t.length) blocks.push({ kind: "text", tone: "muted", text: "No preview recorded: the SDK did not upload this experiment's drive or predicted response." });
+    else {
+    const ch = (x: { label: string; unit: string }) => `${x.label}${x.unit ? ` (${x.unit})` : ""}`;
+    if (p.preview.input && spec.input) blocks.push({ kind: "wave", t: p.preview.t, y: p.preview.input, label: `${ch(spec.input)} as proposed`, caption: `Input · ${ch(spec.input)}` });
+    blocks.push({ kind: "wave", t: p.preview.t, y: p.preview.predicted, label: `${ch(spec.output)} predicted at Fit #${p.atFit}`, caption: `Predicted · ${ch(spec.output)} at Fit #${p.atFit}` });
+    }
+    sections.push({ heading: "Preview", blocks });
+  }
+  const at = sections.length;
   if (p.status === "proposed" && p.outlook.axes.length) {
     sections.push({ heading: "Experiment", blocks: [{ kind: "fields", fields: shown.map((f, i) => ({ name: f.name, label: f.label, unit: f.unit, value: drafts[i]?.raw ?? sig(f.value, 3), invalid: drafts[i]?.message })) }] });
   } else {
     sections.push({ heading: "Experiment", blocks: [{ kind: "facts", rows: p.fields.map((f) => ({ label: f.label, value: `${sig(f.value, 3)} ${f.unit}`, note: f.value !== f.original ? `(was ${sig(f.original, 3)})` : undefined })) }] });
   }
-  if (Object.keys(p.fixedSettings).length) sections[0].blocks.push({ kind: "facts", rows: Object.entries(p.fixedSettings).map(([label, value]) => ({ label, value: sig(value, 4) })) });
+  if (Object.keys(p.fixedSettings).length) sections[at].blocks.push({ kind: "facts", rows: Object.entries(p.fixedSettings).map(([name, value]) => {
+    const setting = spec.settings.find((x) => x.name === name) ?? c.catalog.flatMap((e) => e.settings).find((x) => x.name === name);
+    return { label: setting?.label ?? name, value: `${sig(value, 4)} ${setting?.unit ?? ""}`.trim() };
+  }) });
   if (!p.outlook.axes.length && !Object.keys(p.outlook.after).length) sections.push({ heading: "Outlook", blocks: [{ kind: "missing", title: "Not recorded yet", description: "This proposal has no outlook grid. Settings are read-only because edits cannot be scored; approve or reject the experiment as proposed." }] });
   const unedited = shown.every((f) => f.value === f.original);
   sections.push({ heading: "Expected", blocks: [{ kind: "facts", rows: [
@@ -242,8 +255,6 @@ function proposalDetails(s: State, project: Project, inv: Investigation, p: Prop
     }),
     { label: "Budget after", value: `${experimentsUsed(inv) + (p.status === "proposed" ? 1 : 0)} / ${c.budgets.maxExperiments} experiments` },
   ] }] });
-  const ranking = rankingBars(s, inv, p);
-  sections.push({ heading: "Ranked against", blocks: [ranking.length ? { kind: "bars", rows: ranking } : { kind: "missing", title: "Not recorded yet", description: "No experiment ranking has been recorded by the SDK." }] });
   if (p.status === "approved") {
     const id = expectedMeasurement(inv, p);
     sections.push(delivered(inv, p)
@@ -256,6 +267,7 @@ function proposalDetails(s: State, project: Project, inv: Investigation, p: Prop
   const invalid = drafts.some(Boolean);
   return {
     icon: "proposal", title: spec.label, cardName: true, status, sections,
+    footnote: `${simulatorLabel(c)} · seed ${Number.isFinite(inv.seed) ? inv.seed : "not recorded"} · ranked at Fit #${p.atFit}`,
     decision: p.status === "proposed" ? [{ name: "approve", label: "Approve", variant: "primary", disabled: invalid, title: invalid ? "Fix the marked field first" : undefined }, { name: "reject", label: "Reject" }] : undefined,
     actions: p.status === "approved" && !delivered(inv, p) && allows(s, "unapproved") ? [{ name: "withdraw", label: "Withdraw approval" }]
       : p.status === "rejected" && allows(s, "restored") ? [{ name: "restore", label: "Restore proposal" }] : undefined,

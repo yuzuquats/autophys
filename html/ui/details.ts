@@ -26,6 +26,7 @@ export function detailsMarkup(model: DetailsModel, classes: DetailsClasses = {})
     out += `<div class="${esc(row)}">${model.decision.map((a) => buttonMarkup(a, classes)).join("")}</div>`;
   }
   if (model.actions?.length) out += `<div class="ap-actions${model.actions.length === 1 ? " ap-one" : ""}">${model.actions.map((a) => buttonMarkup(a, classes)).join("")}</div>`;
+  if (model.footnote) out += `<p class="ap-footnote">${esc(model.footnote)}</p>`;
   return out;
 }
 

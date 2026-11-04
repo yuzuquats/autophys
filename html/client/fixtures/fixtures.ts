@@ -387,6 +387,15 @@ function sineProposal(id: string, atFit: number, status: Proposal["status"], dec
     fixedSettings: { x0: 0 }, status, decidedBy: decided ? USER : null, decidedAt: decided,
     hypothesis: "Mass is not identifiable from free response: only k/m and c/m are. Driving near resonance separates m.",
     ranking: [], expected: [], dataFrom: "laptop", preview: { t: [], input: null, predicted: [] }, outlook: { axes: [], score: [], after: {} },
+    trace: [
+      { n: 1, action: "inspect_data", hypothesis: "The free response is a clean decaying oscillation; fit it before choosing anything.", evidence: [], expected: "" },
+      { n: 2, action: "optimize_parameters", hypothesis: `Fit #${atFit} should match the ring-down; its residuals will say whether the model is adequate.`, evidence: [], expected: "χ²/N near 1 with white residuals" },
+      { n: 3, action: "analyze_sensitivity", hypothesis: "A good fit is not enough: check which parameters this data actually determines.", evidence: [], expected: "" },
+      { n: 4, action: "rank_experiments", hypothesis: "Score every catalog experiment on the weakest direction.", evidence: [], expected: "" },
+      { n: 5, action: "propose_experiment", hypothesis: "Mass is not identifiable from free response: only k/m and c/m are. Driving near resonance separates m.",
+        evidence: ["The weakest direction loads m, c and k equally", "Free response fixes the decay rate and the frequency, not the overall scale", "A drive near resonance scores highest of the candidates"],
+        expected: "m, c and k each identified to well under 1%" },
+    ],
   };
 }
 

@@ -1,14 +1,14 @@
 /** The main column: crumb, meta, the viewer's panels and one credit line. */
 import type { Investigation, Project, ProjectConfig, Proposal } from "../domain.ts";
-import type { Action, BarRow, MainModel, RangesChart } from "../../ui/view-model.ts";
+import type { Action, BarRow, MainModel, RangesChart, Section, TableRow, TraceRow } from "../../ui/view-model.ts";
 import {
-  configPanels, edgePanels, envelopePanels, fitPanels, frequencyPanels, landscapeChart, measurementPanels, proposalPanels, residualPanels, sensitivityPanels,
+  configPanels, edgePanels, envelopePanels, fitPanels, frequencyPanels, landscapeChart, measurementPanels, residualPanels, sensitivityPanels,
   validationPanels, VIEW_LABEL,
 } from "./charts.ts";
 import { truthPanels } from "./truth.ts";
 import { configurationSections, experimentSections, knownSection } from "./configuration.ts";
 import { simulatorLabel } from "../config.ts";
-import { int, shortHash, sig } from "./fmt.ts";
+import { engineering, int, shortHash, sig } from "./fmt.ts";
 import { displayedFields, outlookAt } from "./outlook.ts";
 import { configFor, investigationLabel, defaultSelection, experimentsUsed, ids, latestConfig, latestFit, parseSel, projectOf, proposalLabel, rankOf, type State, statusText } from "./shared.ts";
 
@@ -25,6 +25,49 @@ export function rankingBars(s: State, inv: Investigation, p: Proposal): BarRow[]
     .sort((a, b) => b.score - a.score);
   const top = rows[0]?.score || 1;
   return rows.map((r) => ({ label: r.label, fraction: r.score / top, value: r.score < 1e-3 * top ? "≈ 0" : int(r.score), tone: r.proposal ? "default" : "muted" }));
+}
+
+/** A catalog experiment's applied settings at their defaults ("2 N · 440 mHz"); drive settings only when the manifest declared roles. */
+function settingsText(c: ProjectConfig, id: string, values?: Record<string, number>): string {
+  const spec = c.catalog.find((e) => e.id === id);
+  if (!spec) return "";
+  const declared = spec.settings.some((s) => s.role), shown = spec.settings.filter((s) => !declared || s.role === "drive");
+  return shown.map((s) => engineering(values?.[s.name] ?? s.default, s.unit)).join(" · ");
+}
+
+/** Every candidate the agent ranked, the proposal's row at its current (possibly edited) fields and marked. */
+function candidatesSection(s: State, c: ProjectConfig, inv: Investigation, p: Proposal): Section {
+  const shown = displayedFields(s, inv, p), own = outlookAt(p, shown), label = proposalLabel({ ...p, fields: shown });
+  const rows = p.ranking.map((r) => (r.proposal ? { ...r, score: own?.score ?? r.score } : r)).sort((a, b) => b.score - a.score);
+  if (!rows.length) return { heading: "Candidates", caption: `Ranked at Fit #${p.atFit}`, blocks: [{ kind: "missing", title: "Not recorded yet", description: "No experiment ranking has been recorded by the SDK." }] };
+  const top = rows[0].score || 1, values = Object.fromEntries(shown.map((f) => [f.name, f.value]));
+  const name = (r: typeof rows[number]) => r.proposal ? label : c.catalog.find((e) => e.id === r.label)?.label ?? r.label;
+  const settings = rows.map((r) => settingsText(c, r.proposal ? p.experiment : r.label, r.proposal ? { ...p.fixedSettings, ...values } : undefined));
+  const withSettings = settings.some(Boolean);
+  const table: TableRow[] = [
+    { dim: true, cells: [{ text: "Experiment" }, ...(withSettings ? [{ text: "Settings" }] : []), { text: "Score", end: true }] },
+    ...rows.map((r, i) => ({ strong: r.proposal, cells: [{ text: name(r) }, ...(withSettings ? [{ text: settings[i] }] : []), { text: r.score < 1e-3 * top ? "≈ 0" : int(r.score), end: true }] })),
+  ];
+  const lead = rows[0].proposal ? "the agent proposes the top one" : `the agent proposes ${label}`;
+  return { heading: "Candidates", caption: `${rows.length} ranked at Fit #${p.atFit} by the weakest-direction score · ${lead}`, blocks: [{ kind: "table", rows: table }] };
+}
+
+const actionTitle = (action: string) => (action.charAt(0).toUpperCase() + action.slice(1)).replace(/_/g, " ");
+
+/** The agent's steps that led to the proposal: one line each, the proposing step with its evidence and expectation. */
+function reasoningSection(c: ProjectConfig, p: Proposal): Section {
+  const trace = p.trace ?? [];
+  if (!trace.length) {
+    return { heading: "Reasoning", caption: "The agent's steps were not recorded for this proposal", blocks: p.hypothesis
+      ? [{ kind: "text", text: p.hypothesis }]
+      : [{ kind: "missing", title: "Not recorded yet", description: "Neither a hypothesis nor the agent's steps were recorded for this proposal." }] };
+  }
+  const steps: TraceRow[] = trace.map((t, i) => {
+    const current = i === trace.length - 1;
+    return { title: actionTitle(t.action), meta: `step ${t.n}${current ? " · this proposal" : ""}`, text: t.error || t.hypothesis || undefined,
+      ...(t.error ? { tone: "danger" as const } : {}), ...(current ? { current, evidence: t.evidence, expected: t.expected || undefined } : {}) };
+  });
+  return { heading: "Reasoning", caption: `${trace.length} agent step${trace.length === 1 ? "" : "s"} since the last proposal · ${c.policy.label}`, blocks: [{ kind: "trace", steps }] };
 }
 
 export function mainModel(s: State): MainModel {
@@ -95,7 +138,7 @@ function selectedMain(s: State): MainModel {
     case "proposal": {
       const c = configFor(project, sel.inv), p = sel.proposal;
       return { crumb: [invCrumb(sel.inv), { label: proposalLabel({ ...p, fields: displayedFields(s, sel.inv, p) }) }], meta: `${p.status} · ${experimentsUsed(sel.inv) + (p.status === "proposed" ? 1 : 0)} / ${c.budgets.maxExperiments} experiments`, actions: [EXPORT],
-        body: { kind: "panels", panels: proposalPanels({ config: c, inv: sel.inv }, p, rankingBars(s, sel.inv, p), displayedFields(s, sel.inv, p).some((f) => f.value !== f.original)) }, credit: credit(c, sel.inv, [], ` · ranked at fit #${p.atFit}`) };
+        body: { kind: "decision", cards: [candidatesSection(s, c, sel.inv, p), reasoningSection(c, p)] }, credit: "" };
     }
     case "truth": return { crumb: [invCrumb(sel.inv), { label: "Ground truth" }], meta: "Revealed after outcome", actions: [EXPORT],
       body: { kind: "panels", panels: truthPanels(sel.inv.reveal!) }, credit: "Synthetic: truth was hidden from the agent until the outcome." };

@@ -14,7 +14,7 @@ export function blockMarkup(b: Block): string {
     case "facts":
       return `<dl class="ap-facts">${b.rows.map((r) => `<div><dt>${esc(r.label)}</dt><dd class="${tone(r.tone).trim()}">${r.value ? `<span>${esc(r.value)}</span>` : ""}${r.note ? ` <span class="ap-note">${esc(r.note)}</span>` : ""}${tag(r.tag)}</dd></div>`).join("")}</dl>`;
     case "table":
-      return `<table class="ap-table"><tbody>${b.rows.map((r) => `<tr${r.dim ? ` class="ap-dim"` : ""}>${r.cells.map((c) =>
+      return `<table class="ap-table"><tbody>${b.rows.map((r) => `<tr${r.dim ? ` class="ap-dim"` : r.strong ? ` class="ap-strong"` : ""}>${r.cells.map((c) =>
         `<td${c.end ? ` class="ap-end"` : ""}>${c.text ? esc(c.text) : ""}${c.unit ? ` <span class="ap-unit">${esc(c.unit)}</span>` : ""}${tag(c.tag)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
     case "bars":
       return barsMarkup(b.rows);
@@ -25,18 +25,20 @@ export function blockMarkup(b: Block): string {
     case "links":
       return `<div class="ap-links">${b.links.map((l) => `<button type="button" class="ap-link" ${ATTR.role}="select" ${ATTR.id}="${esc(l.id)}">${esc(l.label)}</button>`).join("")}</div>`;
     case "wave":
-      return waveMarkup(b.t, b.y, b.label);
+      return waveMarkup(b.t, b.y, b.label, b.caption);
+    case "trace":
+      return `<ol class="ap-trace">${b.steps.map((s) => `<li class="${s.current ? "ap-cur" : ""}${s.tone ? ` ap-t-${s.tone}` : ""}"><div class="ap-trace-head"><b>${esc(s.title)}</b>${s.meta ? `<span>${esc(s.meta)}</span>` : ""}</div>${s.text ? `<p>${esc(s.text)}</p>` : ""}${s.evidence?.length ? `<ul>${s.evidence.map((e) => `<li>${esc(e)}</li>`).join("")}</ul>` : ""}${s.expected ? `<p class="ap-trace-exp">Expected: <b>${esc(s.expected)}</b></p>` : ""}</li>`).join("")}</ol>`;
     case "text":
       return `<p class="ap-text${tone(b.tone)}">${esc(b.text)}${b.link ? ` <button type="button" class="ap-link" ${ATTR.role}="select" ${ATTR.id}="${esc(b.link.id)}">${esc(b.link.label)}</button>` : ""}</p>`;
   }
 }
 
 /** A 0–1 normalised polyline in a fixed 100×24 viewBox, stretched to the card's width. A flat trace sits mid-height. */
-function waveMarkup(t: number[], y: number[], label: string): string {
+function waveMarkup(t: number[], y: number[], label: string, caption?: string): string {
   const ok = t.map((x, i) => [x, y[i]]).filter(([x, v]) => Number.isFinite(x) && Number.isFinite(v));
   if (ok.length < 2) return "";
   const t0 = ok[0][0], t1 = ok[ok.length - 1][0], lo = Math.min(0, ...ok.map((p) => p[1])), hi = Math.max(0, ...ok.map((p) => p[1]));
   const sx = (x: number) => (t1 > t0 ? (x - t0) / (t1 - t0) : 0) * 100, sy = (v: number) => hi > lo ? 22 - (v - lo) / (hi - lo) * 20 : 12;
   const pts = ok.map(([x, v]) => `${sx(x).toFixed(2)},${sy(v).toFixed(2)}`).join(" ");
-  return `<figure class="ap-wave" title="${esc(label)}"><svg viewBox="0 0 100 24" preserveAspectRatio="none" role="img" aria-label="${esc(label)}"><line x1="0" x2="100" y1="${sy(0).toFixed(2)}" y2="${sy(0).toFixed(2)}"/><polyline points="${pts}"/></svg></figure>`;
+  return `<figure class="ap-wave" title="${esc(label)}">${caption ? `<figcaption>${esc(caption)}</figcaption>` : ""}<svg viewBox="0 0 100 24" preserveAspectRatio="none" role="img" aria-label="${esc(label)}"><line x1="0" x2="100" y1="${sy(0).toFixed(2)}" y2="${sy(0).toFixed(2)}"/><polyline points="${pts}"/></svg></figure>`;
 }

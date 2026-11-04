@@ -143,7 +143,8 @@ Deno.test("daemon: the workbench renders the seeded investigation, with gaps sai
   const details = ctl.view().details;
   assertEquals(details.status.text, "Awaiting approval");
   assertEquals(details.decision?.map((a) => a.name), ["approve", "reject"]);
-  assertStringIncludes(JSON.stringify(ctl.view().main.body), "preview not recorded");
+  assertStringIncludes(JSON.stringify(details), "No preview recorded");
+  assertEquals(ctl.view().main.body.kind, "decision");
 });
 
 Deno.test("daemon: the stream resumes with after=<last gseq> after a drop and skips what it saw", async () => {

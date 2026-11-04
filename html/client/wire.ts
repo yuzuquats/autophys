@@ -9,7 +9,7 @@
  */
 import type {
   Channel, ExperimentKind, ExperimentSpec, Fit, Investigation, Measurement, ParamSpec, Project, ProjectConfig, Proposal, ProposalField, ProposalOutlook,
-  RankedCandidate, SettingRole, SimulatorKind, Validation, ViewHint, Workspace,
+  RankedCandidate, SettingRole, SimulatorKind, TraceStep, Validation, ViewHint, Workspace,
 } from "./domain.ts";
 
 /** A record exactly as the daemon serves it (the SDK's 8 fields). */
@@ -175,6 +175,9 @@ export function mapInvestigation(records: WireRecord[], configs: { version: stri
   let ranking: { criterion: string; rows: unknown[] } | null = null;
   let nonIdentified: string[] | null = null;
   let steps = 0, simulations = 0, state: Investigation["state"] = "awaiting-agent", validation: Validation = { state: "needs-data", recorded: false };
+  // Steps since the last proposing step. The proposal record is written while its step runs, so it
+  // usually precedes that step's record; either order attaches the same trail.
+  let trail: TraceStep[] = [], untraced: Raw | null = null, orphan: TraceStep[] | null = null;
 
   for (const r of records.slice(1)) {
     const p = r.payload;
@@ -218,7 +221,15 @@ export function mapInvestigation(records: WireRecord[], configs: { version: stri
     } else if (r.kind === "step") {
       steps++;
       if (Number.isFinite(num(p.simulations))) simulations += num(p.simulations);
-      const action = str(obj(p.decision).action), result = obj(p.result);
+      const decision = obj(p.decision), action = str(decision.action), result = obj(p.result);
+      trail.push({ n: steps, action: action || "unusable decision", hypothesis: str(decision.hypothesis), evidence: strs(decision.evidence),
+        expected: str(decision.expected_information), ...(str(p.error) ? { error: str(p.error) } : {}) });
+      if (action === "propose_experiment") {
+        if (untraced) untraced.proposal.trace = trail;
+        else orphan = trail;
+        untraced = null;
+        trail = [];
+      }
       if (action === "analyze_sensitivity" && Array.isArray(result.identified)) {
         nonIdentified = strs(result.non_identified);
         const fit = fits.find((f) => f.n === num(p.fit_id)) ?? fits[fits.length - 1];
@@ -228,7 +239,11 @@ export function mapInvestigation(records: WireRecord[], configs: { version: stri
     } else if (r.kind === "proposal") {
       const pid = str(p.proposal_id), event = str(p.event), raw = proposals.get(pid);
       if (event === "proposed") {
-        proposals.set(pid, proposed(pid, p, obj(catalog[str(p.experiment)]), fits[fits.length - 1]?.n ?? 0, ranking, nonIdentified, host));
+        const raw = proposed(pid, p, obj(catalog[str(p.experiment)]), fits[fits.length - 1]?.n ?? 0, ranking, nonIdentified, host);
+        proposals.set(pid, raw);
+        if (orphan) raw.proposal.trace = orphan;
+        untraced = orphan ? null : raw;
+        orphan = null;
         state = "awaiting-agent";
       } else if (raw) {
         decided(raw, event, p, r.ts);

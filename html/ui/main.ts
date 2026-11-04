@@ -16,6 +16,10 @@ export type MainClasses = { toolbar?: string; button?: string; primary?: string 
 export { buttonMarkup } from "./actions.ts";
 
 /** The whole main surface at `width` pixels. */
+/** A card: a std-round surface, a list-cell header (title, caption under it) and its content. */
+const cardMarkup = (cls: string, title: string, caption: string, inner: string) =>
+  `<section class="ap-card ${cls}"><std-round floating bg="var(--ap-card-bg)" border="var(--ap-line)" radius="10"></std-round><header class="ap-card-head" data-ap-cell><h3>${esc(title)}</h3>${caption ? `<p>${esc(caption)}</p>` : ""}</header>${inner}</section>`;
+
 export function mainMarkup(model: MainModel, width: number, classes: MainClasses = {}): string {
   const sep = `<span class="ap-sep" aria-hidden="true">/</span>`;
   const crumb = model.crumb.map((c, i) => {
@@ -37,10 +41,11 @@ export function mainMarkup(model: MainModel, width: number, classes: MainClasses
     body = `<section class="ap-viewer ap-signin-wrap"><form class="ap-signin" method="post" action="/api/auth/login"><std-round floating bg="#fff" radius="14" shadow="0 10px 30px rgba(0,0,0,0.10)"></std-round><h2>${esc(model.body.title)}</h2><p>${esc(model.body.description)}</p><input type="hidden" name="next" value="/app"><label>Email<input name="email" type="email" autocomplete="username" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><button type="submit">Sign in</button><p class="ap-signin-alt">No account? <a href="?source=fixtures">View the recorded demo</a> (read-only).</p></form></section>`;
   } else if (model.body.kind === "missing" || model.body.kind === "unavailable") {
     body = `<section class="ap-viewer ap-state">${emptyMarkup(model.body.title, model.body.description)}</section>`;
+  } else if (model.body.kind === "decision") {
+    body = `<div class="ap-viewer ap-decision-view">${model.body.cards.map((s) => cardMarkup("ap-dcard", s.heading, s.caption ?? "", s.blocks.map(blockMarkup).join(""))).join("")}</div>`;
   } else if (model.body.kind === "configuration") {
     // Each card's header is a list cell: the title with its caption under it (hydrated to std-list-cell-layout).
-    const card = (cls: string, title: string, caption: string, inner: string) =>
-      `<section class="ap-card ${cls}"><std-round floating bg="var(--ap-card-bg)" border="var(--ap-line)" radius="10"></std-round><header class="ap-card-head" data-ap-cell><h3>${esc(title)}</h3>${caption ? `<p>${esc(caption)}</p>` : ""}</header>${inner}</section>`;
+    const card = cardMarkup;
     const section = (cls: string) => (s: Section) => card(cls, s.heading, s.caption ?? "", s.blocks.map(blockMarkup).join(""));
     // A scale or tag every parameter shares moves to the caption instead of repeating on each row.
     const rows = model.body.parameters.rows, shared = <T,>(f: (r: typeof rows[number]) => T) => rows.length > 0 && rows.every((r) => f(r) === f(rows[0])) ? f(rows[0]) : undefined;

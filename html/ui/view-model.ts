@@ -109,6 +109,8 @@ export type MainBody =
   | { kind: "signed-out"; title: string; description: string }
   | { kind: "onboarding"; title: string; description: string; snippet: string; copyLabel: string; note: string }
   | { kind: "configuration"; parameters: RangesChart; experiments: Section[]; sections: Section[] }
+  /** Cards stacked in one column, each a Section with its caption (a proposal: candidates, then reasoning). */
+  | { kind: "decision"; cards: Section[] }
   | { kind: "panels"; panels: ChartPanel[]; columns?: number };
 
 export type MainModel = {
@@ -129,7 +131,10 @@ export type Tag = { text: string; tone?: Tone };
 
 export type Fact = { label: string; value: string; tone?: Tone; tag?: Tag; note?: string };
 export type Cell = { text: string; unit?: string; tag?: Tag; end?: boolean };
-export type TableRow = { cells: Cell[]; dim?: boolean };
+/** `strong` marks the row a table is about (the proposal among its candidates). */
+export type TableRow = { cells: Cell[]; dim?: boolean; strong?: boolean };
+/** One step of a reasoning trace: `current` is expanded with its evidence and expectation; the others show one line. */
+export type TraceRow = { title: string; meta?: string; text?: string; evidence?: string[]; expected?: string; current?: boolean; tone?: Tone };
 export type Meter = { label: string; value: string; fraction: number; tone?: Tone };
 /** An editable value. `value` is the raw text shown; `invalid` marks the field with a message. */
 export type Field = { name: string; label: string; value: string; unit?: string; invalid?: string };
@@ -147,8 +152,9 @@ export type Block =
   | { kind: "fields"; fields: Field[] }
   | { kind: "links"; links: Link[] }
   | { kind: "text"; text: string; tone?: Tone; link?: Link }
-  /** A small unlabelled trace (an experiment's input preview); `label` names it for assistive tech and the hover title. */
-  | { kind: "wave"; t: number[]; y: number[]; label: string };
+  /** A small trace (an experiment's input preview); `label` names it for assistive tech and the hover title, `caption` shows above it. */
+  | { kind: "wave"; t: number[]; y: number[]; label: string; caption?: string }
+  | { kind: "trace"; steps: TraceRow[] };
 
 /** `caption` is one line under the heading; renderers without a caption slot ignore it. */
 export type Section = { heading: string; caption?: string; blocks: Block[] };
@@ -166,4 +172,6 @@ export type DetailsModel = {
   decision?: [Action, Action];
   /** Any other buttons, in a row of their own. */
   actions?: Action[];
+  /** One quiet line after everything else (provenance). */
+  footnote?: string;
 };

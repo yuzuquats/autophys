@@ -145,6 +145,12 @@ export type ProposalField = { name: string; label: string; unit: string; value: 
 
 export type RankedCandidate = { label: string; score: number; proposal: boolean };
 
+/**
+ * One agent step as its record states it: the decision's action, hypothesis, evidence and expected
+ * information, or the error that made it unusable. `n` counts steps from the investigation's start.
+ */
+export type TraceStep = { n: number; action: string; hypothesis: string; evidence: string[]; expected: string; error?: string };
+
 export type Proposal = {
   id: string;
   experiment: ExperimentKind;
@@ -174,6 +180,8 @@ export type Proposal = {
   outlook: ProposalOutlook;
   /** Whether the SDK attached the approved experiment's data (the daemon's data_attached); absent: inferred from the measurements. */
   delivered?: boolean;
+  /** The agent steps that led to this proposal, oldest first; the last is the proposing step. Absent: not recorded. */
+  trace?: TraceStep[];
 };
 
 export type ProposalOutlook = { axes: { name: string; values: number[] }[]; score: number[]; after: Record<string, number[]> };

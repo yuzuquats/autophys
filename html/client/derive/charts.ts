@@ -241,20 +241,6 @@ export function validationPanels(ctx: Ctx, fit: Fit, testId: string, predicted: 
 }
 
 /** The drive as proposed and the response the ranking fit predicts for it (both computed upstream). */
-export function proposalPanels(ctx: Ctx, p: Proposal, ranking: BarRow[], edited: boolean): ChartPanel[] {
-  const { config } = ctx, t = p.preview.t;
-  const asProposed = p.fields.map((f) => `${sig(f.original, 3)} ${f.unit}`.trim()).join(" · ");
-  const bars: ChartPanel = { title: "Experiment ranking", charts: ranking.length ? [{ kind: "bars", rows: ranking, label: "ranked against · weakest-direction score" }] : [missing("No experiment ranking has been recorded. Rankings will appear when uploaded by the SDK.")] };
-  if (!t.length) return [{ title: `${asProposed ? `${edited ? "as proposed: " : ""}${asProposed} · ` : ""}preview not recorded`, charts: [missing("The SDK has not recorded preview drive or predicted-response series for this proposal. You can still review its recorded settings.")] }, bars];
-  const drive = { experiment: p.experiment, t, input: p.preview.input };
-  const out = specOf(config, p.experiment).output;
-  const charts: Chart[] = [inputStrip(config, drive, 70), {
-    kind: "xy", height: 130, x: timeAxis(t), y: axisAround(p.preview.predicted, { count: 4 }), label: `${out.label} · ${out.unit}, predicted at Fit #${p.atFit}`,
-    layers: [{ kind: "line", points: decimate(zip(t, p.preview.predicted)), tone: "fit" }],
-  }];
-  return [{ title: edited ? `as proposed: ${asProposed}` : asProposed, charts }, bars];
-}
-
 export function configPanels(config: ProjectConfig): ChartPanel[] {
   const rows: RangeRow[] = config.params.map((p) => ({
     label: p.label || p.name, ...(p.description ? { note: p.description } : {}), lo: engineering(p.lo, p.unit), hi: engineering(p.hi, p.unit),
