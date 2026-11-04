@@ -60,7 +60,9 @@ function wire(host: HTMLElement, heading: HTMLElement): void {
   const place = (): void => {
     const range = document.createRange();
     range.selectNodeContents(heading);
-    const text = range.getBoundingClientRect(), box = host.getBoundingClientRect();
+    // Absolute positions start inside the host's border (the docs section has a 1px top rule).
+    const text = range.getBoundingClientRect(), r = host.getBoundingClientRect();
+    const box = { left: r.left + host.clientLeft, top: r.top + host.clientTop };
     const height = WIDTH * (1246 / 1262), left = text.left - box.left - GAP - WIDTH;
     img.style.left = `${left}px`;
     img.style.top = `${(text.top + text.bottom) / 2 - box.top - height / 2}px`;
