@@ -56,3 +56,17 @@ Change-Ids: structure I96ab4c4e17d7071c6395 (crate), Ic0facb30ce209809407a
 (html shell), I1efebbcd898d11d732c3 (ops); logic Ied3ec9ce88d8d9cc98cb
 (daemon routes, CLI stubs and tests), Icf889ee79ded95e3c6a3 (html import);
 this record I81f7837f7c0ee007ff06.
+
+## Operator review, 2026-11-04 (`/open-questions`, autophys/rs)
+
+```review-table
+| Id | Decision (operator, 2026-11-04) | Before | Implementation |
+| --- | --- | --- | --- |
+| AX-9 | **Changed: session cookie.** The served page sets a random, HttpOnly, `SameSite=Strict` cookie, and `/workspace`, `/stream` and `GET /pairings` require it. The `Sec-Fetch-Site` keyless-read exemption is removed. Keys still work for every other client. | keyless same-origin reads on a loopback bind | pending (phase 1 implementer) |
+| AX-10 | Confirmed: a replayed id returns the stored record with 200; the same id with different content gets 409 `idempotency_conflict`. The Python fake follows the store. | — | built in the store; Python fake to follow (autophys/api) |
+| RS-1 | Confirmed: the library crate is `autophys` (`use autophys::connect`); the root package is `autophys-cli`, binary `autophys`. | — | in progress (phase 1) |
+| AX-17 | **Changed: the server's default collection is `AUTOPHYS_HOME`, else `~/autophys`, the same as Python's.** The keys and pairing database lives in `~/.local/share/tento/autophys/`. | one database at `~/.local/share/tento/autophys/autophys.db` | pending (phase 1 implementer) |
+| R-9 | **Changed: drop `tento_commit`.** `/api/healthz` is `{ok, version, commit}`, plus `web_id` once the app is bundled; deploy stops writing `TENTO_COMMIT`. | `tento_commit` held the vendored tree id | pending (phase 1 implementer) |
+| batch | Confirmed as built: AP-3 (port 4794), AP-4 (`Restart=on-failure`), AP-8 (cookbook through the vendored alias), AX-8, AX-11, AX-12, AX-13, AX-14, AX-15, AX-16, R-1 to R-8. | — | built |
+| B-1 | Operator direction: `./autophys` ships as one file per platform with the web app embedded as a ZIP, so no folder travels with it; one binary for every OS is not needed. Linux appends the ZIP with a footer; macOS puts it in a Mach-O section. | `--web-root` folder beside the binary | planned after phase 1 |
+```
