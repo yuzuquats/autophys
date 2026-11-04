@@ -51,3 +51,5 @@ pub mod simulator;
 pub mod models;
 pub mod data;
 pub mod fit;
+pub mod sensitivity;
+pub mod design;
