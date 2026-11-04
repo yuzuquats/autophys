@@ -1,13 +1,16 @@
 {
+  "imports": {
+    "@tento-cookbook": "../../../tento/tento-cookbook-js/lib.ts",
+    "@std/assert": "jsr:@std/assert@1"
+  },
   "tasks": {
-    "build": "deno run --allow-read=. --allow-write=dist --allow-run=deno --allow-env build.ts",
-    "check": "deno check src/main.ts build.ts",
-    "test": "deno test src/"
+    "build": "deno run --no-lock --allow-read --allow-write --allow-run --allow-env ../../../tento/tento-cookbook-js/build.ts --root src/index.root.ts --out dist --title Autophys --config deno.json",
+    "check": "deno check --no-lock src/index.root.ts",
+    "test": "deno test --no-lock src/"
   },
   "compilerOptions": {
     "lib": ["dom", "dom.iterable", "esnext", "deno.ns"],
     "strict": true
   },
-  "fmt": { "lineWidth": 110 },
   "lock": false
 }
