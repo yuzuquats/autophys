@@ -194,3 +194,14 @@ with a JSON file of its expected projection rows and chain heads. The Python
 suite checks that it reproduces them. The Rust store should open each golden
 workbook, verify every chain, rebuild the projections and compare them with
 the JSON, and write its own workbook for the Python suite to verify.
+
+### Candidate uncertainty in ranking steps
+
+`rank_experiments` step results retain `criterion` and `ranking`. Uncosted rows
+are `[experiment, min_eig, d_opt, after]`; the first three positions are unchanged.
+Costed rows retain their dictionary fields and add `after`. Old three-element
+rows remain valid. `after` maps parameters not identified at the ranking fit to
+expected one-sigma uncertainty in fitting coordinates (log sigma for log
+parameters), using the same ridge-floored Fisher inverse as proposal outlook.
+Null/nonfinite means unbounded; a missing map means not recorded. No record kind,
+configuration hash or daemon envelope changes: step results remain opaque payloads.

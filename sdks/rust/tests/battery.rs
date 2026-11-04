@@ -139,6 +139,7 @@ fn costs_refusal_ranking_and_resume() {
                 "d_opt",
                 "min_eig_gain",
                 "worst_direction",
+                "after",
                 "cost_hours"
             ]
         );

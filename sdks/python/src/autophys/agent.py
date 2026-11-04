@@ -636,11 +636,12 @@ class Investigation:
         self.ranking = rank_experiments(self.sim, r.params, self.dataset.split("train"), noise,
                                         candidates=cands, criterion=criterion, J0=self.jac)
         for c in self.ranking:
+            c.after = {n: s for n, s in c.after.items() if n in self.sens.non_identified}
             c.cost_hours = (float(self.project.catalog[c.experiment].get("cost_hours", 0.0))
                             if any("cost_hours" in lim for lim in self.project.catalog.values()) else None)
         self.ranking_fit = self.fit_id
         self.ranking_criterion = criterion
-        result = {"criterion": criterion, "ranking": [(c.experiment, c.min_eig, c.d_opt) for c in self.ranking]}
+        result = {"criterion": criterion, "ranking": [(c.experiment, c.min_eig, c.d_opt, c.after) for c in self.ranking]}
         if any("cost_hours" in lim for lim in self.project.catalog.values()):
             result["ranking"] = [c.to_dict() for c in self.ranking]
         return result

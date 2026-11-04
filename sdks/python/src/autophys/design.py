@@ -18,7 +18,7 @@ noise. Two criteria are reported for ``F = F0 + F_e``:
 from __future__ import annotations
 
 import itertools
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Mapping, Sequence
 
 import numpy as np
@@ -37,6 +37,7 @@ class Candidate:
     min_eig_gain: float
     worst_direction: dict[str, float]
 
+    after: dict[str, float] = field(default_factory=dict)
     cost_hours: float | None = None
 
     def to_dict(self) -> dict:
@@ -91,6 +92,7 @@ def rank_experiments(
         _, logdet = np.linalg.slogdet(F + ridge)
         out.append(
             Candidate(
+                after={n: float(s) for n, s in zip(sim.param_names, np.sqrt((V ** 2) @ (1.0 / np.maximum(w, eps))))},
                 experiment=name,
                 min_eig=float(max(w[0], 0.0)),
                 d_opt=float(logdet - logdet0),

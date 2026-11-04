@@ -11,6 +11,8 @@ pub struct Candidate {
     pub d_opt: f64,
     pub min_eig_gain: f64,
     pub worst_direction: Params,
+    #[serde(default)]
+    pub after: Params,
     /// MQ-5: the catalog cost of one run, set only when the catalog defines
     /// costs, so uncosted rankings serialize unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -147,6 +149,8 @@ pub fn rank_experiments(
         let f = &f0 + fisher(&jacobian(sim, p, &[o], 1e-4, FIT_OPTIONS)?);
         let (w, v) = eigen(&f);
         out.push(Candidate {
+            after: sim.param_names().into_iter().enumerate().map(|(j, k)|
+                (k, (0..w.len()).map(|i| v[(j, i)].powi(2) / w[i].max(eps)).sum::<f64>().sqrt())).collect(),
             cost_hours: None,
             experiment: name,
             min_eig: w[0].max(0.),

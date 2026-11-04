@@ -8,7 +8,7 @@ import {
 import { truthPanels } from "./truth.ts";
 import { configurationSections, experimentSections, knownSection } from "./configuration.ts";
 import { simulatorLabel, specOf } from "../config.ts";
-import { engineering, int, shortHash, sig } from "./fmt.ts";
+import { engineering, int, shortHash, sig, pct } from "./fmt.ts";
 import { displayedFields, outlookAt } from "./outlook.ts";
 import { configFor, investigationLabel, defaultSelection, experimentsUsed, ids, latestConfig, latestFit, parseSel, projectOf, proposalLabel, rankOf, type State, statusText } from "./shared.ts";
 
@@ -35,17 +35,23 @@ function settingsText(c: ProjectConfig, id: string, values?: Record<string, numb
 }
 
 /** Every candidate the agent ranked, the proposal's row at its current (possibly edited) fields and marked. */
-function candidatesSection(s: State, c: ProjectConfig, inv: Investigation, p: Proposal): Section {
+export function candidatesSection(s: State, c: ProjectConfig, inv: Investigation, p: Proposal): Section {
   const shown = displayedFields(s, inv, p), own = outlookAt(p, shown), label = proposalLabel({ ...p, fields: shown });
-  const rows = p.ranking.map((r) => (r.proposal ? { ...r, score: own?.score ?? r.score } : r)).sort((a, b) => b.score - a.score);
+  const rows = p.ranking.map((r) => (r.proposal ? { ...r, score: own?.score ?? r.score, after: own?.after ?? r.after } : r)).sort((a, b) => b.score - a.score);
   if (!rows.length) return { heading: "Candidates", caption: `Ranked at Fit #${p.atFit}`, blocks: [{ kind: "missing", title: "Not recorded yet", description: "No experiment ranking has been recorded by the SDK." }] };
   const top = rows[0].score || 1, values = Object.fromEntries(shown.map((f) => [f.name, f.value]));
   const name = (r: typeof rows[number]) => r.proposal ? label : c.catalog.find((e) => e.id === r.label)?.label ?? r.label;
   const settings = rows.map((r) => settingsText(c, r.proposal ? p.experiment : r.label, r.proposal ? { ...p.fixedSettings, ...values } : undefined));
   const withSettings = settings.some(Boolean);
+  const params = p.expected.map((e) => e.param), columns = params.length > 3 ? ["Weakest after"] : params.map((n) => `${n} after`);
+  const uncertainty = (r: typeof rows[number]): { text: string; end: boolean }[] => {
+    const values = params.map((n) => !r.after || !(n in r.after) ? undefined : r.after[n]);
+    const format = (v: number | null | undefined) => v === undefined ? "–" : v == null || !Number.isFinite(v) ? "unbounded" : pct(v);
+    return (params.length > 3 ? [values.some((v) => v === undefined) ? undefined : values.some((v) => v == null) ? null : Math.max(...values as number[])] : values).map((v) => ({ text: format(v), end: true }));
+  };
   const table: TableRow[] = [
-    { dim: true, cells: [{ text: "Experiment" }, ...(withSettings ? [{ text: "Settings" }] : []), { text: "Score", end: true }] },
-    ...rows.map((r, i) => ({ strong: r.proposal, cells: [{ text: name(r) }, ...(withSettings ? [{ text: settings[i] }] : []), { text: r.score < 1e-3 * top ? "≈ 0" : int(r.score), end: true }] })),
+    { dim: true, cells: [{ text: "Experiment" }, ...(withSettings ? [{ text: "Settings" }] : []), { text: "Score", end: true }, ...columns.map((text) => ({ text, end: true }))] },
+    ...rows.map((r, i) => ({ strong: r.proposal, cells: [{ text: name(r) }, ...(withSettings ? [{ text: settings[i] }] : []), { text: r.score < 1e-3 * top ? "≈ 0" : int(r.score), end: true }, ...uncertainty(r)] })),
   ];
   const lead = rows[0].proposal ? "the agent proposes the top one" : `the agent proposes ${label}`;
   return { heading: "Candidates", caption: `${rows.length} ranked at Fit #${p.atFit} by the weakest-direction score · ${lead}`, blocks: [{ kind: "table", rows: table }] };

@@ -635,13 +635,16 @@ impl Investigation {
             criterion,
             self.jac.as_ref(),
         )?;
+        for c in &mut rank {
+            c.after.retain(|k, _| self.sens.as_ref().unwrap().non_identified.contains(k));
+        }
         let out = if self.costed() {
             for c in &mut rank {
                 c.cost_hours = Some(self.cost_hours(&c.experiment));
             }
             json!({"criterion":criterion,"ranking":rank})
         } else {
-            json!({"criterion":criterion,"ranking":rank.iter().map(|c|json!([c.experiment,c.min_eig,c.d_opt])).collect::<Vec<_>>()})
+            json!({"criterion":criterion,"ranking":rank.iter().map(|c|json!([c.experiment,c.min_eig,c.d_opt,c.after])).collect::<Vec<_>>()})
         };
         self.ranking = Some(rank);
         self.ranking_fit = Some(self.fit_id);

@@ -143,7 +143,7 @@ export type FrequencyResponse = {
 
 export type ProposalField = { name: string; label: string; unit: string; value: number; original: number; lo: number; hi: number };
 
-export type RankedCandidate = { label: string; score: number; proposal: boolean };
+export type RankedCandidate = { label: string; score: number; proposal: boolean; after?: Record<string, number | null> };
 
 /**
  * One agent step as its record states it: the decision's action, hypothesis, evidence and expected

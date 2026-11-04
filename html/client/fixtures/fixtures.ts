@@ -372,8 +372,12 @@ function rankingAt(config: ProjectConfig, inv: Investigation, fit: Fit, proposal
   const ms = fit.measurements.map((id) => inv.measurements.find((m) => m.id === id)!);
   const F0 = fisher(jacobian(problemOf(config, ms, fit.free, fit.fixed), fit.params).J);
   const own = proposalOutlook(config, inv, proposal);
-  return [{ label: sineLabel(proposal.fields.find((f) => f.name === "frequency")!.value), score: own.score, proposal: true },
-    ...oscillatorCandidates().map((c) => ({ label: c.label, score: score(F0, experimentFisher(config, fit.params, fit.free, c.kind, c.settings, c.duration, c.rate)), proposal: false }))]
+  return [{ label: sineLabel(proposal.fields.find((f) => f.name === "frequency")!.value), score: own.score, after: Object.fromEntries(own.expected.map((e) => [e.param, e.after])), proposal: true },
+    ...oscillatorCandidates().map((c) => {
+      const F1 = experimentFisher(config, fit.params, fit.free, c.kind, c.settings, c.duration, c.rate);
+      const all = marginalUnder(F0.map((row, i) => row.map((x, j) => x + F1[i][j])), fit.free);
+      return { label: c.label, score: score(F0, F1), after: Object.fromEntries((fit.sensitivity?.nonIdentified ?? []).map((n) => [n, all[n]])), proposal: false };
+    })]
     .sort((a, b) => b.score - a.score);
 }
 

@@ -279,7 +279,7 @@ export function mapInvestigation(records: WireRecord[], configs: { version: stri
   };
 }
 
-function proposed(pid: string, p: Obj, entry: Obj, atFit: number, ranking: { criterion: string; rows: unknown[] } | null, nonIdentified: string[] | null, host: string): Raw {
+export function proposed(pid: string, p: Obj, entry: Obj, atFit: number, ranking: { criterion: string; rows: unknown[] } | null, nonIdentified: string[] | null, host: string): Raw {
   const settings = obj(p.settings), experiment = str(p.experiment), outlook = outlookOf(p), edit = obj(entry.edit);
   const fields: ProposalField[] = outlook.axes.map((a) => {
     const lim = nums(edit[a.name]), value = num(settings[a.name]);
@@ -287,9 +287,11 @@ function proposed(pid: string, p: Obj, entry: Obj, atFit: number, ranking: { cri
   });
   const editable = new Set(fields.map((f) => f.name));
   const own = num(p.score);
-  const rows: RankedCandidate[] = (ranking?.rows ?? []).filter(Array.isArray).map((row) => {
-    const [label, minEig, dOpt] = row as unknown[];
-    return { label: str(label), score: ranking!.criterion === "d_opt" ? num(dOpt) : num(minEig), proposal: str(label) === experiment };
+  const rows: RankedCandidate[] = (ranking?.rows ?? []).map((row) => {
+    const d = obj(row);
+    const [label, minEig, dOpt, after] = Array.isArray(row) ? row : [d.experiment, d.min_eig, d.d_opt, d.after];
+    return { label: str(label), score: ranking!.criterion === "d_opt" ? num(dOpt) : num(minEig), proposal: str(label) === experiment,
+      ...(after && typeof after === "object" ? { after: Object.fromEntries(Object.entries(obj(after)).map(([k, v]) => [k, v == null || !Number.isFinite(num(v)) ? null : num(v)])) } : {}) };
   }).filter((x) => x.label && Number.isFinite(x.score));
   if (!rows.some((x) => x.proposal) && Number.isFinite(own)) rows.push({ label: experiment, score: own, proposal: true });
   const params = Object.keys(outlook.after).filter((k) => !nonIdentified || nonIdentified.includes(k));
