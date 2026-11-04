@@ -129,6 +129,51 @@ def compare(actual, rule):
         assert numeric(actual, expected) or (rule.get("up_to_sign") and numeric(actual, expected, -1)), (actual, rule)
 
 
+def op_cases(model, sim, base, name, settings, t, catalog, axis, values, ops, suffix):
+    """One case per op from a shared base input."""
+    for op in ops:
+        i = copy.deepcopy(base)
+        i.update(experiment=name, settings=copy.deepcopy(settings), t=t.tolist())
+        if op == "fit":
+            i.update(starts=[{k: v * 1.1 for k, v in base["theta"].items()}], loss="linear", f_scale=1.)
+        if op == "analyze":
+            i["rule"] = asdict(IdentifiabilityRule())
+        if op in ("rank", "outlook"):
+            i["criterion"] = "min_eig"
+        if op == "rank":
+            i["candidates"] = list(catalog)
+        if op == "outlook":
+            i["axes"] = [{"name": axis, "values": [values[0], settings[axis], values[1]]}]
+        c = {"format": 1, "written_by": "autophys 0.1.0 (python)", "model": model, "op": op, "inputs": i}
+        result = plain(execute(c))
+        rules = {}
+
+        def add(key, **rule):
+            rules[key] = {"value": field(result, key), **rule}
+        if op == "simulate":
+            add("trajectory", rtol=1e-6, atol=1e-9)
+        elif op == "fit":
+            for key in ("params", "loss", "chi2_per_n"):
+                add(key, rtol=1e-5, atol=1e-8)
+            for key in ("at_bounds", "success"):
+                add(key, exact=True)
+        elif op == "analyze":
+            for key in ("identified", "non_identified"):
+                add(key, set=True)
+            add("singular_values", rtol=1e-5, atol=1e-7)
+            add("jacobian", rtol=1e-5, atol=1e-6)
+            for j in range(len(sim.params)):
+                add(f"directions.{j}.vector", up_to_sign=True, rtol=1e-5, atol=1e-7)
+        elif op == "rank":
+            add("order", exact=True)
+        else:
+            add("grid.axes", exact=True)
+            add("grid.score", rtol=1e-5, atol=1e-7)
+            add("grid.after", rtol=1e-5, atol=1e-7)
+        c["expect"] = rules
+        yield f"{model}/{op}-{suffix}.json", c
+
+
 def build_cases():
     rng = np.random.default_rng(20261104)
     configs = {
@@ -147,47 +192,8 @@ def build_cases():
         base = {"params": {k: {"unit": s.unit, "lo": s.lo, "hi": s.hi} for k, s in sim.params.items()},
                 "fixed": {}, "catalog": catalog, "options": asdict(FIT_OPTIONS), "theta": theta,
                 "observations": [observation], "noise": {ch: sigma for ch in y}}
-        for op in ("simulate", "fit", "analyze", "rank", "outlook"):
-            i = copy.deepcopy(base)
-            i.update(experiment=name, settings=copy.deepcopy(settings), t=t.tolist())
-            if op == "fit":
-                i.update(starts=[{k: v * 1.1 for k, v in theta.items()}], loss="linear", f_scale=1.)
-            if op == "analyze":
-                i["rule"] = asdict(IdentifiabilityRule())
-            if op in ("rank", "outlook"):
-                i["criterion"] = "min_eig"
-            if op == "rank":
-                i["candidates"] = list(catalog)
-            if op == "outlook":
-                i["axes"] = [{"name": axis, "values": [values[0], settings[axis], values[1]]}]
-            c = {"format": 1, "written_by": "autophys 0.1.0 (python)", "model": model, "op": op, "inputs": i}
-            result = plain(execute(c))
-            rules = {}
-
-            def add(key, **rule):
-                rules[key] = {"value": field(result, key), **rule}
-            if op == "simulate":
-                add("trajectory", rtol=1e-6, atol=1e-9)
-            elif op == "fit":
-                for key in ("params", "loss", "chi2_per_n"):
-                    add(key, rtol=1e-5, atol=1e-8)
-                for key in ("at_bounds", "success"):
-                    add(key, exact=True)
-            elif op == "analyze":
-                for key in ("identified", "non_identified"):
-                    add(key, set=True)
-                add("singular_values", rtol=1e-5, atol=1e-7)
-                add("jacobian", rtol=1e-5, atol=1e-6)
-                for j in range(len(sim.params)):
-                    add(f"directions.{j}.vector", up_to_sign=True, rtol=1e-5, atol=1e-7)
-            elif op == "rank":
-                add("order", exact=True)
-            else:
-                add("grid.axes", exact=True)
-                add("grid.score", rtol=1e-5, atol=1e-7)
-                add("grid.after", rtol=1e-5, atol=1e-7)
-            c["expect"] = rules
-            yield f"{model}/{op}-compact.json", c
+        yield from op_cases(model, sim, base, name, settings, t, catalog, axis, values,
+                            ("simulate", "fit", "analyze", "rank", "outlook"), "compact")
         if model in ("thermal", "oscillator"):
             i = copy.deepcopy(base)
             i.update(dataset=[observation, {**copy.deepcopy(observation), "split": "validation"}],
@@ -204,11 +210,44 @@ def build_cases():
                 for key in ("action", "arguments"):
                     c["expect"][f"decisions.{j}.{key}"] = {"value": decision[key], "exact": True}
             yield f"{model}/run-scripted.json", c
+            # The same run, but the reader drives its own ScriptedPolicy
+            # ("policy") instead of replaying a script; Rust phase 3.
+            p = {k: copy.deepcopy(v) for k, v in c.items() if k != "inputs"}
+            p["policy"] = "scripted"
+            p["inputs"] = {k: copy.deepcopy(v) for k, v in i.items() if k != "script"}
+            yield f"{model}/run-policy.json", p
+
+
+def degenerate_cases():
+    """Thermal with a 120 s step against a 1000 s time constant: R is not identified."""
+    rng = np.random.default_rng(20261105)
+    theta, sigma = {"C": 500., "R": 2.}, .05
+    name, settings = "step_120s", {"kind": "step", "power": 10., "duration": 120., "rate": .25}
+    catalog = {name: settings, "long": {**settings, "duration": 2400., "rate": .025}}
+    sim = copy.deepcopy(MODELS["thermal"])
+    sim.experiments = copy.deepcopy(catalog)
+    y = sim(theta, settings, options=TRUTH_OPTIONS)
+    t = y.pop("t")
+    measured = {ch: v + rng.normal(0., sigma, len(v)) for ch, v in y.items()}
+    observation = Observation(name, settings, t, measured, {ch: sigma for ch in y}).to_dict()
+    base = {"params": {k: {"unit": s.unit, "lo": s.lo, "hi": s.hi} for k, s in sim.params.items()},
+            "fixed": {}, "catalog": catalog, "options": asdict(FIT_OPTIONS), "theta": theta,
+            "observations": [observation], "noise": {ch: sigma for ch in y}}
+    for path, c in op_cases("thermal", sim, base, name, settings, t, catalog, "power", [5., 15.],
+                            ("analyze", "rank"), "short"):
+        if c["op"] == "analyze":
+            assert c["expect"]["non_identified"]["value"], "the short step should leave a parameter undetermined"
+        yield path, c
+
+
+def all_cases():
+    yield from build_cases()
+    yield from degenerate_cases()
 
 
 def write(out=ROOT):
     written = []
-    for name, case in build_cases():
+    for name, case in all_cases():
         path = out / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(case, indent=2, allow_nan=False) + "\n")

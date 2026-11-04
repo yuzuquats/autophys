@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from numerics_cases import ROOT, build_cases, compare, execute, field
+from numerics_cases import ROOT, all_cases, compare, execute, field
 
 CASES = sorted(ROOT.glob("*/*.json"))
 
@@ -18,13 +18,13 @@ def test_python_numerics_goldens(path):
             compare(field(result, key), rule)
         except AssertionError as exc:
             raise AssertionError(f"{path}:{key}: {exc}") from exc
-    if case["op"] == "run":
+    if case["op"] == "run" and "script" in case["inputs"]:
         assert [(d["action"], d["arguments"]) for d in result["decisions"]] == [
             (d["action"], d["arguments"]) for d in case["inputs"]["script"]]
 
 
 def test_numerics_generator_is_current():
-    generated = dict(build_cases())
+    generated = dict(all_cases())
     assert {str(p.relative_to(ROOT)) for p in CASES} == set(generated)
     for path in CASES:
         saved = json.loads(path.read_text())
