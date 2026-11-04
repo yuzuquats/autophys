@@ -242,7 +242,8 @@ def test_default_server_is_the_loopback_daemon():
 def test_wait_for_approval_consumes_the_stream_from_the_cursor(server):
     store = HttpStore(server.url, server.issue_key())
     inv = _pending_proposal(store)
-    assert store.cursor == 0  # POST responses carry no gseq: the first wait replays from 0
+    head = store.cursor
+    assert head == server.gseq  # POST responses advance the cursor
     timer = threading.Timer(0.3, server.approve_record, (inv, "p1"))
     timer.start()
     try:
@@ -251,15 +252,16 @@ def test_wait_for_approval_consumes_the_stream_from_the_cursor(server):
         timer.cancel()
     assert p["status"] == "approved" and store.last_wait == "stream"
     first = store.cursor
-    assert server.stream_afters == [0] and first == server.gseq  # the approval's id advanced it
+    assert server.stream_afters == [head] and first == server.gseq  # the approval's id advanced it
     store.append(inv, "proposal", {"proposal_id": "p2", "event": "proposed", "experiment": "e", "settings": {}})
+    second = store.cursor
     timer = threading.Timer(0.3, server.approve_record, (inv, "p2", "rejected"))
     timer.start()
     try:
         assert store.wait_for_approval(inv, "p2", timeout=10, sleep=_never_poll)["status"] == "rejected"
     finally:
         timer.cancel()
-    assert server.stream_afters == [0, first]  # the second wait resumed from the cursor
+    assert server.stream_afters == [head, second]  # the second wait resumed from the cursor
 
 
 
@@ -274,8 +276,8 @@ def test_wait_for_approval_reconnects_after_idle_and_resumes(server):
     finally:
         timer.cancel()
     assert p["status"] == "edited" and p["settings"] == {"amplitude": 1.0}
-    # first subscription replays from 0; each reconnect resumes from the last id seen
-    assert server.stream_afters[0] == 0 and len(server.stream_afters) >= 2
+    # POSTs and stream events share the same cursor.
+    assert server.stream_afters[0] == head and len(server.stream_afters) >= 2
     assert set(server.stream_afters[1:]) == {head}
 
 

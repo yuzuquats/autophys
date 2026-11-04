@@ -3,7 +3,7 @@ import pytest
 
 from autophys.data import Dataset, Observation
 from autophys.design import rank_experiments
-from autophys.fit import fit, residuals
+from autophys.fit import FitResult, StartResult, fit, residuals
 from autophys.models import battery_ecm, oscillator, thermal_rc
 from autophys.sensitivity import IdentifiabilityRule, analyze, report_from_jacobian
 from autophys.simulator import FIT_OPTIONS, TRUTH_OPTIONS
@@ -54,6 +54,9 @@ def test_fit_converges_and_reports(free_obs):
     for k in TRUTH:
         assert abs(r.params[k] / TRUTH[k] - 1) < 0.01
     assert r.dataset_version == 2 and r.source_hash == oscillator.source_hash
+    restored = FitResult.from_dict(r.to_dict())
+    assert restored == r and restored.to_dict() == r.to_dict()
+    assert all(isinstance(start, StartResult) for start in restored.starts)
     assert r.loss == pytest.approx(np.sum(residuals(oscillator, r.params, [free_obs, sine]) ** 2), rel=1e-6)
 
 

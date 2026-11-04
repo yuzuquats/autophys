@@ -1,10 +1,17 @@
 """ap.connect → Client → Workbook, and resuming an investigation from its records."""
 
+import json
+import os
+import subprocess
+import sys
+import textwrap
+from pathlib import Path
+
 import numpy as np
 import pytest
 
 import autophys as ap
-from autophys.agent import Investigation, ProposalRunner, ScriptedPolicy, ToolError
+from autophys.agent import Investigation, Outcome, ProposalRunner, ScriptedPolicy, ToolError
 from autophys.project import Budgets, Project
 from autophys.store import MemoryStore, StoreError
 from autophys.synthetic import NoiseModel, observe, oscillator_case, thermal_case
@@ -89,6 +96,7 @@ def test_resume_in_a_new_process_matches_an_uninterrupted_run(tmp_path):
     pid = ref.run().proposal_id
     ref.approve(pid, by="eng")
     ref.attach_data(pid, observe(view.simulator, truth, ref.pending_experiment, noise, np.random.default_rng(9)))
+    resume_step = ref.steps
     want = ref.run()
 
     # process 1: run until the proposal, then go away
@@ -105,20 +113,51 @@ def test_resume_in_a_new_process_matches_an_uninterrupted_run(tmp_path):
     with WorkbookStore(path) as viewer:
         viewer.append(inv_id, "proposal", {"proposal_id": pid, "event": "approved", "by": "viewer"})
 
-    # process 2: resume from the file
+    # process 2 really is a fresh interpreter, with no in-memory fit state.
+    src = str(Path(__file__).resolve().parents[1] / "src")
+    script = textwrap.dedent(f"""
+        import json
+        import numpy as np
+        import autophys as ap
+        from autophys.agent import ToolError
+        from autophys.project import Project, Budgets
+        from autophys.synthetic import oscillator_case, NoiseModel, observe
+        view, _ = oscillator_case(0, max_experiments=2)
+        project = Project(view.name, view.simulator, budgets=Budgets(max_experiments=2))
+        with ap.connect({str(tmp_path)!r}) as client:
+            inv = client.project(project).investigation({inv_id!r})
+            assert inv.pending == {pid!r} and inv.pending_experiment == "sine_0.44Hz"
+            assert inv.steps == 4 and inv.simulations == {out.simulations} and inv.experiments_used == 0
+            assert inv.outcome.status == "awaiting_data"
+            assert inv.fit is not None and inv.fit_model == inv.model == "base"
+            try:
+                inv.run()
+            except ToolError:
+                pass
+            else:
+                raise AssertionError("pending proposal did not block run")
+            assert inv.wait_for_approval(timeout=5)["status"] == "approved"
+            inv.attach_data({pid!r}, observe(view.simulator, {{"m": 2.0, "c": 0.8, "k": 15.0}},
+                            inv.pending_experiment, NoiseModel({{"x": 0.01}}), np.random.default_rng(9)))
+            got = inv.run()
+            print(json.dumps(got.to_dict()))
+    """)
+    proc = subprocess.run([sys.executable, "-I", "-B", "-c", f"import sys; sys.path.insert(0, {src!r})\n" + script],
+                          env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}, capture_output=True, text=True, timeout=120)
+    assert proc.returncode == 0, proc.stderr
+    got = Outcome(**json.loads(proc.stdout))
     client = ap.connect(tmp_path)
     inv = client.project(project).investigation(inv_id)
-    assert inv.pending == pid and inv.pending_experiment == "sine_0.44Hz"
-    assert inv.steps == 4 and inv.simulations == out.simulations and inv.experiments_used == 0
-    assert inv.outcome is not None and inv.outcome.status == "awaiting_data"
-    with pytest.raises(ToolError):
-        inv.run()
-    assert inv.wait_for_approval(timeout=5)["status"] == "approved"
-    inv.attach_data(pid, observe(view.simulator, truth, inv.pending_experiment, noise, np.random.default_rng(9)))
-    got = inv.run()
     assert got.status == want.status == "validated"
     assert got.experiments == want.experiments == 1 and got.identified == want.identified
-    assert max(abs(got.estimate[k] / want.estimate[k] - 1) for k in truth) < 1e-3
+    assert got.estimate == want.estimate  # exact float equality, including the warm start
+    assert got.steps == want.steps and got.simulations == want.simulations
+    after_resume = lambda i: [r.payload["decision"]["action"] for r in i.records("step")][resume_step:]
+    assert after_resume(inv) == after_resume(ref)
+    assert [r.payload["decision"]["arguments"] for r in inv.records("step")
+            if r.payload["decision"]["action"] == "request_experiment"] == [
+                r.payload["decision"]["arguments"] for r in ref.records("step")
+                if r.payload["decision"]["action"] == "request_experiment"]
     assert [r.payload["event"] for r in inv.records("proposal")] == ["proposed", "approved", "data_attached"]
     assert inv.proposal(pid)["status"] == "data_attached"
     assert client.project(project).verify()["ok"]
@@ -131,8 +170,9 @@ def test_resume_in_a_new_process_matches_an_uninterrupted_run(tmp_path):
     client.close()
 
 
-def test_resume_counts_a_direct_runner_and_the_adopted_model(tmp_path):
-    view, _ = thermal_case(0, max_experiments=1)
+@pytest.mark.parametrize("bias", [0.0, 0.5])
+def test_resume_counts_a_direct_runner_and_the_adopted_model(tmp_path, bias):
+    view, _ = thermal_case(0, max_experiments=1, bias=bias)
     project = project_for(view)
     client = ap.connect(tmp_path)
     wb = client.project(project)
@@ -143,6 +183,7 @@ def test_resume_counts_a_direct_runner_and_the_adopted_model(tmp_path):
     assert back.runs_per_experiment == inv.runs_per_experiment
     assert back.model == inv.model and back.compared == inv.compared
     assert back.fit_id == inv.fit_id
+    assert back.fit.to_dict() == inv.fit.to_dict() and back.fit_model == inv.fit_model
     client.close()
 
 

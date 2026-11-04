@@ -22,7 +22,9 @@ import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from autophys.store import GENESIS, chain_hash
+from autophys.store import GENESIS, canonical, chain_hash
+from autophys.workbook import (WorkbookError, append_payload, check_id, check_transition,
+                               investigation_payload)
 
 PREFIX = "/api/v1"
 
@@ -80,17 +82,30 @@ class FakeAutophys:
 
     # ------------------------------------------------------------------
     def _append(self, inv: str, rid: str, kind: str, payload: dict) -> dict:
+        if kind == "investigation":
+            rid, payload, _ = investigation_payload(payload, rid)
+        else:
+            rid, payload, _ = append_payload(kind, payload, rid)
+        # Record ids are global; replay precedes investigation/proposal state.
+        for records in self.records.values():
+            for r in records:
+                if r["id"] == rid:
+                    if r["investigation"] == inv and r["kind"] == kind and canonical(r["payload"]) == canonical(payload):
+                        return r
+                    raise WorkbookError("idempotency_conflict", "record id was already used for different content")
+        if inv not in self.records:
+            raise WorkbookError("not_found", "unknown investigation")
         log = self.records[inv]
-        for r in log:
-            if r["id"] == rid:
-                return self._wire(r)
+        if kind == "proposal":
+            events = [r["payload"] for r in log if r["kind"] == "proposal" and r["payload"]["proposal_id"] == payload["proposal_id"]]
+            check_transition(events[-1]["event"] if events else None, events[0] if events else None, payload)
         prev = log[-1]["hash"] if log else GENESIS
         self.gseq += 1
         rec = {"gseq": self.gseq, "id": rid, "investigation": inv, "seq": len(log), "kind": kind, "ts": time.time(),
                "payload": payload, "prev_hash": prev, "hash": chain_hash(prev, rid, kind, payload)}
         log.append(rec)
         self.changed.notify_all()
-        return self._wire(rec)
+        return rec
 
     @staticmethod
     def _wire(r: dict) -> dict:
@@ -124,8 +139,24 @@ class FakeAutophys:
                 self.end_headers()
                 self.wfile.write(body)
 
-            def _err(self, code, error, message=""):
-                self._send(code, {"error": error, "message": message})
+            def _err(self, code, error, message="", path=None):
+                self._send(code, {"error": error, "message": message, **({"path": path} if path else {})})
+
+            def _record(self, inv, body, kind, events=None, pid=None):
+                if not isinstance(body, dict) or body.get("kind") != kind:
+                    raise WorkbookError("invalid", "kind does not match the route", "kind")
+                rid = check_id("id", body.get("id"))
+                payload = body.get("payload")
+                # Validate before route event checks and before replay, just as
+                # the daemon does. _append checks replay before transitions.
+                _, payload, _ = append_payload(kind, payload, rid)
+                if events is not None and payload["event"] not in events:
+                    raise WorkbookError("invalid", "event does not match the route", "payload.event")
+                if pid is not None and payload["proposal_id"] != pid:
+                    raise WorkbookError("invalid", "proposal id does not match the route", "payload.proposal_id")
+                before = fake.gseq
+                r = fake._append(inv, rid, kind, payload)
+                return self._send(201 if fake.gseq > before else 200, {"record": fake._wire(r), "gseq": r["gseq"]})
 
             def _auth(self):
                 h = self.headers.get("Authorization", "")
@@ -161,7 +192,11 @@ class FakeAutophys:
                         self._stream(int(parse_qs(u.query).get("after", ["0"])[0]))
                     return
                 with fake.lock:
-                    return self._dispatch(method, path, raw, body, parse_qs(u.query))
+                    try:
+                        return self._dispatch(method, path, raw, body, parse_qs(u.query))
+                    except WorkbookError as e:
+                        status = {"invalid": 422, "too_large": 413, "not_found": 404}.get(e.error, 409)
+                        return self._err(status, e.error, str(e), e.path)
 
             def _stream(self, after):
                 """SSE of records with gseq > after, then live ones; keep-alive comments while idle."""
@@ -248,43 +283,48 @@ class FakeAutophys:
                     if method == "GET":
                         return self._send(200, {"investigations": list(fake.investigations.values())})
                     pid, ver = body.get("project_id"), body.get("config_version")
+                    meta = {**body.get("meta", {}), "project_id": pid, "config_version": ver,
+                            "overrides": body.get("overrides", {})}
+                    rid, meta, text = investigation_payload(meta, self.headers.get("Idempotency-Key"))
+                    for log in fake.records.values():
+                        for old in log:
+                            if old["id"] == rid:
+                                if old["kind"] == "investigation" and canonical(old["payload"]) == text:
+                                    return self._send(200, {"id": old["investigation"], "record": fake._wire(old), "gseq": old["gseq"]})
+                                raise WorkbookError("idempotency_conflict", "record id was already used for different content")
                     if pid not in fake.configs or ver not in fake.configs[pid]:
                         return self._err(409, "unknown_config_version", "PUT the config version first")
                     inv = "inv_" + uuid.uuid4().hex[:16]
-                    fake.investigations[inv] = {"id": inv, "project_id": pid, "config_version": ver, "overrides": body.get("overrides", {})}
+                    fake.investigations[inv] = {"id": inv, "project_id": pid, "config_version": ver, "overrides": meta["overrides"]}
                     fake.records[inv] = []
-                    fake._append(inv, uuid.uuid4().hex, "investigation", body.get("meta", {}))
-                    return self._send(201, {"id": inv})
+                    r = fake._append(inv, rid, "investigation", meta)
+                    return self._send(201, {"id": inv, "record": fake._wire(r), "gseq": r["gseq"]})
                 m = re.fullmatch(r"/investigations/([^/]+)/(.+)", path)
-                if not m or m.group(1) not in fake.records:
+                if not m:
                     return self._err(404, "not_found")
                 inv, rest = m.group(1), m.group(2)
                 if rest == "records" and method == "GET":
+                    if inv not in fake.records:
+                        return self._err(404, "not_found")
                     kind = query.get("kind", [None])[0]
                     return self._send(200, {"records": [fake._wire(r) for r in fake.records[inv] if kind is None or r["kind"] == kind]})
                 kinds = {"measurements": "measurement", "runs": "run", "steps": "step", "outcome": "outcome"}
                 if rest in kinds and method == "POST":
-                    if body.get("kind") != kinds[rest]:
-                        return self._err(400, "invalid_request", "kind does not match the route")
-                    return self._send(201, {"record": fake._append(inv, body["id"], body["kind"], body["payload"])})
+                    return self._record(inv, body, kinds[rest])
                 if rest == "proposals" and method == "POST":
-                    return self._send(201, {"record": fake._append(inv, body["id"], "proposal", body["payload"])})
+                    return self._record(inv, body, "proposal", ("proposed", "withdrawn"))
                 m2 = re.fullmatch(r"proposals/([^/]+)(?:/(approvals|data))?", rest)
                 if m2:
                     pid, sub = m2.group(1), m2.group(2)
-                    state = fake._proposal(inv, pid)
-                    if state is None:
-                        return self._err(404, "not_found", "unknown proposal")
-                    if method == "GET" and sub is None:
-                        return self._send(200, state)
                     if method == "POST" and sub == "approvals":
-                        if state["status"] != "proposed":
-                            return self._err(409, "conflict", f"proposal is {state['status']}")
-                        return self._send(201, {"record": fake._append(inv, body["id"], "proposal", body["payload"])})
+                        return self._record(inv, body, "proposal", ("approved", "edited", "rejected"), pid)
                     if method == "POST" and sub == "data":
-                        if state["status"] not in ("approved", "edited"):
-                            return self._err(409, "conflict", f"proposal is {state['status']}")
-                        return self._send(201, {"record": fake._append(inv, body["id"], "proposal", body["payload"])})
+                        return self._record(inv, body, "proposal", ("data_attached",), pid)
+                    if method == "GET" and sub is None:
+                        state = fake._proposal(inv, pid) if inv in fake.records else None
+                        if state is None:
+                            return self._err(404, "not_found", "unknown proposal")
+                        return self._send(200, state)
                 return self._err(405 if method else 404, "method_not_allowed")
 
         return H

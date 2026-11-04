@@ -45,6 +45,7 @@ class Budgets:
     max_steps: int = 24
     max_simulations: int = 20000
     max_experiments: int = 2
+    max_outlook_simulations: int = 50000
 
 
 @dataclass(frozen=True)
@@ -146,6 +147,9 @@ class Project:
 
     def config(self) -> dict:
         sim = self.simulator
+        budgets = asdict(self.budgets)
+        if self.budgets.max_outlook_simulations == Budgets().max_outlook_simulations:
+            budgets.pop("max_outlook_simulations")
         return {
             "name": self.name,
             "simulator": {"name": sim.name, "source_hash": sim.source_hash, "outputs": list(sim.outputs)},
@@ -161,7 +165,7 @@ class Project:
             },
 
             "noise": asdict(self.noise),
-            "budgets": asdict(self.budgets),
+            "budgets": budgets,
             "stop": {
                 "validation_threshold": self.stop.validation_threshold,
                 "misfit_threshold": self.stop.misfit_threshold,

@@ -133,6 +133,41 @@ class Store(ABC):
     @abstractmethod
     def investigations(self) -> list[dict]: ...
 
+    def _find_record(self, rid: str) -> Record | None:
+        return next((r for inv in self.investigations() for r in self.records(inv["id"]) if r.id == rid), None)
+
+    def _prepare_create(self, meta: dict, record_id: str | None) -> tuple[str, dict, str | None]:
+        from .workbook import WorkbookError, investigation_payload
+
+        rid, payload, text = investigation_payload(meta, record_id)
+        old = self._find_record(rid)
+        if old:
+            if old.kind == "investigation" and canonical(old.payload) == text:
+                return rid, payload, old.investigation
+            raise WorkbookError("idempotency_conflict", f"record id {rid} was already used for a different record")
+        if payload["config_version"] not in {c["version"] for c in self.config_versions(payload["project_id"])}:
+            raise WorkbookError("unknown_config_version", "config version is not stored; store the config version first")
+        return rid, payload, None
+
+    def _prepare_append(self, investigation: str, kind: str, payload: dict, record_id: str | None):
+        from .workbook import WorkbookError, append_payload, check_transition
+
+        rid, payload, text = append_payload(kind, payload, record_id)
+        old = self._find_record(rid)
+        if old:
+            if old.investigation == investigation and old.kind == kind and canonical(old.payload) == text:
+                return rid, payload, old
+            raise WorkbookError("idempotency_conflict", f"record id {rid} was already used for a different record")
+        if investigation not in {i["id"] for i in self.investigations()}:
+            raise WorkbookError("not_found", f"unknown investigation {investigation}")
+        if kind == "proposal":
+            events = [r.payload for r in self.records(investigation, "proposal")
+                      if r.payload["proposal_id"] == payload["proposal_id"]]
+            state = events[-1]["event"] if events else None
+            proposed = events[0] if events else None
+            check_transition(state, proposed, payload)
+        return rid, payload, None
+
     def verify(self, investigation: str) -> bool:
         prev = GENESIS
         for i, r in enumerate(self.records(investigation)):
@@ -164,20 +199,6 @@ def _check_config(version: str, config: dict) -> None:
     if config_hash(config) != version:
         raise StoreError("config version does not match the hash of its content")
 
-
-def _check_pin(store: "Store", meta: dict) -> None:
-    pid, ver = meta.get("project_id"), meta.get("config_version")
-    if not pid or not ver:
-        raise StoreError("an investigation must name project_id and config_version")
-    if ver not in {c["version"] for c in store.config_versions(pid)}:
-        raise StoreError(f"config version {ver} is not stored for project {pid}")
-
-
-def _check(kind: str, payload: dict) -> None:
-    if kind not in KINDS:
-        raise StoreError(f"unknown record kind {kind!r}")
-    if kind == "proposal" and payload.get("event") not in PROPOSAL_EVENTS:
-        raise StoreError(f"proposal event must be one of {PROPOSAL_EVENTS}")
 
 
 class MemoryStore(Store):
@@ -213,28 +234,29 @@ class MemoryStore(Store):
     def projects(self):
         return list(self._projects.values())
 
-    def create_investigation(self, meta: dict) -> str:
-        _check_pin(self, meta)
-        inv = "inv_" + uuid.uuid4().hex[:16]
+    def create_investigation(self, meta: dict, *, record_id: str | None = None) -> str:
+        from .workbook import now_ts
+
         with self._lock:
-            self._logs[inv] = []
-            self._meta[inv] = dict(meta)
-        self.append(inv, "investigation", meta)
-        return inv
+            rid, payload, replay = self._prepare_create(meta, record_id)
+            if replay is not None:
+                return replay
+            inv = "inv_" + uuid.uuid4().hex[:16]
+            self._meta[inv] = dict(payload)
+            self._logs[inv] = [Record(rid, inv, 0, "investigation", now_ts(), payload, GENESIS,
+                                      chain_hash(GENESIS, rid, "investigation", payload))]
+            return inv
 
     def append(self, investigation, kind, payload, *, record_id=None) -> Record:
-        _check(kind, payload)
-        payload = json.loads(canonical(payload))
+        from .workbook import now_ts
+
         with self._lock:
-            log = self._logs.get(investigation)
-            if log is None:
-                raise StoreError(f"unknown investigation {investigation}")
-            rid = record_id or uuid.uuid4().hex
-            for r in log:
-                if r.id == rid:
-                    return r  # idempotent replay
+            rid, payload, replay = self._prepare_append(investigation, kind, payload, record_id)
+            if replay is not None:
+                return replay
+            log = self._logs[investigation]
             prev = log[-1].hash if log else GENESIS
-            rec = Record(rid, investigation, len(log), kind, time.time(), payload, prev, chain_hash(prev, rid, kind, payload))
+            rec = Record(rid, investigation, len(log), kind, now_ts(), payload, prev, chain_hash(prev, rid, kind, payload))
             log.append(rec)
             return rec
 
@@ -294,33 +316,32 @@ class JsonlStore(Store):
     def projects(self):
         return self._lines("projects.jsonl")
 
-    def create_investigation(self, meta: dict) -> str:
-        _check_pin(self, meta)
-        inv = "inv_" + uuid.uuid4().hex[:16]
-        self._path(inv).touch(exist_ok=False)
-        with open(self.root / "investigations.jsonl", "a") as f:
-            f.write(canonical({"id": inv, "created": time.time(), **meta}) + "\n")
-        self.append(inv, "investigation", meta)
-        return inv
+    def create_investigation(self, meta: dict, *, record_id: str | None = None) -> str:
+        from .workbook import now_ts
+
+        with self._lock:
+            rid, payload, replay = self._prepare_create(meta, record_id)
+            if replay is not None:
+                return replay
+            inv = "inv_" + uuid.uuid4().hex[:16]
+            ts = now_ts()
+            rec = Record(rid, inv, 0, "investigation", ts, payload, GENESIS,
+                         chain_hash(GENESIS, rid, "investigation", payload))
+            self._append_line(f"{inv}.jsonl", rec.to_dict())
+            self._append_line("investigations.jsonl", {"id": inv, "created": ts, **payload})
+            return inv
 
     def append(self, investigation, kind, payload, *, record_id=None) -> Record:
-        _check(kind, payload)
-        payload = json.loads(canonical(payload))
-        path = self._path(investigation)
-        if not path.exists():
-            raise StoreError(f"unknown investigation {investigation}")
+        from .workbook import now_ts
+
         with self._lock:
+            rid, payload, replay = self._prepare_append(investigation, kind, payload, record_id)
+            if replay is not None:
+                return replay
             existing = self.records(investigation)
-            rid = record_id or uuid.uuid4().hex
-            for r in existing:
-                if r.id == rid:
-                    return r
             prev = existing[-1].hash if existing else GENESIS
-            rec = Record(rid, investigation, len(existing), kind, time.time(), payload, prev, chain_hash(prev, rid, kind, payload))
-            with open(path, "a") as f:
-                f.write(canonical(rec.to_dict()) + "\n")
-                f.flush()
-                os.fsync(f.fileno())
+            rec = Record(rid, investigation, len(existing), kind, now_ts(), payload, prev, chain_hash(prev, rid, kind, payload))
+            self._append_line(f"{investigation}.jsonl", rec.to_dict())
             return rec
 
     def records(self, investigation, kind=None):

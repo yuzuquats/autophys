@@ -39,12 +39,14 @@ def connect(target: str | os.PathLike | None = None, *, api_key: str | None = No
     if text.startswith(("http://", "https://")):
         from .http import HttpStore, load_credentials
 
+        key_id = None
         if api_key is None:
             creds = load_credentials(text)
             if creds is None:
                 raise StoreError(f"no API key for {text}: pass api_key=, set AUTOPHYS_API_KEY or run `autophys pair`")
             api_key = creds.api_key
-        return RemoteClient(HttpStore(text, api_key))
+            key_id = creds.key_id
+        return RemoteClient(HttpStore(text, api_key, key_id=key_id))
     path = Path(text).expanduser()
     if path.suffix == SUFFIX:
         return LocalClient(path.parent, only=path)

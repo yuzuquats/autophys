@@ -20,7 +20,7 @@ def store(request, tmp_path):
 
 def test_append_only_chain(store):
     inv = pinned(store)
-    store.append(inv, "measurement", {"version": 1})
+    store.append(inv, "measurement", {"version": 1, "observation": {}})
     store.append(inv, "run", {"loss": 1.5, "nan": float("nan")})
     recs = store.records(inv)
     assert [r.kind for r in recs] == ["investigation", "measurement", "run"]

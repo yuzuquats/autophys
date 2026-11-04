@@ -77,6 +77,11 @@ class FitResult:
         d = asdict(self)
         return d
 
+    @classmethod
+    def from_dict(cls, d: dict) -> "FitResult":
+        """Restore a fit, including its multistart results, from :meth:`to_dict`."""
+        return cls(**{**d, "starts": [StartResult(**s) for s in d.get("starts", [])]})
+
 
 def _lhs_starts(sim: Simulator, n: int, seed: int) -> np.ndarray:
     lo, hi = sim.x_bounds()

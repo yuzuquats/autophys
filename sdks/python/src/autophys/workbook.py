@@ -230,6 +230,83 @@ def payload_shape(kind: str, payload: Any) -> None:
                 raise _invalid("payload.measurement_version", "required for data_attached")
 
 
+def append_payload(kind: str, payload: Any, record_id: str | None) -> tuple[str, dict, str]:
+    """Shared append envelope and payload validation for every local Store."""
+    if kind == "investigation":
+        raise _invalid("kind", "investigation records are created by create_investigation")
+    rid = check_id("id", record_id) if record_id is not None else uuid.uuid4().hex
+    clean, text = canonical_payload(payload)
+    payload_shape(kind, clean)
+    check_payload_size(text)
+    return rid, clean, text
+
+
+def canonical_payload(payload: Any) -> tuple[Any, str]:
+    clean = json.loads(canonical(payload))
+    return clean, canonical(clean)
+
+
+def check_payload_size(text: str) -> None:
+    if len(text.encode()) > MAX_PAYLOAD_BYTES:
+        raise WorkbookError("too_large", f"payload exceeds {MAX_PAYLOAD_BYTES} bytes")
+
+
+def investigation_payload(meta: dict, record_id: str | None) -> tuple[str, dict, str]:
+    rid = check_id("Idempotency-Key", record_id) if record_id is not None else uuid.uuid4().hex
+    payload = dict(meta)
+    overrides = payload.get("overrides")
+    if overrides is None:
+        payload["overrides"] = {}
+    elif not isinstance(overrides, dict):
+        raise _invalid("overrides", "must be an object")
+    payload, text = canonical_payload(payload)
+    payload_shape("investigation", payload)
+    check_payload_size(text)
+    return rid, payload, text
+
+
+def check_transition(state: str | None, proposed: dict | None, payload: dict) -> None:
+    pid, ev = payload["proposal_id"], payload["event"]
+    if ev == "proposed":
+        if state is not None:
+            raise WorkbookError("proposal_exists", f"proposal {pid} already exists and is {state}")
+        return
+    if state is None:
+        raise WorkbookError("not_found", f"unknown proposal {pid}")
+    if state == "proposed" and ev in ("approved", "rejected", "withdrawn"):
+        return
+    if state == "proposed" and ev == "edited":
+        check_edit(proposed, payload)
+        return
+    if state in ("approved", "edited") and ev == "data_attached":
+        return
+    raise WorkbookError("conflict", f"proposal is {state}; {ev} is not allowed")
+
+
+def check_edit(proposed: dict | None, payload: dict) -> None:
+    axes = (proposed or {}).get("outlook", {}).get("axes") if isinstance((proposed or {}).get("outlook"), dict) else None
+    if not isinstance(axes, list):
+        return  # without an outlook the store cannot know what is editable
+    ranges = {}
+    for a in axes:
+        vals = [v for v in (_number(x) for x in a.get("values", [])) if v is not None]
+        if isinstance(a.get("name"), str):
+            ranges[a["name"]] = (min(vals, default=math.inf), max(vals, default=-math.inf))
+    before = proposed.get("settings") if isinstance(proposed.get("settings"), dict) else None
+    for key, value in payload["settings"].items():
+        at = f"payload.settings.{key}"
+        if key in ranges:
+            lo, hi = ranges[key]
+            slack = 1e-9 * max(abs(lo), abs(hi), 1.0)
+            x = _number(value)
+            if x is None:
+                raise _invalid(at, "must be a number (it is an outlook axis)")
+            if not (lo - slack <= x <= hi + slack):
+                raise _invalid(at, f"{x} is outside the outlook axis [{lo}, {hi}]")
+        elif before is None or key not in before or canonical(before[key]) != canonical(value):
+            raise _invalid(at, "is not an outlook axis, so it cannot be edited")
+
+
 # --------------------------------------------------------------------------
 # The projection fold (mirrors src/store/projections.rs::apply)
 
@@ -443,11 +520,6 @@ class WorkbookStore(Store):
         return bytes(rows[0][0]), rows[0][1]
 
     # --- the log ------------------------------------------------------------
-    @staticmethod
-    def _canonical_payload(payload: Any) -> tuple[Any, str]:
-        clean = json.loads(canonical(payload))
-        return clean, canonical(clean)
-
     def _insert(self, c: sqlite3.Connection, inv: str, rid: str, kind: str, payload: Any, text: str) -> Record:
         head = c.execute("SELECT seq, hash FROM records WHERE investigation = ? ORDER BY seq DESC LIMIT 1",
                          (inv,)).fetchone()
@@ -459,20 +531,7 @@ class WorkbookStore(Store):
         return rec
 
     def create_investigation(self, meta: dict, *, record_id: str | None = None) -> str:
-        rid = check_id("Idempotency-Key", record_id) if record_id is not None else secrets.token_hex(16)
-        payload = dict(meta)
-        overrides = payload.get("overrides")
-        if overrides is None:
-            payload["overrides"] = {}
-        elif not isinstance(overrides, dict):
-            raise _invalid("overrides", "must be an object")
-        payload, text = self._canonical_payload(payload)
-        try:
-            payload_shape("investigation", payload)
-        except WorkbookError:
-            raise _invalid("project_id", "project_id and config_version are required strings") from None
-        if len(text.encode()) > MAX_PAYLOAD_BYTES:
-            raise WorkbookError("too_large", f"payload exceeds {MAX_PAYLOAD_BYTES} bytes")
+        rid, payload, text = investigation_payload(meta, record_id)
         with self._tx() as c:
             row = c.execute(f"SELECT {_COLUMNS} FROM records WHERE id = ?", (rid,)).fetchone()
             if row:
@@ -487,13 +546,7 @@ class WorkbookStore(Store):
             return inv
 
     def append(self, investigation: str, kind: str, payload: dict, *, record_id: str | None = None) -> Record:
-        if kind == "investigation":
-            raise WorkbookError("invalid", "investigation records are created by create_investigation", "kind")
-        rid = check_id("id", record_id) if record_id is not None else uuid.uuid4().hex
-        payload, text = self._canonical_payload(payload)
-        payload_shape(kind, payload)
-        if len(text.encode()) > MAX_PAYLOAD_BYTES:
-            raise WorkbookError("too_large", f"payload exceeds {MAX_PAYLOAD_BYTES} bytes")
+        rid, payload, text = append_payload(kind, payload, record_id)
         with self._tx() as c:
             row = c.execute(f"SELECT {_COLUMNS} FROM records WHERE id = ?", (rid,)).fetchone()
             if row:
@@ -510,50 +563,14 @@ class WorkbookStore(Store):
         pid, ev = payload["proposal_id"], payload["event"]
         row = c.execute("SELECT state FROM proposals WHERE investigation = ? AND id = ?", (inv, pid)).fetchone()
         state = row[0] if row else None
-        if ev == "proposed":
-            if state is not None:
-                raise WorkbookError("proposal_exists", f"proposal {pid} already exists and is {state}")
-            return
-        if state is None:
-            raise WorkbookError("not_found", f"unknown proposal {pid}")
-        if state == "proposed" and ev in ("approved", "rejected", "withdrawn"):
-            return
-        if state == "proposed" and ev == "edited":
-            self._check_edit(c, inv, pid, payload)
-            return
-        if state in ("approved", "edited") and ev == "data_attached":
-            return
-        raise WorkbookError("conflict", f"proposal is {state}; {ev} is not allowed")
-
-    def _check_edit(self, c: sqlite3.Connection, inv: str, pid: str, payload: dict) -> None:
         proposed = None
-        for (text,) in c.execute("SELECT payload FROM records WHERE investigation = ? AND kind = 'proposal' ORDER BY seq",
-                                 (inv,)):
-            p = json.loads(text)
-            if p.get("proposal_id") == pid and p.get("event") == "proposed":
-                proposed = p
-                break
-        axes = (proposed or {}).get("outlook", {}).get("axes") if isinstance((proposed or {}).get("outlook"), dict) else None
-        if not isinstance(axes, list):
-            return  # without an outlook the store cannot know what is editable
-        ranges = {}
-        for a in axes:
-            vals = [v for v in (_number(x) for x in a.get("values", [])) if v is not None]
-            if isinstance(a.get("name"), str):
-                ranges[a["name"]] = (min(vals, default=math.inf), max(vals, default=-math.inf))
-        before = proposed.get("settings") if isinstance(proposed.get("settings"), dict) else None
-        for key, value in payload["settings"].items():
-            at = f"payload.settings.{key}"
-            if key in ranges:
-                lo, hi = ranges[key]
-                slack = 1e-9 * max(abs(lo), abs(hi), 1.0)
-                x = _number(value)
-                if x is None:
-                    raise _invalid(at, "must be a number (it is an outlook axis)")
-                if not (lo - slack <= x <= hi + slack):
-                    raise _invalid(at, f"{x} is outside the outlook axis [{lo}, {hi}]")
-            elif before is None or key not in before or canonical(before[key]) != canonical(value):
-                raise _invalid(at, "is not an outlook axis, so it cannot be edited")
+        if ev == "edited" and state == "proposed":
+            for (text,) in c.execute("SELECT payload FROM records WHERE investigation = ? AND kind = 'proposal' ORDER BY seq", (inv,)):
+                p = json.loads(text)
+                if p.get("proposal_id") == pid and p.get("event") == "proposed":
+                    proposed = p
+                    break
+        check_transition(state, proposed, payload)
 
     def records(self, investigation: str, kind: str | None = None) -> list[Record]:
         rows = self._q(f"SELECT {_COLUMNS} FROM records WHERE investigation = ? AND (? IS NULL OR kind = ?) ORDER BY seq",

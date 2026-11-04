@@ -26,6 +26,7 @@ import numpy as np
 from .data import Observation
 from .sensitivity import jacobian
 from .simulator import Simulator, time_grid
+from .store import canonical
 
 
 @dataclass
@@ -103,6 +104,10 @@ def rank_experiments(
 
 OUTLOOK_POINTS = 12
 OUTLOOK_MAX_AXES = 3
+#: Above this fitting-coordinate uncertainty, the UI shows "not determined".
+AFTER_RESOLVED_MAX = 1.0
+#: Leave space for the proposal envelope under the store's 1 MiB payload limit.
+OUTLOOK_MAX_BYTES = 900 * 1024
 
 
 def settings_score(
@@ -167,6 +172,9 @@ def outlook(
     criterion: str = "min_eig",
     points: int = OUTLOOK_POINTS,
     J0: np.ndarray | None = None,
+    max_simulations: int = 50000,
+    at: str = "fit",
+    jacobian_scale: float = 1.0,
 ) -> tuple[dict, float, dict[str, float]]:
     """The outlook of one proposed experiment.
 
@@ -177,19 +185,42 @@ def outlook(
     ``settings``, computed independently of the grid. ``edit`` maps each
     editable setting to its ``[lo, hi]`` limits (at most
     :data:`OUTLOOK_MAX_AXES`); with no editable setting the grid is the single
-    proposed point.
+    proposed point. Uniformly reduce ``points`` (minimum 2, plus the proposed
+    value) to fit ``max_simulations`` and :data:`OUTLOOK_MAX_BYTES`, including
+    the separate score and any training Jacobian in the call estimate. The
+    size estimate bounds every finite float's canonical representation.
+    ``at`` marks the estimate's origin; ``jacobian_scale`` divides an uncached
+    training Jacobian, preserving the investigation's noise-scale convention.
+    Limits below the minimum grid raise ``ValueError`` before simulation.
     """
     if len(edit) > OUTLOOK_MAX_AXES:
         raise ValueError(f"at most {OUTLOOK_MAX_AXES} editable settings, got {len(edit)}")
     if points < 2:
         raise ValueError("an outlook axis needs at least 2 points")
     p = len(sim.params)
+    # _template runs once and the central-difference Jacobian runs twice
+    # per parameter. The proposal's independently computed score costs the
+    # same again; an uncached training Jacobian costs 2p per observation.
+    per_cell = 2 * p + 1
+    base_cost = per_cell + (2 * p * len(observations) if J0 is None else 0)
+    names = list(edit)
+    while True:
+        axes = [{"name": n, "values": _axis(n, float(edit[n][0]), float(edit[n][1]), float(settings[n]), points)} for n in names]
+        cells = int(np.prod([len(a["values"]) for a in axes]))
+        skeleton = {"axes": axes, "score": [], "after": {n: [] for n in sim.param_names},
+                    "after_resolved_max": AFTER_RESOLVED_MAX, "at": at}
+        # A finite binary64 JSON number takes at most 24 ASCII characters,
+        # plus a comma. Bound every score/after entry before simulating it.
+        payload_bytes = len(canonical(skeleton).encode()) + cells * (p + 1) * 25
+        if base_cost + cells * per_cell <= max_simulations and payload_bytes <= OUTLOOK_MAX_BYTES:
+            break
+        if points == 2 or not edit:
+            raise ValueError("outlook limits cannot fit the minimum grid (2 points per axis plus the proposed value)")
+        points -= 1
     if J0 is None:
-        J0 = jacobian(sim, params, observations) if observations else np.zeros((0, p))
+        J0 = jacobian(sim, params, observations) / jacobian_scale if observations else np.zeros((0, p))
     F0 = fisher(J0)
     score, after = settings_score(sim, params, F0, noise, settings, criterion=criterion)
-    names = list(edit)
-    axes = [{"name": n, "values": _axis(n, float(edit[n][0]), float(edit[n][1]), float(settings[n]), points)} for n in names]
     grid_score: list[float] = []
     grid_after: dict[str, list[float]] = {n: [] for n in sim.param_names}
     for combo in itertools.product(*(a["values"] for a in axes)):
@@ -199,4 +230,4 @@ def outlook(
         grid_score.append(sc)
         for n, v in af.items():
             grid_after[n].append(v)
-    return {"axes": axes, "score": grid_score, "after": grid_after}, score, after
+    return {**skeleton, "score": grid_score, "after": grid_after}, score, after

@@ -283,8 +283,8 @@ class Investigation:
         The project must be the one the investigation is pinned to (same config
         version, so the same simulator source). Restored: the measurements, the
         step, simulation and experiment counts, the adopted model variant, the
-        pending proposal and the last outcome. Fits, sensitivities and rankings
-        are not restored; the policy recomputes them on the next ``run()``.
+        pending proposal, the last fit (including its warm start) and the last
+        outcome. Sensitivities, rankings and validation are recomputed.
         ``runner`` defaults to a :class:`ProposalRunner`.
         """
         recs = store.records(investigation_id)
@@ -341,7 +341,10 @@ class Investigation:
                     st["experiment"] = p.get("experiment")
                     self.ranking_criterion = p.get("criterion") or self.ranking_criterion
             elif r.kind == "run":
-                self.fit_id = max(self.fit_id, int(p.get("fit_id", 0)))
+                self.fit_id = int(p["fit_id"])
+                self.fit_model = p["model"]
+                self.model = self.fit_model
+                self.fit = FitResult.from_dict({k: v for k, v in p.items() if k not in ("fit_id", "model", "simulator")})
             elif r.kind == "step":
                 self.outcome = None  # a later run superseded the last outcome
                 self.steps += 1
@@ -576,9 +579,10 @@ class Investigation:
         for v in self.variants.values():
             v.budget = None
         try:
-            if J0 is None and train:
-                J0 = jacobian(sim, params, train) / scale
-            grid, score, _ = outlook(sim, params, train, noise, settings, edit, criterion=self.ranking_criterion, J0=J0)
+            grid, score, _ = outlook(sim, params, train, noise, settings, edit,
+                                     criterion=self.ranking_criterion, J0=J0,
+                                     max_simulations=self.budgets.max_outlook_simulations,
+                                     at="fit" if self.fit is not None else "initial", jacobian_scale=scale)
         except (ValueError, SimulationError) as e:
             raise ToolError(f"cannot compute the outlook for {experiment}: {e}") from None
         finally:
@@ -603,7 +607,8 @@ class Investigation:
             })
             self.pending = pid
             self.pending_experiment = experiment
-            return {"proposal_id": pid, "status": "proposed", "outlook_simulations": outlook_sims}
+            return {"proposal_id": pid, "status": "proposed", "outlook_simulations": outlook_sims,
+                    "outlook_points": {a["name"]: len(a["values"]) for a in grid["axes"]}}
 
         obs = self.runner.run(experiment)
         obs.split = "train"
@@ -657,16 +662,31 @@ class Investigation:
     def approve(self, proposal_id: str, *, by: str = "user", settings: dict | None = None) -> None:
         self._require_pending(proposal_id)
         ev = "edited" if settings is not None else "approved"
-        payload = {"proposal_id": proposal_id, "event": ev, "by": by}
+        payload = {"proposal_id": proposal_id, "event": ev, **self._decision_actor(by)}
         if settings is not None:
             payload["settings"] = self.sim.experiment(settings)
         self._record("proposal", payload)
 
     def reject(self, proposal_id: str, *, by: str = "user", reason: str = "") -> None:
         self._require_pending(proposal_id)
-        self._record("proposal", {"proposal_id": proposal_id, "event": "rejected", "by": by, "reason": reason})
-        self.pending = None
+        self._record("proposal", {"proposal_id": proposal_id, "event": "rejected", **self._decision_actor(by), "reason": reason})
+        self.pending = self.pending_experiment = None
         self.history.append(f"proposal {proposal_id} rejected: {reason}")
+
+    def _decision_actor(self, by: str) -> dict:
+        actor = {"by": by, "via": "sdk"}
+        key_id = getattr(self.store, "key_id", None)
+        if key_id is not None:
+            actor["key_id"] = key_id
+        return actor
+
+    def withdraw(self, proposal_id: str, *, by: str = "user", reason: str = "") -> None:
+        """Withdraw the pending, still-proposed experiment before approval."""
+        self._require_pending(proposal_id)
+        self._record("proposal", {"proposal_id": proposal_id, "event": "withdrawn",
+                                  **self._decision_actor(by), "reason": reason})
+        self.pending = self.pending_experiment = None
+        self.history.append(f"proposal {proposal_id} withdrawn: {reason}")
 
     def attach_data(self, proposal_id: str, observation: Observation) -> None:
         self._require_pending(proposal_id)
@@ -699,16 +719,16 @@ class Investigation:
         waiter = getattr(self.store, "wait_for_approval", None)
         if waiter is not None:
             st = waiter(self.id, self.pending, timeout=timeout, interval=interval, sleep=sleep, clock=clock)
-            if st["status"] == "rejected":
-                self.pending = None
+            if st["status"] in ("rejected", "withdrawn"):
+                self.pending = self.pending_experiment = None
             return st
         deadline = clock() + timeout
         while True:
             st = self.store.proposal_status(self.id, self.pending)
 
             if st["status"] != "proposed":
-                if st["status"] == "rejected":
-                    self.pending = None
+                if st["status"] in ("rejected", "withdrawn"):
+                    self.pending = self.pending_experiment = None
                 return st
             if clock() >= deadline:
                 raise TimeoutError(f"proposal {self.pending} still awaiting approval")

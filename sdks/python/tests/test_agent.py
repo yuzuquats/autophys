@@ -129,7 +129,9 @@ def test_proposal_flow_awaits_and_resumes():
 def test_edited_proposal_is_recorded():
     view, _ = oscillator_case(0, max_experiments=1)
     store = MemoryStore()
-    inv = Investigation(project_for(view), view.dataset, ProposalRunner(), policy=ScriptedPolicy(), store=store)
+    catalog = {n: {"max_runs": None} for n in view.simulator.experiments}
+    catalog["sine_0.44Hz"]["edit"] = {"amplitude": [1.0, 3.0]}
+    inv = Investigation(project_for(view, catalog=catalog), view.dataset, ProposalRunner(), policy=ScriptedPolicy(), store=store)
     pid = inv.run().proposal_id
     edited = {"kind": "sine", "amplitude": 1.0, "freq": 0.44, "duration": 10.0, "rate": 100.0}
     inv.approve(pid, settings=edited)
@@ -222,6 +224,7 @@ def test_proposal_outlook_grid_value_at_proposed_settings_is_its_score():
     assert [a["name"] for a in o["axes"]] == ["freq", "amplitude"]
     freq, amp = (a["values"] for a in o["axes"])
     assert len(freq) == 13 and len(amp) == 12
+    assert o["at"] == "fit" and o["after_resolved_max"] == 1.0
     assert freq == sorted(freq) and freq[0] == 0.1 and freq[-1] == 2.0
     assert set(o["after"]) == {"m", "c", "k"}
     n = len(freq) * len(amp)
@@ -234,7 +237,8 @@ def test_proposal_outlook_grid_value_at_proposed_settings_is_its_score():
     assert all(o["after"][k][flat] < 0.1 for k in ("m", "c", "k"))
     # the grid's simulations inform the reviewer and are not charged to the budget
     step = [r.payload for r in store.records(inv.id, "step")][-1]
-    assert step["result"]["outlook_simulations"] > n
+    assert step["result"]["outlook_simulations"] == (n + 1) * 7
+    assert step["result"]["outlook_points"] == {"freq": 13, "amplitude": 12}
     plain = Investigation(project_for(view), view.dataset, ProposalRunner(), policy=ScriptedPolicy()).run()
     assert out.simulations == plain.simulations  # same budget use as a one-point outlook
 

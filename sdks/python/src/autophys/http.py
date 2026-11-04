@@ -252,15 +252,16 @@ class HttpStore(Store):
 
     ``cursor`` is the highest ``gseq`` this store has seen. The daemon puts
     ``gseq`` in the stream's ``id:`` field and keeps it out of record JSON, so
-    today only the stream advances it (a top-level ``gseq`` beside a POSTed
-    ``record`` would too); :meth:`wait_for_approval` resumes from it.
+    POST responses also carry ``gseq`` beside ``record`` and advance it;
+    :meth:`wait_for_approval` resumes from it.
     ``last_wait`` says how the last wait was served: ``"stream"`` or
     ``"poll"``.
     """
 
-    def __init__(self, server: str, api_key: str, *, timeout: float = 30.0, stream_idle: float = 30.0) -> None:
+    def __init__(self, server: str, api_key: str, *, timeout: float = 30.0, stream_idle: float = 30.0, key_id: str | None = None) -> None:
         self.base = server.rstrip("/") + API_PREFIX
         self._key = api_key
+        self.key_id = key_id
         self.timeout = timeout
         self.stream_idle = stream_idle
         self.cursor = 0
@@ -299,16 +300,17 @@ class HttpStore(Store):
         body = {"project_id": meta.get("project_id"), "config_version": meta.get("config_version"),
                 "overrides": meta.get("overrides", {}), "meta": meta}
         j = self._req("POST", "/investigations", body, headers={"Idempotency-Key": uuid.uuid4().hex})
+        self._see(j)
         return j["id"]
 
     def append(self, investigation, kind, payload, *, record_id=None) -> Record:
-        rid = record_id or uuid.uuid4().hex
+        rid = record_id if record_id is not None else uuid.uuid4().hex
         inv = urllib.parse.quote(investigation, safe="")
         envelope = {"id": rid, "kind": kind, "payload": payload}
         if kind == "proposal":
             pid = urllib.parse.quote(payload["proposal_id"], safe="")
             ev = payload["event"]
-            if ev == "proposed":
+            if ev in ("proposed", "withdrawn"):
                 path = f"/investigations/{inv}/proposals"
             elif ev in ("approved", "edited", "rejected"):
                 path = f"/investigations/{inv}/proposals/{pid}/approvals"
@@ -399,7 +401,7 @@ class HttpStore(Store):
             sleep(interval)
 
     def _wait_streaming(self, investigation: str, proposal_id: str, deadline: float, clock) -> dict:
-        decided = ("approved", "edited", "rejected")
+        decided = ("approved", "edited", "rejected", "withdrawn")
         while True:
             remaining = deadline - clock()
             if remaining <= 0:
