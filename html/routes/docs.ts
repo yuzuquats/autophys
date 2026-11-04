@@ -296,10 +296,12 @@ step = ap.Observation("step_short", thermal_rc.experiment("step_short"),
                       t=run["t"], y={"T": run["T"]}, sigma={"T": 0.05})
 
 project = ap.Project("thermal-demo", thermal_rc)
-wb = ap.connect("./autophys-demo").project(project)   # creates ./autophys-demo/thermal-demo.ap-workbook
+# Creates ./autophys-demo/thermal-demo.ap-workbook.
+wb = ap.connect("./autophys-demo").project(project)
 inv = wb.investigate(ap.Dataset([step]), ap.ProposalRunner(), policy=ap.ScriptedPolicy())
 outcome = inv.run()
-print(outcome.status, outcome.investigation, outcome.proposal_id)   # awaiting_data inv_… prop_…
+print(outcome.status, outcome.investigation, outcome.proposal_id)
+# awaiting_data inv_… prop_…
 \`\`\`
 
 Save it as \`demo.py\` and run \`.venv/bin/python -i demo.py\` from the repository root; \`-i\` keeps \`inv\` available when the script finishes, and the workbook lands in \`./autophys-demo\`. To review it, start \`./target/release/autophys serve --collection ./autophys-demo\` in another terminal and open \`http://127.0.0.1:4794\`, or use the daemon's \`approve\` with \`--target ./autophys-demo\` and the printed IDs. Then call \`inv.wait_for_approval()\`, \`inv.attach_data(outcome.proposal_id, measured)\` and \`inv.run()\` again.
@@ -394,7 +396,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let client = autophys::connect(Some("./autophys-demo"))?;
     let wb = client.project_with(Project::new("thermal-demo", sim))?;
-    let mut inv = wb.investigate(Dataset::new([step])?, ProposalRunner, ScriptedPolicy::default())?;
+    let dataset = Dataset::new([step])?;
+    let mut inv = wb.investigate(dataset, ProposalRunner, ScriptedPolicy::default())?;
     let outcome = inv.run()?;
     println!("{} {} {:?}", outcome.status, inv.id, outcome.proposal_id);
     Ok(())
@@ -485,6 +488,11 @@ class StaticCodeBlockView {
   dom: Code;
   constructor(node: ProseMirrorEditor.ProseMirrorNode) {
     this.dom = Code.make();
+    // Code scrolls wide lines on its host with the platform's scrollbar, which on Linux and
+    // Windows is a full-width grey bar with arrow buttons. A thin, faint one suits the page.
+    // Inline, because the host sits in std-documentation's shadow root, beyond this sheet.
+    this.dom.style.scrollbarWidth = "thin";
+    this.dom.style.scrollbarColor = "rgb(0 0 0 / 0.18) transparent";
     this.draw(node);
   }
   private draw(node: ProseMirrorEditor.ProseMirrorNode): void {
