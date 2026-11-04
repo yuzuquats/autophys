@@ -433,10 +433,29 @@ a separate display-only simulation API, which would keep the exact map alias
 but split the simulation contract from Python. The wrapper is implemented to
 keep ordinary simulation results aligned with Python; reversing it would be a
 small SDK-only API refactor before external adoption. Identity and numerical
-conformance tests cover the boundary. Implementation: this step's `Project:
-autophys` commit and its matching Change-Id.
+conformance tests cover the boundary. Implementation: `3e9496b`
+(`Ia92f82fc2cb154edfbe3`), with compatibility fixes `53f8c69`
+(`Ia9e363767fc7c0a4ddda`) and `22136d3` (`I5b6d6a33bd26ee06758a`).
 
-Validation receipt: pending final archived-commit gate and independent review.
+Validation receipt: `cargo test --manifest-path sdks/rust/Cargo.toml` from a
+`git archive` export of the reviewed combined master `d2bada2` passed **92
+unit/integration tests and 1 doctest**, including all three golden byte
+comparisons and every existing conformance case. All 54 source-hashed model
+and fixture files checked against the pre-step master are byte-unchanged.
+Initial gates found two trajectory-to-map test call sites, now converted, and
+a stale exact-four-workbooks assertion, now requiring the original four by
+name and checking every committed workbook. The fifth workbook's reveal
+support landed independently before the passing gate. No cases were edited.
+
+A separate GPT-6.1 Sol reviewer (Codex, high effort, no credits provider)
+reviewed the three scoped commits against rev 3 and Python `acf3c33`: **no
+findings**, including no unresolved objections. The final receipt commit is
+archive-gated again before handoff; its owner-host log is
+`~/.cache/autophys/rs-dm1-evidence/gate-<commit>.log`. All gates use
+`CARGO_TARGET_DIR=~/.cache/autophys/rs-dm1-target`, removed after the final gate.
+Python source and fixtures were untouched, so the Python suite was not rerun.
+DM-RS-1 remains pending operator review; HTTP registration and UI integration
+are outside this Rust step.
 Task-board CLI was unavailable on rwc-dev-01 (installed `lona-console` has no
 `task` command); plan and live gate logs are in
 `~/.cache/autophys/rs-dm1-evidence/` on the owner host. No other threads were
