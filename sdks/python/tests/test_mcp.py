@@ -240,8 +240,11 @@ def test_plugin_builder_keeps_canonical_skill_and_paths_in_config(tmp_path):
     assert json.loads((result / "playbook.json").read_text())["sha256"] == hashlib.sha256(data).hexdigest()
     manifest = json.loads((result / ".muse-plugin/plugin.json").read_text())
     argv = manifest["capabilities"]["mcpServers"][0]["command"]
-    assert argv == [str(Path(sys.executable).absolute()), "-m", "autophys.cli", "mcp",
-                    "--config", "mcp-config.json", "--playbook", "skills/autophys/SKILL.md"]
+    assert argv == ["./mcp-stdio.sh"]
+    wrapper = result / "mcp-stdio.sh"
+    assert wrapper.stat().st_mode & 0o111
+    assert '"$plugin_root/mcp-config.json"' in wrapper.read_text()
+    assert '"$plugin_root/skills/autophys/SKILL.md"' in wrapper.read_text()
     assert json.loads((result / "mcp-config.json").read_text())["root"] == str(tmp_path)
     with pytest.raises(FileExistsError):
         build(result)
@@ -287,3 +290,67 @@ def test_canonical_snapshot_pins_without_m2_loader(tmp_path, monkeypatch):
         assert with_session.workbook.verify()["ok"]
     finally:
         with_session.close()
+
+
+def test_plugin_launchers_resolve_installed_resources_and_keep_lab_cwd(tmp_path):
+    """Execute the manifest after relocation, with no provider or remote call."""
+    import os
+    import runpy
+    import shutil
+    import subprocess
+    source = Path(__file__).resolve().parents[3] / "plugins/muse-autophys"
+    if not source.exists():
+        pytest.skip("plugin sources are not part of the Python wheel")
+    build = runpy.run_path(str(source / "build.py"))["build"]
+    lab = tmp_path / "lab"
+    lab.mkdir()
+    bins = tmp_path / "bin"
+    bins.mkdir()
+    recorder = bins / "python recorder"
+    recorder.write_text("#!/usr/bin/env python3\nimport json, os, sys\n"
+                        "from pathlib import Path\n"
+                        "args=sys.argv[1:]\n"
+                        "config=Path(args[args.index('--config')+1])\n"
+                        "playbook=Path(args[args.index('--playbook')+1])\n"
+                        "print(json.dumps({'argv':args,'cwd':os.getcwd(),"
+                        "'config':json.loads(config.read_text()),"
+                        "'playbook':playbook.read_text()}))\n")
+    recorder.chmod(0o755)
+    local = build(tmp_path / "local", python=str(recorder), project="user_sim:project",
+                  root=".", workbook="relative books")
+    installed = tmp_path / "relocated install"
+    shutil.move(str(local), installed)
+    argv = json.loads((installed / ".muse-plugin/plugin.json").read_text())["capabilities"]["mcpServers"][0]["command"]
+    assert argv == ["./mcp-stdio.sh"]
+    # Muse resolves a path-like executable against the installed package.
+    result = subprocess.run([str(installed / argv[0])], cwd=lab, text=True,
+                            capture_output=True, check=True)
+    received = json.loads(result.stdout)
+    assert received["cwd"] == str(lab)
+    assert received["config"] == {"project": "user_sim:project", "root": ".", "workbook": "relative books"}
+    assert received["playbook"].encode() == load_playbook().data
+    for flag in ["--config", "--playbook"]:
+        assert Path(received["argv"][received["argv"].index(flag) + 1]).is_relative_to(installed)
+
+    ssh = bins / "ssh"
+    ssh.write_text("#!/usr/bin/env python3\nimport json, os, sys\n"
+                   "print(json.dumps({'argv':sys.argv[1:],'cwd':os.getcwd()}))\n")
+    ssh.chmod(0o755)
+    remote = build(tmp_path / "remote", python="/remote/my venv/python", project="user_sim:project",
+                   root="relative lab", workbook="relative books", ssh_host="lab-alias",
+                   source_root="/remote/sdk src")
+    installed_remote = tmp_path / "relocated remote"
+    shutil.move(str(remote), installed_remote)
+    argv = json.loads((installed_remote / ".muse-plugin/plugin.json").read_text())["capabilities"]["mcpServers"][0]["command"]
+    result = subprocess.run([str(installed_remote / argv[0])], cwd=lab, text=True,
+                            capture_output=True, check=True,
+                            env={**os.environ, "PATH": str(bins) + os.pathsep + os.environ["PATH"]})
+    received = json.loads(result.stdout)
+    import shlex
+    assert received["cwd"] == str(lab)
+    assert received["argv"][0] == "lab-alias"
+    assert shlex.split(received["argv"][1]) == [
+        "env", "PYTHONDONTWRITEBYTECODE=1", "PYTHONPATH=/remote/sdk src",
+        "/remote/my venv/python", "-m", "autophys.cli", "mcp",
+        "--project", "user_sim:project", "--workbook", "relative books", "--root", "relative lab"]
+    assert (installed_remote / "skills/autophys/SKILL.md").read_bytes() == load_playbook().data

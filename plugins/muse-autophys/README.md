@@ -63,3 +63,10 @@ python3 plugins/muse-autophys/build.py --output /tmp/autophys-ssh-plugin \
 
 Build the bundle where Muse runs and install it there. The generated shell wrapper uses SSH's existing authentication and
 contains no credentials. The full guide has a reproducible synthetic CSV setup.
+
+The manifest names `./mcp-stdio.sh` as its executable. Muse resolves that
+package-relative executable to the installed package, including after relocation.
+The wrapper resolves its config and canonical playbook beside itself; it keeps
+the workspace/lab working directory unchanged. Relative workbook/root paths
+therefore still refer to the lab. Rebuild and reinstall older generated bundles
+whose manifest used `sh mcp-stdio.sh` or relative resource arguments.

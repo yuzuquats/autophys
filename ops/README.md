@@ -19,7 +19,10 @@ curl and GNU coreutils. The template lives at `systemd/autophys.service.in`.
 
 Existing installations retain their release root at
 `~/.local/share/tento/services/autophys`; a new installation may set
-`AUTOPHYS_RELEASE_ROOT` to its own absolute directory. This is a local layout
+`AUTOPHYS_RELEASE_ROOT` to its own absolute directory using only ASCII letters,
+digits, `_`, `.`, `/` and `-`. Spaces, backslashes, percent signs, quotes and
+control characters are rejected before build/install/symlink changes, because
+the path is a literal in both sed and systemd syntax. This is a local layout
 compatibility default, not a dependency on a fleet daemon. Logs remain under
 `~/.local/state/autophys/logs`; the service remains named `autophys.service`
 and uses `Restart=on-failure`. Set `CARGO_TARGET_DIR` explicitly to keep

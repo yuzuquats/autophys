@@ -95,6 +95,10 @@ pub fn domain(config: &AppConfig, info: BuildInfo) -> DomainConfig {
         .project_root(config.project_root.clone())
         .compiler(Some(compiler))
         .config(move |cfg| {
+            // Reserve the dependency system namespace before its SystemRouter.
+            // Autophys owns its auth/API; upstream admin and UX-test handlers
+            // must never run, even when they need app data we do not provide.
+            cfg.service(web::scope("/_").default_service(web::route().to(api_not_found)));
             cfg.app_data(info.clone());
             cfg.app_data(shell.clone());
             cfg.app_data(sessions.clone());
