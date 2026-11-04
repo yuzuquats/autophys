@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "paths": {
+      "@tento-ui/*": ["../vendor/tento/tento-ui-js/*"],
+      "@tento-core/*": ["../vendor/tento/tento-core-js/*"],
+      "@tento-cookbook/*": ["../vendor/tento/tento-cookbook-js/*"],
+      "@tento-trace": ["../vendor/tento/tento-trace-js/src/lib.ts"],
+      "@tento-trace/*": ["../vendor/tento/tento-trace-js/src/*"],
+      "@tento-chrono": ["../vendor/tento/tento-chrono/chrono/mod.ts"],
+      "@tento-chrono/*": ["../vendor/tento/tento-chrono/*"]
+    }
+  },
+  "extends": "../vendor/tento/tento-web-js/tsconfig.base.json",
+  "include": [
+    "**/*.ts",
+    "../vendor/tento/tento-ui-js/types/*.d.ts",
+    "../vendor/tento/tento-core-js/types/*.d.ts"
+  ]
+}

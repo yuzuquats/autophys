@@ -1,3 +1,4 @@
 /target
-/web/dist/
-/web/node_modules/
+vendor/tento/node_modules
+vendor/tento/Cargo.lock
+vendor/tento/target/
