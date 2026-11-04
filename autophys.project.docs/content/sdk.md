@@ -340,6 +340,16 @@ On rwc-dev-01 (Python 3.12.3, NumPy 2.5.4, SciPy 1.18.1, venv
   `overrides: null`, which no writer produces. Each SDK verifies the
   other's goldens and the 21 numerics cases.
 
+## Publication
+
+2026-11-04: the review fixes and this record were published to origin master
+(github.com/yuzuquats/autophys) as 6038f8f (I9c4e1b7a3f6d20e85b47) and
+5ca4c51 (I2d7b5f0e8a3c61b49e06), on base 63606eb. The pushed range had three
+independent pre-push review rounds (Opus subagents, agent review only):
+changes required, then ready, then ready. The receipt is
+`~/.local/state/autophys/publication-receipts/py-sink-20261104-review.md` on
+rwc-dev-01.
+
 ## Remaining work
 
 - Battery case suite (MQ-5, owned here): cases, an experiment catalog costed
