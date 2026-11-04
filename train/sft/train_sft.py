@@ -77,6 +77,62 @@ def datum(p: list[int], a: list[int]):
                                  "weights": TensorData(data=weights, dtype="float32", shape=[len(weights)])})
 
 
+DEDICATED: dict = {}
+
+
+def deactivate(deployment_id: str) -> bool:
+    """Stop a dedicated Loops trainer so it stops billing GPU time."""
+    import httpx
+    url = f"https://api.baseten.co/v1/loops/deployments/{deployment_id}/deactivate"
+    headers = {"Authorization": f"Api-Key {os.environ['BASETEN_API_KEY']}"}
+    for _ in range(3):
+        try:
+            if httpx.post(url, headers=headers, timeout=60).status_code == 200:
+                print(json.dumps({"event": "deactivated", "deployment": deployment_id}), flush=True)
+                return True
+        except httpx.HTTPError:
+            pass
+        time.sleep(5)
+    print(json.dumps({"event": "deactivate_failed", "deployment": deployment_id}), flush=True)
+    return False
+
+
+def guard_dedicated(allow: bool, max_seconds: float | None):
+    """A dedicated trainer bills GPU time, which the per-token budget does not
+    cover. Without ``allow`` the run stops (and the trainer is deactivated) as
+    soon as Loops reports one. With it, the trainer is deactivated at
+    ``max_seconds`` after start, and the process exits."""
+    from baseten.loops import service_client
+    from baseten.loops.trainer_deployment import DedicatedTrainerDeployment
+    original = service_client.deployment_from_run
+
+    def checked(run):
+        deployment = original(run)
+        if isinstance(deployment, DedicatedTrainerDeployment):
+            DEDICATED.update(id=deployment.deployment_id, run=run.get("id"), instance=(run.get("instance_type") or {}).get("id"))
+            print(json.dumps({"event": "dedicated_trainer", **DEDICATED}), flush=True)
+            if not allow:
+                deactivate(deployment.deployment_id)
+                raise SystemExit(f"Loops assigned a dedicated trainer (deployment {deployment.deployment_id}); it bills GPU "
+                                 "time, which the per-token budget does not cover. Deactivated before training; "
+                                 "a dedicated run needs --usd-per-hour and --max-usd.")
+        return deployment
+
+    service_client.deployment_from_run = checked
+    if max_seconds:
+        import threading
+
+        def deadline():
+            print(json.dumps({"event": "deadline", "after_s": max_seconds}), flush=True)
+            if "id" in DEDICATED:
+                deactivate(DEDICATED["id"])
+            os._exit(3)
+
+        timer = threading.Timer(max_seconds, deadline)
+        timer.daemon = True
+        timer.start()
+
+
 def lr_at(step: int, total: int, base: float, warmup: int) -> float:
     if step < warmup:
         return base * (step + 1) / warmup
@@ -96,7 +152,12 @@ def main(argv=None) -> int:
     p.add_argument("--epochs", type=int, default=4)
     p.add_argument("--eval-every", type=int, default=10)
     p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--scope", default="serverless", help="Loops scope; 'serverless' fails rather than fall back to GPU billing")
+    p.add_argument("--scope", default=None,
+                   help="Loops scope (Baseten-internal organizations only); omitted, the organization's default applies")
+    p.add_argument("--allow-dedicated", action="store_true",
+                   help="accept a dedicated trainer (billed by GPU time); without it the run stops before training")
+    p.add_argument("--max-seconds", type=float, default=None,
+                   help="wall-clock cap: deactivate a dedicated trainer and exit after this many seconds")
     p.add_argument("--name", default="autophys-sft")
     p.add_argument("--live", action="store_true", help="actually train on Baseten (spends money)")
     a = p.parse_args(argv)
@@ -114,6 +175,10 @@ def main(argv=None) -> int:
         if not os.environ.get("BASETEN_API_KEY"):
             p.error("--live needs BASETEN_API_KEY in the environment")
         from baseten.loops import ServiceClient
+        if a.allow_dedicated and not a.max_seconds:
+            p.error("--allow-dedicated needs --max-seconds")
+        started = time.time()
+        guard_dedicated(a.allow_dedicated, a.max_seconds)
         client = ServiceClient().create_lora_training_client(
             base_model=a.base_model, rank=a.rank, max_seq_len=a.max_seq_len, scope=a.scope or None,
             seed=a.seed, name=a.name)
@@ -146,7 +211,16 @@ def main(argv=None) -> int:
         print("dry run: nothing sent to Baseten")
         return 0
 
+    try:
+        return train_live(a, client, enc, tr, va, summary, started)
+    finally:
+        if "id" in DEDICATED:
+            deactivate(DEDICATED["id"])
+
+
+def train_live(a, client, enc, tr, va, summary, started):
     from baseten.loops import AdamParams
+    total = summary["schedule"]["updates"]
     run_dir = HERE / "runs" / a.name
     run_dir.mkdir(parents=True, exist_ok=True)
     train_data = [datum(*x) for x in tr]
@@ -176,7 +250,8 @@ def main(argv=None) -> int:
     sampler = client.save_weights_for_sampler(name=f"{a.name}-step-{step}").result(timeout=1800)
     state = client.save_state(name=f"{a.name}-state-{step}").result(timeout=1800)
     record = {"run_id": client.run_id, "sampler_weights": sampler.path, "state": state.path, "args": vars(a) | {"data": str(a.data)},
-              "summary": summary, "log": log}
+              "summary": summary, "log": log,
+              "trainer": DEDICATED or {"kind": "serverless"}, "wall_seconds": round(time.time() - started, 1)}
     (run_dir / "run.json").write_text(json.dumps(record, indent=1, default=str) + "\n")
     print(f"run_id={client.run_id} sampler_weights={sampler.path}")
     client.close()

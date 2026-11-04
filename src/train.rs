@@ -26,7 +26,8 @@ pub const USAGE: &str =
        autophys train run --name NAME --base-model HF_ID --data DIR [--backend loops|modal]
                           [--rank N] [--epochs N] [--batch-size N] [--lr X] [--max-seq-len N]
                           [--warmup N] [--eval-every N] [--seed N] [--scope S]
-                          loops: [--usd-per-mtok X --max-usd Y --live]
+                          loops: [--usd-per-mtok X --max-usd Y --live]   (serverless, billed per token)
+                          loops: [--usd-per-hour X --max-usd Y --live]   (dedicated trainer, billed by GPU time)
                           modal: [--gpu L40S|A100-80GB|H100 --usd-per-hour X --max-usd Y --live]
        autophys train eval --out DIR [--model NAME] [--seeds 3,4] [--case NAME]...
                            [--policy reason|scripted]... [--route baseten|meta|lane] [--replay FILE]
@@ -500,6 +501,16 @@ fn modal_budget(usd_per_hour: Option<f64>, max_usd: Option<f64>, gpu: Option<&st
     })
 }
 
+/// A dedicated Loops trainer bills GPU time, so its cap is a deadline like
+/// Modal's; the worker deactivates the trainer when it passes.
+fn loops_dedicated_budget(usd_per_hour: Option<f64>, max_usd: Option<f64>) -> Value {
+    let mut gate = modal_budget(usd_per_hour, max_usd, Some("assigned by Baseten"));
+    gate["gpu"] = Value::Null;
+    gate["billing"] = json!("dedicated trainer, GPU time");
+    gate["enforced_by"] = json!("worker deactivates the Loops deployment at the deadline");
+    gate
+}
+
 /// Presence only; the Modal client reads its own token.
 fn require_modal_credentials() -> Result<()> {
     let env = ["MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET"]
@@ -643,8 +654,11 @@ pub fn run(args: Vec<String>) -> Result<Value, Failure> {
         let tokens = plan
             .pointer("/billed_token_estimate/total")
             .and_then(Value::as_f64);
+        let dedicated = backend == "loops" && usd_per_hour.is_some();
         let gate = if backend == "modal" {
             modal_budget(usd_per_hour, max_usd, flags.get("gpu"))
+        } else if dedicated {
+            loops_dedicated_budget(usd_per_hour, max_usd)
         } else {
             budget(tokens, usd_per_mtok, max_usd)
         };
@@ -708,6 +722,11 @@ pub fn run(args: Vec<String>) -> Result<Value, Failure> {
             ])?
         } else {
             argv.push("--live".into());
+            if dedicated {
+                argv.push("--allow-dedicated".into());
+                argv.push("--max-seconds".into());
+                argv.push(gate["timeout_s"].to_string());
+            }
             worker.stream("train_sft.py", &argv)?
         };
         let record = read_json(&run_dir.join("run.json")).ok();
@@ -728,7 +747,13 @@ pub fn run(args: Vec<String>) -> Result<Value, Failure> {
             manifest["run_id"] = record["run_id"].clone();
             manifest["sampler_weights"] = record["sampler_weights"].clone();
             manifest["state"] = record["state"].clone();
-            for key in ["heldout_decisions", "gpu_seconds", "end_of_turn"] {
+            for key in [
+                "heldout_decisions",
+                "gpu_seconds",
+                "end_of_turn",
+                "trainer",
+                "wall_seconds",
+            ] {
                 if let Some(value) = record.get(key) {
                     manifest[key] = value.clone();
                 }
