@@ -210,6 +210,8 @@ async fn every_keyed_route_refuses_missing_wrong_and_revoked_keys() {
         ("POST", "/projects".into()),
         ("GET", "/projects/p/config_versions".into()),
         ("PUT", "/projects/p/config_versions/v".into()),
+        ("PUT", format!("/projects/p/blobs/{}", "0".repeat(64))),
+        ("GET", format!("/projects/p/blobs/{}", "0".repeat(64))),
         ("GET", "/investigations".into()),
         ("POST", "/investigations".into()),
         ("GET", format!("/investigations/{inv}/records")),
@@ -542,6 +544,80 @@ async fn browser_approves_and_denies_pairings() {
         401,
         "no key, no browser"
     );
+}
+
+#[actix_web::test]
+async fn blobs_are_put_by_hash_and_read_back() {
+    let f = fixture();
+    let app = app!(f.api);
+    let key = pair(&app, &f.api, "d").await;
+    let k = Some(key.as_str());
+    let (_, p) = call(
+        &app,
+        post("/projects", k, &json!({"name": "thermal"})).to_request(),
+    )
+    .await;
+    let pid = p["project"]["id"].as_str().unwrap();
+    let skill = b"# Playbook\nFit first, then rank.\n";
+    let hash = sha256_hex([&skill[..]]);
+    let path = format!("/projects/{pid}/blobs/{hash}");
+    let put = |path: &str, body: &[u8], media: Option<&str>| {
+        let req = actix_web::test::TestRequest::put()
+            .uri(&format!("/api/v1{path}"))
+            .insert_header(("authorization", format!("Bearer {key}")))
+            .set_payload(body.to_vec());
+        match media {
+            Some(m) => req.insert_header(("content-type", m)),
+            None => req,
+        }
+        .to_request()
+    };
+    let (s, v) = call(&app, put(&path, skill, Some("text/markdown"))).await;
+    assert_eq!((s, v["sha256"].as_str()), (201, Some(hash.as_str())));
+    assert_eq!(
+        call(&app, put(&path, skill, Some("text/markdown"))).await.0,
+        200,
+        "idempotent"
+    );
+    let (s, e) = call(&app, put(&path, b"other bytes", Some("text/markdown"))).await;
+    assert_eq!((s, e["error"].as_str()), (422, Some("hash_mismatch")));
+    let (s, e) = call(&app, put(&path, skill, None)).await;
+    assert_eq!((s, e["path"].as_str()), (422, Some("Content-Type")));
+    let (s, e) = call(
+        &app,
+        put(
+            &format!("/projects/{pid}/blobs/sha256:{hash}"),
+            skill,
+            Some("text/markdown"),
+        ),
+    )
+    .await;
+    assert_eq!(
+        (s, e["path"].as_str()),
+        (422, Some("sha256")),
+        "bare hex only"
+    );
+    let (s, _) = call(
+        &app,
+        put(
+            &format!("/projects/prj_nope/blobs/{hash}"),
+            skill,
+            Some("text/markdown"),
+        ),
+    )
+    .await;
+    assert_eq!(s, 404);
+
+    let resp = actix_web::test::call_service(&app, get(&path, k).to_request()).await;
+    assert_eq!(resp.status().as_u16(), 200);
+    assert_eq!(resp.headers().get("content-type").unwrap(), "text/markdown");
+    assert_eq!(&actix_web::test::read_body(resp).await[..], &skill[..]);
+    let (s, _) = call(
+        &app,
+        get(&format!("/projects/{pid}/blobs/{}", "f".repeat(64)), k).to_request(),
+    )
+    .await;
+    assert_eq!(s, 404);
 }
 
 #[actix_web::test]

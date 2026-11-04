@@ -45,6 +45,9 @@ pub const PREFIX: &str = "/api/v1";
 
 /// Request bodies: a 1 MiB payload plus room for its envelope.
 pub const BODY_LIMIT: usize = autophys::MAX_PAYLOAD_BYTES + 64 * 1024;
+/// Largest blob `PUT /projects/{pid}/blobs/{sha256}` takes: a playbook's
+/// SKILL.md or a step image.
+pub const BLOB_LIMIT: usize = 16 << 20;
 
 /// What the `/api/v1` scope serves: a collection of workbooks, the server
 /// database, and a wake-up channel for `/stream` (a project id after each
@@ -150,6 +153,8 @@ pub fn scope(api: Api) -> actix_web::Scope {
             "/projects/{pid}/config_versions/{version}",
             web::put().to(put_config_version),
         )
+        .route("/projects/{pid}/blobs/{sha256}", web::put().to(put_blob))
+        .route("/projects/{pid}/blobs/{sha256}", web::get().to(get_blob))
         .route("/investigations", web::get().to(investigations))
         .route("/investigations", web::post().to(create_investigation))
         .route("/investigations/{inv}/records", web::get().to(records))
@@ -416,6 +421,69 @@ async fn put_config_version(
     let v = version.clone();
     let new = blocking(move || Ok(wb.put_config_version(&v, &bytes)?)).await?;
     Ok(created(new, json!({ "version": version })))
+}
+
+// --- blobs -----------------------------------------------------------------
+
+/// A blob path names its bare sha256: 64 lowercase hex digits.
+fn blob_hash(hash: &str) -> Result<String> {
+    if hash.len() == 64 && hash.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
+        Ok(hash.to_string())
+    } else {
+        Err(ApiError::invalid("sha256", "64 lowercase hex digits"))
+    }
+}
+
+/// Store bytes a record names by hash (a playbook, a step image) before the
+/// record is written. The server hashes the body itself; the media type is
+/// the request's Content-Type. Idempotent: 201 on create, 200 when present.
+async fn put_blob(
+    _: Keyed,
+    api: Data,
+    req: HttpRequest,
+    path: web::Path<(String, String)>,
+    body: web::Payload,
+) -> Result<HttpResponse> {
+    let (pid, hash) = path.into_inner();
+    let hash = blob_hash(&hash)?;
+    let media_type = req
+        .headers()
+        .get(actix_web::http::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| ApiError::invalid("Content-Type", "required: the blob's media type"))?
+        .to_string();
+    let bytes = match body.to_bytes_limited(BLOB_LIMIT).await {
+        Ok(Ok(bytes)) => bytes,
+        Ok(Err(e)) => return Err(ApiError::bad_request(format!("reading the body: {e}"))),
+        Err(_) => return Err(ApiError::too_large(BLOB_LIMIT)),
+    };
+    if autophys::sha256_hex([&bytes[..]]) != hash {
+        return Err(autophys::Error::HashMismatch.into());
+    }
+    let wb = workbook(&api, &pid).await?;
+    let h = hash.clone();
+    let new = blocking(move || {
+        let new = match wb.get_blob(&h) {
+            Ok(_) => false,
+            Err(autophys::Error::NotFound(_)) => true,
+            Err(e) => return Err(e.into()),
+        };
+        wb.put_blob(&bytes, &media_type)?;
+        Ok(new)
+    })
+    .await?;
+    Ok(created(new, json!({ "sha256": hash })))
+}
+
+/// The bytes of a stored blob, served with the media type they were put with.
+async fn get_blob(_: Keyed, api: Data, path: web::Path<(String, String)>) -> Result<HttpResponse> {
+    let (pid, hash) = path.into_inner();
+    let hash = blob_hash(&hash)?;
+    let wb = workbook(&api, &pid).await?;
+    let (bytes, media_type) = blocking(move || Ok(wb.get_blob(&hash)?)).await?;
+    Ok(HttpResponse::Ok().content_type(media_type).body(bytes))
 }
 
 // --- investigations ---------------------------------------------------------
