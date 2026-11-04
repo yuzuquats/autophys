@@ -95,11 +95,16 @@ def build_parser() -> argparse.ArgumentParser:
     pb.add_argument("--case", action="append", help="case name (repeatable); default all")
     pb.add_argument("--policy", action="append", help="scripted or fake-reasoner (repeatable); default both")
     pb.add_argument("--json", action="store_true")
+    from .mcp.cli import add_parser
+    add_parser(sub)
     return p
 
 
 def main(argv: list[str] | None = None, out=sys.stdout) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "mcp":
+        from .mcp.cli import run
+        return run(args)
     return {"pair": cmd_pair, "whoami": cmd_whoami, "bench": cmd_bench}[args.command](args, out=out)
 
 
