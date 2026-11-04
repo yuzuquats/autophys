@@ -7,6 +7,7 @@ import json
 import math
 import os
 from pathlib import Path
+import random
 import subprocess
 import tempfile
 
@@ -50,6 +51,53 @@ def improves(candidate, baseline):
             and candidate["cost_usd"] < baseline["cost_usd"])
 
 
+LOG_ERROR_CAP = 50.0
+
+
+def _unit_means(runs):
+    """Per (case, seed) unit: mean correctness and capped mean log error over repeats."""
+    units = {}
+    for run in runs:
+        row, component = run["row"], run["score"]
+        error = component.get("mean_log_error")
+        error = LOG_ERROR_CAP if error is None or not math.isfinite(error) else min(float(error), LOG_ERROR_CAP)
+        units.setdefault((row["case"], row["seed"]), []).append((float(component["correct"]), error))
+    return {key: (sum(c for c, _ in values) / len(values), sum(e for _, e in values) / len(values))
+            for key, values in units.items()}
+
+
+def paired_bootstrap(candidate_runs, incumbent_runs, *, alpha=0.05, resamples=2000, seed=0):
+    """AR-3: accept only a gain that is unlikely to be noise.
+
+    Candidate and incumbent are paired on the same (case, seed) units, averaging any
+    repeats. The compared metric is per-unit correctness; when no unit's correctness
+    changed it falls back to mean log error. Units are resampled with replacement and
+    the candidate is accepted when the mean paired difference favours it in at least
+    1 - alpha of the resamples. Cost-only gains are never accepted by this rule.
+    Returns (accepted, stats).
+    """
+    candidate, incumbent = _unit_means(candidate_runs), _unit_means(incumbent_runs)
+    stats = {"rule": "paired-bootstrap", "alpha": alpha, "resamples": resamples, "units": len(candidate)}
+    if not candidate or set(candidate) != set(incumbent):
+        return False, {**stats, "metric": None, "p_better": None,
+                       "reason": "candidate and incumbent were not scored on the same units"}
+    keys = sorted(candidate)
+    correct = [candidate[k][0] - incumbent[k][0] for k in keys]
+    error = [incumbent[k][1] - candidate[k][1] for k in keys]  # positive: the candidate fits better
+    stats.update(improved=sum(d > 0 for d in correct), worse=sum(d < 0 for d in correct))
+    if any(correct):
+        metric, diffs = "correct", correct
+    elif any(abs(d) > 1e-12 for d in error):
+        metric, diffs = "mean_log_error", error
+    else:
+        return False, {**stats, "metric": None, "p_better": None, "reason": "no unit changed"}
+    rng, n = random.Random(seed), len(diffs)
+    better = sum(sum(diffs[rng.randrange(n)] for _ in range(n)) > 0 for _ in range(resamples))
+    p_better = better / resamples
+    stats.update(metric=metric, mean_diff=sum(diffs) / n, p_better=p_better)
+    return p_better >= 1 - alpha, stats
+
+
 class _InvalidEdit(ValueError):
     """A completed researcher returned an unusable strategy edit."""
 
@@ -65,6 +113,12 @@ def validate_edit(original, proposed):
             load_playbook(path)
         except ValueError as error:
             raise _InvalidEdit(str(error)) from None
+    # Typed settings must parse, or every investigation would fail on the edit.
+    from .bench import strategy_settings
+    try:
+        strategy_settings("\nStrategy:\n" + proposed)
+    except ValueError as error:
+        raise _InvalidEdit(str(error)) from None
     # A proposed full system prompt is not a strategy skill.
     from .agent import CONTRACT
     if CONTRACT.strip() in proposed:
@@ -210,6 +264,10 @@ class MuseCLIResearcher:
             identity["images"] = [i["sha256"] for i in images]
             prompt_text += "\nInspect the PNG fit/residual plots listed in plot-images.json in your workspace."
         key = hashlib.sha256(canonical(identity).encode()).hexdigest()
+        # Like the plot note, this adapter instruction is outside the replay identity,
+        # so recorded cassettes keep their keys.
+        prompt_text += ("\n\nYour workspace holds SKILL.md and failing-transcripts.json. Write the edited "
+                        "SKILL.md to that file in place: the file, not your reply, is what gets scored.")
         if self.replay:
             recorded = Path(self.replay).read_text(encoding="utf-8")
             if recorded.startswith("---"):
@@ -261,7 +319,12 @@ class MuseCLIResearcher:
             self.last_events = parse_muse_events(result.stdout)
             if self.last_events["terminal"] != "completed":
                 raise ReasonerError(f"Muse researcher run ended {self.last_events['terminal']}")
-            proposed = validate_edit(playbook_text, skill.read_text(encoding="utf-8"))
+            written = skill.read_text(encoding="utf-8")
+            reply = (self.last_events.get("message") or "").strip()
+            if written == playbook_text and reply.startswith("---"):
+                # The model answered with the full SKILL.md instead of editing the file.
+                written = reply + "\n"
+            proposed = validate_edit(playbook_text, written)
             if self.record:
                 with Path(self.record).open("a", encoding="utf-8") as stream:
                     stream.write(json.dumps({"key": key, "playbook": proposed, "events": self.last_events}) + "\n")

@@ -6,6 +6,13 @@ iteration is journalled with its hypothesis, diff, scores and decision, and the
 journal is shown to the next proposal so rejected edits are not proposed again.
 Held-out seeds are scored once, at the end, and never shown to the researcher.
 
+Acceptance (AR-3) is ``lexicographic`` (``research.improves``: any gain counts) or
+``bootstrap`` (``research.paired_bootstrap``: the gain must survive a paired
+bootstrap over (case, seed) units at level ``alpha``). ``auto`` picks bootstrap for
+the stochastic ``reason`` policy and lexicographic for the deterministic offline
+policies. ``repeats`` scores every playbook that many times per seed, which
+multiplies policy cost but lets the bootstrap see run-to-run noise.
+
 A run directory holds all state, so ``resume=True`` continues an interrupted run::
 
     state.json          incumbent playbook, its training score, counters, spend
@@ -31,7 +38,7 @@ from pathlib import Path
 
 from .bench import STRATEGY_SETTINGS, strategy_settings
 from .reasoner import BudgetError
-from .research import _InvalidEdit, _write_json, evaluate, improves, require_replay, validate_edit
+from .research import _InvalidEdit, _write_json, evaluate, improves, paired_bootstrap, require_replay, score, validate_edit
 from .synthetic import CASES, PLANTED_CASES
 
 HISTORY_LIMIT = 20
@@ -56,7 +63,8 @@ def _usage_cost(usage) -> float:
 
 def _history(journal: list[dict]) -> list[dict]:
     """What the researcher may see: its own past proposals and their training scores."""
-    keep = ("iteration", "hypothesis", "prediction", "diff", "accepted", "reason", "score", "incumbent_score")
+    keep = ("iteration", "hypothesis", "prediction", "diff", "accepted", "reason", "score", "incumbent_score",
+            "acceptance")
     return [{k: e.get(k) for k in keep} for e in journal[-HISTORY_LIMIT:]]
 
 
@@ -92,7 +100,7 @@ class _Run:
 
 def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_seeds=(0, 1, 2), heldout_seeds=(3, 4),
              policy="reason", jobs=1, max_iterations=10, patience=3, max_usd=None, max_wall_s=None, resume=False,
-             evaluate_fn=evaluate, **options) -> dict:
+             acceptance="auto", repeats=1, alpha=0.05, evaluate_fn=evaluate, **options) -> dict:
     """Run the autoloop in ``output_dir`` until a stop condition; return the summary."""
     from .playbook import load_playbook
 
@@ -105,6 +113,7 @@ def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_se
         config = state["config"]
         cases, train_seeds, heldout_seeds = config["cases"], tuple(config["train_seeds"]), tuple(config["heldout_seeds"])
         policy = config["policy"]
+        acceptance, repeats, alpha = config.get("acceptance", "lexicographic"), config.get("repeats", 1), config.get("alpha", alpha)
     else:
         cases = list(cases or CASES)
         train_seeds, heldout_seeds = tuple(train_seeds), tuple(heldout_seeds)
@@ -112,23 +121,42 @@ def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_se
             raise ValueError("train and held-out seeds must be non-empty and disjoint")
         if any(c not in CASES and c not in PLANTED_CASES for c in cases):
             raise ValueError("unknown case")
-        if jobs < 1 or max_iterations < 0 or patience < 1:
-            raise ValueError("invalid jobs, max_iterations or patience")
+        if jobs < 1 or max_iterations < 0 or patience < 1 or repeats < 1 or not 0 < alpha < 1:
+            raise ValueError("invalid jobs, max_iterations, patience, repeats or alpha")
+        if acceptance == "auto":
+            acceptance = "bootstrap" if policy == "reason" else "lexicographic"
+        if acceptance not in ("lexicographic", "bootstrap"):
+            raise ValueError(f"unknown acceptance rule {acceptance!r}")
         root.mkdir(parents=True, exist_ok=False)
         config = {"cases": cases, "train_seeds": list(train_seeds), "heldout_seeds": list(heldout_seeds),
-                  "policy": policy, "playbook": str(playbook)}
+                  "policy": policy, "playbook": str(playbook), "acceptance": acceptance, "repeats": repeats,
+                  "alpha": alpha}
         state = {"config": config, "started_at": _now(), "iteration": 0, "rejected_in_a_row": 0, "spent_usd": 0.0,
                  "wall_s": 0.0}
     if policy == "reason":
         require_replay(options.get("replay"))
     takes_history = "history" in inspect.signature(researcher.propose).parameters
 
+    def scored(path, seeds, directory):
+        if repeats == 1:
+            return evaluate_fn(path, cases, seeds, policy, directory, jobs=jobs, **options)
+        parts = [evaluate_fn(path, cases, seeds, policy, directory / f"r{k}", jobs=jobs, **options)
+                 for k in range(repeats)]
+        runs = [dict(run, repeat=k) for k, part in enumerate(parts) for run in part["runs"]]
+        return {"runs": runs, "score": score(runs),
+                "failing_transcripts": [t for part in parts for t in part["failing_transcripts"]]}
+
+    def decide(trial, incumbent, index):
+        if acceptance == "bootstrap":
+            return paired_bootstrap(trial["runs"], incumbent["runs"], alpha=alpha, seed=index)
+        return improves(trial["score"], incumbent["score"]), {"rule": "lexicographic"}
+
     t0 = time.monotonic()
     wall_before = float(state.get("wall_s", 0.0))
     if not resume:
         text = load_playbook(playbook).data.decode("utf-8")
         path = run.playbook(0, text)
-        report = evaluate_fn(path, cases, train_seeds, policy, root / "train" / "000", jobs=jobs, **options)
+        report = scored(path, train_seeds, root / "train" / "000")
         state.update(incumbent=path.name, incumbent_sha256=_sha(text), incumbent_score=report["score"],
                      initial=path.name, spent_usd=state["spent_usd"] + (report["score"].get("cost_usd") or 0.0))
         (root / "train" / "000").mkdir(parents=True, exist_ok=True)
@@ -163,9 +191,15 @@ def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_se
         except BudgetError:
             stop = "researcher budget error"
             break
+        except _InvalidEdit as error:
+            # The researcher validated its own output and it was unusable: a rejected iteration.
+            proposal = error
         usage = getattr(researcher, "last_usage", None)
         state["spent_usd"] += _usage_cost(usage)
         entry["researcher_usage"] = usage
+        events = getattr(researcher, "last_events", None)
+        if isinstance(events, dict):
+            entry["researcher_events"] = {k: events.get(k) for k in ("terminal", "usage")}
         if proposal is None:
             stop = "researcher has no further proposal"
             break
@@ -173,6 +207,8 @@ def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_se
             entry["hypothesis"], entry["prediction"] = proposal.get("hypothesis"), proposal.get("prediction")
             proposal = proposal.get("skill")
         try:
+            if isinstance(proposal, _InvalidEdit):
+                raise proposal
             if not isinstance(proposal, str):
                 raise _InvalidEdit("researcher returned no SKILL.md text")
             proposed = validate_edit(text, proposal)
@@ -180,14 +216,14 @@ def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_se
             entry.update(accepted=False, reason=f"invalid edit: {error}", score=None, playbook=None, diff=None)
         else:
             candidate = run.playbook(index, proposed)
-            trial = evaluate_fn(candidate, cases, train_seeds, policy, root / "train" / f"{index:03d}", jobs=jobs, **options)
+            trial = scored(candidate, train_seeds, root / "train" / f"{index:03d}")
             (root / "train" / f"{index:03d}").mkdir(parents=True, exist_ok=True)
             _write_json(root / "train" / f"{index:03d}" / "report.json", trial)
             state["spent_usd"] += trial["score"].get("cost_usd") or 0.0
-            accepted = improves(trial["score"], state["incumbent_score"])
+            accepted, stats = decide(trial, report, index)
             entry.update(accepted=accepted, score=trial["score"], playbook=candidate.name, sha256=_sha(proposed),
-                         diff=_diff(text, proposed), reason="improves on the incumbent" if accepted else
-                         "does not improve on the incumbent")
+                         diff=_diff(text, proposed), acceptance=stats, reason="improves on the incumbent" if accepted
+                         else stats.get("reason") or "does not improve on the incumbent")
             if accepted:
                 text, report = proposed, trial
                 state.update(incumbent=candidate.name, incumbent_sha256=_sha(proposed), incumbent_score=trial["score"])
@@ -200,9 +236,8 @@ def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_se
     initial = root / "playbooks" / state["initial"]
     final = root / "playbooks" / state["incumbent"]
     stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime())
-    held_initial = evaluate_fn(initial, cases, heldout_seeds, policy, root / "heldout" / f"initial-{stamp}", jobs=jobs, **options)
-    held_final = held_initial if final == initial else evaluate_fn(
-        final, cases, heldout_seeds, policy, root / "heldout" / f"final-{stamp}", jobs=jobs, **options)
+    held_initial = scored(initial, heldout_seeds, root / "heldout" / f"initial-{stamp}")
+    held_final = held_initial if final == initial else scored(final, heldout_seeds, root / "heldout" / f"final-{stamp}")
     state["wall_s"] = wall_before + time.monotonic() - t0
     state["stopped"] = {"at": _now(), "reason": stop}
     run.save_state(state)
@@ -212,6 +247,9 @@ def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_se
                "train_initial": json.loads((root / "train" / "000" / "report.json").read_text())["score"],
                "train_final": state["incumbent_score"], "heldout_initial": held_initial["score"],
                "heldout_final": held_final["score"], "spent_usd": state["spent_usd"], "wall_s": state["wall_s"],
+               "acceptance": state["config"].get("acceptance", "lexicographic"),
+               "heldout_comparison": paired_bootstrap(held_final["runs"], held_initial["runs"], alpha=alpha)[1]
+               if final != initial and held_final["runs"] else None,
                "cases": cases, "train_seeds": list(train_seeds), "heldout_seeds": list(heldout_seeds)}
     _write_json(root / "summary.json", summary)
     return summary

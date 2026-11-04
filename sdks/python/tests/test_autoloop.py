@@ -150,3 +150,121 @@ def test_resume_continues_without_rescoring_the_baseline(tmp_path):
 def test_resume_requires_a_run(tmp_path):
     with pytest.raises(ValueError):
         autoloop(researcher=Proposer([]), output_dir=tmp_path / "none", resume=True)
+
+
+# --- AR-3: paired bootstrap acceptance -------------------------------------------
+
+from autophys.research import paired_bootstrap
+
+
+def _runs(correct_by_unit, error=0.1):
+    return [{"row": {"case": case, "seed": seed}, "score": {"correct": c, "mean_log_error": error, "cost_usd": 0.0}}
+            for (case, seed), c in correct_by_unit.items()]
+
+
+UNITS = [(f"c{i % 7}", i // 7) for i in range(21)]
+
+
+def test_bootstrap_rejects_a_single_lucky_unit_and_accepts_a_consistent_gain():
+    base = {u: False for u in UNITS}
+    lucky = {**base, UNITS[0]: True}
+    accepted, stats = paired_bootstrap(_runs(lucky), _runs(base))
+    assert not accepted and stats["metric"] == "correct" and stats["improved"] == 1 and stats["p_better"] < 0.95
+    consistent = {**base, **{u: True for u in UNITS[:6]}}
+    accepted, stats = paired_bootstrap(_runs(consistent), _runs(base))
+    assert accepted and stats["improved"] == 6 and stats["p_better"] >= 0.95
+
+
+def test_bootstrap_falls_back_to_error_and_rejects_mismatched_or_unchanged_units():
+    same = {u: True for u in UNITS}
+    accepted, stats = paired_bootstrap(_runs(same, error=0.01), _runs(same, error=0.5))
+    assert accepted and stats["metric"] == "mean_log_error"
+    accepted, stats = paired_bootstrap(_runs(same), _runs(same))
+    assert not accepted and stats["reason"] == "no unit changed"
+    accepted, stats = paired_bootstrap(_runs({UNITS[0]: True}), _runs({UNITS[1]: False}))
+    assert not accepted and "same units" in stats["reason"]
+    # Missing estimates (null/inf errors) are capped rather than breaking the comparison.
+    nulls = [dict(r, score=dict(r["score"], mean_log_error=None)) for r in _runs(same)]
+    accepted, stats = paired_bootstrap(_runs(same), nulls)
+    assert accepted and stats["metric"] == "mean_log_error"
+
+
+class UnitEval:
+    """Per-unit fake evaluator: 'Lucky.' fixes one unit, 'Solid.' fixes six; counts repeats."""
+
+    def __init__(self):
+        self.dirs = []
+
+    def __call__(self, path, cases, seeds, policy, directory, **kw):
+        self.dirs.append(directory.name)
+        text = path.read_text()
+        fixed = 6 if "Solid." in text else 1 if "Lucky." in text else 0
+        runs = _runs({u: i < fixed for i, u in enumerate(UNITS)})
+        return {"runs": runs, "score": score([r["score"] for r in runs]), "failing_transcripts": []}
+
+
+def test_autoloop_bootstrap_keeps_only_the_robust_edit(tmp_path):
+    researcher = Proposer(["\nLucky.\n", "\nSolid.\n"])
+    summary, _ = _run(tmp_path, researcher, evaluate_fn=UnitEval(), acceptance="bootstrap", patience=5)
+    journal = [json.loads(l) for l in (tmp_path / "run/journal.jsonl").read_text().splitlines()]
+    assert [e["accepted"] for e in journal] == [False, True]
+    assert journal[0]["acceptance"]["improved"] == 1 and journal[0]["acceptance"]["rule"] == "paired-bootstrap"
+    assert summary["acceptance"] == "bootstrap" and summary["final_playbook"] == "002.md"
+    assert summary["heldout_comparison"]["improved"] == 6
+    # The researcher sees why its earlier edit was rejected.
+    assert researcher.histories[1][0]["acceptance"]["p_better"] < 0.95
+
+
+def test_lexicographic_keeps_the_lucky_edit_and_auto_resolves_by_policy(tmp_path):
+    summary, _ = _run(tmp_path, Proposer(["\nLucky.\n"]), evaluate_fn=UnitEval())
+    assert summary["acceptance"] == "lexicographic" and summary["accepted"] == 1
+    with pytest.raises(ValueError):
+        (tmp_path / "x").mkdir()
+        _run(tmp_path / "x", Proposer([]), acceptance="vibes")
+
+
+def test_repeats_score_each_playbook_several_times(tmp_path):
+    evaluate = UnitEval()
+    summary, _ = _run(tmp_path, Proposer(["\nSolid.\n"]), evaluate_fn=evaluate, acceptance="bootstrap", repeats=2)
+    assert evaluate.dirs[:2] == ["r0", "r1"] and summary["train_final"]["correct"] == 12
+    state = json.loads((tmp_path / "run/state.json").read_text())
+    assert state["config"]["repeats"] == 2 and state["config"]["acceptance"] == "bootstrap"
+
+
+def test_bootstrap_autoloop_finds_the_planted_fix(tmp_path):
+    start = tmp_path / "start.md"
+    start.write_text(NEVER)
+    summary = autoloop(researcher=HeuristicResearcher(), output_dir=tmp_path / "run", playbook=start,
+                       policy="fake-reasoner", cases=["battery-biased"], train_seeds=(0, 1, 2, 3, 4),
+                       heldout_seeds=(5, 6), acceptance="bootstrap")
+    assert summary["accepted"] == 1 and summary["train_final"]["correct"] == 5
+    entry = json.loads((tmp_path / "run/journal.jsonl").read_text().splitlines()[0])
+    assert entry["acceptance"]["p_better"] == 1.0
+
+
+def test_an_invalid_setting_value_is_a_rejected_edit_not_a_crash(tmp_path):
+    researcher = Proposer(["\n- compare_variants: always\n"])
+    summary, evaluate = _run(tmp_path, researcher, patience=5)
+    [entry] = [json.loads(l) for l in (tmp_path / "run/journal.jsonl").read_text().splitlines()]
+    assert entry["reason"].startswith("invalid edit") and "compare_variants" in entry["reason"]
+    assert summary["stop_reason"] == "researcher has no further proposal"
+
+
+def test_a_researcher_that_rejects_its_own_output_is_journalled(tmp_path):
+    from autophys.research import _InvalidEdit, validate_edit
+
+    class SelfValidating:
+        last_usage = None
+        last_events = {"terminal": "completed", "usage": {"calls": 3}, "message": "ok"}
+        def __init__(self):
+            self.n = 0
+        def propose(self, text, report):
+            self.n += 1
+            if self.n == 1:
+                return validate_edit(text, text)  # raises: unchanged
+            return None
+    summary, _ = _run(tmp_path, SelfValidating(), patience=5)
+    [entry] = [json.loads(l) for l in (tmp_path / "run/journal.jsonl").read_text().splitlines()]
+    assert entry["reason"] == "invalid edit: researcher left SKILL.md unchanged"
+    assert entry["researcher_events"] == {"terminal": "completed", "usage": {"calls": 3}}
+    assert summary["stop_reason"] == "researcher has no further proposal"

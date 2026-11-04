@@ -166,6 +166,20 @@ def test_muse_failures(tmp_path, monkeypatch, body, error):
         MuseCLIResearcher(binary=fake_muse(tmp_path, body), timeout=.2).propose(load_playbook().data.decode(), {})
 
 
+def test_muse_reply_is_used_when_the_file_is_unchanged(tmp_path, monkeypatch):
+    """Seen live 2026-11-04: Muse answered with the SKILL.md text instead of editing the file."""
+    monkeypatch.setenv("AUTOPHYS_ALLOW_LIVE_REASON", "1")
+    text = load_playbook().data.decode()
+    reply = text.rstrip("\n") + "\nCompare variants when the fit is poor.\n"
+    body = (
+        "import sys, json\nfrom pathlib import Path\n"
+        "prompt = Path(sys.argv[sys.argv.index('--prompt-file')+1]).read_text()\n"
+        "assert 'Write the edited SKILL.md to that file in place' in prompt\n"
+        "print(json.dumps({'schema_version': 1, 'payload_type': 'run.terminal.completed',"
+        " 'payload': {'terminal': 'completed', 'text': " + repr(reply) + "}}))\n")
+    assert MuseCLIResearcher(binary=fake_muse(tmp_path, body)).propose(text, {}) == reply
+
+
 def test_researcher_replay_guard(tmp_path, monkeypatch):
     monkeypatch.delenv("AUTOPHYS_ALLOW_LIVE_REASON", raising=False)
     monkeypatch.delenv("AUTOPHYS_REASON_REPLAY", raising=False)

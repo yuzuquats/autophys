@@ -123,7 +123,7 @@ def cmd_autoloop(args, out=sys.stdout):
                           cases=args.case, train_seeds=args.train_seeds, heldout_seeds=args.heldout_seeds,
                           policy=args.policy, jobs=args.jobs, max_iterations=args.max_iterations,
                           patience=args.patience, max_usd=args.max_usd, max_wall_s=args.max_wall_s,
-                          resume=args.resume,
+                          resume=args.resume, acceptance=args.acceptance, repeats=args.repeats, alpha=args.alpha,
                           model_spec=ModelSpec("policy", args.route, args.model, args.effort, images=args.images),
                           replay=args.replay, record=args.record)
     except (ReasonerError, ValueError, OSError) as error:
@@ -247,6 +247,10 @@ def build_parser() -> argparse.ArgumentParser:
     pa.add_argument("--patience", type=int, default=3, help="stop after this many rejections in a row")
     pa.add_argument("--max-usd", type=float, help="stop once researcher and policy spend reach this")
     pa.add_argument("--max-wall-s", type=float)
+    pa.add_argument("--acceptance", choices=("auto", "lexicographic", "bootstrap"), default="auto",
+                    help="keep rule: any gain, or a paired bootstrap gain (auto: bootstrap for --policy reason)")
+    pa.add_argument("--repeats", type=int, default=1, help="score each playbook this many times per seed")
+    pa.add_argument("--alpha", type=float, default=0.05, help="bootstrap level: accept when P(better) >= 1 - alpha")
     pa.add_argument("--jobs", type=int, default=1)
     pe = sub.add_parser("export-trajectories", help="export recorded reasoner decisions as JSONL")
     pe.add_argument("source")
