@@ -46,16 +46,22 @@ export function experimentSections(c: ProjectConfig): Section[] {
   });
 }
 
-/** Known settings (physical constants the experiments share), once per project; a value that differs between experiments lists each. */
+/**
+ * Known settings (physical constants the experiments use), once per project. A value every
+ * experiment declares the same is one row; one that differs gets a row per experiment, named.
+ */
 export function knownSection(c: ProjectConfig): Section | null {
-  const known = new Map<string, { s: SettingSpec; values: Set<string> }>();
+  const known = new Map<string, { s: SettingSpec; uses: { experiment: string; value: string }[] }>();
   for (const e of c.catalog) for (const s of e.settings) if (roleOf(s) === "known") {
-    const k = known.get(s.name) ?? { s, values: new Set<string>() };
-    k.values.add(value(s));
+    const k = known.get(s.name) ?? { s, uses: [] };
+    k.uses.push({ experiment: e.label, value: value(s) });
     known.set(s.name, k);
   }
   if (!known.size) return null;
-  return { heading: "Known values", caption: "Constants every experiment shares", blocks: [{ kind: "facts", rows: [...known.values()].map(({ s, values }) => ({ label: cap(s.label), value: [...values].join(", ") })) }] };
+  const rows = [...known.values()].flatMap(({ s, uses }) => new Set(uses.map((u) => u.value)).size === 1
+    ? [{ label: cap(s.label), value: uses[0].value }]
+    : uses.map((u) => ({ label: cap(s.label), value: u.value, note: u.experiment })));
+  return { heading: "Known values", caption: "Constants the experiments are run with", blocks: [{ kind: "facts", rows }] };
 }
 
 export function configurationSections(c: ProjectConfig): Section[] {

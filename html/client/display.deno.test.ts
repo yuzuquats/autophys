@@ -67,5 +67,22 @@ Deno.test("configuration cards group settings by role", () => {
   assertEquals(pulse.blocks.slice(3).map((b) => b.kind === "text" ? b.text : ""), ["Recorded for 300 s @ 2 Hz", "Not supported by this UI: phase-portrait view"]);
   assertEquals(rest.blocks.map((b) => b.kind === "text" ? b.text : b.kind), ["Recorded for 600 s @ 1 Hz"]);
   const known = knownSection(c)!;
-  assertEquals(known.blocks, [{ kind: "facts", rows: [{ label: "Capacity", value: "5 Ah" }] }]);
+  assertEquals(known.blocks, [{ kind: "facts", rows: [{ label: "Capacity", value: "5 Ah" }] }], "a value every experiment shares is one row");
+});
+
+Deno.test("known values that differ keep the experiment they belong to", () => {
+  const differing = { ...config, catalog: { ...config.catalog, rest: { settings: { duration: 600, rate: 1, capacity_ah: 2.5 } } } };
+  const known = knownSection(mapConfig(differing, 1, "h", display))!;
+  assertEquals(known.blocks, [{ kind: "facts", rows: [
+    { label: "Capacity", value: "5 Ah", note: "Pulse train" }, { label: "Capacity", value: "2.5 Ah", note: "Rest" },
+  ] }]);
+});
+
+Deno.test("display: manifest keys are own properties only", () => {
+  const proto = { ...display, experiments: { pulse_train: { ...display.experiments.pulse_train, views: ["constructor", "toString", "edges"] } } };
+  const pulse = mapConfig(config, 1, "h", proto).catalog[0];
+  assertEquals([pulse.viewHints, pulse.unsupportedViews], [["zoom:edges"], ["constructor", "toString"]]);
+  const named = { ...config, catalog: { constructor: { settings: { toString: 1 } } } };
+  const c = mapConfig(named, 1, "h", { format: 1, channels: {}, settings: {}, experiments: {} }), e = c.catalog[0];
+  assertEquals([e.label, e.description, e.settings.map((s) => [s.label, s.role])], ["Constructor", undefined, [["toString", "other"]]], "undeclared names are not found on the prototype");
 });

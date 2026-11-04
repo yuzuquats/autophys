@@ -54,7 +54,9 @@ function experimentSpec(id: string, entry: unknown, output: Channel): Experiment
   return { id: id as ExperimentKind, label: humanize(id), input: null, output, settings, maxRuns: typeof e.max_runs === "number" ? e.max_runs : null, viewHints: [] };
 }
 
-const VIEWS: Record<string, ViewHint> = { envelope: "envelope", spectrum: "frequency", edges: "zoom:edges" };
+const VIEWS = new Map<string, ViewHint>([["envelope", "envelope"], ["spectrum", "frequency"], ["edges", "zoom:edges"]]);
+/** Manifest keys are data: only own properties count, so a name such as "constructor" is never mistaken for a declaration. */
+const has = (o: Obj, key: string) => Object.hasOwn(o, key);
 const ROLES = new Set(["drive", "sampling", "known", "other"]);
 
 /**
@@ -69,7 +71,7 @@ export function applyDisplay(c: ProjectConfig, display: unknown): ProjectConfig 
   const channels = obj(d.channels), settings = obj(d.settings), params = obj(d.params), experiments = obj(d.experiments);
   const channel = (name: string, fallback: Channel): Channel => {
     const ch = obj(channels[name]);
-    return name in channels ? { name, label: str(ch.label) || name, unit: str(ch.unit) } : fallback;
+    return has(channels, name) ? { name, label: str(ch.label) || name, unit: str(ch.unit) } : fallback;
   };
   const inputName = Object.keys(channels).find((k) => obj(channels[k]).role === "input");
   return {
@@ -79,7 +81,7 @@ export function applyDisplay(c: ProjectConfig, display: unknown): ProjectConfig 
       return { ...p, ...(str(m.label) ? { label: str(m.label) } : {}), ...(str(m.description) ? { description: str(m.description) } : {}) };
     }),
     catalog: c.catalog.map((e) => {
-      const m = obj(experiments[e.id]), declared = e.id in experiments, views = strs(m.views), preview = obj(m.preview);
+      const m = obj(experiments[e.id]), declared = has(experiments, e.id), views = strs(m.views), preview = obj(m.preview);
       // An experiment drives the input channel when its preview of that channel is not all zero (free decay records zeros).
       const u = inputName ? nums(obj(preview.u)[inputName]) : [], t = nums(preview.t), drives = u.length > 1 && u.length === t.length && u.some((v) => v !== 0);
       return {
@@ -89,13 +91,13 @@ export function applyDisplay(c: ProjectConfig, display: unknown): ProjectConfig 
         output: channel(e.output.name, e.output),
         settings: e.settings.map((s) => {
           const sd = obj(settings[s.name]), role = str(sd.role);
-          return s.name in settings
+          return has(settings, s.name)
             ? { ...s, label: str(sd.label) || s.name, unit: typeof sd.unit === "string" ? sd.unit : s.unit, role: (ROLES.has(role) ? role : "other") as SettingRole }
             : { ...s, label: s.name, role: "other" as const };
         }),
         ...(declared ? {
-          viewHints: views.filter((v) => v in VIEWS).map((v) => VIEWS[v]),
-          unsupportedViews: views.filter((v) => !(v in VIEWS)),
+          viewHints: views.filter((v) => VIEWS.has(v)).map((v) => VIEWS.get(v)!),
+          unsupportedViews: views.filter((v) => !VIEWS.has(v)),
           description: str(m.description),
           preview: drives ? { t, u } : null,
         } : {}),
