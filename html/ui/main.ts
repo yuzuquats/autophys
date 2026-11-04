@@ -35,11 +35,21 @@ export function mainMarkup(model: MainModel, width: number, classes: MainClasses
   } else if (model.body.kind === "missing" || model.body.kind === "unavailable") {
     body = `<section class="ap-viewer ap-state">${emptyMarkup(model.body.title, model.body.description)}</section>`;
   } else if (model.body.kind === "configuration") {
-    const card = (cls: string, title: string, aside: string | undefined, inner: string) =>
-      `<section class="ap-card ${cls}"><std-round floating bg="var(--ap-card-bg)" border="var(--ap-line)" radius="10"></std-round><header><h3>${esc(title)}</h3>${aside ? `<span>${esc(aside)}</span>` : ""}</header>${inner}</section>`;
-    const section = (cls: string) => (s: Section) => card(cls, s.heading, undefined, s.blocks.map(blockMarkup).join(""));
-    const params = card("ap-config-params", "Parameters", undefined, `<p class="ap-text">Bounds and initial guess, each on its fitting scale</p>${chartMarkup(model.body.parameters, width - 48, "config")}`);
-    body = `<div class="ap-viewer ap-configuration"><div data-ap-grid="260">${[params, ...model.body.experiments.map(section("ap-config-exp"))].join("")}</div><div data-ap-grid="260">${model.body.sections.map(section("ap-config-limits")).join("")}</div></div>`;
+    // Each card's header is a list cell: the title with its caption under it (hydrated to std-list-cell-layout).
+    const card = (cls: string, title: string, caption: string, inner: string) =>
+      `<section class="ap-card ${cls}"><std-round floating bg="var(--ap-card-bg)" border="var(--ap-line)" radius="10"></std-round><header class="ap-card-head" data-ap-cell><h3>${esc(title)}</h3>${caption ? `<p>${esc(caption)}</p>` : ""}</header>${inner}</section>`;
+    // An experiment's first block is its caption text (channels and run limit).
+    const section = (cls: string) => (s: Section) => {
+      const [first, ...rest] = s.blocks, caption = cls === "ap-config-exp" && first?.kind === "text" ? first.text : "";
+      return card(cls, s.heading, caption, (caption ? rest : s.blocks).map(blockMarkup).join(""));
+    };
+    // A scale or tag every parameter shares moves to the caption instead of repeating on each row.
+    const rows = model.body.parameters.rows, shared = <T,>(f: (r: typeof rows[number]) => T) => rows.length > 0 && rows.every((r) => f(r) === f(rows[0])) ? f(rows[0]) : undefined;
+    const scale = shared((r) => r.scale), tag = shared((r) => r.tag?.text);
+    const parameters = { ...model.body.parameters, rows: rows.map((r) => ({ ...r, scale: scale ? undefined : r.scale, tag: tag ? undefined : r.tag })) };
+    const params = card("ap-config-params", "Parameters", ["Bounds and initial guess", scale, tag && `all ${tag}`].filter(Boolean).join(" · "), chartMarkup(parameters, width - 48, "config"));
+    const cards = [params, ...model.body.experiments.map(section("ap-config-exp")), ...model.body.sections.map(section("ap-config-limits"))];
+    body = `<div class="ap-viewer ap-configuration"><div data-ap-grid="260">${cards.join("")}</div></div>`;
   } else {
     const cols = Math.max(1, model.body.columns ?? 1);
     const inner = Math.max(120, width - 24);

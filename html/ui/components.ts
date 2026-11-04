@@ -12,6 +12,7 @@ import { Skeleton } from "@tento-ui/components/skeleton/skeleton";
 import { SelectInput } from "@tento-ui/components/input/select-input";
 import { Button } from "@tento-ui/components/button/button";
 import { GridLayout } from "@tento-ui/components/grid/grid-layout";
+import { ListCellLayout } from "@tento-ui/components/list/list-cell-layout";
 import "@tento-ui/components/round";
 import { LabelTimeline } from "./timeline.ts";
 import type { IntentHandler } from "./intent.ts";
@@ -32,12 +33,23 @@ export function hydrateComponents(host: HTMLElement, onIntent: IntentHandler): v
     }
     marker.replaceChildren(empty);
   }
+  for (const marker of host.querySelectorAll<HTMLElement>("[data-ap-cell]")) {
+    // The rendered title and caption become the cell's content slot (makeText needs tento's global DOM extensions).
+    const content = document.createElement("div");
+    content.className = "ap-cell-text";
+    content.append(...marker.children);
+    const cell = ListCellLayout.makeWith({ $content: content });
+    cell.style.cssText = "--list-cell-padding:0;--list-cell-layout-hover-color:transparent";
+    marker.replaceChildren(cell);
+  }
   for (const marker of host.querySelectorAll<HTMLElement>("[data-ap-grid]")) {
     const grid = GridLayout.make();
     grid.style.cssText = "display:block;width:100%";
     grid.append(...marker.children);
     marker.replaceChildren(grid);
     grid.bind({ blockSpacingPx: 10, inlineSpacingPx: 10, minWidthPx: Number(marker.dataset.apGrid) || 260 });
+    // Every render replaces the grid; place the cards now instead of showing them stacked for a frame.
+    grid.layoutGridSync();
   }
   for (const marker of host.querySelectorAll<HTMLElement>("[data-ap-timeline]")) {
     marker.replaceChildren(LabelTimeline.makeWith(JSON.parse(marker.dataset.apTimeline!)));
