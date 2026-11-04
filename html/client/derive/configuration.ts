@@ -18,7 +18,7 @@ export function experimentSections(c: ProjectConfig): Section[] {
       ...(e.settings.length ? [{ kind: "table" as const, rows: [
         { dim: true, cells: [{ text: "Setting" }, { text: "Default", end: true }, { text: "Allowed", end: true }] },
         ...e.settings.map((s) => ({ cells: [{ text: cap(s.label) }, { text: engineering(s.default, settingUnit(s)), end: true },
-          { text: `${engineering(s.lo, settingUnit(s))}–${engineering(s.hi, settingUnit(s))}`, end: true }] })),
+          { text: s.lo === s.hi ? "fixed" : `${engineering(s.lo, settingUnit(s))}–${engineering(s.hi, settingUnit(s))}`, end: true }] })),
       ] }] : []),
     ],
   }));

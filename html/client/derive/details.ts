@@ -124,8 +124,8 @@ function investigationDetails(project: Project, inv: Investigation): DetailsMode
       ] }] },
       whereItStands(c, latestFit(inv)),
       { heading: "Run", blocks: [{ kind: "facts", rows: [
-        { label: "Investigation ID", value: inv.id }, { label: "Simulator", value: simulatorLabel(c) }, { label: "Source hash", value: c.simulator.sourceHash.slice(0, 6) || "–" },
-        { label: "Config", value: `v${c.version} · ${c.hash.slice(0, 8)}` }, { label: "Free", value: inv.free.join(", ") },
+        { label: "Investigation ID", value: inv.id }, { label: "Simulator", value: simulatorLabel(c) }, { label: "Source hash", value: shortHash(c.simulator.sourceHash) || "–" },
+        { label: "Config", value: `v${c.version} · ${shortHash(c.hash)}` }, { label: "Free", value: inv.free.join(", ") },
         { label: "Policy", value: c.policy.label }, { label: "Seed", value: Number.isFinite(inv.seed) ? String(inv.seed) : "not recorded" },
       ] }] },
     ],
