@@ -73,7 +73,8 @@ export function createTutorial(steps: readonly TutorialStep[]): Tutorial {
     clear: () => ring.hide(),
     step(delta) {
       const moved = delta > 0 ? stepper.advance() : stepper.back();
-      if (moved) render(true);
+      // Arrow keys page through the steps: the text swaps in place, without the Next button's rise.
+      if (moved) render(false);
       return moved;
     },
     onDone: null,
