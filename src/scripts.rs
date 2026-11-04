@@ -44,6 +44,7 @@ fn users_commands() -> Scripts<()> {
         .add_command(users_list)
         .add_command(users_add)
         .add_command(users_remove)
+        .add_command(users_set)
 }
 fn db_commands() -> Scripts<()> {
     Scripts::new(())
@@ -282,7 +283,7 @@ admin_command!(
 admin_command!(
     users_add,
     "add",
-    "Invite EMAIL (or re-invite: a password reset); prints a one-time link; --public-url, --server-db",
+    "Invite EMAIL (or re-invite: a password reset); prints a one-time link; --read-only, --public-url, --server-db",
     "users",
     "add"
 );
@@ -292,6 +293,13 @@ admin_command!(
     "Delete EMAIL's account and end its sessions; --server-db",
     "users",
     "remove"
+);
+admin_command!(
+    users_set,
+    "set",
+    "Make EMAIL read-only or read-write again: --read-only | --read-write; --server-db",
+    "users",
+    "set"
 );
 
 #[derive(CommandArg, Deserialize, Clone, Debug)]
