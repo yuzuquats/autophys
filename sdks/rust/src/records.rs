@@ -163,6 +163,54 @@ impl ReasonMetadata {
                 _ => {}
             }
         }
-        Ok(out)
+        Ok(out.with_live_total())
+    }
+
+    /// Until the outcome records `usage_total`, derive it from the steps with
+    /// the same rule, so a running investigation can show cost and tokens.
+    fn with_live_total(mut self) -> Self {
+        if self.usage_total.is_none() && self.steps.iter().any(|s| s.get("usage").is_some()) {
+            self.usage_total = Some(crate::usage::usage_total(&self.steps));
+        }
+        self
+    }
+}
+
+#[cfg(test)]
+mod live_total_tests {
+    use super::ReasonMetadata;
+    use serde_json::json;
+
+    #[test]
+    fn a_running_investigation_totals_its_steps_and_an_outcome_wins() {
+        let step =
+            |i, o, c| json!({"usage": {"input_tokens": i, "output_tokens": o, "cost_usd": c}});
+        let running = ReasonMetadata {
+            steps: vec![
+                step(100, 10, 0.5),
+                json!({"usage": {"prompt_tokens": 7}}),
+                step(50, 5, 0.25),
+            ],
+            ..Default::default()
+        }
+        .with_live_total();
+        assert_eq!(
+            running.usage_total,
+            Some(json!({"calls": 2, "input_tokens": 150, "output_tokens": 15, "cost_usd": 0.75}))
+        );
+        let recorded = json!({"calls": 9, "input_tokens": 1, "output_tokens": 1, "cost_usd": null});
+        let done = ReasonMetadata {
+            usage_total: Some(recorded.clone()),
+            steps: vec![step(100, 10, 0.5)],
+            ..Default::default()
+        }
+        .with_live_total();
+        assert_eq!(done.usage_total, Some(recorded));
+        let unpriced = ReasonMetadata {
+            steps: vec![json!({"observation": 1})],
+            ..Default::default()
+        }
+        .with_live_total();
+        assert_eq!(unpriced.usage_total, None, "no usage, no total");
     }
 }
