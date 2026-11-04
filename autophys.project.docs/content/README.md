@@ -1,5 +1,11 @@
 # autophys is a daemon that serves the tento cookbook shell, and grows from there
 
+Current contributor setup and layout are in [CONTRIBUTING.md](../../CONTRIBUTING.md)
+and [docs/README.md](../../docs/README.md). The bounded OSS portability batch is
+implemented and awaiting independent review; [oss-layout.md](oss-layout.md)
+records exact committed-export checks, retained dependencies and license blockers.
+The earlier skeleton/restructure description below remains historical context.
+
 Status: rev 4 (2026-11-04). The repo is restructured per the operator's
 S-1..S-3 rulings ([repo.md](repo.md)): one root crate on tento-web's
 file-based router, `html/` holding the routes, ui and client, and a vendored

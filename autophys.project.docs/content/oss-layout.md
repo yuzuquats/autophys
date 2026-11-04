@@ -1,6 +1,6 @@
 # Autophys contributors should need one checkout, not a fleet host
 
-Status: **bounded implementation plan, revision 1; no cleanup implemented yet.**
+Status: **implementation complete, independent review pending. Checked code revision 189a4ddd12f618882bcea00417dad8c9a026ffe5.**
 User authorization is folder structure and host/fleet portability before open source.
 The five-judge productionize campaign remains unstarted. Read this page first;
 [productionize-prep.md](productionize-prep.md) carries the earlier baseline.
@@ -67,3 +67,93 @@ kind: risk
 title: A portable checkout is not yet an open-source release
 Root and Rust SDK Cargo manifests say UNLICENSED, Python says Apache-2.0, and most vendored Tento packages have no included license grant. Preserve all existing notices and obtain the owner's license/provenance decision before publication. Cached dependency success cannot prove cold-network acquisition or every supported platform.
 ```
+
+## One checkout now builds and serves the product
+
+The plan landed in `b879fff` (I6abb40f1454745339b38dec7683e6869), the atomic
+layout/configuration batch in `b963d91` (I0a177e5bd5af4bd6bca61d5323834931),
+and executable Python selection plus remaining contributor caller fixes in
+`189a4dd` (I4964042f537649e6a014456807db33c1). The implementation adds
+CONTRIBUTING.md, docs/README.md, ops/package.sh, ops/README.md and vendor/README.md;
+updates root/SDK/plugin/training entry points; moves the unchanged unit template
+to ops/systemd together with its deploy reference; and changes training's
+interpreter and Modal SDK defaults. `ops/deploy.sh` remains at its old path.
+The example environment no longer selects the private hosted server.
+
+**OSS-2 — agent-chosen, pending operator review:** training now uses explicit
+`--python` / AUTOPHYS_TRAIN_PYTHON, else executable `python3` from PATH, keeping
+venv symlink spelling. The alternative is requiring a flag for every worker;
+PATH supports normal activated environments without an operator home layout.
+A user can restore the old interpreter through the existing environment override,
+at no data migration cost. Modal's SDK defaults to this checkout; separately
+shipped workers retain AUTOPHYS_SDK_DIR. Provider/account/model settings and
+live budget gates are unchanged.
+
+All final checks used a Git archive of the owned committed revision, not peer
+working drafts, under the external evidence directory. Its **2,847-file manifest
+SHA-256 is `4d713022ddf8f99a70c4833af37f7d9062362f3a0ccb10d0cd008310f17dda98`**,
+identical before and after verification. Vendored tree:
+`993f812519f8a55cfce96657996722981dad436f`. Raw command arrays, environments,
+receipts and the export remain external for independent review.
+
+```review-table
+| Check at the committed identity | Actual outcome and limit |
+| --- | --- |
+| cargo metadata --offline --locked --format-version 1 | 544 packages resolve; all 41 local packages are inside the export; no sibling source path |
+| cargo test --offline --locked -p autophys-cli --lib train::tests | 10 passed, 0 failed; includes PATH executable filtering and venv spelling; not the full workspace suite |
+| cargo build --offline --locked --bin autophys | exit 0; existing unused/dead-code warnings remain |
+| deno test --cached-only --allow-read --config html/deno.json html/ | 101 passed, 0 failed |
+| deno check --cached-only --config html/deno.json html/routes/index.root.ts | exit 0; existing experimentalDecorators deprecation warning |
+| Python pytest test_workbook.py test_conformance.py test_mcp.py test_muse.py | 74 passed, no skips, 23.79 seconds; existing Python 3.12.3 / NumPy 2.5.4 / SciPy 1.18.1 environment; no provider calls |
+| Real build-web from final export | exit 0; bundle and per-file emitter both ok. Deno wrapper enforced cached-only, no node_modules generation and denied network; existing esbuild 0.24.0 used; no dependency installation |
+| Real Linux pack and isolated HTTP smoke | health ok with embedded web_id; / and /index.root.js return 200. Source root deliberately nonexistent, Deno absent from PATH, fresh collection/server-db/cache. Child terminated in finally |
+| Ops command harness on final committed scripts | deploy invocation, rendered unit, legacy release root/restart and Deno config pass; package orders build/strip/pack, touches no service commands and refuses existing output/dirty source. Cargo/Deno/systemctl/curl are stand-ins here; no real deploy run by this task |
+| Python wheel via setuptools.build_meta | not verified: ModuleNotFoundError: No module named setuptools in both existing Autophys venvs; no install attempted |
+| Static checks | shell syntax, rustfmt, contributor file links, Deno/esbuild alias confinement and Python module compilation pass; Modal SDK expression resolves inside checkout without importing Modal |
+```
+
+The installed peer-managed service was separately observed healthy at commit
+`b963d916d58c781546074d16889fed2b5de8dd45`; that read-only observation is not a
+claim that this executor deployed it. Native macOS packaging, cold downloads,
+full workspace/Python batteries, cross-writer parity, a real browser, Muse
+launch and provider/training execution were not run in this bounded batch.
+The prep's known Muse SSH wrapper/cwd issue remains an optional-integration
+follow-up; changing its launcher was outside this layout batch.
+
+## The closed inventory distinguishes dependencies from host assumptions
+
+```review-table
+| Remaining item | Disposition |
+| --- | --- |
+| Vendor Rust/JS runtime libraries | Retained under the operator's vendor decision. Actual offline bundle and source-free packed serving work; no Lona account, fleet CLI or private host is required. Upstream vendor source still contains Lona adapters, examples/docs and tooling; extraction/pruning is separate architectural work, not a word replacement |
+| tento-dirs names and TENTO_APP_* defaults | Local compatibility paths for keys/cache; explicit standalone flags/overrides documented. AX-17 data locations were preserved without migration |
+| Optional deploy release namespace | Legacy default retained for installed callers; AUTOPHYS_RELEASE_ROOT permits user-selected absolute layout. Systemd, tunnel and fleet self.toml callers remain external and untouched |
+| Hostnames in auth/server/MCP tests and origin comments | Inert fixtures/examples; tests do not contact them. No product configuration selects those hosts |
+| Hosted demo link in html/routes/content.ts | Intentional optional pitch navigation owned by the active UI/pitch workstream; not SDK or daemon configuration. Historical SDK/project host names and measurements remain attributed |
+| Ignored target, SDK build metadata, node_modules, training data/runs, peer drafts | Inventoried recursively and preserved; not fresh-clone inputs. Existing real root target is still peer state and was not moved/deleted |
+| Agent surfaces | Existing tracked battery workflow is optional; generated host configuration was not edited |
+| Secret-shaped scan | No token/private-key-shaped matches in maintained source or relevant untracked/ignored SDK/training text. Seven credential-URL-shaped tracked matches were test fixtures; values were not copied to reports. This bounded shape scan is not a full security/history audit |
+```
+
+Release still needs the owner's license decision and complete vendored rights,
+notices and upstream provenance. Rust says UNLICENSED while Python says
+Apache-2.0; the vendor inventory has 32 named Cargo packages without a license
+field. Deno has no dependency lock, so cold acquisition/version reproducibility
+also remains unqualified. Python wheel creation remains an environment-blocked
+check; local import/contract tests do not replace it.
+
+Peer staging was protected with private indexes for scoped commits. A later
+training-loop draft arrived in src/train.rs during the reserved batch and was
+briefly included in this executor's tip; that tip was amended before any
+success claim, excluding the peer draft while retaining its working bytes
+byte-for-byte. The loop owner was notified to retain/recheck its unstaged work.
+Only the corrected final export is assessed above. Subsequent peer changes to
+src/train.rs, train/sft/README.md and modal_app.py remain outside this receipt;
+no adoption of those drafts is claimed.
+
+The external task fallback records implementation and verification done, with
+the root awaiting the parent's independent review. The task board CLI remains
+unavailable, and no SQLite write or board update is claimed. The full five-judge
+productionize campaign remains unstarted. No push, release, dependency install,
+real service deployment, GPU/training run or runtime-data cleanup was performed
+by this executor.
