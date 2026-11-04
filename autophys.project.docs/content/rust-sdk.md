@@ -597,14 +597,13 @@ The daemon test loads Python's actual replay golden and checks the listing,
 workspace and records views; the earlier proposal-context test remains.
 No HTML changes are part of phase 3b.
 
-Contract divergence for autophys/rs to resolve with autophys/py:
-in `d389c79`, Python `usage_total` sets cost to null for a raw usage
-dictionary before checking whether it has `input_tokens`. Thus an uncounted
-legacy provider dict can poison the cost of otherwise priced calls. Rust
-follows the explicitly agreed rule: skip legacy raw dictionaries entirely;
-only an unknown cost on a counted normalized call makes the total null.
-A test and the new Rust golden pin that behavior. This disagreement was
-reported, not resolved by changing Python.
+Until an outcome records `usage_total`, the read views derive it from the
+steps with the same rule (8c8a3e9), so a running investigation's chip shows
+cost and tokens; the recorded total wins once it exists.
+
+The legacy-usage divergence with Python is resolved: both SDKs skip a raw
+provider dictionary entirely (Python 8847a6d). A null, float or missing count
+records 0 and makes the cost unknown in both (ee0dac7).
 
 Qualification: `cargo test --workspace --locked` passes 126 tests, 0 failed,
 2 ignored (including SDK doc tests). The commit gate uses a fresh
