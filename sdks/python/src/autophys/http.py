@@ -250,10 +250,13 @@ _ENDPOINT = {"measurement": "measurements", "run": "runs", "step": "steps", "out
 class HttpStore(Store):
     """Store backed by the daemon's ``/api/v1`` contract.
 
-    ``cursor`` is the highest ``gseq`` this store has seen. The daemon puts
-    ``gseq`` in the stream's ``id:`` field and keeps it out of record JSON, so
-    POST responses also carry ``gseq`` beside ``record`` and advance it;
-    :meth:`wait_for_approval` resumes from it.
+    ``cursors`` maps each investigation to the highest ``gseq`` this store has
+    seen for it. ``gseq`` orders one workbook, so streams are always scoped
+    (``?investigation=``) and keep integer cursors; the collection-wide
+    cursor of an unscoped stream is never used. The daemon puts ``gseq`` in
+    the stream's ``id:`` field and beside ``record`` in POST responses, both
+    of which advance the investigation's cursor; :meth:`wait_for_approval`
+    resumes from it.
     ``last_wait`` says how the last wait was served: ``"stream"`` or
     ``"poll"``.
     """
@@ -264,13 +267,13 @@ class HttpStore(Store):
         self.key_id = key_id
         self.timeout = timeout
         self.stream_idle = stream_idle
-        self.cursor = 0
+        self.cursors: dict[str, int] = {}
         self.last_wait: str | None = None
 
-    def _see(self, rec: dict) -> dict:
+    def _see(self, investigation: str, rec: dict) -> dict:
         g = rec.get("gseq")
-        if isinstance(g, int) and g > self.cursor:
-            self.cursor = g
+        if isinstance(g, int) and g > self.cursors.get(investigation, 0):
+            self.cursors[investigation] = g
         return rec
 
     def __repr__(self) -> str:
@@ -300,7 +303,7 @@ class HttpStore(Store):
         body = {"project_id": meta.get("project_id"), "config_version": meta.get("config_version"),
                 "overrides": meta.get("overrides", {}), "meta": meta}
         j = self._req("POST", "/investigations", body, headers={"Idempotency-Key": uuid.uuid4().hex})
-        self._see(j)
+        self._see(j["id"], j)
         return j["id"]
 
     def append(self, investigation, kind, payload, *, record_id=None) -> Record:
@@ -323,7 +326,7 @@ class HttpStore(Store):
         else:
             raise StoreError(f"kind {kind!r} is not uploaded through HttpStore")
         j = self._req("POST", path, envelope, headers={"Idempotency-Key": rid})
-        self._see(j)
+        self._see(investigation, j)
         return _to_record(j["record"])
 
     def records(self, investigation, kind=None):
@@ -338,16 +341,17 @@ class HttpStore(Store):
         inv = urllib.parse.quote(investigation, safe="")
         return self._req("GET", f"/investigations/{inv}/proposals/{urllib.parse.quote(proposal_id, safe='')}")
 
-    def stream(self, after: int | None = None, *, idle: float | None = None):
-        """Open ``GET /stream?after=<gseq>``; returns the open response.
+    def stream(self, investigation: str, after: int | None = None, *, idle: float | None = None):
+        """Open ``GET /stream?investigation=<inv>&after=<gseq>``; returns the open response.
 
         Raises :class:`StreamUnavailable` when the route is missing or does
         not answer with ``text/event-stream``, :class:`AuthError` for a bad
         key. Iterate it with :meth:`stream_records`.
         """
-        after = self.cursor if after is None else after
+        after = self.cursors.get(investigation, 0) if after is None else after
+        q = urllib.parse.urlencode({"investigation": investigation, "after": int(after)})
         req = urllib.request.Request(
-            f"{self.base}/stream?after={int(after)}",
+            f"{self.base}/stream?{q}",
             headers={"Accept": "text/event-stream", "User-Agent": USER_AGENT, "Authorization": f"Bearer {self._key}"},
         )
         try:
@@ -364,13 +368,13 @@ class HttpStore(Store):
         return resp
 
     def stream_records(self, resp) -> Iterator[dict]:
-        """Records from an open stream, in ``gseq`` order; advances ``cursor``."""
+        """Records from an open scoped stream, in ``gseq`` order; advances ``cursors``."""
         for ev in iter_sse(resp):
             if ev.event not in ("message", "record"):
                 continue
             rec = json.loads(ev.data)
-            if ev.id.isdigit():
-                self._see({"gseq": int(ev.id)})
+            if ev.id.isdigit() and isinstance(rec.get("investigation"), str):
+                self._see(rec["investigation"], {"gseq": int(ev.id)})
             yield rec
 
 
@@ -378,7 +382,7 @@ class HttpStore(Store):
                           sleep=time.sleep, clock=time.monotonic, stream: bool = True) -> dict:
         """Block until the proposal leaves ``proposed`` (approved, edited or rejected).
 
-        Consumes the record stream from :attr:`cursor` and returns as soon as
+        Consumes the investigation's record stream from its cursor and returns as soon as
         an approval, edit or rejection of this proposal arrives. If the stream
         is unavailable (or ``stream=False``) it polls the proposal every
         ``interval`` seconds instead. Sets :attr:`last_wait`.
@@ -410,7 +414,7 @@ class HttpStore(Store):
             # between is replayed by the stream (after=cursor), and one made
             # before the cursor shows in the GET.
             try:
-                resp = self.stream(idle=min(self.stream_idle, remaining))
+                resp = self.stream(investigation, idle=min(self.stream_idle, remaining))
             except OSError as e:  # refused, reset, DNS: no stream here
                 raise StreamUnavailable(str(e)) from None
             with resp:

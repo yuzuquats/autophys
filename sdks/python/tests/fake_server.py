@@ -77,8 +77,9 @@ class FakeAutophys:
         with self.lock:
             self._append(inv, uuid.uuid4().hex, "proposal", payload)
 
-    def _since(self, after: int) -> list[dict]:
-        return sorted((r for log in self.records.values() for r in log if r["gseq"] > after), key=lambda r: r["gseq"])
+    def _since(self, after: int, investigation: str | None = None) -> list[dict]:
+        return sorted((r for inv, log in self.records.items() if investigation in (None, inv)
+                       for r in log if r["gseq"] > after), key=lambda r: r["gseq"])
 
     # ------------------------------------------------------------------
     def _append(self, inv: str, rid: str, kind: str, payload: dict) -> dict:
@@ -189,7 +190,14 @@ class FakeAutophys:
                 fake.requests.append((method, path, dict(self.headers)))
                 if path == "/stream" and method == "GET" and fake.stream:
                     if self._auth() is not None:
-                        self._stream(int(parse_qs(u.query).get("after", ["0"])[0]))
+                        q = parse_qs(u.query)
+                        inv = q.get("investigation", [None])[0]
+                        after = int(q.get("after", ["0"])[0])
+                        if inv is None and after:
+                            # Like the daemon: an unscoped stream takes the
+                            # collection cursor, never a bare nonzero gseq.
+                            return self._err(400, "invalid", "unscoped stream needs a collection cursor", "after")
+                        self._stream(after, inv)
                     return
                 with fake.lock:
                     try:
@@ -198,7 +206,7 @@ class FakeAutophys:
                         status = {"invalid": 422, "too_large": 413, "not_found": 404}.get(e.error, 409)
                         return self._err(status, e.error, str(e), e.path)
 
-            def _stream(self, after):
+            def _stream(self, after, investigation=None):
                 """SSE of records with gseq > after, then live ones; keep-alive comments while idle."""
                 fake.stream_afters.append(after)
                 self.send_response(200)
@@ -210,10 +218,10 @@ class FakeAutophys:
                 try:
                     while time.monotonic() < deadline:
                         with fake.lock:
-                            batch = fake._since(cursor)
+                            batch = fake._since(cursor, investigation)
                             if not batch and not fake.closing:
                                 fake.changed.wait(0.5)
-                                batch = fake._since(cursor)
+                                batch = fake._since(cursor, investigation)
                             closing = fake.closing
                         for r in batch:
                             self.wfile.write(f"id: {r['gseq']}\nevent: record\ndata: {json.dumps(fake._wire(r))}\n\n".encode())

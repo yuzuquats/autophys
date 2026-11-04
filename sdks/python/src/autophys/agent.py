@@ -418,8 +418,11 @@ class Investigation:
     def _record(self, kind: str, payload: dict):
         return self.store.append(self.id, kind, payload)
 
+    def _measurement_payload(self, obs: Observation) -> dict:
+        return {"version": self.dataset.version, "digest": self.dataset.digest(), "observation": obs.to_dict()}
+
     def _record_measurement(self, obs: Observation) -> None:
-        self._record("measurement", {"version": self.dataset.version, "digest": self.dataset.digest(), "observation": obs.to_dict()})
+        self._record("measurement", self._measurement_payload(obs))
 
     # --- facts ------------------------------------------------------------
     def facts(self) -> dict:
@@ -695,9 +698,13 @@ class Investigation:
             raise ToolError(f"proposal {proposal_id} is {status}; approve it before attaching data")
         observation.split = "train"
         self.dataset.add(observation)
-        self._record_measurement(observation)
-        self._record("proposal", {"proposal_id": proposal_id, "event": "data_attached", "measurement_version": self.dataset.version,
-                                  "digest": observation.digest()})
+        # The measurement and its data_attached event commit together, so a
+        # crash cannot leave a measurement without its attribution.
+        self.store.append_batch(self.id, [
+            ("measurement", self._measurement_payload(observation)),
+            ("proposal", {"proposal_id": proposal_id, "event": "data_attached", "measurement_version": self.dataset.version,
+                          "digest": observation.digest()}),
+        ])
         self.experiments_used += 1
         name = self.pending_experiment
         self.pending_experiment = None

@@ -546,18 +546,27 @@ class WorkbookStore(Store):
             return inv
 
     def append(self, investigation: str, kind: str, payload: dict, *, record_id: str | None = None) -> Record:
-        rid, payload, text = append_payload(kind, payload, record_id)
+        item = append_payload(kind, payload, record_id)
         with self._tx() as c:
-            row = c.execute(f"SELECT {_COLUMNS} FROM records WHERE id = ?", (rid,)).fetchone()
-            if row:
-                if row[2] == investigation and row[4] == kind and row[6] == text:
-                    return _row_record(row)
-                raise WorkbookError("idempotency_conflict", f"record id {rid} was already used for a different record")
-            if not c.execute("SELECT 1 FROM investigations WHERE id = ?", (investigation,)).fetchone():
-                raise WorkbookError("not_found", f"unknown investigation {investigation}")
-            if kind == "proposal":
-                self._check_transition(c, investigation, payload)
-            return self._insert(c, investigation, rid, kind, payload, text)
+            return self._append_tx(c, investigation, kind, *item)
+
+    def append_batch(self, investigation: str, items: list[tuple[str, dict]]) -> list[Record]:
+        """Append the records in one ``BEGIN IMMEDIATE`` transaction: all or none."""
+        prepared = [(kind, *append_payload(kind, payload, None)) for kind, payload in items]
+        with self._tx() as c:
+            return [self._append_tx(c, investigation, kind, rid, payload, text) for kind, rid, payload, text in prepared]
+
+    def _append_tx(self, c: sqlite3.Connection, investigation: str, kind: str, rid: str, payload: Any, text: str) -> Record:
+        row = c.execute(f"SELECT {_COLUMNS} FROM records WHERE id = ?", (rid,)).fetchone()
+        if row:
+            if row[2] == investigation and row[4] == kind and row[6] == text:
+                return _row_record(row)
+            raise WorkbookError("idempotency_conflict", f"record id {rid} was already used for a different record")
+        if not c.execute("SELECT 1 FROM investigations WHERE id = ?", (investigation,)).fetchone():
+            raise WorkbookError("not_found", f"unknown investigation {investigation}")
+        if kind == "proposal":
+            self._check_transition(c, investigation, payload)
+        return self._insert(c, investigation, rid, kind, payload, text)
 
     def _check_transition(self, c: sqlite3.Connection, inv: str, payload: dict) -> None:
         pid, ev = payload["proposal_id"], payload["event"]

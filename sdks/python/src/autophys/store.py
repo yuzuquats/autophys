@@ -127,6 +127,14 @@ class Store(ABC):
     @abstractmethod
     def append(self, investigation: str, kind: str, payload: dict, *, record_id: str | None = None) -> Record: ...
 
+    def append_batch(self, investigation: str, items: list[tuple[str, dict]]) -> list[Record]:
+        """Append ``(kind, payload)`` records in order, all or none where the store can.
+
+        Local stores commit the batch together (WorkbookStore in one
+        transaction); this default, used over HTTP, appends one at a time.
+        """
+        return [self.append(investigation, kind, payload) for kind, payload in items]
+
     @abstractmethod
     def records(self, investigation: str, kind: str | None = None) -> list[Record]: ...
 
@@ -248,17 +256,30 @@ class MemoryStore(Store):
             return inv
 
     def append(self, investigation, kind, payload, *, record_id=None) -> Record:
+        with self._lock:
+            return self._append_locked(investigation, kind, payload, record_id)
+
+    def append_batch(self, investigation, items):
+        with self._lock:
+            n = len(self._logs.get(investigation, ()))
+            try:
+                return [self._append_locked(investigation, kind, payload, None) for kind, payload in items]
+            except BaseException:
+                if investigation in self._logs:
+                    del self._logs[investigation][n:]
+                raise
+
+    def _append_locked(self, investigation, kind, payload, record_id) -> Record:
         from .workbook import now_ts
 
-        with self._lock:
-            rid, payload, replay = self._prepare_append(investigation, kind, payload, record_id)
-            if replay is not None:
-                return replay
-            log = self._logs[investigation]
-            prev = log[-1].hash if log else GENESIS
-            rec = Record(rid, investigation, len(log), kind, now_ts(), payload, prev, chain_hash(prev, rid, kind, payload))
-            log.append(rec)
-            return rec
+        rid, payload, replay = self._prepare_append(investigation, kind, payload, record_id)
+        if replay is not None:
+            return replay
+        log = self._logs[investigation]
+        prev = log[-1].hash if log else GENESIS
+        rec = Record(rid, investigation, len(log), kind, now_ts(), payload, prev, chain_hash(prev, rid, kind, payload))
+        log.append(rec)
+        return rec
 
     def records(self, investigation, kind=None):
         return [r for r in self._logs.get(investigation, []) if kind is None or r.kind == kind]
@@ -332,17 +353,35 @@ class JsonlStore(Store):
             return inv
 
     def append(self, investigation, kind, payload, *, record_id=None) -> Record:
+        return self._append_many(investigation, [(kind, payload, record_id)])[0]
+
+    def append_batch(self, investigation, items):
+        return self._append_many(investigation, [(kind, payload, None) for kind, payload in items])
+
+    def _append_many(self, investigation, items) -> list[Record]:
+        """Validate every item, then write all new lines with one write and fsync."""
         from .workbook import now_ts
 
         with self._lock:
-            rid, payload, replay = self._prepare_append(investigation, kind, payload, record_id)
-            if replay is not None:
-                return replay
             existing = self.records(investigation)
-            prev = existing[-1].hash if existing else GENESIS
-            rec = Record(rid, investigation, len(existing), kind, now_ts(), payload, prev, chain_hash(prev, rid, kind, payload))
-            self._append_line(f"{investigation}.jsonl", rec.to_dict())
-            return rec
+            out: list[Record] = []
+            new: list[Record] = []
+            for kind, payload, record_id in items:
+                rid, payload, replay = self._prepare_append(investigation, kind, payload, record_id)
+                if replay is not None:
+                    out.append(replay)
+                    continue
+                prev = new[-1].hash if new else (existing[-1].hash if existing else GENESIS)
+                rec = Record(rid, investigation, len(existing) + len(new), kind, now_ts(), payload, prev,
+                             chain_hash(prev, rid, kind, payload))
+                new.append(rec)
+                out.append(rec)
+            if new:
+                with open(self.root / f"{investigation}.jsonl", "a") as f:
+                    f.write("".join(canonical(r.to_dict()) + "\n" for r in new))
+                    f.flush()
+                    os.fsync(f.fileno())
+            return out
 
     def records(self, investigation, kind=None):
         path = self._path(investigation)

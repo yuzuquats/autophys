@@ -271,3 +271,25 @@ def test_fake_payload_errors_and_route_events_have_422_field_paths():
             with e.value as response:
                 body = json.load(response)
             assert e.value.code == 422 and body["error"] == "invalid" and body["path"] == path
+
+
+def test_append_batch_is_all_or_nothing(store):
+    """attach_data's measurement and data_attached commit together (RS question 2)."""
+    inv = pinned(store)
+    before = len(store.records(inv))
+    with pytest.raises(WorkbookError):
+        store.append_batch(inv, [
+            ("measurement", {"version": 1, "observation": {}}),
+            ("proposal", {"proposal_id": "nope", "event": "data_attached", "measurement_version": 1}),
+        ])
+    assert len(store.records(inv)) == before
+    assert store.verify(inv)
+    propose(store, inv, "p1")
+    store.append(inv, "proposal", {"proposal_id": "p1", "event": "approved", "by": "u"})
+    recs = store.append_batch(inv, [
+        ("measurement", {"version": 1, "observation": {}}),
+        ("proposal", {"proposal_id": "p1", "event": "data_attached", "measurement_version": 1}),
+    ])
+    assert [r.kind for r in recs] == ["measurement", "proposal"]
+    assert [r.seq for r in recs] == [recs[0].seq, recs[0].seq + 1]
+    assert store.verify(inv)

@@ -10,7 +10,7 @@ import pytest
 from fake_server import FakeAutophys
 from autophys import cli
 from autophys.agent import Investigation, ProposalRunner, ScriptedPolicy
-from autophys.http import DEFAULT_SERVER, HttpError, HttpStore, iter_sse, load_credentials
+from autophys.http import DEFAULT_SERVER, HttpError, HttpStore, iter_sse, load_credentials, request_json
 from autophys.project import Budgets, Project
 from autophys.reasoner import HttpReasoner, ReasonerError, parse_json_content
 from autophys.store import config_hash
@@ -242,7 +242,7 @@ def test_default_server_is_the_loopback_daemon():
 def test_wait_for_approval_consumes_the_stream_from_the_cursor(server):
     store = HttpStore(server.url, server.issue_key())
     inv = _pending_proposal(store)
-    head = store.cursor
+    head = store.cursors[inv]
     assert head == server.gseq  # POST responses advance the cursor
     timer = threading.Timer(0.3, server.approve_record, (inv, "p1"))
     timer.start()
@@ -251,10 +251,10 @@ def test_wait_for_approval_consumes_the_stream_from_the_cursor(server):
     finally:
         timer.cancel()
     assert p["status"] == "approved" and store.last_wait == "stream"
-    first = store.cursor
+    first = store.cursors[inv]
     assert server.stream_afters == [head] and first == server.gseq  # the approval's id advanced it
     store.append(inv, "proposal", {"proposal_id": "p2", "event": "proposed", "experiment": "e", "settings": {}})
-    second = store.cursor
+    second = store.cursors[inv]
     timer = threading.Timer(0.3, server.approve_record, (inv, "p2", "rejected"))
     timer.start()
     try:
@@ -309,7 +309,7 @@ def test_wait_for_approval_stream_false_polls(server):
 def test_stream_rejects_a_bad_key(server):
     store = HttpStore(server.url, "apk_wrong")
     with pytest.raises(HttpError) as e:
-        store.stream(after=0)
+        store.stream("inv_0000000000000000", after=0)
     assert e.value.status == 401
 
 
@@ -318,3 +318,26 @@ def test_iter_sse_parses_frames():
             b"data:plain\n", b"\n", b"event: other\n", b"\n"]
     evs = list(iter_sse(body))
     assert [(e.event, e.id, e.data) for e in evs] == [("record", "7", "{\"a\":\n1}"), ("message", "7", "plain")]
+
+
+def test_streams_are_scoped_with_a_cursor_per_investigation(server):
+    """gseq orders one workbook, so each wait streams its own investigation."""
+    store = HttpStore(server.url, server.issue_key())
+    a = _pending_proposal(store)
+    b = _pending_proposal(store)
+    assert store.cursors[a] < store.cursors[b]
+    timer = threading.Timer(0.3, server.approve_record, (a, "p1"))
+    timer.start()
+    try:
+        assert store.wait_for_approval(a, "p1", timeout=10, sleep=_never_poll)["status"] == "approved"
+    finally:
+        timer.cancel()
+    assert store.last_wait == "stream" and store.cursors[a] == server.gseq
+    # b's cursor did not move with a's records.
+    assert store.cursors[b] < store.cursors[a]
+
+
+def test_unscoped_stream_with_a_bare_gseq_is_refused(server):
+    with pytest.raises(HttpError) as e:
+        request_json("GET", server.url + "/api/v1/stream?after=3", None, api_key=server.issue_key())
+    assert e.value.status == 400
