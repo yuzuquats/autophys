@@ -152,6 +152,61 @@ shipped. These details are **agent-chosen, pending operator review**:
 | WB-6 | The goldens are committed SQLite files (about 360 KB) with a JSON expectation each. Ids and timestamps are random, so regenerating changes the bytes. | Deterministic generation (seeded ids, fixed clock). That gives reproducible bytes, but needs hooks into the store for ids and time. | inject an id/clock factory |
 ```
 
+## Muse first-class (plan, 2026-11-04)
+
+Requested by the operator through autophys/pitch: Muse Spark investigates
+(inner loop), Muse Wonder edits a playbook skill (outer loop), batteries
+first. What exists already: `ChatReasoner` (meta/baseten routes), steps that
+carry the reasoner's `model`, raw `usage` and `elapsed_ms`, and an
+investigation record pinning `system_prompt_sha256`. No published number
+comes from a Meta model yet, and the system prompt hard-codes the
+"request the top-ranked experiment" strategy that ScriptedPolicy also uses.
+
+```review-table
+| Id  | What lands | Est. |
+| --- | --- | --- |
+| M-1 | `ModelSpec(route, model, effort, max_tokens)` per role (`policy`, `researcher`); `reasoner_for(spec)`; known models `muse-spark-1.3`, `muse-wonder-1.0` with token floors and a dated price table. `bench --policy reason --model ID [--effort E]`. | 1.5 h |
+| M-2 | Playbook skill: the prompt splits into a fixed contract (JSON shape, action list, the identified-claim rule; not editable) and a strategy loaded from `playbooks/<name>/SKILL.md` in Muse skill format. The default strategy is rewritten to reason about information rather than follow the ranking. Pinned on the investigation as `playbook`. | 2 h |
+| M-3 | Usage per step and totals per outcome, normalised across providers, with estimated cost from the price table snapshot pinned on the investigation. | 1 h |
+| M-6 | Retry with jittered backoff on 429, 5xx and timeouts (402 stays terminal: it means billing is not configured). `RecordingReasoner` / `ReplayReasoner` cassettes keyed by the sha256 of the canonical request; replay is the offline demo and the deterministic tests. | 1.5 h |
+| M-7 | `bench --jobs N`: cases × seeds × policies in a bounded pool (threads for model-bound runs, processes for scripted ones). | 1 h |
+| M-9 | Outer loop `autophys research`: frozen train / held-out split, scalar score (diagnosis and status correct first, then error, cost as tiebreak), propose an edit, re-evaluate on train, keep only on improvement, report held-out. Researcher protocol with an API adapter (`ChatReasoner` on Wonder). | 2.5 h |
+| M-5 | Muse Code CLI researcher adapter: workspace with the skill and failed transcripts, prompt file, `muse exec --json --model muse-wonder-1.0 --workspace DIR`, JSONL events parsed, edited SKILL.md read back and validated. Tested with a fake `muse`. | 2 h |
+| M-8 | `autophys export-trajectories`: JSONL of each decision's contract hash, playbook hash, prompt, raw response, parsed decision, validity and the run's evaluator score. Export only. | 1 h |
+| M-4 | Image input: fit and residual plots rendered (optional `plots` extra), stored as blobs, referenced by hash; attached for Wonder (researcher) and for the policy only if the model is image-capable. The hacks reason lane stays text-only. | 2.5 h |
+```
+
+Order: M-1, M-2, M-3, M-6 first (they unblock a first Spark number),
+then M-7, M-9, M-5, M-8, then M-4. Estimates are agent time.
+
+Deferred: live Spark/Wonder runs and the live `muse` path until the operator
+approves a token budget (estimate below); fine-tuning; the Rust mirror
+(autophys/rs, from `workbook-format.md`).
+
+Rough cost per live run, to be replaced by measured usage from M-3: about 24
+decisions × ~3k input / ~1.5k output tokens is ~$0.25 per investigation on
+Spark 1.3, so ~$5 for a 4-case × 5-seed bench. One Wonder iteration (~200k in,
+~20k out) is ~$1.2 plus a train re-evaluation; ten iterations ≈ $60.
+
+Proposed record fields (to be agreed with autophys/rs, then added to
+`workbook-format.md`):
+
+- investigation: `playbook: {name, sha256}` (sha256 of the SKILL.md bytes;
+  the bytes are stored as a blob), `model: {role, route, model, effort,
+  max_tokens}`, `price: {model, input_per_mtok, output_per_mtok, as_of}`.
+  `system_prompt_sha256` stays and covers the contract and playbook.
+- step: `usage: {input_tokens, output_tokens, reasoning_tokens,
+  cached_input_tokens}` (normalised; replaces the raw provider dict),
+  `latency_ms` (renames `elapsed_ms`), `cost_usd`, `images: [{sha256,
+  media_type, caption}]`, `replayed: true` when served from a cassette.
+- outcome: `usage_total: {calls, input_tokens, output_tokens, cost_usd,
+  latency_ms}`.
+
+Open: Muse skill frontmatter rules and the `muse exec --json` event schema
+need `muse skills validate` and `muse exec --help` run once on the laptop
+(local commands, no tokens). The CLI researcher runs where `muse` and its key
+are; it is not on rwc-dev-01.
+
 ## Contract questions
 
 These are for the owner of `tento-autophys-store` and `architecture.md`. The
