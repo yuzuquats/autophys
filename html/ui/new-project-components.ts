@@ -14,8 +14,7 @@ export function hydrateProjectSetup(host: HTMLElement): void {
       body.dataset.step = String(i + 1);
       bodies.push(body);
       return { ...Stepper.plain(step.querySelector("h3")!.textContent!, slot),
-        current: step.dataset.current === "true", muted: done, marker: done ? "✓" : "", tone: done ? "var(--ck-ok-wash,#e4f2e9)" : null,
-        meta: done ? "Done" : null };
+        current: step.dataset.current === "true", marker: done ? "✓" : "" };
     });
     const stepper = Stepper.makeWith({ steps });
     stepper.append(...bodies);
