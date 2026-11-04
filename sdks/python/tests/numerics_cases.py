@@ -197,7 +197,7 @@ def build_cases():
         if model in ("thermal", "oscillator"):
             i = copy.deepcopy(base)
             i.update(dataset=[observation, {**copy.deepcopy(observation), "split": "validation"}],
-                     initial=theta, budgets=asdict(Budgets(max_experiments=1)),
+                     initial=theta, budgets={k: v for k, v in asdict(Budgets(max_experiments=1)).items() if k != "max_test_hours"},
                      stop={"validation_threshold": 2., "misfit_threshold": 2., "rule": asdict(IdentifiabilityRule())},
                      runner={"theta": theta})
             c = {"format": 1, "written_by": "autophys 0.1.0 (python)", "model": model, "op": "run", "inputs": i}
@@ -240,9 +240,37 @@ def degenerate_cases():
         yield path, c
 
 
+def battery_cases():
+    from autophys.synthetic import battery_case, BATTERY_TRUTH
+    view, _ = battery_case(0)
+    sim = view.simulator
+    obs = view.dataset.split("train")[0]
+    base = {"params": {k: {"unit": s.unit, "lo": s.lo, "hi": s.hi} for k, s in sim.params.items()},
+            "fixed": {}, "catalog": copy.deepcopy(sim.experiments), "options": asdict(FIT_OPTIONS),
+            "theta": BATTERY_TRUTH, "observations": [obs.to_dict()], "noise": {"v": .002}}
+    yield from op_cases("battery", sim, base, obs.experiment, obs.settings, obs.t,
+                        sim.experiments, "current", [1., 3.], ("analyze", "rank"), "short")
+    i = copy.deepcopy(base)
+    i.update(dataset=[o.to_dict() for o in view.dataset], initial=BATTERY_TRUTH,
+             budgets={k: v for k, v in asdict(Budgets(max_experiments=2)).items() if k != "max_test_hours"},
+             stop={"validation_threshold": 2., "misfit_threshold": 2., "rule": asdict(IdentifiabilityRule())},
+             runner={"theta": BATTERY_TRUTH})
+    # Keep the shared numerics format unchanged: project catalog costs are
+    # tested in test_battery, not represented by this physics transcript.
+    c = {"format": 1, "written_by": "autophys 0.1.0 (python)", "model": "battery", "op": "run", "inputs": i}
+    result = execute(c)
+    i["script"] = result["decisions"]
+    c["expect"] = {k: {"value": result[k], "exact": True} for k in ("status", "actions")}
+    for j, decision in enumerate(result["decisions"]):
+        for key in ("action", "arguments"):
+            c["expect"][f"decisions.{j}.{key}"] = {"value": decision[key], "exact": True}
+    yield "battery/run-scripted.json", c
+
+
 def all_cases():
     yield from build_cases()
     yield from degenerate_cases()
+    yield from battery_cases()
 
 
 def write(out=ROOT):

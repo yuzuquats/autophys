@@ -46,6 +46,12 @@ class Budgets:
     max_simulations: int = 20000
     max_experiments: int = 2
     max_outlook_simulations: int = 50000
+    max_test_hours: float | None = None
+
+    def __post_init__(self) -> None:
+        value = self.max_test_hours
+        if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float)) or not np.isfinite(value) or value < 0):
+            raise ValueError("max_test_hours must be finite and non-negative")
 
 
 @dataclass(frozen=True)
@@ -111,6 +117,9 @@ class Project:
             mr = lim.get("max_runs")
             if mr is not None and not (isinstance(mr, int) and mr >= 0):
                 raise ValueError(f"{n}: max_runs must be a non-negative integer")
+            cost = lim.get("cost_hours")
+            if "cost_hours" in lim and (isinstance(cost, bool) or not isinstance(cost, (int, float)) or not np.isfinite(cost) or cost < 0):
+                raise ValueError(f"{n}: cost_hours must be finite and non-negative")
             self._check_edit(n, lim.get("edit") or {})
 
     def _check_edit(self, name: str, edit: dict) -> None:
@@ -150,6 +159,8 @@ class Project:
         budgets = asdict(self.budgets)
         if self.budgets.max_outlook_simulations == Budgets().max_outlook_simulations:
             budgets.pop("max_outlook_simulations")
+        if self.budgets.max_test_hours is None:
+            budgets.pop("max_test_hours")
         return {
             "name": self.name,
             "simulator": {"name": sim.name, "source_hash": sim.source_hash, "outputs": list(sim.outputs)},
@@ -159,6 +170,7 @@ class Project:
             },
             "catalog": {
                 n: {"settings": sim.experiments[n], "max_runs": lim.get("max_runs"),
+                    **({"cost_hours": float(lim["cost_hours"])} if "cost_hours" in lim else {}),
                     # only present when declared, so configs without it keep their hash
                     **({"edit": {k: [float(a), float(b)] for k, (a, b) in lim["edit"].items()}} if lim.get("edit") else {})}
                 for n, lim in self.catalog.items()

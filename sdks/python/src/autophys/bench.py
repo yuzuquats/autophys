@@ -103,7 +103,8 @@ POLICIES: dict[str, Callable[[], object]] = {
 
 
 def case_project(view) -> Project:
-    return Project(name=view.name, simulator=view.simulator, budgets=Budgets(max_experiments=view.max_experiments))
+    return Project(name=view.name, simulator=view.simulator, catalog=view.catalog,
+                   budgets=Budgets(max_experiments=view.max_experiments, max_test_hours=view.max_test_hours))
 
 
 @dataclass
@@ -122,6 +123,7 @@ class BenchRow:
     non_identified: list
     diagnosis_correct: bool
     requested: list
+    test_hours: float = 0.0
     calls: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
@@ -154,7 +156,7 @@ def run_case(case: str, policy: str, seed: int, store: Store | None = None, **re
     requested = [o.experiment for o in view.dataset if o.source == "synthetic" and o.split == "train"][1:]
     usage = usage_total(r.payload for r in inv.store.records(inv.id, "step"))
     return BenchRow(
-        case=case, policy=policy, seed=seed, status=out.status,
+        case=case, policy=policy, seed=seed, status=out.status, test_hours=inv.test_hours_used,
         max_rel_error=max(rel.values()) if rel else float("nan"), rel_errors=rel,
         test_rmse=evaluator.test_rmse(view.simulator, est) if est else float("nan"),
         simulations=out.simulations, wall_s=wall, experiments=out.experiments, steps=out.steps,
@@ -243,6 +245,7 @@ def summarize(rows: list[BenchRow]) -> list[dict]:
             "median_simulations": statistics.median(r.simulations for r in rs),
             "median_wall_s": statistics.median(r.wall_s for r in rs),
             "experiments": statistics.median(r.experiments for r in rs),
+            "test_hours": statistics.median(r.test_hours for r in rs),
             "diagnosis_correct": f"{sum(r.diagnosis_correct for r in rs)}/{len(rs)}",
             "calls": sum(r.calls for r in rs),
             "input_tokens": sum(r.input_tokens for r in rs),
@@ -254,11 +257,11 @@ def summarize(rows: list[BenchRow]) -> list[dict]:
 
 
 def format_table(summary: list[dict]) -> str:
-    head = ["case", "policy", "seeds", "status", "max rel err", "test RMSE", "sims", "wall s", "exps", "diagnosis", "requested", "calls", "input_tokens", "output_tokens", "cost_usd"]
+    head = ["case", "policy", "seeds", "status", "max rel err", "test RMSE", "sims", "wall s", "exps", "diagnosis", "requested", "calls", "input_tokens", "output_tokens", "cost_usd", "test_hours"]
     rows = [[s["case"], s["policy"], str(s["seeds"]), s["status"], f"{s['median_max_rel_error']:.2%}",
              f"{s['median_test_rmse']:.4g}", f"{s['median_simulations']:.0f}", f"{s['median_wall_s']:.2f}",
              f"{s['experiments']:.0f}", s["diagnosis_correct"], " | ".join(s["requested"]), str(s["calls"]), str(s["input_tokens"]), str(s["output_tokens"]),
-             "null" if s["cost_usd"] is None else f'{s["cost_usd"]:.6f}'] for s in summary]
+             "null" if s["cost_usd"] is None else f'{s["cost_usd"]:.6f}', f'{s["test_hours"]:.6g}'] for s in summary]
     widths = [max(len(h), *(len(r[i]) for r in rows)) for i, h in enumerate(head)]
     fmt = lambda r: "| " + " | ".join(c.ljust(w) for c, w in zip(r, widths)) + " |"  # noqa: E731
     return "\n".join([fmt(head), "|" + "|".join("-" * (w + 2) for w in widths) + "|", *map(fmt, rows)])

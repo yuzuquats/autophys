@@ -37,8 +37,13 @@ class Candidate:
     min_eig_gain: float
     worst_direction: dict[str, float]
 
+    cost_hours: float | None = None
+
     def to_dict(self) -> dict:
-        return asdict(self)
+        d = asdict(self)
+        if self.cost_hours is None:
+            d.pop("cost_hours")
+        return d
 
 
 def _template(sim: Simulator, name: str, settings: dict, noise: Mapping[str, float], params) -> Observation:

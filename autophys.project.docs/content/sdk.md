@@ -263,8 +263,28 @@ review**; each is cheap to change until the Rust SDK mirrors it.
 | BT-4 | No new record fields. Test hours used are recomputed from the experiments run, as resume already rebuilds experiment counts. Bench rows gain a `test_hours` column. | Record `test_hours` on outcomes. Readers would not need the catalog, but it is a format change both SDKs must validate. | add the field later as optional |
 ```
 
-The Rust SDK mirrors BT-2 and BT-3 once implemented; the numerics set gains
-battery run cases.
+Implemented (I1f9b4d7e2c6a08e3b5d4). The short case is a 6 s, 2 A pulse
+over 25 s at 32 Hz with 2 mV noise. `bench --seeds 5`, scripted and
+fake-reasoner:
+
+| Case | Status | Sims | Test RMSE | Diagnosis | Test hours |
+| --- | --- | --- | --- | --- | --- |
+| battery-short-only | inconclusive (R1) | 204 | 0.004077 V | 10/10 | 0 |
+| battery | validated | 481 | 0.002067 V | 10/10 | 1.17 of 3 |
+
+Depending on the seed, `battery` requests `discharge_1A` or `pulse_2A`. The
+four existing cases, configs and goldens are unchanged. The numerics set
+gains battery `analyze-short`, `rank-short` and `run-scripted`. There is no
+battery `run-policy` case, because the case format has no catalog costs yet.
+
+The Rust SDK mirrors:
+- `Budgets.max_test_hours`, omitted from the config when unset;
+- catalog `cost_hours` (finite and nonnegative; absent means 0);
+- hours recomputed from measurements and `data_attached` links;
+- unaffordable candidates excluded with a 1e-12 tolerance, and over-budget
+  requests refused;
+- costs in rankings and hours in facts only for costed catalogs;
+- the three new numerics cases.
 
 ## Contract questions
 

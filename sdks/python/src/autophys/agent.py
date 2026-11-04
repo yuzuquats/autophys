@@ -425,8 +425,31 @@ class Investigation:
         noise.update(self.noise_cfg.sigma or {})
         return noise
 
+    @property
+    def test_hours_used(self) -> float:
+        """Recomputed from measured data, including data restored on resume."""
+        if not any("cost_hours" in lim for lim in self.project.catalog.values()):
+            return 0.0
+        # Attached observations may have a lab-specific name. Resolve those
+        # from the existing proposal/measurement-version linkage.
+        proposals, attached = {}, {}
+        for record in self.records("proposal"):
+            p = record.payload
+            if p.get("event") == "proposed":
+                proposals[p["proposal_id"]] = p["experiment"]
+            elif p.get("event") == "data_attached":
+                attached[p["measurement_version"]] = proposals.get(p["proposal_id"])
+        return sum(float(self.project.catalog.get(attached.get(version) or o.experiment, {}).get("cost_hours", 0.0))
+                   for version, o in enumerate(self.dataset, 1))
+
+    def _affordable(self, name: str) -> bool:
+        limit = self.budgets.max_test_hours
+        cost = float(self.project.catalog.get(name, {}).get("cost_hours", 0.0))
+        return limit is None or self.test_hours_used + cost <= limit + 1e-12
+
     def available_experiments(self) -> list[str]:
-        return [n for n, lim in self.limits.items() if lim is None or self.runs_per_experiment.get(n, 0) < lim]
+        return [n for n, lim in self.limits.items()
+                if (lim is None or self.runs_per_experiment.get(n, 0) < lim) and self._affordable(n)]
 
     @property
     def sim(self) -> Simulator:
@@ -481,6 +504,10 @@ class Investigation:
             "ranking": None,
             "validation": None,
         }
+        if any("cost_hours" in lim for lim in self.project.catalog.values()):
+            f["budget"]["test_hours_used"] = self.test_hours_used
+            if self.budgets.max_test_hours is not None:
+                f["budget"]["test_hours_left"] = self.budgets.max_test_hours - self.test_hours_used
         if self.fit is not None:
             current = self.fit.dataset_version == self.dataset.version and self.fit_model == self.model
             f["fit"] = {
@@ -570,9 +597,15 @@ class Investigation:
         noise = {ch: s * scale for ch, s in self.declared_noise().items()}
         self.ranking = rank_experiments(self.sim, r.params, self.dataset.split("train"), noise,
                                         candidates=cands, criterion=criterion, J0=self.jac)
+        for c in self.ranking:
+            c.cost_hours = (float(self.project.catalog[c.experiment].get("cost_hours", 0.0))
+                            if any("cost_hours" in lim for lim in self.project.catalog.values()) else None)
         self.ranking_fit = self.fit_id
         self.ranking_criterion = criterion
-        return {"criterion": criterion, "ranking": [(c.experiment, c.min_eig, c.d_opt) for c in self.ranking]}
+        result = {"criterion": criterion, "ranking": [(c.experiment, c.min_eig, c.d_opt) for c in self.ranking]}
+        if any("cost_hours" in lim for lim in self.project.catalog.values()):
+            result["ranking"] = [c.to_dict() for c in self.ranking]
+        return result
 
     def proposal_outlook(self, experiment: str, settings: dict) -> tuple[dict, float, int]:
         """E-1: the outlook grid of a proposed experiment, at the latest fit.
@@ -617,6 +650,8 @@ class Investigation:
     def tool_request_experiment(self, experiment: str, decision: Decision | None = None) -> dict:
         if self.experiments_used >= self.budgets.max_experiments:
             raise ToolError(f"experiment budget of {self.budgets.max_experiments} is spent")
+        if experiment in self.limits and not self._affordable(experiment):
+            raise ToolError(f"{experiment} exceeds the test-hour budget of {self.budgets.max_test_hours}")
         if experiment not in self.available_experiments():
             raise ToolError(f"{experiment} is not in the catalog or is at its run limit")
         settings = self.sim.experiment(experiment)

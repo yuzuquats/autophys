@@ -9,16 +9,18 @@ EXPECTED = {
     "oscillator": "validated",
     "thermal-short-only": "inconclusive",
     "thermal": "validated",
+    "battery-short-only": "inconclusive",
+    "battery": "validated",
 }
 
 
 def test_benchmark_all_cases_both_policies():
     rows = run_benchmark(seeds=1)
-    assert len(rows) == 8
+    assert len(rows) == 12
     for r in rows:
         assert r.status == EXPECTED[r.case], r
         assert r.diagnosis_correct, r
-        assert r.max_rel_error < 0.02, r
+        assert r.max_rel_error < (0.1 if r.case.startswith("battery") else 0.02), r
         assert r.simulations > 0 and r.wall_s > 0
     by = {(r.case, r.policy): r for r in rows}
     assert by[("oscillator", "scripted")].requested == ["sine_0.44Hz"]

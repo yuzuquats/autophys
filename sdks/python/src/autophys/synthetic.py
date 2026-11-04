@@ -94,6 +94,8 @@ class CaseView:
     runner: SyntheticRunner
     max_experiments: int
     candidates: list[str] | None = None
+    max_test_hours: float | None = None
+    catalog: dict | None = None
 
 
 @dataclass
@@ -242,9 +244,41 @@ def thermal_case(seed: int = 0, *, max_experiments: int = 2, bias: float = 0.0, 
     )
 
 
+BATTERY_TRUTH = {"R0": 0.025, "R1": 0.045, "C1": 1600.0}
+
+
+def battery_case(seed: int = 0, *, max_experiments: int = 2):
+    """A short pulse measures the ohmic drop and initial polarization slope."""
+    from .models.battery import battery_ecm, KNOWN
+
+    short = max_experiments == 0
+    def pulse(name, current, on=6.0):
+        return {"name": name, "kind": "pulse", "current": current, "on": on,
+                "duration": 25.0, "rate": 32.0, **KNOWN}
+    view, ev = _build(
+        "battery-short-only" if short else "battery", battery_ecm, BATTERY_TRUTH,
+        NoiseModel({"v": 0.002}), seed,
+        train=[pulse("pulse_short", 2.0)],
+        validation=[pulse("pulse_short_1A", 1.0, 6.0)],
+        test=[{"name": "unseen_train", "kind": "pulse_train", "current": 1.5,
+               "on": 40.0, "off": 60.0, "duration": 500.0, "rate": 1.0, **KNOWN}],
+        max_experiments=max_experiments,
+        combos={"R0": {"R0": 1.0}, "C1": {"C1": 1.0}} if short else
+               {k: {k: 1.0} for k in BATTERY_TRUTH},
+        expected={"R1"} if short else set(),
+        note="A 6 s pulse against a 72 s RC time constant resolves the instantaneous I R0 drop and initial I/C1 slope; R1 needs a longer polarization and relaxation trace.",
+    )
+    view.max_test_hours = 3.0
+    view.catalog = {n: {"max_runs": None, "cost_hours": 1.0 + e["duration"] / 3600.0}
+                    for n, e in battery_ecm.experiments.items()}
+    return view, ev
+
+
 CASES = {
     "oscillator-free-only": lambda seed: oscillator_case(seed, max_experiments=0),
     "oscillator": lambda seed: oscillator_case(seed, max_experiments=2),
     "thermal-short-only": lambda seed: thermal_case(seed, max_experiments=0),
     "thermal": lambda seed: thermal_case(seed, max_experiments=2),
+    "battery-short-only": lambda seed: battery_case(seed, max_experiments=0),
+    "battery": lambda seed: battery_case(seed, max_experiments=2),
 }
