@@ -10,9 +10,19 @@
  * InstanceUrl.staticUrl("/js/prosemirror.min.js"). autophys serves no static subdomain, so the
  * static base is this origin and the bundle ships beside this file as js/prosemirror.min.js
  * (the committed tento-plugins-js build other tento apps serve, sha256 b4c9b9e4c64d…).
+ *
+ * Code blocks are coloured by tento-ui's own tokenizers (shell, Python), registered for their
+ * fence names and drawn with Code's static rendering: the committed CodeMirror bundle predates
+ * `streamLanguage`, so the editor path would draw a registered language plain. Static output
+ * is read-only text with tok-* spans, which is all a documentation page needs.
  */
 import "@tento-ui/components/documentation/documentation";
 import { Documentation } from "@tento-ui/components/documentation/documentation";
+import { Code } from "@tento-ui/components/code/code";
+import { shellTokenizer } from "@tento-ui/components/code/languages/shell";
+import { pythonTokenizer } from "@tento-ui/components/code/languages/python";
+import { LispExampleView } from "@tento-ui/components/lisp-example/lisp-example-view";
+import type { ProseMirrorEditor } from "@tento-ui/components/prosemirror";
 import { InstanceUrl } from "@tento-core/instance-url";
 import type { Cookbook } from "@tento-cookbook/lib.ts";
 
@@ -120,7 +130,8 @@ It does not draw the fitted curve yet; use the battery example for curves.
 /** std-documentation sizes type with Lona's cap-height scale, which tento apps get from
  * theme-base.css's :root block. That sheet also styles bare h1-h7, buttons and labels, which
  * would restyle the cookbook, so only its tokens are carried here, scoped to this section, and
- * the colours resolve to the cookbook's. */
+ * the colours resolve to the cookbook's. Code colours are tento-ui's light syntax palette
+ * (brand/tokens/color/loaf.ts), which Lona apps otherwise get from colors.css. */
 const TOKENS = `
   --text-8px: 0.5rem; --text-9px: 0.5625rem; --text-10px: 0.625rem; --text-11px: 0.6875rem;
   --text-12px: 0.75rem; --text-13px: 0.8125rem; --text-14px: 0.875rem; --text-15px: 0.9375rem;
@@ -134,6 +145,9 @@ const TOKENS = `
   --text-pri: var(--ck-ink, #141414); --text-sec: var(--ck-secondary, #424242); --text-ter: var(--ck-n600, #5c5c5c);
   --divider: var(--ck-line, #d9d9d9); --bg: #fff; --bg-surface: var(--ck-n100, #f7f7f7); --code-bg: var(--ck-n100, #f7f7f7);
   font-family: var(--ck-font, system-ui, sans-serif); color: var(--text-pri);
+  --fg-syntax-keyword: #a626a4; --fg-syntax-function: #4078f2; --fg-syntax-string: #50a14f;
+  --fg-syntax-number: #986801; --fg-syntax-comment: #a0a1a7; --fg-syntax-punctuation: #696c77;
+  --fg-syntax-operator: #0184bc; --fg-syntax-variable: #383a42;
 `;
 
 const CSS = `
@@ -141,6 +155,38 @@ const CSS = `
 @media (min-width: 640px) { .ap-landing-docs { padding-inline: 24px; } }
 .ap-landing-docs > std-documentation { display: block; margin: 0 auto; max-width: 800px; }
 `;
+
+Code.registerLanguage(["sh", "bash", "shell", "zsh", "console"], shellTokenizer);
+Code.registerLanguage(["python", "py"], pythonTokenizer);
+
+/** std-documentation's code block view, drawing with Code's static, tokenizer-coloured path. */
+class StaticCodeBlockView {
+  dom: Code;
+  constructor(node: ProseMirrorEditor.ProseMirrorNode) {
+    this.dom = Code.make();
+    this.draw(node);
+  }
+  private draw(node: ProseMirrorEditor.ProseMirrorNode): void {
+    void this.dom.bind({ content: node.textContent, language: node.attrs.params || "plain", rendering: "static" });
+  }
+  update(node: ProseMirrorEditor.ProseMirrorNode): boolean {
+    if (node.type.name !== "code_block") return false;
+    this.draw(node);
+    return true;
+  }
+  stopEvent(): boolean {
+    return true;
+  }
+  ignoreMutation(): boolean {
+    return true;
+  }
+}
+
+/** Documentation's default views (lisp examples, code blocks), with code blocks drawn statically. */
+const NODE_VIEWS: Documentation.Props["nodeViews"] = {
+  lisp_example: (node) => new LispExampleView(node),
+  code_block: (node) => new StaticCodeBlockView(node),
+};
 
 /** The docs section and the shell hook that keeps it out of the open app's tab order. inert,
  * not hidden: onStage runs after the drawer restores the landing's scroll offset, and removing
@@ -163,7 +209,7 @@ export function landingDocs(): { onStage(stage: Cookbook.Stage): void; mount(): 
       const footer = document.querySelector(".ck-footer");
       if (footer) footer.before(section);
       else document.body.append(section);
-      void doc.bind({ markdown: DOCS_MARKDOWN });
+      void doc.bind({ markdown: DOCS_MARKDOWN, nodeViews: NODE_VIEWS });
     },
   };
 }
