@@ -1,7 +1,10 @@
 """Fit a first-order battery model to your own pulse data and plot the curve.
 
-    python examples/battery_fit.py --demo                 # synthetic cell, known answer
-    python examples/battery_fit.py my_cell.csv --sigma 0.002
+    python battery_fit.py data/demo.csv                   # synthetic cell, known answer
+    python battery_fit.py my_cell.csv --sigma 0.002 --ocv my_ocv.csv
+    python battery_fit.py --demo                          # regenerate demo.csv
+
+See README.md in this folder for setup, inputs and how to read the output.
 
 The CSV needs time (s), current (A, positive = discharging) and voltage (V)
 columns. Any current trace works: pulses, rests, drive cycles. The model is

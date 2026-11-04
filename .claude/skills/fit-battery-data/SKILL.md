@@ -5,29 +5,25 @@ description: Fit a 1RC battery model to a cell's time/current/voltage CSV with a
 
 # Fit battery data with autophys
 
-The tool is `examples/battery_fit.py`, which uses the Python SDK in
-`sdks/python`. It runs locally with no network, accounts or API keys.
+Everything is in `examples/battery_fit/`: the script, `run.sh`, sample data
+and expected output. Its README is the reference for inputs and output. It
+runs locally with no network, accounts or API keys after setup. Python 3.10 or
+newer is required.
 
-## 1. Set up once, from the repo root
-
-```sh
-test -x .venv/bin/python || python3 -m venv .venv
-.venv/bin/pip install -q ./sdks/python matplotlib
-```
-
-Python 3.10 or newer is required.
-
-## 2. Check that the install works
+## 1. Set up and check the install
 
 ```sh
-.venv/bin/python examples/battery_fit.py --demo
+examples/battery_fit/run.sh
 ```
 
-Expect chi2/N near 1 and all three parameters identified, near R0 = 0.025,
-R1 = 0.045 and C1 = 1600. If not, stop and report the output; don't go on to
+The first run creates `examples/battery_fit/.venv` and installs the SDK and
+matplotlib. It then fits `data/demo.csv` and writes `fit.png` to the current
+directory. Compare the output with `examples/battery_fit/expected/demo.txt`:
+chi2/N 0.99, with all three parameters identified near R0 = 0.025,
+R1 = 0.045 and C1 = 1600. If it differs, stop and report it; don't go on to
 real data.
 
-## 3. Ask for what can't be inferred
+## 2. Ask for what can't be inferred
 
 Get these from the user before fitting, and don't guess them:
 
@@ -38,19 +34,19 @@ Get these from the user before fitting, and don't guess them:
   from the fit residual, because that makes chi2/N meaningless.
 - **Capacity** (Ah) and **starting SOC** (0 to 1).
 - **OCV curve**, as a `soc,voltage` CSV, if they have one. Without it the
-  script uses a generic NMC table. Say that this limits the result.
+  script uses the generic NMC table in `data/ocv_generic.csv`. Say that this limits the result.
 
-## 4. Fit
+## 3. Fit
 
 ```sh
-.venv/bin/python examples/battery_fit.py CELL.csv --sigma S --capacity-ah Q --soc0 SOC \
+examples/battery_fit/run.sh CELL.csv --sigma S --capacity-ah Q --soc0 SOC \
   [--ocv OCV.csv] [--columns T,I,V] --out CELL.png
 ```
 
 The script exits with a message if columns are missing or time doesn't
 increase. Fix the input; don't edit around the check.
 
-## 5. Report
+## 4. Report
 
 - Quote the printed parameter lines and the `identified` / `NOT identified`
   verdicts exactly. Only the script's identified list counts.
@@ -66,7 +62,7 @@ increase. Fix the input; don't edit around the check.
 ## Never
 
 - Claim a parameter is identified because the curve or residuals look good.
-  A perfect fit can leave R1 and C1 tied; `short.csv` in the README shows one.
+  A perfect fit can leave R1 and C1 tied; `examples/battery_fit/data/short.csv` shows one.
 - Present demo or synthetic results as measurements from a real cell.
 - Change the ±10% identifiability rule, or the bounds in `make_model`, to get
   a nicer verdict without telling the user.
@@ -74,7 +70,7 @@ increase. Fix the input; don't edit around the check.
 ## Going further
 
 - **A 2RC model or temperature dependence:** edit `make_model` in
-  `examples/battery_fit.py`. It's an `@ap.simulator` function that returns
+  `examples/battery_fit/battery_fit.py`. It's an `@ap.simulator` function that returns
   `{"t": t, "v": volts}`.
 - **The closed loop:** autophys ranks the next experiment, a human approves
   it in the browser, and the new data is attached and refitted. See

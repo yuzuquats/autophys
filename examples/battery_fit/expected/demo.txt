@@ -1,0 +1,8 @@
+wrote data/demo.csv: 1800 samples, true R0=0.025 R1=0.045 C1=1600.0
+
+fit: chi2/N = 0.99 (converged; ~1 means the residuals match sigma)
+  R0  = 0.024857 ohm       ±0.4%  identified
+  R1  = 0.045448 ohm       ±0.4%  identified
+  C1  = 1589.3 F         ±0.7%  identified
+
+plot: expected/demo.png
