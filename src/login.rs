@@ -15,6 +15,11 @@
 //! itself ([`crate::app`]) redirects to `/login` until a session exists and
 //! then carries a small account badge ([`badge`]).
 
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+
 use actix_web::cookie::{Cookie, SameSite, time};
 use actix_web::http::header;
 use actix_web::{HttpRequest, HttpResponse, web};
@@ -30,13 +35,15 @@ use crate::http::{Api, blocking};
 /// catch-all.
 pub fn configure(cfg: &mut web::ServiceConfig, api: Api) {
     let data = web::Data::new(api);
+    cfg.app_data(web::Data::new(Throttle::default()));
     cfg.service(
         web::scope("/api/auth")
             .app_data(data.clone())
             .route("/login", web::post().to(login))
             .route("/invite", web::post().to(accept))
             .route("/logout", web::post().to(logout))
-            .route("/me", web::get().to(me)),
+            .route("/me", web::get().to(me))
+            .route("/badge", web::get().to(badge_fragment)),
     );
     cfg.service(
         web::resource("/login")
@@ -51,9 +58,19 @@ pub fn configure(cfg: &mut web::ServiceConfig, api: Api) {
 }
 
 /// Only same-site paths: `/app/...`, never `//host` or a URL.
+///
+/// A browser strips tabs and newlines from a URL, so `/\t/evil.example`
+/// would become `//evil.example`: only printable ASCII (no space, no
+/// backslash) is accepted.
 fn safe_next(next: Option<&str>) -> String {
     match next {
-        Some(n) if n.starts_with('/') && !n.starts_with("//") && !n.contains('\\') => n.into(),
+        Some(n)
+            if n.starts_with('/')
+                && !n.starts_with("//")
+                && n.bytes().all(|b| b.is_ascii_graphic() && b != b'\\') =>
+        {
+            n.into()
+        }
         _ => "/app".into(),
     }
 }
@@ -221,9 +238,32 @@ async fn login(
         next,
     } = form.into_inner();
     let next = safe_next(next.as_deref());
+    let throttle = req
+        .app_data::<web::Data<Throttle>>()
+        .cloned()
+        .ok_or_else(|| ApiError::Internal("no sign-in throttle".into()))?;
+    let key = crate::accounts::normalize_email(&email).unwrap_or_else(|_| email.to_lowercase());
+    let refuse = |m: &str| {
+        Ok(html(
+            actix_web::http::StatusCode::TOO_MANY_REQUESTS,
+            login_form(&next, &email, Some(m)),
+        ))
+    };
+    if throttle.locked(&key) {
+        return refuse(
+            "Too many sign-in attempts for this email. Wait a few minutes and try again.",
+        );
+    }
+    let Some(_slot) = throttle.slot() else {
+        return refuse("Autophys is busy signing people in. Try again in a moment.");
+    };
     let keys = api.keys.clone();
     let typed = email.clone();
     let user = blocking(move || keys.users_check(&typed, &password)).await?;
+    match &user {
+        Some(_) => throttle.clear(&key),
+        None => throttle.fail(&key),
+    }
     let Some(user) = user else {
         return Ok(html(
             actix_web::http::StatusCode::UNAUTHORIZED,
@@ -311,6 +351,77 @@ async fn me(api: web::Data<Api>, req: HttpRequest) -> Result<HttpResponse> {
     }
 }
 
+/// Sign-in throttling without trusting client IPs (the public proxy may
+/// not forward them): at most [`Throttle::FAILURES`] failed sign-ins per
+/// email per [`Throttle::WINDOW`], and at most [`Throttle::CONCURRENT`]
+/// password checks at once (argon2 is the expensive part).
+#[derive(Default)]
+pub struct Throttle {
+    failures: Mutex<HashMap<String, (u32, Instant)>>,
+    in_flight: Arc<AtomicUsize>,
+}
+
+/// A held password-check slot; released on drop.
+pub struct Slot(Arc<AtomicUsize>);
+
+impl Drop for Slot {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+impl Throttle {
+    pub const FAILURES: u32 = 8;
+    pub const WINDOW: Duration = Duration::from_secs(15 * 60);
+    pub const CONCURRENT: usize = 4;
+
+    fn map(&self) -> std::sync::MutexGuard<'_, HashMap<String, (u32, Instant)>> {
+        self.failures.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
+    /// Whether this email has used up its failures for the window.
+    pub fn locked(&self, key: &str) -> bool {
+        self.map()
+            .get(key)
+            .is_some_and(|(n, since)| *n >= Self::FAILURES && since.elapsed() < Self::WINDOW)
+    }
+
+    pub fn fail(&self, key: &str) {
+        let mut map = self.map();
+        if map.len() > 10_000 {
+            map.retain(|_, (_, since)| since.elapsed() < Self::WINDOW);
+        }
+        let entry = map.entry(key.to_string()).or_insert((0, Instant::now()));
+        if entry.1.elapsed() >= Self::WINDOW {
+            *entry = (0, Instant::now());
+        }
+        entry.0 += 1;
+    }
+
+    pub fn clear(&self, key: &str) {
+        self.map().remove(key);
+    }
+
+    /// A password-check slot, or `None` when [`Throttle::CONCURRENT`] are running.
+    pub fn slot(&self) -> Option<Slot> {
+        let n = self.in_flight.fetch_add(1, Ordering::SeqCst);
+        let slot = Slot(self.in_flight.clone());
+        (n < Self::CONCURRENT).then_some(slot)
+    }
+}
+
+/// `GET /api/auth/badge`: the signed-in account badge as an HTML fragment,
+/// for a page that signed in without reloading (the in-app sign-in card).
+async fn badge_fragment(api: web::Data<Api>, req: HttpRequest) -> Result<HttpResponse> {
+    match signed_in(&api, &req).await? {
+        Some(user) => Ok(HttpResponse::Ok()
+            .insert_header((header::CACHE_CONTROL, "no-store"))
+            .content_type("text/html; charset=utf-8")
+            .body(badge(&user))),
+        None => Err(ApiError::Unauthorized),
+    }
+}
+
 /// The account badge the app document carries while signed in: the email and
 /// a sign-out button, pinned over the right end of the cookbook header (which
 /// this app leaves empty). Fixed and on top, so no app layer covers it.
@@ -339,17 +450,6 @@ pub fn badge(user: &User) -> String {
     )
 }
 
-/// Carried by the signed-in app document: when the API answers 401 (the
-/// session ended: signed out elsewhere, expired, or the account removed),
-/// go to the sign-in page and come back here, rather than showing the app's
-/// connection error.
-pub const SIGNED_OUT_GUARD: &str = "<script>(function(){var f=window.fetch;\
-window.fetch=function(i){return f.apply(this,arguments).then(function(r){\
-var u=typeof i==='string'?i:(i&&i.url)||'';\
-if(r.status===401&&u.indexOf('/api/v1/')!==-1){\
-location.assign('/login?next='+encodeURIComponent(location.pathname+location.search));}\
-return r;});};})();</script>";
-
 /// What a signed-out visitor sees on the public pages (`serve --login`),
 /// where the account badge would be: one Sign in button.
 pub fn anonymous_badge() -> String {
@@ -367,6 +467,16 @@ mod tests {
     #[test]
     fn next_is_same_site_only() {
         assert_eq!(safe_next(Some("/app/inv_1")), "/app/inv_1");
+        // Browsers strip tabs and newlines: these would become //evil.example.
+        for bad in [
+            "/\t/evil.example",
+            "/\n/evil.example",
+            "/\r/evil.example",
+            "/ /x",
+            "/\\evil",
+        ] {
+            assert_eq!(safe_next(Some(bad)), "/app", "{bad:?}");
+        }
         for bad in [
             None,
             Some("https://evil.example"),
@@ -376,6 +486,24 @@ mod tests {
         ] {
             assert_eq!(safe_next(bad), "/app");
         }
+    }
+
+    #[test]
+    fn throttle_locks_an_email_and_caps_concurrent_checks() {
+        let t = Throttle::default();
+        for _ in 0..Throttle::FAILURES {
+            assert!(!t.locked("a@b.org"));
+            t.fail("a@b.org");
+        }
+        assert!(t.locked("a@b.org") && !t.locked("c@d.org"));
+        t.clear("a@b.org");
+        assert!(!t.locked("a@b.org"));
+        let held: Vec<_> = (0..Throttle::CONCURRENT)
+            .map(|_| t.slot().unwrap())
+            .collect();
+        assert!(t.slot().is_none());
+        drop(held);
+        assert!(t.slot().is_some());
     }
 
     #[test]

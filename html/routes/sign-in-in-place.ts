@@ -37,10 +37,13 @@ export function signInInPlace(onSignedIn: () => void): () => void {
 /** Replace the Sign in button with the account badge the server renders for this session. */
 async function swapBadge(): Promise<void> {
   try {
-    const html = await (await fetch("/app", { credentials: "same-origin", cache: "no-store" })).text();
-    const next = new DOMParser().parseFromString(html, "text/html").getElementById("ap-account");
+    const r = await fetch("/api/auth/badge", { credentials: "same-origin", cache: "no-store" });
+    if (!r.ok) return;
+    const template = document.createElement("template");
+    template.innerHTML = await r.text();
+    const next = template.content.getElementById("ap-account");
     const current = document.getElementById("ap-account");
-    if (next && current) current.replaceWith(document.importNode(next, true));
+    if (next && current) current.replaceWith(next);
   } catch { /* the badge is cosmetic; the session works without it */ }
 }
 

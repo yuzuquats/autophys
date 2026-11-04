@@ -31,6 +31,12 @@ const PAIRING_POLL_MS = 5000;
 // asks for reauthentication; the host owns document reload and its per-tab loop guard.
 const REAUTH_WINDOW_MS = 30_000;
 function reauth(): void {
+  // `serve --login` (the page carries the account badge): a 401 means the session ended, so
+  // sign in again and come back here rather than reloading into the same 401.
+  if (document.getElementById("ap-account")) {
+    location.assign(`/login?next=${encodeURIComponent(location.pathname + location.search)}`);
+    return;
+  }
   try {
     const key = "autophys.reauth-at", now = Date.now(), last = Number(sessionStorage.getItem(key));
     if (last && now - last < REAUTH_WINDOW_MS) return;
@@ -112,9 +118,10 @@ const app: Cookbook.App = {
     // Store exposes the failure through the view.
     const start = () => { void ctl.store.start().catch(() => {}); poll = setInterval(() => void ctl.store.refreshPairings(), PAIRING_POLL_MS); };
     // Signed out: the card signs in without a page load, then the workspace starts in place.
-    if (SIGNED_OUT) signInInPlace(() => { SIGNED_OUT = false; start(); redraw(); });
+    let stopSignIn: (() => void) | undefined;
+    if (SIGNED_OUT) stopSignIn = signInInPlace(() => { SIGNED_OUT = false; start(); redraw(); });
     else start();
-    teardown = () => { clearInterval(poll); unsubscribe(); views.forEach((v) => v.dispose()); removeStyles(); };
+    teardown = () => { stopSignIn?.(); clearInterval(poll); unsubscribe(); views.forEach((v) => v.dispose()); removeStyles(); };
   },
   unmount() {
     teardown?.();

@@ -182,11 +182,21 @@ pub fn browser(req: &HttpRequest, api: &Api) -> Result<(), ApiError> {
         }
     }
     // `serve --login`: the persistent sign-in cookie (checked by the caller)
-    // authorizes the browser; writes still pass the Origin check above. The
-    // process-local document session is not required, so a daemon restart
-    // (every deploy) does not knock signed-in tabs out.
+    // authorizes the browser, so a daemon restart (every deploy) does not knock
+    // signed-in tabs out. That cookie is SameSite=Lax, so reads must also be
+    // same-origin by Sec-Fetch-Site (a sibling subdomain or a cross-site
+    // top-level navigation is refused); writes passed the Origin check above.
     if api.options().login {
-        return Ok(());
+        let same_origin = req
+            .headers()
+            .get("sec-fetch-site")
+            .and_then(|v| v.to_str().ok())
+            .is_some_and(|v| v.eq_ignore_ascii_case("same-origin"));
+        return if same_origin || !matches!(*req.method(), Method::GET | Method::HEAD) {
+            Ok(())
+        } else {
+            Err(ApiError::Unauthorized)
+        };
     }
     api.sessions
         .accepts(req)

@@ -159,13 +159,7 @@ async fn app_document(
     let mut demo = false;
     if let Some(api) = api.filter(|a| a.options().login) {
         match crate::http::auth::signed_in(&api, &req).await? {
-            Some(user) => {
-                badge = Some(format!(
-                    "{}{}",
-                    crate::login::badge(&user),
-                    crate::login::SIGNED_OUT_GUARD
-                ))
-            }
+            Some(user) => badge = Some(crate::login::badge(&user)),
             None if req.path() == "/" => badge = Some(crate::login::anonymous_badge()),
             None if demo_requested(&req) => {
                 badge = Some(crate::login::anonymous_badge());
@@ -216,6 +210,23 @@ async fn app_document(
             .cookie(sessions.issue_cookie()?)
             .cookie(demo_cookie(demo))
             .insert_header((actix_web::http::header::CACHE_CONTROL, "no-store"))
+            // `serve --login` pages carry a password form: refuse framing.
+            .insert_header((
+                "x-frame-options",
+                if badge.is_some() {
+                    "DENY"
+                } else {
+                    "SAMEORIGIN"
+                },
+            ))
+            .insert_header((
+                actix_web::http::header::CONTENT_SECURITY_POLICY,
+                if badge.is_some() {
+                    "frame-ancestors 'none'"
+                } else {
+                    "frame-ancestors 'self'"
+                },
+            ))
             .content_type("text/html; charset=utf-8")
             .body(match badge {
                 Some(badge) => with_badge(html, &badge),

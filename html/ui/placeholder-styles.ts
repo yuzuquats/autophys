@@ -15,7 +15,9 @@ ${w} .ap-ph i.card { height:96px;border-radius:10px;margin:6px 0; }
 ${w} .ap-ph-details { padding:4px 0; }
 @keyframes ap-ph-shimmer { 0% { background-position:100% 0; } 100% { background-position:-200% 0; } }
 @media (prefers-reduced-motion: reduce) { ${w} .ap-ph i { animation:none; } }
-${w} [data-ap-empty][data-title=""] { display:none; }
+${w} .ap-side-notice [data-ap-empty][data-title=""] { display:none; }
+/* Quiet loading: the text stays for screen readers (role=status) but is not drawn. */
+${w} .ap-viewer.ap-state[aria-busy="true"] > [data-ap-empty] { position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap; }
 ${w} .ap-viewer.ap-state > .ap-ph { max-width:420px; }
 ${w} :has(> .ap-signin-wrap) > .ap-toolbar, ${w} :has(> * > .ap-signin-wrap) > .ap-toolbar { visibility:hidden; }
 ${w} .ap-signin-wrap { container-type:size;display:grid;place-content:safe center;place-items:center;

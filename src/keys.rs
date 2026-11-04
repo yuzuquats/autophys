@@ -588,7 +588,11 @@ impl KeyStore {
 
     /// Accept an invite with the chosen password.
     pub fn users_accept(&self, token: &str, password: &str) -> Result<crate::accounts::User> {
-        crate::accounts::accept(&mut *self.conn()?, token, password, Utc::now())
+        // argon2 runs between the two locked steps, so a slow hash (tens of
+        // ms, ~19 MiB) never holds up key checks and session lookups.
+        crate::accounts::accept_check(&*self.conn()?, token, password, Utc::now())?;
+        let phc = crate::accounts::password_hash(password)?;
+        crate::accounts::accept_commit(&mut *self.conn()?, token, &phc, Utc::now())
     }
 
     /// The active account with this email and password.
@@ -597,7 +601,9 @@ impl KeyStore {
         email: &str,
         password: &str,
     ) -> Result<Option<crate::accounts::User>> {
-        crate::accounts::check_password(&*self.conn()?, email, password)
+        // Look up under the lock, verify after releasing it.
+        let row = crate::accounts::password_row(&*self.conn()?, email)?;
+        Ok(crate::accounts::verify_row(row, password))
     }
 
     pub fn users_list(&self) -> Result<Vec<crate::accounts::User>> {

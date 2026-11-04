@@ -153,10 +153,11 @@ pub(crate) fn invitee(conn: &Connection, token: &str, now: DateTime<Utc>) -> Res
         .optional()?)
 }
 
-/// Accept an invite: set the password, spend the token, and end every
-/// earlier session of the account (a reset signs out other browsers).
-pub(crate) fn accept(
-    conn: &mut Connection,
+/// Check an invite acceptance without hashing: the password rules and an
+/// unexpired token. The caller hashes ([`password_hash`]) outside the
+/// database lock, then calls [`accept_commit`].
+pub(crate) fn accept_check(
+    conn: &Connection,
     token: &str,
     password: &str,
     now: DateTime<Utc>,
@@ -170,13 +171,30 @@ pub(crate) fn accept(
     if password.len() > 1024 {
         return Err(ApiError::invalid("password", "at most 1024 bytes"));
     }
-    let Some(user) = invitee(conn, token, now)? else {
+    invitee(conn, token, now)?
+        .ok_or_else(|| ApiError::not_found("invite (it may have expired or been used)"))
+}
+
+/// The argon2 hash of a password (slow by design: hold no lock).
+pub(crate) fn password_hash(password: &str) -> Result<String> {
+    hash_password(password)
+}
+
+/// Set the hashed password, spend the token, and end every earlier session
+/// of the account (a reset signs out other browsers). The token is checked
+/// again inside the transaction, so one spent meanwhile is refused.
+pub(crate) fn accept_commit(
+    conn: &mut Connection,
+    token: &str,
+    phc: &str,
+    now: DateTime<Utc>,
+) -> Result<User> {
+    let tx = conn.transaction()?;
+    let Some(user) = invitee(&tx, token, now)? else {
         return Err(ApiError::not_found(
             "invite (it may have expired or been used)",
         ));
     };
-    let phc = hash_password(password)?;
-    let tx = conn.transaction()?;
     tx.execute(
         "UPDATE users SET password = ?2, invite_sha256 = NULL, invite_expires = NULL
          WHERE id = ?1",
@@ -190,31 +208,56 @@ pub(crate) fn accept(
     })
 }
 
+/// Accept an invite in one call ([`accept_check`], hash, [`accept_commit`]).
+pub(crate) fn accept(
+    conn: &mut Connection,
+    token: &str,
+    password: &str,
+    now: DateTime<Utc>,
+) -> Result<User> {
+    accept_check(conn, token, password, now)?;
+    let phc = hash_password(password)?;
+    accept_commit(conn, token, &phc, now)
+}
+
+/// An account and its password hash, looked up by email (no hashing).
+pub(crate) type PasswordRow = Option<(User, Option<String>)>;
+
+/// Look up the account a sign-in names. Cheap: verify with [`verify_row`]
+/// after releasing the database lock.
+pub(crate) fn password_row(conn: &Connection, email: &str) -> Result<PasswordRow> {
+    let Ok(email) = normalize_email(email) else {
+        return Ok(None);
+    };
+    Ok(conn
+        .query_row(
+            &format!("SELECT {USER_COLS} FROM users WHERE email = ?1"),
+            [&email],
+            |r| Ok((user_row(r)?, r.get(3)?)),
+        )
+        .optional()?)
+}
+
+/// The account if the password matches. An unknown or uninvited email costs
+/// the same argon2 work as a wrong password.
+pub(crate) fn verify_row(row: PasswordRow, password: &str) -> Option<User> {
+    match row {
+        Some((user, Some(phc))) if verify_password(password, &phc) => Some(user),
+        Some((_, Some(_))) => None,
+        _ => {
+            decoy_verify(password);
+            None
+        }
+    }
+}
+
 /// The active account whose email and password match, else `None`.
 pub(crate) fn check_password(
     conn: &Connection,
     email: &str,
     password: &str,
 ) -> Result<Option<User>> {
-    let Ok(email) = normalize_email(email) else {
-        decoy_verify(password);
-        return Ok(None);
-    };
-    let row: Option<(User, Option<String>)> = conn
-        .query_row(
-            &format!("SELECT {USER_COLS} FROM users WHERE email = ?1"),
-            [&email],
-            |r| Ok((user_row(r)?, r.get(3)?)),
-        )
-        .optional()?;
-    match row {
-        Some((user, Some(phc))) if verify_password(password, &phc) => Ok(Some(user)),
-        Some((_, Some(_))) => Ok(None),
-        _ => {
-            decoy_verify(password);
-            Ok(None)
-        }
-    }
+    Ok(verify_row(password_row(conn, email)?, password))
 }
 
 /// Start a session for `user`; returns the token for the cookie.

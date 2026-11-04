@@ -56,6 +56,7 @@ fn login_fixture() -> Fixture {
 /// A request as it arrives through the public proxy (Host is not local).
 fn public(req: test::TestRequest) -> test::TestRequest {
     req.insert_header(("host", "autophys.example.org"))
+        .insert_header(("sec-fetch-site", "same-origin"))
         .peer_addr("127.0.0.1:50000".parse().unwrap())
 }
 
@@ -270,10 +271,6 @@ async fn sign_in_gates_the_app_and_the_browser_api() {
         (s, me["user"]["email"].as_str()),
         (200, Some("ada@lab.org"))
     );
-    assert!(
-        page.contains("/login?next="),
-        "the document goes to sign-in on a 401"
-    );
     // The sign-in cookie alone is enough, so a daemon restart (which drops the
     // process-local document sessions) does not sign anyone out.
     let only_login = |req: test::TestRequest| {
@@ -287,6 +284,26 @@ async fn sign_in_gates_the_app_and_the_browser_api() {
             .await
             .0,
         200
+    );
+    // A read that is not same-origin (a sibling subdomain, a cross-site
+    // navigation) is refused even with the sign-in cookie.
+    for site in ["same-site", "cross-site", "none"] {
+        let req = only_login(get("/workspace", None)).insert_header(("sec-fetch-site", site));
+        assert_eq!(call(&app, req.to_request()).await.0, 401, "{site}");
+    }
+    // The signed-in document refuses framing; the badge fragment serves an in-place sign-in.
+    let doc = only_login(test::TestRequest::get().uri("/app")).to_request();
+    let resp = test::call_service(&app, doc).await;
+    assert_eq!(resp.headers().get("x-frame-options").unwrap(), "DENY");
+    let (s, _, _, frag) = send(
+        &app,
+        only_login(test::TestRequest::get().uri("/api/auth/badge")),
+        "x",
+    )
+    .await;
+    assert!(
+        s == 200 && frag.contains("ada@lab.org") && frag.contains("/api/auth/logout"),
+        "{frag}"
     );
     // Writes still need one of the daemon's own origins.
     let foreign = only_login(test::TestRequest::post().uri("/api/v1/pairings/ABCD-1234/approve"))
@@ -307,6 +324,33 @@ async fn sign_in_gates_the_app_and_the_browser_api() {
     )
     .await;
     assert_eq!(s, 401);
+    // Repeated failures for one email lock it for the window (429), even
+    // with the right password; other emails are unaffected.
+    for _ in 1..autophys_cli::login::Throttle::FAILURES {
+        let (s, _, _, _) = send(
+            &app,
+            form(
+                "/api/auth/login",
+                "email=ada%40lab.org&password=wrongwrong1",
+                Some(PUBLIC),
+            ),
+            "x",
+        )
+        .await;
+        assert_eq!(s, 401);
+    }
+    let (s, _, _, page) = send(
+        &app,
+        form(
+            "/api/auth/login",
+            "email=ada%40lab.org&password=longenough1",
+            Some(PUBLIC),
+        ),
+        "x",
+    )
+    .await;
+    assert!(s == 429 && page.contains("Too many"), "{s}");
+    let app = app!(f.api);
     let (s, to, again, _) = send(
         &app,
         form(
