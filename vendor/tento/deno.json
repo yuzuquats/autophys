@@ -18,7 +18,9 @@
     "@tento-chrono": "./tento-chrono/chrono/mod.ts",
     "@tento-chrono/": "./tento-chrono/",
     "@tento/chrono": "./tento-chrono/chrono/mod.ts",
-    "@tento/core/rational": "./tento-core-js/rational.ts"
+    "@tento/core/rational": "./tento-core-js/rational.ts",
+    "@tento-lisp": "./tento-lisp-js/src/lib.ts",
+    "@tento-lisp/": "./tento-lisp-js/src/"
   },
   "test": {
     "exclude": [

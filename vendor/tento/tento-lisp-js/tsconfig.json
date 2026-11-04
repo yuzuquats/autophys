@@ -1,0 +1,103 @@
+{
+  "extends": "../tento-web-js/tsconfig.base.json",
+  "compilerOptions": {
+    "strict": true,
+    "paths": {
+      "@tento-chat": [
+        "../tento-chat-js/lib.ts"
+      ],
+      "@tento-chat/*": [
+        "../tento-chat-js/*"
+      ],
+      "@tento-chrono": [
+        "../tento-chrono/chrono/mod.ts"
+      ],
+      "@tento-chrono/*": [
+        "../tento-chrono/*"
+      ],
+      "@tento-data": [
+        "../tento-data-js/lib.ts"
+      ],
+      "@tento-data-ui": [
+        "../tento-data-ui-js/lib.ts"
+      ],
+      "@tento-data-ui/*": [
+        "../tento-data-ui-js/*"
+      ],
+      "@tento-data/*": [
+        "../tento-data-js/*"
+      ],
+      "@tento-lona": [
+        "../tento-lona-js/src/lib.ts"
+      ],
+      "@tento-lona/*": [
+        "../tento-lona-js/src/*"
+      ],
+      "@tento-lona/cli": [
+        "../tento-lona-js/cli/lib.ts"
+      ],
+      "@tento-lona/cli/*": [
+        "../tento-lona-js/cli/*"
+      ],
+      "@tento-lona/testkit/rows-fixtures": [
+        "../tento-lona-js/testkit/rows-fixtures/src/lib.ts"
+      ],
+      "@tento-lona/testkit/rows-fixtures/*": [
+        "../tento-lona-js/testkit/rows-fixtures/src/*"
+      ],
+      "@tento-lona/sheets": [
+        "../tento-lona-js/sheets/src/lib.ts"
+      ],
+      "@tento-lona/sheets-ui": [
+        "../tento-lona-js/sheets-ui/src/lib.ts"
+      ],
+      "@tento-lona/sheets-ui/*": [
+        "../tento-lona-js/sheets-ui/src/*"
+      ],
+      "@tento-lona/sheets/*": [
+        "../tento-lona-js/sheets/src/*"
+      ],
+      "@tento-plugins/codemirror": [
+        "../tento-plugins-js/codemirror/codemirror-plugin.d.ts"
+      ],
+      "@tento-plugins/prosemirror": [
+        "../tento-plugins-js/prosemirror/prosemirror-plugin.d.ts"
+      ],
+      "@tento-scroll": [
+        "../tento-scroll-js/lib.ts"
+      ],
+      "@tento-scroll/*": [
+        "../tento-scroll-js/*"
+      ],
+      "@tento-ui/*": [
+        "../tento-ui-js/*"
+      ],
+      "@tento-web/*": [
+        "../tento-web-js/*"
+      ],
+      "@tento-trace": [
+        "../tento-trace-js/src/lib.ts"
+      ],
+      "@tento-trace/*": [
+        "../tento-trace-js/src/*"
+      ],
+      "@tento-core/*": [
+        "../tento-core-js/*"
+      ],
+      "@tento-lisp": [
+        "./src/lib.ts"
+      ],
+      "@tento-lisp/*": [
+        "./src/*"
+      ]
+    }
+  },
+  "include": [
+    "../tento-ui-js/types/*.d.ts",
+    "src/**/*.ts"
+  ],
+  "exclude": [
+    "**/*.deno.ts",
+    "**/*.deno.test.ts"
+  ]
+}
