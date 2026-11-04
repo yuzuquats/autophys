@@ -38,13 +38,13 @@ button { font: inherit; color: inherit; }
 @media (min-width: 640px) { .ck-header { --ck-gutter: 24px; } }
 @media (min-width: 1024px) { .ck-header { --ck-gutter: 32px; } }
 .ck-header[data-app] { position: fixed; --ck-gutter: calc(var(--ck-gap) + 16px); }
-.ck-nav { position: relative; isolation: isolate; flex: 1; height: 56px; display: flex; align-items: center; justify-content: space-between;
+.ck-nav { position: relative; isolation: isolate; flex: 1; min-width: 0; height: 56px; display: flex; align-items: center; justify-content: space-between;
   gap: 16px; pointer-events: auto; font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: -0.025em; }
 .ck-menubar { position: absolute; inset: 0 -16px; z-index: -1; border-radius: 16px; background: #fff;
   filter: drop-shadow(0 0 1.5px rgb(0 0 0 / 38%)); opacity: 0; transform: scaleY(.86); pointer-events: none;
   transition: opacity 360ms ease, transform 700ms var(--ck-ease); }
 .ck-header[data-app] .ck-menubar { opacity: 1; transform: none; }
-.ck-nav-start { display: flex; align-items: center; min-width: 0; }
+.ck-nav-start { flex: 1; display: flex; align-items: center; min-width: 0; }
 .ck-brand { position: relative; display: inline-flex; align-items: center; min-height: 44px; color: var(--ck-ink); text-decoration: none; flex-shrink: 0; }
 .ck-header[data-app] .ck-brand { padding-left: 28px; }
 .ck-wordmark { display: inline-block; }
@@ -58,7 +58,7 @@ button { font: inherit; color: inherit; }
 .ck-header:not([data-app]) .ck-crumbs { visibility: hidden; }
 .ck-crumb-divider { flex:none;white-space:pre;margin-inline: 6px; color: var(--ck-muted); }
 .ck-crumb-current { overflow: hidden; text-overflow: ellipsis; }
-.ck-nav-links { position: relative; display: flex; align-items: center; justify-content: flex-end; min-height: 44px; }
+.ck-nav-links { flex-shrink: 0; position: relative; display: flex; align-items: center; justify-content: flex-end; min-height: 44px; }
 .ck-open-link { display: inline-flex; align-items: center; min-height: 44px; color: var(--ck-ink); text-decoration: none; white-space: nowrap;
   transition: opacity 180ms ease, visibility 180ms; }
 .ck-open-link:hover { text-decoration: underline; text-underline-offset: 4px; }
