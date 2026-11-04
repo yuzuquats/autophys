@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "name": "autophys",
+  "displayName": "autophys",
+  "version": "0.1.0",
+  "description": "Calibrate local simulators with honest identifiability and human-reviewed experiments.",
+  "compat": {
+    "source": "native",
+    "manifestDir": ".muse-plugin"
+  },
+  "capabilities": {
+    "skills": [
+      {
+        "id": "autophys",
+        "path": "skills/autophys/SKILL.md",
+        "enabledDefault": true
+      }
+    ],
+    "commands": [
+      {
+        "id": "calibrate",
+        "path": "commands/calibrate.md",
+        "enabledDefault": true
+      }
+    ],
+    "mcpServers": [
+      {
+        "id": "autophys",
+        "transport": "stdio",
+        "command": [
+          "autophys",
+          "mcp"
+        ]
+      }
+    ],
+    "hooks": [],
+    "reminders": []
+  }
+}

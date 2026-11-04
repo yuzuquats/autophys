@@ -31,6 +31,17 @@ inv.attach_data(outcome.proposal_id, observation)
 inv.run()
 ```
 
+## Muse Code plugin
+
+Install the optional MCP dependency with `pip install -e 'sdks/python[mcp]'`
+from the repository root, then `muse plugins install plugins/muse-autophys`.
+The native bundle includes the canonical playbook and a stdio server.
+`python -m autophys.cli mcp --project mypkg.module:project --workbook ~/autophys`
+runs the server next to your simulator. Experiments are approved in the browser;
+there is no approve or reject MCP tool. See the
+[demo and verification guide](../../autophys.project.docs/content/muse-plugin.md)
+for explicit venv configuration and the built-in battery CSV path.
+
 ## Connections and workbooks (W-1..W-8)
 
 The operator's decisions are in
