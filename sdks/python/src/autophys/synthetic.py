@@ -1,0 +1,250 @@
+"""Synthetic cases: hidden parameters, noisy observations, and an evaluator.
+
+The split of knowledge is the point of this module:
+
+* :class:`CaseView` is everything the agent may see: the simulator, the
+  initial dataset (train and validation splits), the experiment budget and a
+  :class:`SyntheticRunner` that returns new noisy observations on request.
+* :class:`Evaluator` holds the true parameters and the held-out test
+  experiments. It is returned separately and never passed to an agent, a
+  policy or a tool. The runner captures the truth in a closure and exposes
+  only ``run``; this is a structural boundary inside one process, not a
+  security boundary.
+
+Observations are generated with :data:`TRUTH_OPTIONS`, a much finer solver
+tolerance than fitting uses, so a fit never reproduces the generator's own
+discretisation error (the "inverse crime").
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Callable, Mapping
+
+import numpy as np
+
+from .data import Dataset, Observation
+from .simulator import TRUTH_OPTIONS, Simulator
+
+
+@dataclass(frozen=True)
+class NoiseModel:
+    sigma: dict[str, float]
+    bias: dict[str, float] = field(default_factory=dict)
+    missing_fraction: float = 0.0
+
+
+def observe(
+    sim: Simulator,
+    truth: Mapping[str, float],
+    experiment: str | Mapping[str, Any],
+    noise: NoiseModel,
+    rng: np.random.Generator,
+    *,
+    split: str = "train",
+    name: str | None = None,
+) -> Observation:
+    settings = sim.experiment(experiment)
+    out = sim(truth, settings, options=TRUTH_OPTIONS, count=False)  # data generation is not a fit call
+    y = {}
+    for ch in [k for k in out if k != "t"]:
+        v = out[ch] + rng.normal(0.0, noise.sigma[ch], size=out[ch].shape) + noise.bias.get(ch, 0.0)
+        if noise.missing_fraction > 0:
+            drop = rng.random(v.shape) < noise.missing_fraction
+            drop[0] = False
+            v = np.where(drop, np.nan, v)
+        y[ch] = v
+    return Observation(
+        experiment=name or (experiment if isinstance(experiment, str) else settings["kind"]),
+        settings=settings,
+        t=out["t"],
+        y=y,
+        sigma=dict(noise.sigma),
+        split=split,
+        source="synthetic",
+    )
+
+
+class SyntheticRunner:
+    """Runs catalog experiments on the hidden system. Exposes only ``run``."""
+
+    def __init__(self, sim: Simulator, truth: Mapping[str, float], noise: NoiseModel, seed: int) -> None:
+        rng = np.random.default_rng(seed)
+        hidden = dict(truth)
+
+        def _run(experiment: str | Mapping[str, Any]) -> Observation:
+            return observe(sim, hidden, experiment, noise, rng)
+
+        self._run: Callable[[Any], Observation] = _run
+        self.kind = "synthetic"
+
+    def run(self, experiment: str | Mapping[str, Any]) -> Observation:
+        return self._run(experiment)
+
+
+@dataclass
+class CaseView:
+    """What an agent may see."""
+
+    name: str
+    simulator: Simulator
+    dataset: Dataset
+    runner: SyntheticRunner
+    max_experiments: int
+    candidates: list[str] | None = None
+
+
+@dataclass
+class Evaluator:
+    """Ground truth and held-out test data. Never handed to an agent."""
+
+    case: str
+    truth: dict[str, float]
+    test: list[Observation]
+    combos: dict[str, dict[str, float]]
+    expected_non_identified: set[str]
+    note: str = ""
+
+    def combo_value(self, params: Mapping[str, float], combo: str) -> float:
+        return float(np.prod([params[p] ** e for p, e in self.combos[combo].items()]))
+
+    def relative_errors(self, estimate: Mapping[str, float]) -> dict[str, float]:
+        """Relative error of each identifiable combination."""
+        return {
+            c: abs(self.combo_value(estimate, c) / self.combo_value(self.truth, c) - 1.0) for c in self.combos
+        }
+
+    def test_rmse(self, sim: Simulator, estimate: Mapping[str, float]) -> float:
+        """RMSE against the noisy held-out test observations (≈ sigma for a perfect model)."""
+        sq, n = 0.0, 0
+        for obs in self.test:
+            pred = sim({k: estimate[k] for k in sim.params}, obs.settings, count=False)
+            for ch, y in obs.y.items():
+                m = np.isfinite(y)
+                sq += float(np.sum((y[m] - pred[ch][m]) ** 2))
+                n += int(m.sum())
+        return float(np.sqrt(sq / max(n, 1)))
+
+    def diagnosis_correct(self, non_identified: set[str]) -> bool:
+        return set(non_identified) == set(self.expected_non_identified)
+
+    def save(self, path: str | Path) -> None:
+        Path(path).write_text(
+            json.dumps(
+                {
+                    "case": self.case,
+                    "truth": self.truth,
+                    "combos": self.combos,
+                    "expected_non_identified": sorted(self.expected_non_identified),
+                    "test": [o.to_dict() for o in self.test],
+                    "note": self.note,
+                }
+            )
+        )
+
+    @classmethod
+    def load(cls, path: str | Path) -> "Evaluator":
+        d = json.loads(Path(path).read_text())
+        return cls(
+            case=d["case"],
+            truth=d["truth"],
+            test=[Observation.from_dict(o) for o in d["test"]],
+            combos=d["combos"],
+            expected_non_identified=set(d["expected_non_identified"]),
+            note=d.get("note", ""),
+        )
+
+
+# --------------------------------------------------------------------------
+# Case catalogue
+
+
+OSC_TRUTH = {"m": 2.0, "c": 0.8, "k": 15.0}
+THERMAL_TRUTH = {"C": 500.0, "R": 2.0}
+
+
+def _build(
+    name: str,
+    sim: Simulator,
+    truth: dict,
+    noise: NoiseModel,
+    seed: int,
+    train: list,
+    validation: list,
+    test: list,
+    max_experiments: int,
+    combos: dict,
+    expected: set,
+    note: str,
+) -> tuple[CaseView, Evaluator]:
+    rng = np.random.default_rng([seed, 1])
+    ds = Dataset()
+    for e in train:
+        ds.add(observe(sim, truth, e, noise, rng, split="train", name=e if isinstance(e, str) else None))
+    for e in validation:
+        ds.add(observe(sim, truth, e, noise, rng, split="validation", name=e if isinstance(e, str) else e["name"]))
+    test_rng = np.random.default_rng([seed, 2])
+    test_obs = [observe(sim, truth, e, NoiseModel(noise.sigma), test_rng, split="test", name=e["name"]) for e in test]
+    runner = SyntheticRunner(sim, truth, noise, seed=seed * 7919 + 3)
+    view = CaseView(name, sim, ds, runner, max_experiments)
+    ev = Evaluator(name, dict(truth), test_obs, combos, expected, note)
+    return view, ev
+
+
+def _osc_custom(name: str, **kw) -> dict:
+    return {"name": name, "duration": 10.0, "rate": 100.0, **kw}
+
+
+def oscillator_case(seed: int = 0, *, max_experiments: int = 2, bias: float = 0.0, missing: float = 0.0):
+    """Free-response oscillator; the forced experiments must be requested."""
+    from .models import oscillator
+
+    ambiguous = max_experiments == 0
+    combos = {"c/m": {"c": 1.0, "m": -1.0}, "k/m": {"k": 1.0, "m": -1.0}}
+    if not ambiguous:
+        combos = {"m": {"m": 1.0}, "c": {"c": 1.0}, "k": {"k": 1.0}}
+    return _build(
+        "oscillator-free-only" if ambiguous else "oscillator",
+        oscillator,
+        OSC_TRUTH,
+        NoiseModel({"x": 0.01}, {"x": bias} if bias else {}, missing),
+        seed,
+        train=["free"],
+        validation=[_osc_custom("free_neg", kind="free", x0=-0.08, v0=0.05)],
+        test=[_osc_custom("sine_0.3Hz", kind="sine", amplitude=1.5, freq=0.3), _osc_custom("step_1N", kind="step", amplitude=1.0)],
+        max_experiments=max_experiments,
+        combos=combos,
+        expected={"m", "c", "k"} if ambiguous else set(),
+        note="A free response depends only on c/m and k/m: scaling m, c, k together is invisible.",
+    )
+
+
+def thermal_case(seed: int = 0, *, max_experiments: int = 2, bias: float = 0.0, missing: float = 0.0):
+    """A short heating step pins down C but barely R; a longer experiment fixes R."""
+    from .models import thermal_rc
+
+    short_only = max_experiments == 0
+    return _build(
+        "thermal-short-only" if short_only else "thermal",
+        thermal_rc,
+        THERMAL_TRUTH,
+        NoiseModel({"T": 0.05}, {"T": bias} if bias else {}, missing),
+        seed,
+        train=["step_short"],
+        validation=[{"name": "step_short_5W", "kind": "step", "power": 5.0, "duration": 120.0, "rate": 1.0}],
+        test=[{"name": "pulse_15W", "kind": "pulse", "power": 15.0, "on": 900.0, "duration": 4000.0, "rate": 0.1}],
+        max_experiments=max_experiments,
+        combos={"C": {"C": 1.0}} if short_only else {"C": {"C": 1.0}, "R": {"R": 1.0}},
+        expected={"R"} if short_only else set(),
+        note="Over 120 s of a 1000 s time constant the response is nearly linear in t/C; R only bends it.",
+    )
+
+
+CASES = {
+    "oscillator-free-only": lambda seed: oscillator_case(seed, max_experiments=0),
+    "oscillator": lambda seed: oscillator_case(seed, max_experiments=2),
+    "thermal-short-only": lambda seed: thermal_case(seed, max_experiments=0),
+    "thermal": lambda seed: thermal_case(seed, max_experiments=2),
+}
