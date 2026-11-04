@@ -40,11 +40,14 @@ USER_AGENT = "autophys-python/0.1"
 
 
 class HttpError(RuntimeError):
-    def __init__(self, status: int, error: str, message: str = "") -> None:
+    """An HTTP error response. ``retry_after`` is the raw ``Retry-After`` header, if any."""
+
+    def __init__(self, status: int, error: str, message: str = "", *, retry_after: str | None = None) -> None:
         super().__init__(f"HTTP {status} {error}: {message}".strip())
         self.status = status
         self.error = error
         self.message = message
+        self.retry_after = retry_after
 
 
 class AuthError(HttpError):
@@ -86,7 +89,8 @@ def _http_error(e: urllib.error.HTTPError) -> HttpError:
         j = {}
     err, msg = j.get("error", "http_error"), j.get("message", "")
     cls = AuthError if e.code in (401, 403) and err not in ("access_denied",) else HttpError
-    return cls(e.code, err, msg)
+    retry_after = e.headers.get("Retry-After") if e.headers is not None else None
+    return cls(e.code, err, msg, retry_after=retry_after)
 
 
 # --------------------------------------------------------------------------

@@ -22,7 +22,6 @@ import math
 import os
 import stat
 import time
-import urllib.error
 from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol
 
@@ -120,12 +119,8 @@ def _reason_key(route: str, api_key: str | None) -> str:
 
 
 def _retry_delay(error: HttpError) -> float:
-    # request_json wraps urllib's HTTPError. Its exception context preserves
-    # the response headers, so no second request or global opener is needed.
-    cause = error.__context__
-    headers = cause.headers if isinstance(cause, urllib.error.HTTPError) else None
     try:
-        delay = float(headers.get("Retry-After", "1")) if headers is not None else 1.0
+        delay = float(error.retry_after) if error.retry_after is not None else 1.0
     except (TypeError, ValueError):
         return 1.0
     return min(30.0, max(0.0, delay)) if math.isfinite(delay) else 1.0
