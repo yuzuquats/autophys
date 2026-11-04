@@ -3,7 +3,7 @@
  * cookbook builds the shell; each slot gets one ui surface drawing its slice of the client's
  * view through Cookbook.View.mount; the client's Store follows a Source: the daemon's
  * /api/v1 when this page is served by `autophys serve`, with recovery if it cannot answer.
- * `?source=fixtures` or `?source=daemon` forces one. The rail reports connection status only while disconnected.
+ * `?source=fixtures` or `?source=daemon` forces one. The main pane reports connection status only while disconnected.
  */
 import { Cookbook } from "@tento-cookbook/lib.ts";
 import { daemon, type Source } from "../client/api.ts";
@@ -15,6 +15,7 @@ import { AutophysDetails } from "../ui/details.ts";
 import { hydrateProjectSetup } from "../ui/new-project-components.ts";
 import { AutophysMain } from "../ui/main.ts";
 import { AutophysSidebar } from "../ui/sidebar.ts";
+import { breadcrumbText } from "../ui/breadcrumb.ts";
 import { autophysStyles } from "../ui/styles.ts";
 import { placeholderStyles } from "../ui/placeholder-styles.ts";
 import { deck, tutorial } from "./content.ts";
@@ -114,7 +115,7 @@ const app: Cookbook.App = {
       const details = panels?.querySelector<HTMLElement>(".ck-details");
       if (details) details.inert = setupOnly || !panels?.hasAttribute("data-details");
       views.forEach((v) => v.redraw());
-      shell.setCrumb?.(ctl.view().main.crumb.at(-1)?.label ?? "");
+      shell.setCrumb?.(breadcrumbText(view.main.crumb));
     };
     const unsubscribe = ctl.subscribe(redraw);
     redraw();

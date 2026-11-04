@@ -10,7 +10,7 @@ import { TreeList } from "@tento-ui/components/tree-list/tree-list";
 import { chevronIcon, hydrateComponents } from "./components.ts";
 import { DEVICE_GLYPH, PROJECT_GLYPH } from "./sidebar-glyphs.ts";
 import { sidebarStyles } from "./sidebar-styles.ts";
-import { emptyMarkup, skeletonMarkup, componentButton } from "./state-markup.ts";
+import { emptyMarkup, skeletonMarkup } from "./state-markup.ts";
 import { ICONS } from "./icons.ts";
 import { type IntentHandler, intentOf } from "./intent.ts";
 import {
@@ -60,9 +60,8 @@ export class AutophysSidebar {
   private section = RailSection.make() as RailSection;
   private notice = document.createElement("div");
   private tree = TreeList.make() as TreeList;
-  private connection = document.createElement("aside");
   private footer = document.createElement("div");
-  private keys = { head: "", pinned: "", tree: "", connection: "" };
+  private keys = { head: "", pinned: "", tree: "" };
   private abort = new AbortController();
 
   constructor(host: HTMLElement, private onIntent: IntentHandler) {
@@ -76,15 +75,12 @@ export class AutophysSidebar {
     const style = document.createElement("style");
     style.textContent = sidebarStyles(".ck-app[data-cookbook] .ap-sidebar");
     this.section.className = "ap-projects";
-    this.connection.className = "ap-rail-connection";
-    this.connection.setAttribute("role", "alert");
-    this.connection.hidden = true;
     this.footer.className = "ap-new-project";
     this.footer.innerHTML =
       `<button class="ap-nav-row" type="button" data-ap="action" data-ap-name="new-project">${ICONS.plus}<span>New project</span></button>`;
     hydrateComponents(this.footer, this.onIntent);
     this.section.append(this.tree, this.notice);
-    this.rail.append(this.footer, this.pinned, this.section, this.connection);
+    this.rail.append(this.footer, this.pinned, this.section);
     host.replaceChildren(style, this.rail);
     const { signal } = this.abort;
     for (const type of ["click", "change"] as const) {
@@ -100,14 +96,6 @@ export class AutophysSidebar {
 
   render(model: SidebarModel & SidebarExtras): void {
     const scrollTop = this.rail.bodyScrollTop;
-    this.connection.hidden = !model.connection;
-    const connectionKey = JSON.stringify(model.connection);
-    if (connectionKey !== this.keys.connection) {
-      this.keys.connection = connectionKey;
-      this.connection.innerHTML = model.connection ? `<b>Reconnecting to the daemon…</b><span>${model.connection.lastRecord ? `Showing records up to ${esc(model.connection.lastRecord)}.` : "No records loaded yet."} Approvals are paused.</span>${componentButton("retry", "Retry connection")}` : "";
-      this.connection.title = model.connection?.error ?? "";
-      hydrateComponents(this.connection, this.onIntent);
-    }
     const create = this.footer.querySelector("button")!;
     create.setAttribute("aria-pressed", String(!!model.creatingProject && model.selectedId !== "devices"));
     create.disabled = model.switcher.kind === "loading" || model.switcher.kind === "unavailable";

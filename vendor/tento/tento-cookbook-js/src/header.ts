@@ -22,7 +22,7 @@ export function createHeader(options: {
     <span class="ck-menubar" aria-hidden="true"></span>
     <div class="ck-nav-start">
       <a class="ck-brand" href="/"><svg class="ck-brand-back" viewBox="0 0 20 20" aria-hidden="true"><path d="M16 10H4m5.5-5.5L4 10l5.5 5.5"/></svg><span class="ck-wordmark"></span></a>
-      <div class="ck-crumbs" aria-label="Breadcrumb"><span class="ck-crumb-divider" aria-hidden="true">/</span><span class="ck-crumb-current" aria-current="page"></span></div>
+      <div class="ck-crumbs" aria-label="Breadcrumb"><span class="ck-crumb-divider" aria-hidden="true"> / </span><span class="ck-crumb-current" aria-current="page"></span></div>
     </div>
     <div class="ck-nav-links"><a class="ck-open-link">Open app</a><button type="button" class="ck-export">Export</button></div>
   </nav>`;
@@ -70,6 +70,7 @@ export function createHeader(options: {
     },
     setCrumb(text) {
       crumb.textContent = text;
+      crumb.title = text;
       crumbs.hidden = !text;
     },
   };

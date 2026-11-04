@@ -307,8 +307,6 @@ export class Controller {
   private devicesActive = false;
   private startingRun = false;
   private setupDevices = false;
-  private lastCursor: Snapshot["gseq"] | undefined;
-  private lastRecordAt: string | undefined;
   private subs = new Set<() => void>();
   /** The last refused write; the details panel shows it (selection.notice) until the next pick. */
   error: string | null = null;
@@ -351,15 +349,6 @@ export class Controller {
       this.store.source.name,
     );
     const error = this.store.error;
-    if (snap && snap.gseq !== this.lastCursor) {
-      this.lastCursor = snap.gseq;
-      const record = this.store.applied.at(-1);
-      const seconds = Number(record?.ts);
-      const date = record ? new Date(Number.isFinite(seconds) ? seconds * 1000 : record.ts) : null;
-      this.lastRecordAt = date && Number.isFinite(date.getTime())
-        ? date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }) + " UTC"
-        : snap.workspace.projects.flatMap((p) => p.investigations.map((i) => i.updated)).sort((a, b) => Date.parse(b) - Date.parse(a))[0] ?? "";
-    }
     if (error) view = connectionFailure(view, error, !!snap);
     const selectedProject = snap?.workspace.projects.find(p => p.id === sel?.projectId);
     if (view.main.body.kind === "configuration" && selectedProject?.configs.at(-1)?.simulator.name === "thermal_rc" && this.store.source.projects) {
@@ -388,8 +377,7 @@ export class Controller {
         sections: view.details.sections.map((s) => ({ ...s, blocks: s.blocks.map((b) => b.kind === "pairing" ? { ...b, decision: pair(b.decision) } : b) })) };
 
     }
-    return { ...view, main: { ...view.main, connectionError: undefined }, sidebar: { ...view.sidebar,
-      connection: error ? { lastRecord: this.lastRecordAt ?? "", error } : undefined,
+    return { ...view, sidebar: { ...view.sidebar,
       creatingProject: !!this.setup,
     } };
   }

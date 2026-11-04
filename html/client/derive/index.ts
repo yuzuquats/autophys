@@ -35,12 +35,11 @@ export function loading(_source: string): View {
 }
 
 export function connectionFailure(view: View, error: string, loaded: boolean): View {
-  const description = "Check that your daemon is running and open its URL to renew your session. Retry the connection or explore the demo.";
   return { ...view,
-    sidebar: loaded ? view.sidebar : { ...view.sidebar, switcher: { ...view.sidebar.switcher, kind: "unavailable" },
-      notice: { kind: "unavailable", title: "Connection unavailable", description: "Retry from the workspace to load your projects." } },
-    main: { ...view.main, connectionError: loaded ? `${error} Last loaded records are shown until you reconnect.` : error, ...(loaded ? {} : { body: { kind: "unavailable", title: "Unable to connect", description } }) },
-    details: { ...view.details, status: loaded ? view.details.status : { text: "Connection unavailable" }, sections: [{ heading: "Connection error", blocks: [{ kind: "text", text: error, tone: "danger" }] }, ...view.details.sections] },
+    sidebar: loaded ? view.sidebar : { ...view.sidebar, switcher: { ...view.sidebar.switcher, kind: "unavailable" }, notice: undefined },
+    main: { ...view.main, connectionError: `${error} ${loaded ? "Showing stale records until the daemon reconnects." : "Check that your daemon is running, then retry the connection."} Approvals are paused.`,
+      ...(loaded ? {} : { body: { kind: "unavailable", title: "Your workspace", description: "Projects and investigations will appear here once records are loaded." } }) },
+    details: loaded ? view.details : { ...view.details, status: { text: "No records loaded" }, sections: [] },
   };
 }
 

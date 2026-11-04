@@ -9,6 +9,7 @@ import { ATTR, escapeHtml as esc, intentOf, type IntentHandler } from "./intent.
 import { buttonMarkup } from "./actions.ts";
 import { newProjectMarkup } from "./new-project.ts";
 import { blockMarkup } from "./blocks.ts";
+import { breadcrumbText } from "./breadcrumb.ts";
 import type { MainModel, Section } from "./view-model.ts";
 
 /** Class names the host page styles these elements with (its toolbar and button recipes). */
@@ -22,13 +23,13 @@ const cardMarkup = (cls: string, title: string, caption: string, inner: string) 
   `<section class="ap-card ${cls}"><std-round floating bg="var(--ap-card-bg)" border="var(--ap-line)" radius="10"></std-round><header class="ap-card-head" data-ap-cell><h3>${esc(title)}</h3>${caption ? `<p>${esc(caption)}</p>` : ""}</header>${inner}</section>`;
 
 export function mainMarkup(model: MainModel, width: number, classes: MainClasses = {}): string {
-  const sep = `<span class="ap-sep" aria-hidden="true">/</span>`;
+  const sep = `<span class="ap-sep" aria-hidden="true"> / </span>`;
   const crumb = model.crumb.map((c, i) => {
     const last = i === model.crumb.length - 1;
-    if (last) return `<b>${esc(c.label)}</b>`;
-    return c.id ? `<button type="button" ${ATTR.role}="select" ${ATTR.id}="${esc(c.id)}">${esc(c.label)}</button>` : `<span>${esc(c.label)}</span>`;
+    if (last) return `<b title="${esc(c.label)}" aria-current="page">${esc(c.label)}</b>`;
+    return c.id ? `<button type="button" title="${esc(c.label)}" ${ATTR.role}="select" ${ATTR.id}="${esc(c.id)}">${esc(c.label)}</button>` : `<span title="${esc(c.label)}">${esc(c.label)}</span>`;
   }).join(sep);
-  const toolbar = `<div class="${esc([classes.toolbar ?? "", "ap-toolbar"].filter(Boolean).join(" "))}"><nav class="ap-crumb" aria-label="Selection">${crumb}</nav><div class="ap-right"><span class="ap-meta" id="ap-meta">${esc(model.meta)}</span>${model.actions.map((a) => buttonMarkup(a, classes)).join("")}</div></div>`;
+  const toolbar = `<div class="${esc([classes.toolbar ?? "", "ap-toolbar"].filter(Boolean).join(" "))}"><nav class="ap-crumb" aria-label="Selection" title="${esc(breadcrumbText(model.crumb))}">${crumb}</nav><div class="ap-right"><span class="ap-meta" id="ap-meta">${esc(model.meta)}</span>${model.actions.map((a) => buttonMarkup(a, classes)).join("")}</div></div>`;
   let body: string;
   if (model.body.kind === "project-setup") {
     body = newProjectMarkup(model.body);
@@ -66,7 +67,7 @@ export function mainMarkup(model: MainModel, width: number, classes: MainClasses
         `<div class="ap-chart">${chartMarkup(c, colWidth, `${i}-${j}`)}</div>`).join("")}${(p.blocks ?? []).map(blockMarkup).join("")}</section>`).join("");
     body = `<div class="ap-viewer" style="--ap-cols:${cols}">${panels}</div>`;
   }
-  const error = model.connectionError ? `<aside class="ap-connection" role="alert"><b>Connection unavailable</b><p>${esc(model.connectionError)}</p>${recoveryMarkup()}</aside>` : "";
+  const error = model.connectionError ? `<aside class="ap-connection" role="status"><b>Connection unavailable</b><p>${esc(model.connectionError)}</p>${recoveryMarkup()}</aside>` : "";
   return `${toolbar}${error}${body}<div class="ap-credit" id="ap-credit">${model.creditLabel ? `<details><summary>${esc(model.creditLabel)}</summary><p>${esc(model.credit)}</p><span data-ap-copy="${esc(model.credit)}"><button type="button">Copy provenance</button></span></details>` : esc(model.credit)}</div>`;
 }
 

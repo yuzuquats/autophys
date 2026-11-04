@@ -56,7 +56,7 @@ button { font: inherit; color: inherit; }
   transition: opacity 240ms ease, transform 700ms var(--ck-ease); }
 .ck-header[data-app] .ck-crumbs { opacity: 1; transform: none; transition-delay: 120ms; }
 .ck-header:not([data-app]) .ck-crumbs { visibility: hidden; }
-.ck-crumb-divider { margin-inline: 10px; color: var(--ck-muted); }
+.ck-crumb-divider { flex:none;white-space:pre;margin-inline: 6px; color: var(--ck-muted); }
 .ck-crumb-current { overflow: hidden; text-overflow: ellipsis; }
 .ck-nav-links { position: relative; display: flex; align-items: center; justify-content: flex-end; min-height: 44px; }
 .ck-open-link { display: inline-flex; align-items: center; min-height: 44px; color: var(--ck-ink); text-decoration: none; white-space: nowrap;

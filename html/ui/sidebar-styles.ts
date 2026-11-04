@@ -57,9 +57,5 @@ ${w} .ap-nav-row .ap-badge { margin-left:auto; }
 ${w} .ap-devices { --ap-danger:#c53030; }
 ${w} .ap-new-project { margin-bottom:0; }
 ${w} button:focus-visible { outline:2px solid var(--ck-focus);outline-offset:-2px; }
-${w} .ap-rail-connection { padding:10px;margin-top:12px;border-radius:8px;background:var(--ap-approval-bg,#fff0d4);color:var(--ap-warn);font:12px/18px var(--ap-font);overflow-wrap:anywhere; }
-${w} .ap-rail-connection b { display:block; }
-${w} .ap-rail-connection [data-ap-button] { display:block;margin-top:8px; }
-${w} .ap-rail-connection[hidden] { display:none; }
 `;
 }
