@@ -1,9 +1,40 @@
-[workspace]
-members = ["server"]
-resolver = "3"
-
-[workspace.package]
+[package]
+name = "autophys"
+description = "autophys daemon: a tento-web app; `autophys serve` serves html/routes on loopback"
 version = "0.1.0"
 edition = "2024"
 license = "UNLICENSED"
 publish = false
+
+[lib]
+name = "autophys"
+path = "src/lib.rs"
+
+[[bin]]
+name = "autophys"
+path = "src/main.rs"
+
+[dependencies]
+# The tento crates in vendor/tento: tento-web is the file-based router and
+# bundler, tento-dirs the app dirs.
+tento-web = { path = "vendor/tento/tento-web" }
+tento-dirs = { path = "vendor/tento/tento-dirs" }
+# The same versions the vendored tento crates resolve to.
+actix-web = "4.9.0"
+anyhow = "1.0.94"
+serde = { version = "1.0.216", features = ["derive"] }
+serde_json = "1.0.133"
+tokio = { version = "1.44.2", features = ["rt-multi-thread", "macros", "signal", "fs", "time"] }
+
+# Replaces three crates.io packages, wherever they appear in the dependency
+# graph, with the patched copies in vendor/tento/vendor.
+[patch.crates-io]
+fsevent-sys = { path = "vendor/tento/vendor/fsevent-sys" }
+notify = { path = "vendor/tento/vendor/notify" }
+iana-time-zone = { path = "vendor/tento/vendor/iana-time-zone" }
+
+# This crate is its own workspace root, so a checkout nested under another
+# Cargo workspace still builds. vendor/ is excluded: vendor/tento is a
+# separate workspace for the vendored crates.
+[workspace]
+exclude = ["vendor"]
