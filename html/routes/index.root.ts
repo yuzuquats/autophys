@@ -19,7 +19,7 @@ import { placeholderStyles } from "../ui/placeholder-styles.ts";
 import { deck, tutorial } from "./content.ts";
 import { landingDocs } from "./docs.ts";
 import { quietLoading, signedOutView } from "../client/derive/signed-out.ts";
-import { signInInPlace } from "../client/sign-in-in-place.ts";
+import { signInInPlace } from "./sign-in-in-place.ts";
 import "./brand.ts";
 import "./light-only.ts";
 
