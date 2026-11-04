@@ -184,7 +184,8 @@ Deno.test("derive: the proposal main view is the candidates table and the agent'
   const rows = table.rows.slice(1);
   assertEquals([rows[0].strong, rows[0].cells[0].text, rows[0].cells.at(-1)!.text], [true, "Sine 0.44 Hz", rows[0].cells.at(-1)!.text]);
   assertEquals(rows.filter((r) => r.strong).length, 1);
-  assertEquals(rows.at(-1)!.cells.at(-1)!.text, "≈ 0");
+  assertEquals(rows.at(-1)!.cells[2].text, "≈ 0");
+  assertEquals(table.rows[0].cells.slice(3).map((c) => c.text), ["m after", "c after", "k after"]);
   const [summary] = summaryCard.blocks, [trace] = reasoning.blocks;
   assert(summary.kind === "text" && summary.lead);
   assertStringIncludes(summary.text, "Sine 0.44 Hz applies Force (N) (amplitude 2 N and frequency 440 mHz) and records Displacement (m) for 10 s at 100 Hz.");
