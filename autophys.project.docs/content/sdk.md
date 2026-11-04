@@ -400,6 +400,17 @@ changes required, then ready, then ready. The receipt is
 `~/.local/state/autophys/publication-receipts/py-sink-20261104-review.md` on
 rwc-dev-01.
 
+2026-11-04, later: the "How the loops nest" section, the landing docs and
+their nested-loop figure were published as 5ca4c51..85ae558 (21 commits).
+The range is this record's loop-section commits, the figure commits and,
+as minimal prerequisites, the landing-docs and cookbook vendor commits
+the figure needs. The deck slides (I533fa9fe7f673a4640ee,
+I5d1e7b3a9c2f4068e4b7) and the battery, display and live-run drafts stayed
+local. Two independent pre-push review rounds (Codex, agent review only):
+changes required, then ready. The receipt is
+`~/.local/state/autophys/publication-receipts/loops-docs-sink-20261104-review.md`
+on rwc-dev-01.
+
 ## Remaining work
 
 - First live Spark/Wonder runs, once the operator approves a token budget
