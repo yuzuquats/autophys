@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
 
-use autophys_server::{BuildInfo, app, serve};
+use autophys::{BuildInfo, app, serve};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::oneshot;
@@ -138,8 +138,8 @@ async fn shutdown_signal_drains_and_stops() {
 fn binary_refuses_non_loopback_addr() {
     let web = fixture("bin-refuse");
     for addr in ["0.0.0.0:0", "[::]:0", "100.64.0.19:0"] {
-        let out = Command::new(env!("CARGO_BIN_EXE_autophys-server"))
-            .args(["--addr", addr, "--web"])
+        let out = Command::new(env!("CARGO_BIN_EXE_autophys"))
+            .args(["serve", "--addr", addr, "--web"])
             .arg(&web)
             .output()
             .unwrap();
@@ -155,8 +155,8 @@ fn binary_exits_cleanly_on_sigterm() {
     let probe = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = probe.local_addr().unwrap();
     drop(probe);
-    let mut child = Command::new(env!("CARGO_BIN_EXE_autophys-server"))
-        .args(["--addr", &addr.to_string(), "--web"])
+    let mut child = Command::new(env!("CARGO_BIN_EXE_autophys"))
+        .args(["serve", "--addr", &addr.to_string(), "--web"])
         .arg(&web)
         .stderr(std::process::Stdio::piped())
         .spawn()
@@ -183,4 +183,18 @@ fn binary_exits_cleanly_on_sigterm() {
         stderr.contains("SIGTERM, draining") && stderr.contains("stopped"),
         "{stderr}"
     );
+}
+
+#[test]
+fn binary_requires_the_serve_subcommand() {
+    let bin = env!("CARGO_BIN_EXE_autophys");
+    let none = Command::new(bin).output().unwrap();
+    assert_eq!(none.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&none.stderr).contains("usage: autophys serve"));
+    let unknown = Command::new(bin).arg("ingest").output().unwrap();
+    assert_eq!(unknown.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&unknown.stderr).contains("unknown command"));
+    let help = Command::new(bin).arg("--help").output().unwrap();
+    assert_eq!(help.status.code(), Some(0));
+    assert!(String::from_utf8_lossy(&help.stdout).contains("autophys serve"));
 }

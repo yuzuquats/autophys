@@ -1,5 +1,6 @@
-//! autophys server: one loopback HTTP listener that answers `/api/healthz`
-//! and serves the built client. Nothing else lives here in batch 1.
+//! The autophys daemon. `autophys serve` runs one loopback HTTP listener that
+//! answers `/api/healthz` and serves the built miniapp (the tento-cookbook-js
+//! skeleton composed in `web/`). Nothing else lives here yet.
 
 use std::future::Future;
 use std::io;
@@ -102,8 +103,8 @@ pub struct Config {
     pub web: PathBuf,
 }
 
-/// `--addr` / `AUTOPHYS_ADDR` (default [`DEFAULT_ADDR`]) and `--web` /
-/// `AUTOPHYS_WEB` (required). Flags win over the environment.
+/// `serve` flags: `--addr` / `AUTOPHYS_ADDR` (default [`DEFAULT_ADDR`]) and
+/// `--web` / `AUTOPHYS_WEB` (required). Flags win over the environment.
 pub fn parse_config(
     args: impl IntoIterator<Item = String>,
     env: impl Fn(&str) -> Option<String>,
@@ -140,7 +141,7 @@ pub fn parse_config(
     Ok(Config { addr, web })
 }
 
-pub const USAGE: &str = "usage: autophys-server --web <dir> [--addr 127.0.0.1:4794]";
+pub const USAGE: &str = "usage: autophys serve --web <dir> [--addr 127.0.0.1:4794]";
 
 /// Serve until `shutdown` resolves, then stop accepting and drain in-flight
 /// requests.

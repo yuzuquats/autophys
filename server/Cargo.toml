@@ -1,13 +1,13 @@
 [package]
-name = "autophys-server"
-description = "autophys loopback HTTP server: healthz + static client"
+name = "autophys"
+description = "autophys daemon; `autophys serve` serves the miniapp on loopback"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
 
 [[bin]]
-name = "autophys-server"
+name = "autophys"
 path = "src/main.rs"
 
 [dependencies]
