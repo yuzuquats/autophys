@@ -84,7 +84,7 @@ export type BarRow = { label: string; fraction: number; value: string; tone?: To
 export type BarsChart = { kind: "bars"; rows: BarRow[]; label?: string };
 
 /** One row per range: a track from `lo` to `hi` with a marker at `at` (a fraction of the track). */
-export type RangeRow = { label: string; unit?: string; lo: string; hi: string; at: number; initial?: string; scale?: string; tag?: Tag };
+export type RangeRow = { label: string; unit?: string; lo: string; hi: string; at: number; initial?: string; scale?: string; tag?: Tag; note?: string };
 export type RangesChart = { kind: "ranges"; rows: RangeRow[]; label?: string };
 
 export type Missing = { kind: "missing"; title: string; description: string };
@@ -142,7 +142,9 @@ export type Block =
   | { kind: "meters"; rows: Meter[] }
   | { kind: "fields"; fields: Field[] }
   | { kind: "links"; links: Link[] }
-  | { kind: "text"; text: string; tone?: Tone; link?: Link };
+  | { kind: "text"; text: string; tone?: Tone; link?: Link }
+  /** A small unlabelled trace (an experiment's input preview); `label` names it for assistive tech and the hover title. */
+  | { kind: "wave"; t: number[]; y: number[]; label: string };
 
 /** `caption` is one line under the heading; renderers without a caption slot ignore it. */
 export type Section = { heading: string; caption?: string; blocks: Block[] };

@@ -193,6 +193,13 @@ ${w} .ap-card .ap-facts { grid-template-columns:minmax(0,1fr) auto;gap:3px 16px;
 ${w} .ap-card .ap-facts + .ap-text { margin-top:6px; }
 ${w} .ap-card .ap-text + .ap-table { margin-top:8px; }
 ${w} .ap-card .ap-text + .ap-ranges { margin-top:4px; }
+${w} .ap-range-note { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+${w} .ap-wave { margin:6px 0 8px;height:28px; }
+${w} .ap-wave svg { display:block;width:100%;height:100%;overflow:visible; }
+${w} .ap-wave line { stroke:var(--ap-line);stroke-width:1;vector-effect:non-scaling-stroke; }
+${w} .ap-wave polyline { fill:none;stroke:var(--ap-sec);stroke-width:1.5;stroke-linejoin:round;vector-effect:non-scaling-stroke; }
+${w} .ap-card .ap-table + .ap-text { margin-top:6px; }
+${w} .ap-card .ap-text + .ap-wave { margin-top:8px; }
 ${w} .ap-card .ap-table td { padding:3px 0; }
 ${w} .ap-card .ap-table tr:last-child td { border-bottom:0; }
 ${w} .ap-card .ap-table tr.ap-dim td { padding-top:0;font-size:11px;line-height:16px; }

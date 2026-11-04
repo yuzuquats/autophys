@@ -5,6 +5,7 @@
  * what the SDK uploads and the daemon will serve; no request is made.
  */
 import { configOf, sigmaOf, sineLabel, specOf } from "../config.ts";
+import { applyDisplay } from "../wire.ts";
 import type {
   FrequencyResponse, GainPhase,
   ExperimentSpec, Fit, Investigation, Landscape, Measurement, Project, ProjectConfig, Proposal, RankedCandidate, SensitivityResult, Validation, Workspace,
@@ -29,6 +30,63 @@ export function configHash(value: unknown): string {
 function versioned(config: Omit<ProjectConfig, "hash">): ProjectConfig {
   return { ...config, hash: configHash(config) };
 }
+
+/**
+ * A fixture's display manifest (format 1, as the SDK uploads it), applied by the live path
+ * (wire.ts applyDisplay) after hashing: presentation is never part of a config's identity.
+ * Previews are each experiment's input at its defaults, 64 points over `span` seconds.
+ */
+type FixtureDisplay = {
+  channels: Record<string, { label: string; unit: string; role: "input" | "output" }>;
+  params: Record<string, { label?: string; description: string }>;
+  settings: Record<string, { label: string; unit: string; role: "drive" | "sampling" | "known" }>;
+  experiments: Record<string, { label: string; description?: string; views: string[]; span?: number; extra?: Settings }>;
+};
+function displayed(config: ProjectConfig, d: FixtureDisplay): ProjectConfig {
+  const input = Object.keys(d.channels).find((k) => d.channels[k].role === "input")!;
+  const experiments = Object.fromEntries(config.catalog.map((e) => {
+    const m = d.experiments[e.id], defaults = Object.fromEntries(e.settings.map((s) => [s.name, s.default]));
+    const t = m.span ? Array.from({ length: 64 }, (_, i) => i * m.span! / 63) : [];
+    const u = m.span ? inputSeries(e.id, { ...defaults, ...m.extra }, t) : null;
+    return [e.id, { label: m.label, description: m.description ?? "", views: m.views, ...(u ? { preview: { t, u: { [input]: u } } } : {}) }];
+  }));
+  return applyDisplay(config, { format: 1, simulator: config.simulator.name, channels: d.channels, params: d.params, settings: d.settings, experiments });
+}
+
+const OSC_DISPLAY: FixtureDisplay = {
+  channels: { force: { label: "Force", unit: "N", role: "input" }, x: { label: "Displacement", unit: "m", role: "output" } },
+  params: { m: { description: "moving mass" }, c: { description: "damping coefficient" }, k: { description: "spring stiffness" } },
+  settings: {
+    amplitude: { label: "Amplitude", unit: "N", role: "drive" }, frequency: { label: "Frequency", unit: "Hz", role: "drive" },
+    force: { label: "Force", unit: "N", role: "drive" }, width: { label: "Pulse width", unit: "s", role: "drive" },
+    duration: { label: "Duration", unit: "s", role: "sampling" }, rate: { label: "Rate", unit: "Hz", role: "sampling" },
+    x0: { label: "Initial displacement", unit: "m", role: "known" },
+  },
+  experiments: {
+    free_response: { label: "Free response", description: "Released from the initial displacement and left to ring down.", views: ["envelope"] },
+    impulse: { label: "Impulse", description: "A short force pulse; its width sets the momentum delivered.", views: ["envelope"], span: 1 },
+    step: { label: "Step force", views: [], span: 10 },
+    sine: { label: "Sine force", views: ["spectrum"], span: 5 },
+  },
+};
+const CELL_DISPLAY: FixtureDisplay = {
+  channels: { current: { label: "Current", unit: "A", role: "input" }, v: { label: "Terminal voltage", unit: "V", role: "output" } },
+  params: { R0: { label: "R₀", description: "ohmic resistance" }, R1: { label: "R₁", description: "polarisation resistance" }, C1: { label: "C₁", description: "polarisation capacitance" } },
+  settings: {
+    current: { label: "Current", unit: "A", role: "drive" }, on: { label: "On time", unit: "s", role: "drive" },
+    off: { label: "Rest time", unit: "s", role: "drive" }, cycles: { label: "Cycles", unit: "", role: "drive" },
+  },
+  experiments: { pulse_train: { label: "Current pulses", description: "Square current pulses with a rest after each.", views: ["edges"], span: 400, extra: { start: 10 } } },
+};
+const HEAT_DISPLAY: FixtureDisplay = {
+  channels: { power: { label: "Heater power", unit: "W", role: "input" }, T: { label: "Temperature", unit: "°C", role: "output" } },
+  params: { R: { description: "thermal resistance to ambient" }, C: { description: "heat capacity" }, bias: { description: "sensor offset" } },
+  settings: {
+    power: { label: "Power", unit: "W", role: "drive" }, on_at: { label: "Heater on at", unit: "s", role: "drive" },
+    off_at: { label: "Heater off at", unit: "s", role: "drive" },
+  },
+  experiments: { power_step: { label: "Power step", description: "The heater is switched on, held, then switched off.", views: [], span: 2400 } },
+};
 
 const force = { name: "force", label: "force", unit: "N" };
 const position = { name: "x", label: "x", unit: "m" };
@@ -63,10 +121,10 @@ const oscBase = {
   combinations: [{ name: "k/m", exponents: { k: 1, m: -1 } }, { name: "c/m", exponents: { c: 1, m: -1 } }] as ProjectConfig["combinations"],
   landscape: { x: "m", y: "k", held: "c/m" },
 };
-const OSC_V1 = versioned({ version: 1, ...oscBase, catalog: oscCatalog(false), budgets: { maxSteps: 20, maxSimulations: 4000, maxExperiments: 2 } });
-const OSC_V2 = versioned({ version: 2, ...oscBase, catalog: oscCatalog(true), budgets: { maxSteps: 20, maxSimulations: 4000, maxExperiments: 3 } });
+const OSC_V1 = displayed(versioned({ version: 1, ...oscBase, catalog: oscCatalog(false), budgets: { maxSteps: 20, maxSimulations: 4000, maxExperiments: 2 } }), OSC_DISPLAY);
+const OSC_V2 = displayed(versioned({ version: 2, ...oscBase, catalog: oscCatalog(true), budgets: { maxSteps: 20, maxSimulations: 4000, maxExperiments: 3 } }), OSC_DISPLAY);
 
-const CELL_V1 = versioned({
+const CELL_V1 = displayed(versioned({
   version: 1,
   simulator: { kind: "thevenin", name: "thevenin", version: "0.3", sourceHash: "4be07f31c2a9" },
   params: [
@@ -84,9 +142,9 @@ const CELL_V1 = versioned({
   policy: { kind: "scripted", effort: null, label: "scripted" },
   combinations: [{ name: "τ = R1·C1", exponents: { R1: 1, C1: 1 } }],
   landscape: { x: "R1", y: "C1", held: "R0" },
-});
+}), CELL_DISPLAY);
 
-const HEAT_V1 = versioned({
+const HEAT_V1 = displayed(versioned({
   version: 1,
   simulator: { kind: "thermal", name: "thermal-rc", version: "0.2", sourceHash: "e17a5d90b4c3" },
   params: [
@@ -104,7 +162,7 @@ const HEAT_V1 = versioned({
   policy: { kind: "reason-lane", effort: "low", label: "reason lane · Spark" },
   combinations: [{ name: "τ = R·C", exponents: { R: 1, C: 1 } }],
   landscape: { x: "R", y: "C", held: "bias" },
-});
+}), HEAT_DISPLAY);
 
 // ------------------------------------------------------------------------ builders
 

@@ -9,12 +9,13 @@
  */
 import type {
   Channel, ExperimentKind, ExperimentSpec, Fit, Investigation, Measurement, ParamSpec, Project, ProjectConfig, Proposal, ProposalField, ProposalOutlook,
-  RankedCandidate, SimulatorKind, Validation, Workspace,
+  RankedCandidate, SettingRole, SimulatorKind, Validation, ViewHint, Workspace,
 } from "./domain.ts";
 
 /** A record exactly as the daemon serves it (the SDK's 8 fields). */
 export type WireRecord = { id: string; investigation: string; seq: number; kind: string; ts: number; payload: Record<string, unknown>; prev_hash?: string; hash?: string };
-export type WireProject = { id: string; name: string };
+/** `display` is the project's latest display manifest (format 1), or null when none was uploaded. */
+export type WireProject = { id: string; name: string; display?: unknown };
 export type WireConfig = { project_id: string; version: string; config: unknown };
 /** `GET /workspace`: one consistent snapshot; resume the stream from `cursor`. */
 export type WireWorkspace = { cursor: number | string; projects: WireProject[]; config_versions: WireConfig[]; records: WireRecord[] };
@@ -53,8 +54,61 @@ function experimentSpec(id: string, entry: unknown, output: Channel): Experiment
   return { id: id as ExperimentKind, label: humanize(id), input: null, output, settings, maxRuns: typeof e.max_runs === "number" ? e.max_runs : null, viewHints: [] };
 }
 
-/** The SDK's `Project.config()` (sdks/python project.py) as a domain config version. */
-export function mapConfig(config: unknown, version: number, hash: string): ProjectConfig {
+const VIEWS: Record<string, ViewHint> = { envelope: "envelope", spectrum: "frequency", edges: "zoom:edges" };
+const ROLES = new Set(["drive", "sampling", "known", "other"]);
+
+/**
+ * A display manifest (format 1, display-manifest.md) applied to a config: channel, setting and
+ * parameter labels, units and roles, experiment labels, descriptions, views and input previews.
+ * The manifest is presentation only; it never changes values, ranges or the config hash. With no
+ * manifest (or another format) the config is returned unchanged and renders generically.
+ */
+export function applyDisplay(c: ProjectConfig, display: unknown): ProjectConfig {
+  const d = obj(display);
+  if (d.format !== 1) return c;
+  const channels = obj(d.channels), settings = obj(d.settings), params = obj(d.params), experiments = obj(d.experiments);
+  const channel = (name: string, fallback: Channel): Channel => {
+    const ch = obj(channels[name]);
+    return name in channels ? { name, label: str(ch.label) || name, unit: str(ch.unit) } : fallback;
+  };
+  const inputName = Object.keys(channels).find((k) => obj(channels[k]).role === "input");
+  return {
+    ...c,
+    params: c.params.map((p) => {
+      const m = obj(params[p.name]);
+      return { ...p, ...(str(m.label) ? { label: str(m.label) } : {}), ...(str(m.description) ? { description: str(m.description) } : {}) };
+    }),
+    catalog: c.catalog.map((e) => {
+      const m = obj(experiments[e.id]), declared = e.id in experiments, views = strs(m.views), preview = obj(m.preview);
+      const u = inputName ? nums(obj(preview.u)[inputName]) : [], t = nums(preview.t);
+      return {
+        ...e,
+        label: str(m.label) || e.label,
+        input: inputName ? channel(inputName, { name: inputName, label: inputName, unit: "" }) : e.input,
+        output: channel(e.output.name, e.output),
+        settings: e.settings.map((s) => {
+          const sd = obj(settings[s.name]), role = str(sd.role);
+          return s.name in settings
+            ? { ...s, label: str(sd.label) || s.name, unit: typeof sd.unit === "string" ? sd.unit : s.unit, role: (ROLES.has(role) ? role : "other") as SettingRole }
+            : { ...s, label: s.name, role: "other" as const };
+        }),
+        ...(declared ? {
+          viewHints: views.filter((v) => v in VIEWS).map((v) => VIEWS[v]),
+          unsupportedViews: views.filter((v) => !(v in VIEWS)),
+          description: str(m.description),
+          preview: u.length > 1 && u.length === t.length ? { t, u } : null,
+        } : {}),
+      };
+    }),
+  };
+}
+
+/** The SDK's `Project.config()` (sdks/python project.py) as a domain config version, with the project's display manifest applied. */
+export function mapConfig(config: unknown, version: number, hash: string, display?: unknown): ProjectConfig {
+  return applyDisplay(baseConfig(config, version, hash), display);
+}
+
+function baseConfig(config: unknown, version: number, hash: string): ProjectConfig {
   const c = obj(config), sim = obj(c.simulator), noise = obj(c.noise), budgets = obj(c.budgets), policy = obj(c.policy);
   const params: ParamSpec[] = Object.entries(obj(c.params)).map(([name, raw]) => {
     const p = obj(raw), lo = num(p.lo), hi = num(p.hi);
@@ -329,7 +383,8 @@ export class WireModel {
       mapped.sort((a, b) => (this.logs.get(a.inv.id)![0].ts - this.logs.get(b.inv.id)![0].ts) || (a.inv.id < b.inv.id ? -1 : 1));
       const used = new Map<number, string[]>();
       for (const m of mapped) used.set(m.inv.configVersion, [...(used.get(m.inv.configVersion) ?? []), ...m.experiments]);
-      const configs = cfgs.map((c, i) => ensureSpecs(mapConfig(c.config, i + 1, c.version), used.get(i + 1) ?? []));
+      // Applied after ensureSpecs, so experiments only records name still get the manifest's labels.
+      const configs = cfgs.map((c, i) => applyDisplay(ensureSpecs(mapConfig(c.config, i + 1, c.version), used.get(i + 1) ?? []), wp.display));
       projects.push({ id: wp.id, name: wp.name, configs, investigations: mapped.map((m) => m.inv) });
     }
     for (const [, log] of this.logs) if (log[0]?.kind === "investigation" && !this.projects.some((p) => p.id === str(log[0].payload.project_id))) this.stale = true;

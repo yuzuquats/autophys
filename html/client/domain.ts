@@ -16,9 +16,16 @@ export type Coord = "log" | "linear";
 export type ViewHint = "envelope" | "frequency" | "zoom:edges";
 
 export type Channel = { name: string; label: string; unit: string };
-export type SettingSpec = { name: string; label: string; unit: string; lo: number; hi: number; default: number };
+/**
+ * How a setting is shown (display manifest roles): what the experiment applies (drive), how it is
+ * recorded (sampling), a physical constant shared by experiments (known), or undeclared (other).
+ * No role means no manifest was uploaded; it renders as `other`.
+ */
+export type SettingRole = "drive" | "sampling" | "known" | "other";
+export type SettingSpec = { name: string; label: string; unit: string; lo: number; hi: number; default: number; role?: SettingRole };
 
-export type ParamSpec = { name: string; unit: string; lo: number; hi: number; initial: number; fixed: boolean; coord: Coord };
+/** `label` and `description` come from the display manifest; the name is the fallback. */
+export type ParamSpec = { name: string; unit: string; lo: number; hi: number; initial: number; fixed: boolean; coord: Coord; label?: string; description?: string };
 
 export type ExperimentSpec = {
   id: ExperimentKind;
@@ -29,6 +36,10 @@ export type ExperimentSpec = {
   /** Limit on runs of this experiment per investigation (null: no limit). */
   maxRuns: number | null;
   viewHints: ViewHint[];
+  /** From the display manifest: a sentence about the experiment, the input it applies at its defaults, and views this UI cannot draw. */
+  description?: string;
+  preview?: { t: number[]; u: number[] } | null;
+  unsupportedViews?: string[];
 };
 
 /** One immutable configuration version, declared in code by the SDK and keyed by the hash of its canonical JSON. */
