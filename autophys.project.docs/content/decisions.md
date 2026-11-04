@@ -20,7 +20,7 @@ its own page.
 | E-1 | an edited proposal is re-scored by interpolating an outlook grid the SDK precomputes (at most 3 axes); nothing simulates in the browser | operator, 2026-11-04 | `sdks/python` (sdk.md), `html/client/derive` (UI-3) |
 | O-3 | whether the UI approves device pairings or only `autophys pair approve` on the host | operator, 2026-11-04 | **both**: a pairing can be approved in the UI and with `autophys pair approve` on the host. The keyless state-changing routes the UI uses require `Content-Type: application/json` (otherwise 415) and an `Origin` equal to the daemon's own origin (otherwise 403) | `src/http` pairing routes (store agent); Devices UI section to follow |
 | AX-1 | the cookbook hands out slots; it never asks for components | operator, 2026-11-04 | `architecture.md`; `html/routes/index.root.ts` |
-| AX-2 | numerics live in the SDK only; the client formats | operator, 2026-11-04 | `html/client/derive`, `sdks/python` |
+| AX-2 | numerics live in the SDKs only; the client formats. **Revised 2026-11-04:** both SDKs carry the numerics (full API parity, `rust-sdk.md`); Python is the numerical reference. Originally: the Python SDK only | operator, 2026-11-04 | `html/client/derive`, `sdks/python`, `sdks/rust` (phase 2) |
 | AX-3 | one SQLite file: an append-only record log with projections derived from it | operator, 2026-11-04 | `src/store` (store agent) |
 | AX-4 | live updates are SSE with a `gseq` cursor | operator, 2026-11-04 | `src/http` (store agent), `html/client/api.ts` |
 | AX-5 | loopback only, reached through tento.localhost | operator, 2026-11-04 | `src/server.rs` `parse_loopback` |

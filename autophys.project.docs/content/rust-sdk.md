@@ -1,6 +1,6 @@
 # autophys-rs: the daemon's endpoints are a thin layer over a Rust library that matches the Python SDK
 
-Status: plan, rev 1, 2026-11-04. Operator direction (autophys/rs thread): the
+Status: plan, rev 2, 2026-11-04. Rev 2: full API parity (AX-2 revised). Operator direction (autophys/rs thread): the
 Rust binary produces the app and serves the endpoints, and each endpoint
 calls a Rust library crate that is the Rust counterpart of the Python SDK, so
 Rust programs can import it directly. Not implemented yet. It refines W-4
@@ -45,12 +45,12 @@ Three rules make the layers line up:
 | -------------------------------------- | ------------------------------------------------------- | ------------------------------------------------ |
 | `ap.connect(target=None)`              | `autophys::connect(target: Option<&str>) -> Result<Client>` | — (picks Local or Remote)                    |
 | `client.projects()`                    | `client.projects()`                                     | `GET /api/v1/projects`                           |
-| `client.project(Project)` (simulator + config; uploads the config version) | — (no simulator in Rust)       | `POST /api/v1/projects` + `PUT …/config_versions/{v}` |
+| `client.project(Project)` (simulator + config; uploads the config version) | `client.project_with(Project) -> Result<Workbook>` (phase 2) | `POST /api/v1/projects` + `PUT …/config_versions/{v}` |
 | `client.project(name)` (review only)   | `client.project(name) -> Result<Workbook>` (review only) | `POST /api/v1/projects` (open or create)        |
 | `wb.investigations()`                  | `wb.investigations()`                                   | `GET /api/v1/investigations?project=`            |
-| `wb.investigation(id, runner=None, policy=None)` (resumes from the records) | `wb.investigation(id) -> Result<Investigation>` (records only) | `GET /api/v1/investigations/{inv}/records` |
-| `wb.investigate(dataset, runner, policy=…)` (creates and records) | — (needs the numerics)          | `POST /api/v1/investigations`                    |
-| `inv.run()` (runs the loop; proposals come from `request_experiment`) | — (needs the numerics)          | `POST …/proposals`, `…/runs`, `…/steps`, `…/measurements`, `…/outcome` |
+| `wb.investigation(id, runner=None, policy=None)` (resumes from the records) | `wb.investigation(id)`; `wb.resume(id, runner, policy)` (phase 2) | `GET /api/v1/investigations/{inv}/records` |
+| `wb.investigate(dataset, runner, policy=…)` (creates and records) | `wb.investigate(dataset, runner, policy)` (phase 2) | `POST /api/v1/investigations`                    |
+| `inv.run()` (runs the loop; proposals come from `request_experiment`) | `inv.run() -> Result<Outcome>` (phase 2) | `POST …/proposals`, `…/runs`, `…/steps`, `…/measurements`, `…/outcome` |
 | `store.create_investigation(meta, record_id=)` (record only) | `wb.create_investigation(meta, record_id)`  | `POST /api/v1/investigations`                    |
 | `store.append(kind, payload, id)`      | `inv.append(kind, payload, id)`                         | `POST …/runs`, `…/steps`, `…/measurements`, `…/outcome`, `…/proposals` (by kind) |
 | `inv.records(kind=None)`               | `inv.records(kind: Option<&str>)`                       | `GET …/records`                                  |
@@ -64,9 +64,19 @@ Three rules make the layers line up:
 | `wb.verify()` → `{ok, records, investigations, chain_errors, projections_match}` | `wb.verify() -> VerifyReport` (same five fields) | `autophys db verify` |
 ```
 
-Python's names win (autophys/api, 2026-11-04). Rust leaves out every call that
-runs or needs the numerics. `inv.run` is a loop in Python, so the Rust record
-writer is `append`, after Python's `Store.append`, never `run`.
+Python's names win (autophys/api, 2026-11-04). Every Python call has a Rust
+counterpart. Where Python uses one name with an optional argument, Rust has
+two names: `project`/`project_with` and `investigation`/`resume`. `inv.run`
+is the loop in both languages, so the record writer is `append`, after
+Python's `Store.append`, never `run`.
+
+The rest of the Python surface is ported with the same names in phase 2:
+`simulator`/`Simulator` with `ParamSpec` and `SimOptions`, `Project` with
+`Budgets`, `NoiseConfig`, `PolicyConfig` and `StopRules`, `Dataset` and
+`Observation`, `fit`/`FitResult`, `analyze`/`SensitivityReport`,
+`rank_experiments`, `Decision`, `ScriptedPolicy`, `ReasonLanePolicy`,
+`Reasoner`/`HttpReasoner`, `Outcome`, and the three example models
+(thermal, oscillator, battery).
 
 `target` means the same thing in both: a directory (a local collection), a
 `.ap-workbook` path, an `http(s)` URL, or nothing (`AUTOPHYS_HOME`, default
@@ -92,19 +102,37 @@ async fn approvals(state: web::Data<Server>, path: web::Path<(String, String)>,
 }
 ```
 
-## What the Rust library leaves out
+## Full parity, in two phases
 
 ```review-callout
 kind: decision
-title: The numerics stay Python-only (AX-2)
-AX-2 says numerics live in the SDK and the client only formats. `investigate()`
-in Python runs fitting, sensitivity analysis and experiment design with numpy
-and scipy. The Rust library therefore covers the record side only: workbooks,
-investigations, proposals, the approval verbs, verification and the remote
-client. A Rust program can read, review and approve, but it can't run an
-investigation. **Agent-chosen, pending operator review.** The alternative is
-porting the numerics to Rust; that doubles the numerical code and its tests.
+title: AX-2 revised (operator, 2026-11-04): autophys-rs ports the investigation loop
+The operator chose full API parity over a record-only Rust crate. A Rust
+program can declare a simulator, run an investigation and get the same
+proposals as Python. The cost is accepted: about 2,400 lines of numerics
+exist twice, and every numerics change lands in both SDKs. Python stays the
+reference for numerical behaviour.
 ```
+
+```review-table
+| Phase | Ships                                                                                   | Conformance                                             |
+| ----- | --------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| 1     | the record calls, the workbook format, the daemon on top of the crate                   | byte-identical: hashes, canonical JSON, golden workbooks |
+| 2     | Simulator trait, fit, sensitivity, design, the agent loop, policies, reasoner, 3 models  | numeric, within stated tolerances; decisions identical  |
+```
+
+Phase 2's replacements for scipy: an ODE solver crate for `solve_ivp`, a
+Levenberg–Marquardt crate for `least_squares`, nalgebra for the linear
+algebra, and a Sobol sampler for `qmc`. Each must reproduce the Python
+results within the tolerance its conformance case states.
+
+Phase 2's conformance goes in `tests/conformance/numerics/`. Python records
+the inputs and outputs of the fit, the sensitivity analysis, the experiment
+ranking and a full `ScriptedPolicy` run on each example model; Rust must
+match them within tolerance. Where a tolerance-level difference would change
+a decision (which experiment to propose, which parameters count as
+identifiable), Rust must make the same decision. A case that can't meet that
+is reported, not loosened.
 
 ## Layout and naming
 
@@ -163,6 +191,8 @@ title: Not settled yet
 - `inv.records_after` and the HTTP `?after=` cursor are Rust- and server-only.
   `gseq` orders records within one workbook only (W-6), so a remote stream that
   spans projects needs a cursor per workbook.
-- Crate and package naming and the numerics boundary above are agent choices
-  awaiting operator review.
+- Crate and package naming are agent choices awaiting operator review.
+- Phase 2's tolerances are not yet set. Python's solvers are adaptive, so
+  results that match within 1e-6 on the example models may still drift on
+  stiff user models.
 ```
