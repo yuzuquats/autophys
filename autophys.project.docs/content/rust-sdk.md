@@ -644,3 +644,16 @@ An independent agent review (Codex) returned ready. Its non-blocking notes:
 Receipt and manifests: `fleet/evidence/autophys/sink-20261104/` on
 rwc-dev-01. Still local: py's batch two, the battery hand-off and the
 `usage_total` fix.
+
+The second publication, `4a098cb..63606eb` (14 commits), carried:
+
+- py's batch two and its `usage_total` fix;
+- the workbench and vendor updates;
+- the battery hand-off;
+- the Rust follow-ups: the `build-web` guard, a hardened `deploy.sh`,
+  E-1b outlook axes, blob routes, live usage totals, and parity with Python
+  on 402s, retries, error paths and usage counts.
+
+Only commit messages were rewritten, to merge split trailer blocks and give
+the two battery commits a Change-Id. An independent review returned ready
+with no findings. Receipt: `fleet/evidence/autophys/sink-20261104b/`.
