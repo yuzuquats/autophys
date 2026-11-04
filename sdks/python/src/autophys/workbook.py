@@ -197,12 +197,84 @@ def outlook_shape(outlook: Any) -> None:
             raise _invalid(f"{at}.after.{param}", f"has {n} values; the axes describe {cells} cells (row-major)")
 
 
+def _trace_shape(kind: str, payload: dict) -> None:
+    """Additive v1 trace fields; unknown usage keys remain readable."""
+    def obj(key):
+        value = payload[key]
+        if not isinstance(value, dict):
+            raise _invalid("payload." + key, "must be an object")
+        return value
+
+    def fields(value, at, strings=(), integers=(), numbers=(), nullable=()):
+        for key in strings:
+            if key in value and not isinstance(value[key], str):
+                raise _invalid(at + "." + key, "must be a string")
+        for key in integers:
+            if key in value and (type(value[key]) is not int or value[key] < 0):
+                raise _invalid(at + "." + key, "must be an integer >= 0")
+        for key in numbers:
+            if key in value and not (key in nullable and value[key] is None):
+                n = _number(value[key])
+                if n is None or not math.isfinite(n):
+                    raise _invalid(at + "." + key, "must be a finite number" + (" or null" if key in nullable else ""))
+
+    def digest(value, at):
+        if not isinstance(value, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", value):
+            raise _invalid(at, "must be a 64-hex sha256")
+
+    if kind == "investigation":
+        if "playbook" in payload:
+            value = obj("playbook")
+            for key in ("name", "version"):
+                _string(value, "payload.playbook", key)
+            digest(value.get("sha256"), "payload.playbook.sha256")
+        if "model" in payload:
+            value = obj("model")
+            for key in ("role", "route", "model"):
+                _string(value, "payload.model", key)
+            if value["role"] not in ("policy", "researcher"):
+                raise _invalid("payload.model.role", "must be policy or researcher")
+            if value.get("effort") is not None and not isinstance(value["effort"], str):
+                raise _invalid("payload.model.effort", "must be a string or null")
+            fields({k: v for k, v in value.items() if v is not None}, "payload.model", integers=("max_tokens",))
+        if "price" in payload:
+            value = obj("price")
+            for key in ("model", "as_of"):
+                _string(value, "payload.price", key)
+            for key in ("input_per_mtok", "output_per_mtok"):
+                if key not in value:
+                    raise _invalid("payload.price." + key, "required number")
+            fields(value, "payload.price", numbers=("input_per_mtok", "output_per_mtok"))
+    if kind == "step":
+        if "usage" in payload:
+            fields(obj("usage"), "payload.usage", strings=("route", "model"),
+                   integers=("input_tokens", "output_tokens", "total_tokens", "reasoning_tokens", "cached_input_tokens"),
+                   numbers=("latency_ms", "cost_usd"), nullable=("cost_usd",))
+        if "replayed" in payload and type(payload["replayed"]) is not bool:
+            raise _invalid("payload.replayed", "must be a boolean")
+        if "images" in payload:
+            if not isinstance(payload["images"], list):
+                raise _invalid("payload.images", "must be an array")
+            for i, value in enumerate(payload["images"]):
+                at = f"payload.images[{i}]"
+                if not isinstance(value, dict):
+                    raise _invalid(at, "must be an object")
+                # Blob references use the store's sha256: prefix.
+                digest(value.get("sha256", "").removeprefix("sha256:") if isinstance(value.get("sha256"), str) else None, at + ".sha256")
+                _string(value, at, "media_type")
+                fields(value, at, strings=("caption",))
+    if kind == "outcome" and "usage_total" in payload:
+        fields(obj("usage_total"), "payload.usage_total", integers=("calls", "input_tokens", "output_tokens"),
+               numbers=("cost_usd",), nullable=("cost_usd",))
+
+
 def payload_shape(kind: str, payload: Any) -> None:
     """Validate a payload for its kind (only what projections read, plus E-1's outlook)."""
     if kind not in KINDS:
         raise _invalid("kind", f"unknown kind {kind!r}")
     if not isinstance(payload, dict):
         raise _invalid("payload", "must be a JSON object")
+    _trace_shape(kind, payload)
     if kind == "investigation":
         _string(payload, "payload", "project_id")
         _string(payload, "payload", "config_version")

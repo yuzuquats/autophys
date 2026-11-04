@@ -17,22 +17,69 @@ benchmarks; it never touches the network.
 
 from __future__ import annotations
 
+import hashlib
+import random
 import json
 import math
 import os
 import stat
 import time
-from dataclasses import dataclass, field
-from typing import Any, Callable, Protocol
+from dataclasses import asdict, dataclass, field
+from typing import Any, Callable, Literal, Protocol
+from pathlib import Path
+from email.utils import parsedate_to_datetime
 
 from .http import HttpError, config_dir, request_json
 
+MUSE_SPARK = "muse-spark-1.3"
+MUSE_WONDER = "muse-wonder-1.0"
 MIN_TOKENS = 1800
 REASON_PATH = "/api/inference/reason"
 
 
 class ReasonerError(RuntimeError):
     pass
+
+
+class BudgetError(ReasonerError):
+    """The provider refused a call for billing/budget reasons."""
+
+
+@dataclass(frozen=True)
+class ModelSpec:
+    role: Literal["policy", "researcher"]
+    route: str
+    model: str
+    effort: str | None = None
+    max_tokens: int | None = None
+
+    def __post_init__(self):
+        if self.role not in ("policy", "researcher"):
+            raise ValueError("role must be policy or researcher")
+        if self.route not in ("meta", "baseten", "lane"):
+            raise ReasonerError("reason route must be meta, baseten or lane")
+        if not isinstance(self.model, str) or not self.model:
+            raise ValueError("model must be a non-empty string")
+        if self.max_tokens is not None and (type(self.max_tokens) is not int or self.max_tokens < 0):
+            raise ValueError("max_tokens must be a nonnegative integer")
+
+
+def request_body(route, model, messages, *, response_schema=None, effort=None, max_tokens=None):
+    """The exact POST body, also the cassette identity (never includes auth)."""
+    budget = MIN_TOKENS if max_tokens is None else int(max_tokens)
+    if route in ("meta", "lane") or model in (MUSE_SPARK, MUSE_WONDER):
+        budget = max(MIN_TOKENS, budget)
+    body = {"messages": messages, "max_tokens": budget}
+    if route != "lane":
+        body["model"] = model
+    if response_schema is not None:
+        if route == "lane":
+            body["response_schema"] = response_schema
+        else:
+            body["response_format"] = {"type": "json_schema", "json_schema": {"name": "decision", "schema": response_schema}}
+    if effort is not None:
+        body["effort" if route == "lane" else "reasoning_effort"] = effort
+    return body
 
 
 @dataclass
@@ -42,6 +89,7 @@ class ReasonReply:
     usage: dict = field(default_factory=dict)
     route: str | None = None
     elapsed_ms: float | None = None
+    replayed: bool = False
 
 
 class Reasoner(Protocol):
@@ -56,6 +104,9 @@ class Reasoner(Protocol):
 
 
 class HttpReasoner:
+    route = "lane"
+    model = None
+
     def __init__(self, base_url: str, *, api_key: str | None = None, timeout: float = 150.0, path: str = REASON_PATH) -> None:
         self.url = base_url.rstrip("/") + path
         self._key = api_key
@@ -69,11 +120,7 @@ class HttpReasoner:
             c = m.get("content")
             if not (isinstance(c, str) or (isinstance(c, list) and all(p.get("type") == "text" for p in c))):
                 raise ReasonerError("the reason lane is text-only")
-        body: dict[str, Any] = {"messages": messages, "max_tokens": max(MIN_TOKENS, int(max_tokens or MIN_TOKENS))}
-        if response_schema is not None:
-            body["response_schema"] = response_schema
-        if effort is not None:
-            body["effort"] = effort
+        body = request_body("lane", None, messages, response_schema=response_schema, effort=effort, max_tokens=max_tokens)
         try:
             _, j = request_json("POST", self.url, body, api_key=self._key, timeout=self.timeout)
         except HttpError as e:
@@ -118,12 +165,18 @@ def _reason_key(route: str, api_key: str | None) -> str:
     return key
 
 
-def _retry_delay(error: HttpError) -> float:
-    try:
-        delay = float(error.retry_after) if error.retry_after is not None else 1.0
-    except (TypeError, ValueError):
-        return 1.0
-    return min(30.0, max(0.0, delay)) if math.isfinite(delay) else 1.0
+def _retry_delay(error: HttpError | None, attempt=0, jitter=random.random) -> float:
+    if error is not None and error.retry_after is not None:
+        try:
+            delay = float(error.retry_after)
+        except (TypeError, ValueError):
+            try:
+                delay = parsedate_to_datetime(error.retry_after).timestamp() - time.time()
+            except (TypeError, ValueError, OverflowError):
+                delay = float("nan")
+        if math.isfinite(delay):
+            return min(30.0, max(0.0, delay))
+    return min(30.0, 2 ** attempt * (0.5 + jitter()))
 
 
 class ChatReasoner:
@@ -131,9 +184,9 @@ class ChatReasoner:
 
     Explicit configuration wins over route defaults; keys resolve from the
     argument, route environment variable, then private ``reason.json``.
-    Omitted token budgets default to 1800; only Meta floors explicit budgets.
-    Rate limits are retried at most three times, sleeping 1 second when the
-    server omits a valid numeric Retry-After, and never more than 30 seconds.
+    Omitted token budgets default to 1800; Meta and Muse models floor explicit
+    budgets. Transient HTTP/connection failures retry with jittered exponential
+    backoff and Retry-After, capped at 30 seconds (four attempts by default).
     """
 
     def __init__(
@@ -145,6 +198,8 @@ class ChatReasoner:
         api_key: str | None = None,
         timeout: float = 150.0,
         sleep: Callable[[float], None] = time.sleep,
+        max_attempts: int = 4,
+        jitter: Callable[[], float] = random.random,
     ) -> None:
         if route not in _CHAT_ROUTES:
             raise ReasonerError("reason route must be meta or baseten")
@@ -157,6 +212,10 @@ class ChatReasoner:
         self._key = _reason_key(route, api_key)
         self.timeout = timeout
         self._sleep = sleep
+        if type(max_attempts) is not int or max_attempts < 1:
+            raise ValueError("max_attempts must be >= 1")
+        self.max_attempts = max_attempts
+        self._jitter = jitter
 
     def __repr__(self) -> str:
         # URLs can contain credentials and servers can echo request values.
@@ -172,30 +231,25 @@ class ChatReasoner:
     ) -> ReasonReply:
         if any(not isinstance(m.get("content"), str) for m in messages):
             raise ReasonerError("chat completions are text-only; message content must be a string")
-        budget = MIN_TOKENS if max_tokens is None else int(max_tokens)
-        if self.route == "meta":
-            budget = max(MIN_TOKENS, budget)
-        body: dict[str, Any] = {"model": self.model, "messages": messages, "max_tokens": budget}
-        if response_schema is not None:
-            body["response_format"] = {
-                "type": "json_schema",
-                "json_schema": {"name": "decision", "schema": response_schema},
-            }
-        if effort is not None:
-            body["reasoning_effort"] = effort
+        body = request_body(self.route, self.model, messages, response_schema=response_schema, effort=effort, max_tokens=max_tokens)
         started = time.perf_counter()
-        for attempt in range(4):
+        for attempt in range(self.max_attempts):
             try:
                 _, reply = request_json("POST", self.url, body, api_key=self._key, timeout=self.timeout)
                 break
             except HttpError as error:
-                if error.status == 429 and attempt < 3:
-                    self._sleep(_retry_delay(error))
+                if error.status in (429, 500, 502, 503, 504) and attempt + 1 < self.max_attempts:
+                    self._sleep(self._delay(error, attempt))
                     continue
                 # Never include untrusted server errors/messages: they may echo keys.
                 detail = " (billing_not_configured)" if error.status == 402 else ""
-                raise ReasonerError(f"chat completions: HTTP {error.status}{detail}") from None
-            except (OSError, ValueError):
+                raise (BudgetError if error.status == 402 else ReasonerError)(f"chat completions: HTTP {error.status}{detail}") from None
+            except OSError:
+                if attempt + 1 < self.max_attempts:
+                    self._sleep(self._delay(None, attempt))
+                    continue
+                raise ReasonerError("chat completions request failed") from None
+            except ValueError:
                 raise ReasonerError("chat completions request failed") from None
         try:
             choice = reply["choices"][0]
@@ -210,19 +264,96 @@ class ChatReasoner:
                            self.route, (time.perf_counter() - started) * 1e3)
 
 
-def reasoner_from_env() -> Reasoner:
-    """Select Meta (default), Baseten, or the legacy lane from AUTOPHYS_REASON_*.
+    def _delay(self, error, attempt):
+        return _retry_delay(error, attempt, self._jitter)
 
-    ``lane`` requires AUTOPHYS_REASON_URL and retains HttpReasoner semantics.
-    Direct routes treat the URL as a base, appending ``/chat/completions``.
-    """
-    route = os.environ.get("AUTOPHYS_REASON_ROUTE", "meta")
-    base_url = os.environ.get("AUTOPHYS_REASON_URL")
-    if route == "lane":
-        if not base_url:
+
+def _cassette_key(body):
+    from .store import canonical
+    return hashlib.sha256(canonical(body).encode()).hexdigest()
+
+
+class RecordingReasoner:
+    def __init__(self, inner, path):
+        self.inner, self.path = inner, Path(path)
+        self.route = getattr(inner, "route", "meta")
+        self.model = getattr(inner, "model", MUSE_SPARK)
+
+    def complete(self, messages, **kw):
+        builder = getattr(self.inner, "request_body", None)
+        body = builder(messages, **kw) if builder else request_body(self.route, self.model, messages, **kw)
+        reply = self.inner.complete(messages, **kw)
+        data = asdict(reply)
+        data.pop("replayed", None)
+        from .store import canonical
+        with self.path.open("a", encoding="utf-8") as f:
+            f.write(canonical({"key": _cassette_key(body), "reply": data}) + "\n")
+        return reply
+
+
+class ReplayReasoner:
+    def __init__(self, path, *, route="meta", model=MUSE_SPARK):
+        self.route, self.model = route, model
+        self.replies = {}
+        for line in Path(path).read_text(encoding="utf-8").splitlines():
+            item = json.loads(line)
+            self.replies[item["key"]] = item["reply"]
+
+    def complete(self, messages, **kw):
+        key = _cassette_key(request_body(self.route, self.model, messages, **kw))
+        if key not in self.replies:
+            raise ReasonerError(f"replay miss: {key}")
+        return ReasonReply(**self.replies[key], replayed=True)
+
+
+class _ConfiguredReasoner:
+    def __init__(self, inner, spec):
+        self.inner, self.spec = inner, spec
+        self.route, self.model = spec.route, spec.model
+
+    def _options(self, kw):
+        options = dict(kw)
+        for key in ("effort", "max_tokens"):
+            if options.get(key) is None:
+                options[key] = getattr(self.spec, key)
+        return options
+
+    def request_body(self, messages, **kw):
+        return request_body(self.route, self.model, messages, **self._options(kw))
+
+    def complete(self, messages, **kw):
+        return self.inner.complete(messages, **self._options(kw))
+
+
+def reasoner_for(spec: ModelSpec, **kw) -> Reasoner:
+    replay = kw.pop("replay", None) or os.environ.get("AUTOPHYS_REASON_REPLAY")
+    record = kw.pop("record", None) or os.environ.get("AUTOPHYS_REASON_RECORD")
+    if replay:
+        inner = ReplayReasoner(replay, route=spec.route, model=spec.model)
+    elif spec.route == "lane":
+        base = kw.pop("base_url", None) or os.environ.get("AUTOPHYS_REASON_URL")
+        if not base:
             raise ReasonerError("lane requires AUTOPHYS_REASON_URL")
-        return HttpReasoner(base_url)
-    return ChatReasoner(route, base_url=base_url, model=os.environ.get("AUTOPHYS_REASON_MODEL"))
+        inner = HttpReasoner(base, **kw)
+    else:
+        kw.setdefault("base_url", os.environ.get("AUTOPHYS_REASON_URL"))
+        inner = ChatReasoner(spec.route, model=spec.model, **kw)
+    if record:
+        inner = RecordingReasoner(inner, record)
+        inner.route, inner.model = spec.route, spec.model
+    # Preserve the public factory's existing concrete types for unset defaults.
+    if spec.effort is not None or spec.max_tokens is not None:
+        return _ConfiguredReasoner(inner, spec)
+    return inner
+
+
+def reasoner_from_env() -> Reasoner:
+    route = os.environ.get("AUTOPHYS_REASON_ROUTE", "meta")
+    if route == "baseten" and not os.environ.get("AUTOPHYS_REASON_MODEL"):
+        raise ReasonerError("baseten requires a model: set AUTOPHYS_REASON_MODEL")
+    return reasoner_for(ModelSpec("policy", route, os.environ.get("AUTOPHYS_REASON_MODEL") or
+                                 (MUSE_SPARK if route != "baseten" else "")))
+
 
 
 class FakeReasoner:

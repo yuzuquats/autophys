@@ -11,6 +11,7 @@ parameters) matches the case's expectation.
 from __future__ import annotations
 
 import json
+import os
 import re
 import statistics
 import time
@@ -19,7 +20,8 @@ from typing import Callable
 
 from .agent import Investigation, ReasonLanePolicy, ScriptedPolicy
 from .project import Budgets, Project
-from .reasoner import FakeReasoner
+from .reasoner import FakeReasoner, ModelSpec, ReasonerError, reasoner_for
+from .usage import usage_total
 from .store import MemoryStore, Store
 from .synthetic import CASES
 
@@ -76,7 +78,22 @@ def overclaiming_responder(messages: list[dict]) -> str:
     return json.dumps(d)
 
 
+DEFAULT_POLICIES = ("scripted", "fake-reasoner")
+
+
+def reason_policy(*, model_spec=None, playbook=None, replay=None, record=None):
+    if not (replay or os.environ.get("AUTOPHYS_REASON_REPLAY")) and os.environ.get("AUTOPHYS_ALLOW_LIVE_REASON") != "1":
+        raise ReasonerError("reason benchmark requires --replay for offline use; live calls spend money and require AUTOPHYS_ALLOW_LIVE_REASON=1")
+    if model_spec is None:
+        raise ReasonerError("reason benchmark requires --model")
+    policy = ReasonLanePolicy(reasoner_for(model_spec, replay=replay, record=record),
+                              model_spec=model_spec, playbook=playbook)
+    policy.name = "reason"
+    return policy
+
+
 POLICIES: dict[str, Callable[[], object]] = {
+    "reason": reason_policy,
     "scripted": ScriptedPolicy,
     "fake-reasoner": lambda: ReasonLanePolicy(FakeReasoner(heuristic_responder)),
 }
@@ -102,12 +119,16 @@ class BenchRow:
     non_identified: list
     diagnosis_correct: bool
     requested: list
+    calls: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cost_usd: float | None = None
 
 
-def run_case(case: str, policy: str, seed: int, store: Store | None = None) -> BenchRow:
+def run_case(case: str, policy: str, seed: int, store: Store | None = None, **reason_options) -> BenchRow:
     view, evaluator = CASES[case](seed)
     project = case_project(view)
-    inv = Investigation(project, view.dataset, view.runner, policy=POLICIES[policy](), store=store or MemoryStore(), seed=seed,
+    inv = Investigation(project, view.dataset, view.runner, policy=POLICIES[policy](**reason_options) if policy == "reason" else POLICIES[policy](), store=store or MemoryStore(), seed=seed,
                         title=f"bench {case} seed {seed}")
     t0 = time.perf_counter()
     out = inv.run()
@@ -117,21 +138,23 @@ def run_case(case: str, policy: str, seed: int, store: Store | None = None) -> B
     physical = set(view.simulator.param_names)
     non_ids = sorted(set(out.non_identified) & physical)
     requested = [o.experiment for o in view.dataset if o.source == "synthetic" and o.split == "train"][1:]
+    usage = usage_total(r.payload for r in inv.store.records(inv.id, "step"))
     return BenchRow(
         case=case, policy=policy, seed=seed, status=out.status,
         max_rel_error=max(rel.values()) if rel else float("nan"), rel_errors=rel,
         test_rmse=evaluator.test_rmse(view.simulator, est) if est else float("nan"),
         simulations=out.simulations, wall_s=wall, experiments=out.experiments, steps=out.steps,
         non_identified=non_ids, diagnosis_correct=evaluator.diagnosis_correct(set(non_ids)), requested=requested,
+        **{**usage, "cost_usd": usage["cost_usd"] if usage["calls"] else None},
     )
 
 
-def run_benchmark(cases=None, policies=None, seeds=3) -> list[BenchRow]:
+def run_benchmark(cases=None, policies=None, seeds=3, **reason_options) -> list[BenchRow]:
     rows = []
     for case in cases or list(CASES):
-        for pol in policies or list(POLICIES):
+        for pol in policies or DEFAULT_POLICIES:
             for seed in range(seeds):
-                rows.append(run_case(case, pol, seed))
+                rows.append(run_case(case, pol, seed, **reason_options))
     return rows
 
 
@@ -151,16 +174,21 @@ def summarize(rows: list[BenchRow]) -> list[dict]:
             "median_wall_s": statistics.median(r.wall_s for r in rs),
             "experiments": statistics.median(r.experiments for r in rs),
             "diagnosis_correct": f"{sum(r.diagnosis_correct for r in rs)}/{len(rs)}",
+            "calls": sum(r.calls for r in rs),
+            "input_tokens": sum(r.input_tokens for r in rs),
+            "output_tokens": sum(r.output_tokens for r in rs),
+            "cost_usd": None if any(r.cost_usd is None for r in rs) else sum(r.cost_usd for r in rs),
             "requested": sorted({",".join(r.requested) or "-" for r in rs}),
         })
     return out
 
 
 def format_table(summary: list[dict]) -> str:
-    head = ["case", "policy", "seeds", "status", "max rel err", "test RMSE", "sims", "wall s", "exps", "diagnosis", "requested"]
+    head = ["case", "policy", "seeds", "status", "max rel err", "test RMSE", "sims", "wall s", "exps", "diagnosis", "requested", "calls", "input_tokens", "output_tokens", "cost_usd"]
     rows = [[s["case"], s["policy"], str(s["seeds"]), s["status"], f"{s['median_max_rel_error']:.2%}",
              f"{s['median_test_rmse']:.4g}", f"{s['median_simulations']:.0f}", f"{s['median_wall_s']:.2f}",
-             f"{s['experiments']:.0f}", s["diagnosis_correct"], " | ".join(s["requested"])] for s in summary]
+             f"{s['experiments']:.0f}", s["diagnosis_correct"], " | ".join(s["requested"]), str(s["calls"]), str(s["input_tokens"]), str(s["output_tokens"]),
+             "null" if s["cost_usd"] is None else f'{s["cost_usd"]:.6f}'] for s in summary]
     widths = [max(len(h), *(len(r[i]) for r in rows)) for i, h in enumerate(head)]
     fmt = lambda r: "| " + " | ".join(c.ljust(w) for c, w in zip(r, widths)) + " |"  # noqa: E731
     return "\n".join([fmt(head), "|" + "|".join("-" * (w + 2) for w in widths) + "|", *map(fmt, rows)])

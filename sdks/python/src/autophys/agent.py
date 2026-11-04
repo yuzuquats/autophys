@@ -30,7 +30,7 @@ from __future__ import annotations
 import hashlib
 import time
 import uuid
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Any, Protocol
 
 import numpy as np
@@ -39,6 +39,8 @@ from .data import Dataset, Observation
 from .design import outlook, rank_experiments
 from .fit import FitResult, fit
 from .reasoner import Reasoner, ReasonerError, parse_json_content
+from .playbook import Playbook, load_playbook
+from .usage import normalize_usage, price_for, usage_total
 from .sensitivity import SensitivityReport, jacobian, report_from_jacobian
 from .project import Project, policy_from_config
 from .simulator import CallBudget, SimulationBudgetExceeded, SimulationError, Simulator
@@ -177,6 +179,7 @@ class Outcome:
     investigation: str
     proposal_id: str | None = None
     summary: str = ""
+    usage_total: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -227,6 +230,9 @@ class Investigation:
             "variants": {k: v.source_hash for k, v in self.variants.items()},
         }
         meta.update(getattr(self.policy, "meta", lambda: {})())
+        playbook = getattr(self.policy, "playbook", None)
+        if playbook is not None and hasattr(self.store, "put_blob"):
+            self.store.put_blob(playbook.data, "text/markdown")
         self.id = self.store.create_investigation(meta)
         for obs in dataset:
             self._record_measurement(obs)
@@ -766,6 +772,7 @@ class Investigation:
                     decision = raw if isinstance(raw, Decision) else Decision.parse(
                         raw, param_names=self.sim.param_names, catalog=list(self.limits))
                 except (ReasonerError, DecisionError) as e:
+                    step.update(getattr(e, "trace", {}))
                     failures += 1
                     self.last_error = f"{type(e).__name__}: {e}"
                     step.update({"valid": False, "error": self.last_error})
@@ -872,6 +879,7 @@ class Investigation:
             investigation=self.id,
             proposal_id=self.pending,
             summary=summary,
+            usage_total=usage_total(r.payload for r in self.store.records(self.id, "step")),
         )
         self._record("outcome", out.to_dict())
         self.outcome = out
@@ -987,22 +995,22 @@ class ScriptedPolicy:
                    [f"validation passed={val.get('passed')}", f"non_identified={','.join(sens['non_identified']) or 'none'}"], "none")
 
 
-SYSTEM_PROMPT = """You direct a model-calibration investigation for an engineer.
+CONTRACT = """You direct a model-calibration investigation for an engineer.
 Each turn you see compact diagnostics (no raw data) and choose exactly ONE action.
 Reply with a JSON object only: {"hypothesis": str, "evidence": [str], "action": str, "arguments": {}, "expected_information": str}.
 Ground every evidence item in a line of the diagnostics. Never claim a parameter is identified unless the
-SENSITIVITY line lists it as identified; the code will override such claims. Prefer: fit before sensitivity,
-sensitivity before ranking, request the top-ranked experiment only while a parameter is non-identified and
-experiments remain, validate at the latest fit before stopping. Stop with status "inconclusive" when the budget
-cannot resolve a non-identified parameter, and say which combination the data does determine.
+SENSITIVITY line lists it as identified; the code will override such claims.
 Actions:
 """
+# Backwards-compatible name for the immutable contract.
+SYSTEM_PROMPT = CONTRACT
 
 
-def system_prompt() -> str:
-    return SYSTEM_PROMPT + "\n".join(
+def system_prompt(playbook=None) -> str:
+    playbook = playbook if isinstance(playbook, Playbook) else load_playbook(playbook or "default")
+    return CONTRACT + "\n".join(
         f"- {k}: {v['doc']}; arguments: " + (", ".join(f"{a} ({d})" for a, d in v["args"].items()) or "none")
-        for k, v in ACTIONS.items())
+        for k, v in ACTIONS.items()) + "\n\nStrategy:\n" + playbook.text
 
 
 class ReasonLanePolicy:
@@ -1010,19 +1018,37 @@ class ReasonLanePolicy:
 
     name = "reason-lane"
 
-    def __init__(self, reasoner: Reasoner, *, effort: str | None = "low", max_tokens: int = 2400) -> None:
+    def __init__(self, reasoner: Reasoner, *, playbook=None, model_spec=None, effort: str | None = "low", max_tokens: int = 2400) -> None:
         self.reasoner = reasoner
-        self.effort = effort
-        self.max_tokens = max_tokens
-        self._system = system_prompt()
+        self.model_spec = model_spec
+        self.playbook = playbook if isinstance(playbook, Playbook) else load_playbook(playbook or "default")
+        self.effort = model_spec.effort if model_spec is not None else effort
+        self.max_tokens = model_spec.max_tokens if model_spec is not None else max_tokens
+        self._system = system_prompt(self.playbook)
 
     def meta(self) -> dict:
-        return {"system_prompt_sha256": hashlib.sha256(self._system.encode()).hexdigest(), "reasoner": repr(self.reasoner)}
+        meta = {"system_prompt_sha256": hashlib.sha256(self._system.encode()).hexdigest(),
+                "reasoner": repr(self.reasoner),
+                "playbook": {"name": self.playbook.name, "version": self.playbook.version, "sha256": self.playbook.sha256}}
+        if self.model_spec is not None:
+            meta["model"] = asdict(self.model_spec)
+            price = price_for(self.model_spec.model)
+            if price:
+                meta["price"] = price
+        return meta
 
     def decide(self, f: dict) -> tuple[dict, dict]:
         text = render_facts(f)
         messages = [{"role": "developer", "content": self._system}, {"role": "user", "content": text}]
         trace: dict[str, Any] = {"evidence_text": text}
         reply = self.reasoner.complete(messages, response_schema=DECISION_SCHEMA, effort=self.effort, max_tokens=self.max_tokens)
-        trace.update({"raw_output": reply.content, "model": reply.model, "usage": reply.usage, "elapsed_ms": reply.elapsed_ms})
-        return parse_json_content(reply.content), trace
+        trace.update({"raw_output": reply.content, "model": reply.model, "usage": normalize_usage(reply), "elapsed_ms": reply.elapsed_ms})
+        if reply.replayed:
+            trace["replayed"] = True
+        try:
+            decision = parse_json_content(reply.content)
+        except (ReasonerError, ValueError) as error:
+            failure = ReasonerError(str(error))
+            failure.trace = trace
+            raise failure from None
+        return decision, trace

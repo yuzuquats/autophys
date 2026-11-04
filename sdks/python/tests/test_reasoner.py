@@ -128,7 +128,7 @@ def test_invalid_reply(server, reply):
         ChatReasoner(base_url=url, api_key=KEY).complete(MESSAGES)
 
 
-@pytest.mark.parametrize("status", [400, 401, 402, 403, 500, 503])
+@pytest.mark.parametrize("status", [400, 401, 402, 403])
 def test_http_errors_are_terminal_and_do_not_leak_keys(server, status):
     url, requests, responses = server
     responses[:] = [(status, {"error": {"code": "billing_not_configured", "message": KEY}, "message": KEY}, {})]
@@ -160,8 +160,8 @@ def test_rate_limit_delay_and_retry_bound(server, retry_after, expected):
     responses[:] = [(429, {"error": KEY}, headers)]
     sleeps = []
     with pytest.raises(ReasonerError, match="429") as exc:
-        ChatReasoner(base_url=url, api_key=KEY, sleep=sleeps.append).complete(MESSAGES)
-    assert sleeps == [expected] * 3
+        ChatReasoner(base_url=url, api_key=KEY, sleep=sleeps.append, jitter=lambda: 0.5).complete(MESSAGES)
+    assert sleeps == ([1.0, 2.0, 4.0] if retry_after in (None, "bad", "NaN") else [expected] * 3)
     assert len(requests) == 4
     assert KEY not in str(exc.value)
 
@@ -271,3 +271,19 @@ def test_unknown_route_does_not_echo_input(monkeypatch):
     with pytest.raises(ReasonerError) as exc:
         reasoner_from_env()
     assert KEY not in str(exc.value)
+
+
+def test_recording_matches_transport_body(server, tmp_path):
+    import hashlib
+    from autophys.reasoner import RecordingReasoner, ReplayReasoner
+    from autophys.store import canonical
+    url, requests, _ = server
+    path = tmp_path / "cassette.jsonl"
+    chat = ChatReasoner("baseten", model="custom", base_url=url, api_key=KEY)
+    recorded = RecordingReasoner(chat, path).complete(MESSAGES, effort="high", max_tokens=99)
+    item = json.loads(path.read_text())
+    assert item["key"] == hashlib.sha256(canonical(requests[0][2]).encode()).hexdigest()
+    assert KEY not in path.read_text()
+    replay = ReplayReasoner(path, route="baseten", model="custom").complete(MESSAGES, effort="high", max_tokens=99)
+    assert replay.replayed and replay.content == recorded.content
+    assert len(requests) == 1

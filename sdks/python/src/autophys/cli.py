@@ -74,7 +74,19 @@ def cmd_whoami(args, out=sys.stdout) -> int:
 def cmd_bench(args, out=sys.stdout) -> int:
     from .bench import format_table, rows_json, run_benchmark, summarize
 
-    rows = run_benchmark(cases=args.case or None, policies=args.policy or None, seeds=args.seeds)
+    from .reasoner import ModelSpec, ReasonerError
+    options = {}
+    if args.policy and "reason" in args.policy:
+        if not args.model:
+            print("reason benchmark requires --model", file=out)
+            return 2
+        options = dict(model_spec=ModelSpec("policy", args.route, args.model, args.effort),
+                       playbook=args.playbook, replay=args.replay, record=args.record)
+    try:
+        rows = run_benchmark(cases=args.case or None, policies=args.policy or None, seeds=args.seeds, **options)
+    except ReasonerError as e:
+        print(str(e), file=out)
+        return 2
     print(rows_json(rows) if args.json else format_table(summarize(rows)), file=out)
     return 0
 
@@ -93,7 +105,13 @@ def build_parser() -> argparse.ArgumentParser:
     pb = sub.add_parser("bench", help="run the synthetic benchmark (no network)")
     pb.add_argument("--seeds", type=int, default=3)
     pb.add_argument("--case", action="append", help="case name (repeatable); default all")
-    pb.add_argument("--policy", action="append", help="scripted or fake-reasoner (repeatable); default both")
+    pb.add_argument("--policy", action="append", help="scripted, fake-reasoner or reason (repeatable); default scripted + fake-reasoner")
+    pb.add_argument("--model")
+    pb.add_argument("--route", choices=("meta", "baseten", "lane"), default="meta")
+    pb.add_argument("--effort")
+    pb.add_argument("--playbook")
+    pb.add_argument("--replay")
+    pb.add_argument("--record")
     pb.add_argument("--json", action="store_true")
     from .mcp.cli import add_parser
     add_parser(sub)

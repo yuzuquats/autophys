@@ -1,0 +1,36 @@
+{
+ "format": {
+  "application_id": 1095784258,
+  "user_version": 1
+ },
+ "heads": {
+  "inv_ffb2dafbf80da663": {
+   "hash": "3bc5a02e02b06bbf8343691450f9e635a344ee769beb22b137cc9259c9029540",
+   "seq": 15
+  }
+ },
+ "kinds": {
+  "investigation": 1,
+  "measurement": 3,
+  "outcome": 1,
+  "run": 2,
+  "step": 9
+ },
+ "project": "oscillator",
+ "projections": {
+  "investigations": [
+   {
+    "budget_used": 3,
+    "config_version": "sha256:db6e9a07907ef31dc2410d0fb314ab16a943e8d28ab54dd357564b3c57ba50f5",
+    "created": 1793799175.86896,
+    "id": "inv_ffb2dafbf80da663",
+    "overrides": "{\"fixed\":{},\"free\":[\"m\",\"c\",\"k\"]}",
+    "project": "prj_adcecbd71a97c86e",
+    "status": "validated",
+    "updated": 1793799177.82378
+   }
+  ],
+  "proposals": []
+ },
+ "records": 16
+}

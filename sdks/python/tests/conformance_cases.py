@@ -73,8 +73,28 @@ def _events_and_values(store: WorkbookStore) -> None:
     store.append(inv, "outcome", {"status": "inconclusive", "reasons": ["conformance"]})
 
 
+def _reason_replayed(store: WorkbookStore) -> None:
+    """An offline reason run pins playbook bytes, model, prices and usage."""
+    from autophys.bench import case_project
+    from autophys.reasoner import ModelSpec, MUSE_SPARK, reasoner_for
+    from autophys.agent import ReasonLanePolicy
+    from autophys.synthetic import CASES as SYNTHETIC
+    cassette = Path(__file__).resolve().parents[3] / "tests/conformance/reasoner/spark-oscillator.jsonl"
+    spec = ModelSpec("policy", "meta", MUSE_SPARK)
+    policy = ReasonLanePolicy(reasoner_for(spec, replay=cassette), model_spec=spec)
+    policy.name = "reason"
+    view, _ = SYNTHETIC["oscillator"](0)
+    inv = Investigation(case_project(view), view.dataset, view.runner, policy=policy, store=store)
+    assert inv.run().status == "validated"
+    assert all(r.payload.get("replayed") for r in store.records(inv.id, "step"))
+    # Image references are format-ready; actual multimodal policy calls are M-4.
+    image = store.put_blob(b"synthetic image conformance bytes", "image/png")
+    store.append(inv.id, "step", {"images": [{"sha256": image, "media_type": "image/png",
+                                             "caption": "Synthetic format fixture"}]})
+
+
 CASES = {"thermal-validated": _thermal_validated, "oscillator-edited": _oscillator_edited,
-         "events-and-values": _events_and_values}
+         "events-and-values": _events_and_values, "reason-replayed": _reason_replayed}
 
 
 def expected(store: WorkbookStore) -> dict:
@@ -89,10 +109,12 @@ def expected(store: WorkbookStore) -> dict:
     }
 
 
-def write(out: Path) -> list[Path]:
+def write(out: Path, names=None) -> list[Path]:
     out.mkdir(parents=True, exist_ok=True)
     written = []
     for name, build in CASES.items():
+        if names is not None and name not in names:
+            continue
         path = out / f"{name}.ap-workbook"
         for p in (path, path.with_name(path.name + "-wal"), path.with_name(path.name + "-shm")):
             p.unlink(missing_ok=True)
@@ -110,5 +132,5 @@ def write(out: Path) -> list[Path]:
 
 
 if __name__ == "__main__":
-    for p in write(Path(sys.argv[1])):
+    for p in write(Path(sys.argv[1]), sys.argv[2:] or None):
         print(p, p.stat().st_size)

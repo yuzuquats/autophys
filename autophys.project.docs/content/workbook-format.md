@@ -115,7 +115,10 @@ way. The payload is the client's meta with `project_id`, `config_version` and
 | `investigation` | `project_id`, `config_version` non-empty strings |
 | `measurement` | `observation` is an object |
 | `outcome` | `status` non-empty string |
-| `run`, `step` | none |
+| `run` | none |
+| `investigation` (optional trace metadata) | `playbook {name, version, sha256}`: name/version strings, sha256 64 hex; `model {role, route, model, effort, max_tokens}`: role policy/researcher, route/model strings, effort string or null, max_tokens nonnegative integer or null; `price {model, input_per_mtok, output_per_mtok, as_of}`: strings and finite numeric rates |
+| `step` (optional trace fields) | `usage` object: known route/model keys strings, input_tokens/output_tokens/total_tokens/reasoning_tokens/cached_input_tokens nonnegative integers, latency_ms finite number, cost_usd finite number or null; unknown keys allowed for older raw provider dictionaries. `images` list of {sha256, media_type, caption?}: hash (64 hex, optional sha256: blob prefix), media_type string, optional caption string. `replayed` boolean. Top-level `model` and `elapsed_ms` stay unchanged |
+| `outcome` (optional totals) | `usage_total` object: calls/input_tokens/output_tokens nonnegative integers, cost_usd finite number or null. Readers skip raw usage dictionaries without input_tokens; missing/unknown cost makes the total null |
 | `proposal` | `proposal_id` a valid id; `event` one of `proposed approved edited rejected withdrawn data_attached` |
 | `proposed` | `experiment` non-empty string; `settings` absent, null or an object; `outlook`, when present: `axes` an array of at most 3 `{name, values}` with non-empty finite number arrays, `score` and every `after[param]` finite arrays with the product of the axis lengths |
 | `edited` | `settings` an object |
