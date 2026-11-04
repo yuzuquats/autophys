@@ -1,0 +1,13 @@
+{
+  "tasks": {
+    "build": "deno run --allow-read=. --allow-write=dist --allow-run=deno --allow-env build.ts",
+    "check": "deno check src/main.ts build.ts",
+    "test": "deno test src/"
+  },
+  "compilerOptions": {
+    "lib": ["dom", "dom.iterable", "esnext", "deno.ns"],
+    "strict": true
+  },
+  "fmt": { "lineWidth": 110 },
+  "lock": false
+}
