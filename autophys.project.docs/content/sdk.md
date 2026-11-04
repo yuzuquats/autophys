@@ -54,8 +54,7 @@ working tree; a test checks that the grid value at the proposed settings
 equals the proposal's own score.
 ```
 
-The operator fixed the shape. The details below are agent-chosen, pending
-operator review. Each is cheap to reverse inside the SDK.
+The operator fixed the shape. The details below were agent-chosen. Operator-reviewed on 2026-11-04; outcomes are in "Operator decisions on the SDK" below. Each is cheap to reverse inside the SDK.
 
 ```review-table
 | Id    | Choice                                                         | Strongest alternative and tradeoff                             | Reverse                                  |
@@ -72,7 +71,7 @@ operator review. Each is cheap to reverse inside the SDK.
 ```review-callout
 kind: decision
 title: SD-1 — wait on the record stream, poll when it is missing
-Agent-chosen, pending operator review. Before: poll the proposal every 5 s.
+Agent-chosen, then confirmed by the operator on 2026-11-04 (SD-1 below). Before: poll the proposal every 5 s.
 After: subscribe to `GET /stream?after=<cursor>`, read the proposal once
 (a decision made before the cursor), then return on the first `approved`,
 `edited` or `rejected` record for it. An idle or dropped stream reconnects
@@ -89,7 +88,7 @@ resume after idle, fallback and bad key.
 
 ### Carried forward from ModelLab (ML-8..ML-14)
 
-Each is **agent-chosen, pending operator review**. They were made on
+Each was agent-chosen. Operator-reviewed on 2026-11-04; outcomes are in "Operator decisions on the SDK" below. They were made on
 yuzuquats and are unchanged by the move. Each is reversible in the SDK at
 low cost unless stated.
 
@@ -139,7 +138,7 @@ The operator's W-1..W-8 (`workbook.md`) are implemented in the SDK:
 `Investigation.resume`, `inv.records`, `inv.proposal`, the proposal event
 `withdrawn`, and the shared suite `tests/test_conformance.py` with goldens in
 `tests/conformance/`. The Python names in `rust-sdk.md`'s table are the ones
-shipped. These details are **agent-chosen, pending operator review**:
+shipped. These details were agent-chosen. Operator-reviewed on 2026-11-04; outcomes are in "Operator decisions on the SDK" below.
 
 ```review-table
 | Id   | Choice | Strongest alternative and tradeoff | Reverse |
@@ -169,10 +168,10 @@ comes from a Meta model yet, and the system prompt hard-codes the
 | M-2 | Playbook skill: the prompt splits into a fixed contract (JSON shape, action list, the identified-claim rule; not editable) and a strategy loaded from `playbooks/<name>/SKILL.md` in Muse skill format. The default strategy is rewritten to reason about information rather than follow the ranking. Pinned on the investigation as `playbook`. | 2 h |
 | M-3 | Usage per step and totals per outcome, normalised across providers, with estimated cost from the price table snapshot pinned on the investigation. | 1 h |
 | M-6 | Retry with jittered backoff on 429, 5xx and timeouts (402 stays terminal: it means billing is not configured). `RecordingReasoner` / `ReplayReasoner` cassettes keyed by the sha256 of the canonical request; replay is the offline demo and the deterministic tests. | 1.5 h |
-| M-7 | `bench --jobs N`: cases × seeds × policies in a bounded pool (threads for model-bound runs, processes for scripted ones). | 1 h |
-| M-9 | Outer loop `autophys research`: frozen train / held-out split, scalar score (diagnosis and status correct first, then error, cost as tiebreak), propose an edit, re-evaluate on train, keep only on improvement, report held-out. Researcher protocol with an API adapter (`ChatReasoner` on Wonder). | 2.5 h |
-| M-5 | Muse Code CLI researcher adapter: workspace with the skill and failed transcripts, prompt file, `muse exec --json --model muse-wonder-1.0 --workspace DIR`, JSONL events parsed, edited SKILL.md read back and validated. Tested with a fake `muse`. | 2 h |
-| M-8 | `autophys export-trajectories`: JSONL of each decision's contract hash, playbook hash, prompt, raw response, parsed decision, validity and the run's evaluator score. Export only. | 1 h |
+| M-7 | `bench --jobs N`: cases × seeds × policies in a bounded pool (threads for model-bound runs, processes for scripted ones). | implemented (Python batch 2; offline tests) |
+| M-9 | Outer loop `autophys research`: frozen train / held-out split, scalar score (diagnosis and status correct first, then error, cost as tiebreak), propose an edit, re-evaluate on train, keep only on improvement, report held-out. Researcher protocol with an API adapter (`ChatReasoner` on Wonder). | implemented (Python batch 2; offline tests) |
+| M-5 | Muse Code CLI researcher adapter: workspace with the skill and failed transcripts, prompt file, `muse exec --json --model muse-wonder-1.0 --workspace DIR`, JSONL events parsed, edited SKILL.md read back and validated. Tested with a fake `muse`. | implemented (Python batch 2; offline tests) |
+| M-8 | `autophys export-trajectories`: JSONL of each decision's contract hash, playbook hash, prompt, raw response, parsed decision, validity and the run's evaluator score. Export only. | implemented (Python batch 2; offline tests) |
 | M-4 | Image input: fit and residual plots rendered (optional `plots` extra), stored as blobs, referenced by hash; attached for Wonder (researcher) and for the policy only if the model is image-capable. The hacks reason lane stays text-only. | 2.5 h |
 ```
 
@@ -215,10 +214,8 @@ writes them:
 - projections: unchanged in v1 (they are fixed SQL columns). Read APIs derive
   `playbook` from the seq-0 record and `usage_total` from the outcome.
 
-Open: Muse skill frontmatter rules and the `muse exec --json` event schema
-need `muse skills validate` and `muse exec --help` run once on the laptop
-(local commands, no tokens). The CLI researcher runs where `muse` and its key
-are; it is not on rwc-dev-01.
+Settled: the skill frontmatter (MQ-3, `muse skills validate` on 1.4.14) and the `muse exec --json`
+event envelope (MQ-7, echo run). The CLI researcher runs where `muse` and its key are; it is not on rwc-dev-01.
 
 Implemented: M-1, M-2, M-3 and M-6 (I7d2e5a9c3f1b84e06a51). The offline replay
 of `bench --policy reason --model muse-spark-1.3 --case oscillator --seeds 1`
@@ -235,8 +232,9 @@ then M-4.
 | MQ-2 | Live Spark/Wonder token budget | Replay-only for now. No live Meta API or `muse exec` calls; the budget question is deferred. | Operator, 2026-11-04. No number or transcript may be labelled Spark or Wonder until a live run happens under an approved budget. | enforced: `bench --policy reason` refuses live calls without `--replay` or `AUTOPHYS_ALLOW_LIVE_REASON=1` |
 | MQ-3 | Probe the `muse` CLI on the laptop | Allowed, once, over ssh on macbookpro-laptop: `muse --version`, `muse exec --help`, `muse skills --help`, and `muse skills validate` on a temporary copy of our SKILL.md. | Operator, 2026-11-04. No installs, settings changes or real `muse exec`; stop if validate needs the network or the account. | SKILL.md format settled: the MCP agent ran the probe and recorded it in muse-plugin.md. `skills validate` on Muse Code 1.4.14 is valid with no diagnostics for sha256 `cd65c7b3...e0e35a`, which is the committed `playbooks/default/SKILL.md`, so the probe is not repeated. Still open for M-5: the `muse exec --json` event schema from a real model. The echo provider (`--provider echo`, zero tokens) could capture it, but an echo `muse exec` is outside MQ-3's authorization, so M-5 starts against a fake `muse` built from `exec --help`. |
 | MQ-4 | Research-loop score (M-9) | Lexicographic: the count of correct status-and-diagnosis results first, then lower mean log parameter error, then lower cost as the tiebreak. Every component is logged so runs can be re-scored. | Operator, 2026-11-04. | to implement in M-9 |
-| MQ-5 | Who owns the battery case suite | Open: the question was interrupted before an answer. | Blocks nothing in M-1..M-9. | open |
-| MQ-6 | 402 handling | Agent-chosen, pending operator review: 402 is terminal (`BudgetError`, no retry), since it means billing is not configured. | Alternative: retry it like 429; cost: a few lines in `reasoner.py`. | implemented (I7d2e5a9c3f1b84e06a51) |
+| MQ-5 | Who owns the battery case suite | autophys/py owns all of it: R0/R1/C1 cases, an experiment catalog costed in test hours, a short-data non-identifiable case, goldens and the experiment-cost budget in bench. | Operator, 2026-11-04. sdks/python keeps a single writer; a test-hour budget field is a new config version that autophys/rs mirrors. About 3-4 h agent time, after batch 2 and before M-4. | planned |
+| MQ-6 | 402 handling | Stop on the first 402 everywhere: no retry; the investigation records the step, ends `failed` with reason `billing: provider refused the call (HTTP 402)` and raises `BudgetError`; bench (including `--jobs` pools) and research stop the whole run. | Operator, 2026-11-04, choosing the recommendation over keeping the earlier behaviour, which made three 402 calls per investigation, reported "three unusable decisions in a row" and continued through every batch unit. Meta documents 402 as billing_not_configured, so waiting does not help. | implemented (batch 2 commit) |
+| MQ-7 | One zero-token `muse exec` echo run to learn the event format | Allowed once. Run on macbookpro-laptop with isolated XDG dirs, `--provider echo --json --no-session-log`, shell/writes/web off; output kept as `sdks/python/tests/data/muse-exec-echo-1.4.14.jsonl`, temp dirs removed. | Operator, 2026-11-04. Exit 0, 14 events, zero tokens, SKILL.md unchanged (sha256 cd65c7b3...). Events are `{schema_version: 1, payload_type, payload}`; final text in `run.terminal.completed` payload.text, streamed text in `run.output.delta`, usage in `run.usage` payload.models[] (`input_tokens`, `cached_tokens`, `output_tokens`, `reasoning_tokens`, `calls`). Real-model usage values remain unverified until a live run. | implemented: `parse_muse_events` reads this envelope; a non-completed terminal is an error |
 ```
 
 ## Contract questions
