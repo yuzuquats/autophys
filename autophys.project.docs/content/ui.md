@@ -366,3 +366,24 @@ stepper" design is not restarted. Nothing below is built yet.
 | UI-25b — New project and Devices | New project: head **+** opens one page in Main (name, simulator template, Create), not a stepper. Devices: the rail foot row opens the pairing cards in Main, moved out of Configuration's details. | **Operator decision needed:** whether Create may also start an investigation in the browser. Commit 8920386 (Change-Id I423ed2e9a9428496dccf, server-only, not deployed) adds browser-created thermal projects and a built-in scripted run loop on the daemon. Keep it and wire **Start investigation**, or revert it and keep New project as the SDK snippet and pairing page. | Not built. Reverting 8920386 removes `src/http/workbench.rs` and its test; nothing depends on it. |
 
 **UI-25 withdrawn (2026-11-04).** The operator dropped this proposal: a Codex subagent from the autophys/master thread is building the sidebar, restyled after the artifacts app's, plus a New project screen without a Details panel and aligned panel headers. Its commit and record supersede UI-25, UI-25a and UI-25b. The uncommitted sidebar-B drafts named in UI-25a are unchanged on disk; commit 8920386 remains on master, unused by the UI.
+
+
+### Artifacts sidebar implementation — operator decision, 2026-11-04
+
+| Decision | Resulting behavior | Authority and scope | Validation and reversal |
+| --- | --- | --- | --- |
+| UI-26 — compact workspace tree and aligned headers | Keep the app bar and three separate Workspace, Main and Details panels. A frame-hosted `std-rail` contains New project, Devices, a divider and a small-caps Projects count in `std-rail-section`, then one `std-tree-list` with guides. Project folders carry muted investigation counts; Configuration carries its version; investigations are newest first and retain Data, Fit, Sensitivity, proposals, Validate, their verdicts/values and Approve pills. Pending Devices has a red count with a descriptive accessible label, absent at zero. No project dropdown, Investigations heading, bottom creation button or Live footer. The reconnect alert appears only while broken. New project uses the existing Main stepper and hides Details and its focus targets until a selection needs it. All headers share a 48px band, 13px/600 text and 12px left inset; sidebar labels and icons use that same column. | **Operator-decided (2026-11-04, final).** Supersedes UI-21, UI-24 and withdrawn UI-25/a/b. Reference: rwc-01 artifacts `project-rail.ts` and `ref-artifacts.png`. App code only; no vendor edits, live deployment or push. | HTML type-check and 77 tests pass; fixture flow 63 checks, daemon flow 21, null-state flow 36, browser project flow 37; visual geometry checks plus all eight required desktop/phone captures. Evidence: `rwc-dev-01:~/workspace/fleet/evidence/autophys/ui-sidebar-artifacts-20261104/`. Reversal is a local presentation/model change; no persisted-data migration. |
+
+Draft reconciliation: `sidebar.ts` and `sidebar-markup.ts` retain the useful existing
+workspace tree, accessible badge and recovery rendering; the adapter now uses the
+reference rail/section primitives and top navigation. `sidebar-glyphs.ts` is reused
+with a folder project mark and 13px sizes. `sidebar-model.ts` is reused unchanged.
+`sidebar-styles.ts` is replaced with the approved row/header presentation.
+`e2e/sidebar-flow.ts` is adopted with the approved order, native Devices selector,
+1280×800 desktop coverage, hidden-Details assertions and keyboard field entry.
+The 10:00 UTC preimages are preserved under the evidence directory's `baseline/`.
+New-project/controller work, Configuration card work, signed-out handling and other
+sessions' staged changes remain outside this sidebar commit. The one project-count
+expectation in the existing untracked `project-setup.deno.test.ts` was updated and
+left uncommitted with that file's owner. Scratch daemons use ports 47981–47983 and
+external web output; they are stopped after verification. No browser was left running.

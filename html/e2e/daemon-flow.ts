@@ -90,13 +90,12 @@ await withHeadless(async (browser: { newPage(): Promise<Page> }) => {
     watch(empty, "empty daemon");
     await empty.setViewport({ width: 1280, height: 800 });
     await empty.goto(`${emptyBase}/app`, { waitUntil: "load" });
-    await empty.waitForSelector(".ap-onboarding");
+    await empty.waitForSelector(".ap-empty");
     if (await empty.$(".ck-tour-dismiss")) await empty.click(".ck-tour-dismiss");
     await settle(empty);
     check(await empty.$("#ap-switch") === null, "empty daemon has no blank project selector");
     check(await empty.$eval(".ap-side-notice std-empty-state", (el) => el.shadowRoot?.textContent?.includes("No projects yet") ?? false), "empty daemon explains a project");
-    check((await text(empty, ".ap-code")).includes("wb.investigate"), "empty daemon offers a real SDK recipe");
-    check(await empty.$('.ap-demo-link a[href="?source=fixtures"]') !== null, "empty daemon links to demo data");
+    check(await empty.$(".ap-new-project button") !== null, "empty daemon offers the New project stepper");
     check((await text(empty, ".ck-details")).includes("Connect"), "empty daemon has useful device guidance");
     await snap(empty, "empty-daemon");
     await empty.close();
@@ -128,8 +127,8 @@ const channel: string = config.simulator.outputs[0];
   const fx = await browser.newPage();
   watch(fx, "fixtures");
   await openApp(fx, "?source=fixtures");
-  await until(fx, "fixture status line", async () => (await statusLine(fx)).startsWith("Fixture data"));
-  check(await statusLine(fx) === "Fixture data · ?source=fixtures", "?source=fixtures: the status line names the fixture");
+  await until(fx, "demo indicator", async () => (await text(fx, ".ap-source > span")) === "Demo data");
+  check(await fx.$(".ck-export") === null, "the shell header has no Export action");
   await clickStill(await treeRow(fx, "Sine 0.44"));
   await fx.waitForSelector("pierce/#ap-action-approve");
   await settle(fx);
@@ -145,13 +144,19 @@ const channel: string = config.simulator.outputs[0];
   watch(a, "A (stream blocked)", [/\/api\/v1\/stream/, /status of 409/, /http 409: .*\/approvals$/]);
   watch(c, "C (watcher)");
   watch(b, "B (approver)");
-  await a.setRequestInterception(true);
-  a.on("request", (r: HTTPRequest) => (r.url().includes("/api/v1/stream") ? r.abort() : r.continue()));
+  // Keep the connection healthy but withhold records in this stale browser.
+  // A broken stream now correctly pauses approvals, so aborting it cannot
+  // exercise the daemon's concurrent-decision 409 anymore.
+  await a.evaluateOnNewDocument(() => {
+    const native = EventSource.prototype.addEventListener;
+    (EventSource.prototype as any).addEventListener = function(type: string, listener: any, options: any) {
+      if (type !== "record") native.call(this, type, listener, options);
+    };
+  });
 
   await openApp(c);
-  await until(c, "daemon status line", async () => (await statusLine(c)).startsWith("Live from the daemon"));
-  check(/^Live from the daemon · 0\.\d+\.\d+ · /.test(await statusLine(c)), `the status line names the daemon ("${await statusLine(c)}")`);
-  check((await (await treeRow(c, invName)).evaluate((el) => el.textContent ?? "")).includes(invName), `the seeded investigation ${invName} renders`);
+  check(await c.$eval(".ck-status", el => getComputedStyle(el).display === "none"), "connected daemon has no Live footer");
+  check(await c.$(`pierce/[role=treeitem][data-id="${inv.id}"]`) !== null, "the seeded investigation renders with its stable ID");
   await snap(c, "daemon-investigation");
   await clickStill(await proposalRow(c));
   await c.waitForSelector("pierce/#ap-action-approve");
@@ -187,7 +192,7 @@ const channel: string = config.simulator.outputs[0];
 
   // ---------- pairing (O-3) and data over SSE ----------
   const start = await (await fetch(`${base}/api/v1/pair/start`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ device_name: "e2e laptop", client: "daemon-flow.ts" }) })).json();
-  await clickStill(await c.$("pierce/std-tree-list.ap-pinned [role=treeitem]") ?? await treeRow(c, "Configuration"));
+  await c.click(".ap-devices");
   await until(c, "the pairing appears", async () => (await c.$(`pierce/[id="ap-action-pair-approve:${start.user_code}"]`)) !== null, 15_000);
   await settle(c);
   await snap(c, "daemon-pairing-pending");
@@ -223,14 +228,14 @@ const channel: string = config.simulator.outputs[0];
     await recovery.deleteCookie(cookie);
     await renew; // The app's next pairing read gets 401 and invokes the injected host callback.
     await recovery.waitForSelector(".ck-panels[data-ready]");
-    await until(recovery, "reauth remints the session", async () => (await statusLine(recovery)).startsWith("Live from the daemon"));
+    await until(recovery, "reauth remints the session", async () => await recovery.$('pierce/[role=treeitem][data-id^="project:"]') !== null && await recovery.$(".ap-rail-connection:not([hidden])") === null);
     const renewed = (await recovery.cookies(`${base}/api/v1/workspace`)).find((c) => c.path === "/api")!;
     check(!!renewed?.httpOnly && navigations === 1, `AX-9: an expired cookie reloads the document once and reconnects (documents=${navigations}, session=${!!renewed?.httpOnly})`);
     check(await recovery.evaluate(() => Number(sessionStorage.getItem("autophys.reauth-at")) > 0), "AX-9: the host persists the per-tab reload guard");
     if (await recovery.$(".ck-tour-dismiss")) await recovery.click(".ck-tour-dismiss");
     await settle(recovery);
     await recovery.deleteCookie(renewed);
-    await until(recovery, "reload guard exposes session failure", async () => (await text(recovery, ".ap-text.ap-t-danger")).includes("Browser session expired"), 15_000);
+    await until(recovery, "reload guard exposes session failure", async () => (await recovery.$eval(".ap-rail-connection", el => el.title)).includes("Browser session expired"), 15_000);
     check(navigations === 1, "AX-9: a second 401 inside 30 seconds shows an error instead of reloading again");
     await snap(recovery, "daemon-session-expired-guard");
     await recovery.close();

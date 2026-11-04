@@ -6,6 +6,8 @@
  */
 
 /** Colour roles. The renderer maps each to a CSS variable; it never picks one itself. */
+import type { SidebarExtras } from "./sidebar-model.ts";
+
 export type Tone = "default" | "muted" | "ok" | "warn" | "run" | "danger";
 
 /** Glyphs the package draws (icons.ts). */
@@ -14,7 +16,7 @@ export type IconName =
   | "proposal" | "validate" | "view" | "residuals" | "landscape" | "envelope" | "frequency" | "zoom" | "plus" | "chevron";
 
 /** A row's trailing edge: text in a tone, optionally a spinner before it, or a count badge. */
-export type Trail = { text?: string; tone?: Tone; spinner?: boolean; badge?: string };
+export type Trail = { text?: string; tone?: Tone; spinner?: boolean; badge?: string; label?: string };
 
 export type TreeNode = {
   id: string;
@@ -33,10 +35,10 @@ export type Action = { name: string; label: string; variant?: "primary" | "secon
 
 // ------------------------------------------------------------------------------------ sidebar
 
-export type SidebarModel = {
-  /** The switcher at the top: one option per project. */
+export type SidebarModel = SidebarExtras & {
+  /** Legacy source-load state; the workspace rail renders no project switcher. */
   switcher: { kind: "none" | "loading" | "single" | "select" | "unavailable"; label: string; value: string; options: { value: string; label: string }[] };
-  /** The pinned row above the section (a single tree row). */
+  /** Devices navigation, above the project section. */
   pinned: TreeNode;
   notice?: { kind: "no-projects" | "no-investigations" | "loading" | "unavailable"; title: string; description: string };
   section: { label: string; count: string; add?: Action };

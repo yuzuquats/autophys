@@ -8,27 +8,41 @@ import { ICONS, spinnerSvg } from "./icons.ts";
 import type { Action, SidebarModel, Trail, TreeNode } from "./view-model.ts";
 
 export function switcherMarkup(model: SidebarModel): string {
-  const s = model.switcher;
-  if (s.kind === "none" || s.kind === "loading" || s.kind === "unavailable") return "";
-  if (s.kind === "single") return `<div class="ap-project-label"><span>Project</span><b>${esc(s.options[0]?.label ?? "")}</b></div>`;
-  return `<div id="ap-switch" data-ap-switcher data-options="${esc(JSON.stringify(s.options))}" data-value="${esc(s.value)}"></div>`;
+  return ""; // Projects are roots in the workspace tree; there is no switcher.
 }
 
 export function actionAttrs(a: Action): string {
-  return `${ATTR.role}="action" ${ATTR.name}="${esc(a.name)}" id="ap-action-${esc(a.name)}"${a.disabled ? " disabled" : ""}${a.title ? ` title="${esc(a.title)}"` : ""}`;
+  return `${ATTR.role}="action" ${ATTR.name}="${esc(a.name)}" id="ap-action-${
+    esc(a.name)
+  }"${a.disabled ? " disabled" : ""}${
+    a.title ? ` title="${esc(a.title)}"` : ""
+  }`;
 }
 
 export function sectionMarkup(model: SidebarModel): string {
   const { label, count, add } = model.section;
   if (!label) return "";
-  return `<div class="ap-section-head"><span>${esc(label)}<span class="ap-count">${esc(count)}</span></span>${add
-    ? `<button type="button" class="ap-add" ${actionAttrs(add)} aria-label="${esc(add.label)}">${ICONS.plus}</button>` : ""}</div>`;
+  return `<div class="ap-section-head"><span>${
+    esc(label)
+  }<span class="ap-count">${esc(count)}</span></span>${
+    add
+      ? `<button type="button" class="ap-add" ${actionAttrs(add)} aria-label="${
+        esc(add.label)
+      }">${ICONS.plus}</button>`
+      : ""
+  }</div>`;
 }
 
 /** The trail's inner markup: a badge, or an optional spinner then the text. */
-export function trailMarkup(t: Trail): string {
-  if (t.badge != null) return `<span class="ap-badge">${esc(t.badge)}</span>`;
-  return `${t.spinner ? spinnerSvg(10) : ""}${t.text != null ? `<span>${esc(t.text)}</span>` : ""}`;
+export function trailMarkup(t: Trail & { label?: string }): string {
+  if (t.badge != null) {
+    return `<span class="ap-badge ap-badge-${t.tone ?? "muted"}"${t.label ? ` aria-label="${esc(t.label)}"` : ""} style="display:inline-block;padding:0 6px;border-radius:999px;background:${t.tone === "danger" ? "var(--ap-danger)" : t.tone === "warn" ? "var(--ap-approval-bg,#fff0d4)" : "var(--ck-n200)"};color:${t.tone === "danger" ? "var(--bg)" : t.tone === "warn" ? "var(--ap-warn)" : "var(--ap-sec)"};font:600 10.5px/16px var(--ap-font)">${
+      esc(t.badge)
+    }</span>`;
+  }
+  return `${t.spinner ? spinnerSvg(10) : ""}${
+    t.text != null ? `<span>${esc(t.text)}</span>` : ""
+  }`;
 }
 
 /** What the tree-list draws per row, built lazily through the caller's factories. */
@@ -38,8 +52,13 @@ export type RowFactories = {
 };
 
 export type ListNode = {
-  id: string; label: string; icon: null; selectable: boolean; children: ListNode[] | null;
-  $lead: () => unknown; $trail: (() => unknown) | null;
+  id: string;
+  label: string;
+  icon: null;
+  selectable: boolean;
+  children: ListNode[] | null;
+  $lead: () => unknown;
+  $trail: (() => unknown) | null;
 };
 
 export function listNodes(nodes: TreeNode[], make: RowFactories): ListNode[] {
@@ -49,12 +68,19 @@ export function listNodes(nodes: TreeNode[], make: RowFactories): ListNode[] {
     icon: null,
     selectable: n.selectable,
     $lead: () => make.lead(ICONS[n.icon], !!n.dim),
-    $trail: n.trail && (n.trail.text != null || n.trail.badge != null || n.trail.spinner) ? () => make.trail(trailMarkup(n.trail!), n.trail!.tone ?? "muted") : null,
+    $trail: n.trail &&
+        (n.trail.text != null || n.trail.badge != null || n.trail.spinner)
+      ? () => make.trail(trailMarkup(n.trail!), n.trail!.tone ?? "muted")
+      : null,
     children: n.children ? listNodes(n.children, make) : null,
   }));
 }
 
 /** Changes whenever anything a row draws changes, so a rebind happens only then (spinners keep turning). */
-export function treeKey(nodes: TreeNode[], selectedId: string | null, expandedIds: string[]): string {
+export function treeKey(
+  nodes: TreeNode[],
+  selectedId: string | null,
+  expandedIds: string[],
+): string {
   return JSON.stringify([selectedId, expandedIds, nodes]);
 }

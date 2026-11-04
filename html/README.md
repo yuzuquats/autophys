@@ -59,9 +59,8 @@ routes/       the composition root: index.root.ts (+ index.anon.html, content.ts
 
 ## The view model (what a port must deliver to `ui/`)
 
-- **Sidebar.** `switcher {kind, label, value, options[]}`, a `pinned` row, a `section {label, count,
-  add?}`, and `nodes: TreeNode[]`. Each node is `{id, label, icon, trail?: {text?, tone?,
-  spinner?, badge?}, dim?, selectable, children}`. Also `selectedId` and `expandedIds`.
+- **Sidebar.** `nodes: TreeNode[]` contains collapsible project roots. The legacy `switcher` field carries load state only; no dropdown is rendered. New project and a `pinned` Devices row appear above the Projects section and its tree. `connection?` and `creatingProject` carry recovery/setup state. Each node is `{id, label, icon, trail?: {text?, tone?,
+  spinner?, badge?, label?}, dim?, selectable, children}`. Also `selectedId` and `expandedIds`.
 - **Main.** `crumb: {label, id?}[]`, `meta`, `actions[]`, `credit`, and `body`. The body is
   one of `loading`, `onboarding`, `unavailable`, `missing`, a waiting message, or `{kind: "panels", panels: {title?, charts[]}[], columns?}`.
   A chart is one of the following kinds (or an explicit `missing` placeholder):

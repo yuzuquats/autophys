@@ -7,7 +7,7 @@
 import { assert, assertEquals } from "jsr:@std/assert@1";
 
 const ROOT = new URL("./", import.meta.url);
-const ALLOWED = ["@tento-ui/components/tree-list/tree-list", "@tento-ui/components/empty-state/empty-state",
+const ALLOWED = ["@tento-ui/components/rail/rail", "@tento-ui/components/rail/rail-section", "@tento-ui/components/tree-list/tree-list", "@tento-ui/components/empty-state/empty-state",
   "@tento-ui/components/skeleton/skeleton", "@tento-ui/components/input/select-input", "@tento-ui/components/button/button", "@tento-ui/ui/icons",
   "@tento-ui/components/grid/grid-layout", "@tento-ui/components/round", "@tento-ui/components/list/list-cell-layout"];
 

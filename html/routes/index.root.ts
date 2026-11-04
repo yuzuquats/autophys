@@ -3,7 +3,7 @@
  * cookbook builds the shell; each slot gets one ui surface drawing its slice of the client's
  * view through Cookbook.View.mount; the client's Store follows a Source: the daemon's
  * /api/v1 when this page is served by `autophys serve`, with recovery if it cannot answer.
- * `?source=fixtures` or `?source=daemon` forces one. The sidebar status line names it.
+ * `?source=fixtures` or `?source=daemon` forces one. The rail reports connection status only while disconnected.
  */
 import { Cookbook } from "@tento-cookbook/lib.ts";
 import { daemon, type Source } from "../client/api.ts";
@@ -41,19 +41,6 @@ const source: Source & { chosen?: Promise<Source> } = forced === "fixtures" ? fi
   : forced === "daemon" ? daemon({ user: USER, reauth })
   : daemon({ user: USER, reauth });
 
-/** The sidebar status line: which source the records come from. */
-async function status(): Promise<Cookbook.Status.Line> {
-  if (SIGNED_OUT) return { tone: "pending", text: "Signed out · sign in to see your projects" };
-  await ctl.store.start().catch(() => {});
-  const active = source.chosen ? await source.chosen : source;
-  if (ctl.store.error) return { tone: "down", text: "Connection unavailable" };
-  if (active.name !== "daemon") {
-    return { tone: "pending", text: forced === "fixtures" ? "Fixture data · ?source=fixtures" : "Fixture data · no daemon answered" };
-  }
-  const health = await Cookbook.Status.readHealthz();
-  return health.tone === "ok" ? { tone: "ok", text: `Live from the daemon · ${health.text.replace(/^Server ok · /, "")}` } : health;
-}
-
 const clock = () => new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 const ctl = new Controller(new Store(source), { user: USER, now: clock });
 // `serve --login` marks a signed-out page (the Sign in badge). The landing page stays usable:
@@ -68,11 +55,15 @@ const app: Cookbook.App = {
   title: "Autophys",
   mount(shell) {
     ctl.shell = { download: (name, type, data) => shell.download(name, type, data), picked: () => shell.onSelect() };
+    document.querySelector(".ck-header .ck-export")?.remove();
     const removeStyles = shell.addStyles(autophysStyles(shell.scope));
     const handle: typeof ctl.handle = (intent) => {
       if (intent.kind === "select" && intent.id === "devices") {
+        ctl.handle(intent);
         const toggle = document.querySelector<HTMLButtonElement>(".ck-details-toggle");
-        if (toggle && document.querySelector<HTMLElement>(".ck-panels")?.dataset.mobile !== "details") toggle.click();
+        const panels = document.querySelector<HTMLElement>(".ck-panels");
+        const open = matchMedia("(max-width:639px)").matches ? panels?.dataset.mobile === "details" : panels?.hasAttribute("data-details");
+        if (toggle && !open) toggle.click();
         return;
       }
       if (intent.kind === "action" && intent.name === "sign-in") { location.assign("/login?next=/app"); return; }
@@ -102,12 +93,13 @@ const app: Cookbook.App = {
     ];
     // A record arrived or the selection moved: every view re-reads its model (main with FLIP).
     const redraw = () => {
+      const view = ctl.view();
+      const panels = shell.slots.main.closest<HTMLElement>(".ck-panels");
+      const setupOnly = view.main.body.kind === "project-setup" && view.sidebar.selectedId !== "devices";
+      panels?.toggleAttribute("data-ap-setup-only", setupOnly);
+      const details = panels?.querySelector<HTMLElement>(".ck-details");
+      if (details) details.inert = setupOnly || !panels?.hasAttribute("data-details");
       views.forEach((v) => v.redraw());
-      if (ctl.store.error) {
-        // Cookbook currently exposes its initial status callback only.
-        const line = document.querySelector<HTMLElement>(`${shell.scope} .ck-status`);
-        if (line) { line.dataset.tone = "down"; line.textContent = "Connection unavailable"; }
-      }
       shell.setCrumb?.(ctl.view().main.crumb.at(-1)?.label ?? "");
     };
     const unsubscribe = ctl.subscribe(redraw);
@@ -124,5 +116,8 @@ const app: Cookbook.App = {
 };
 
 const docs = landingDocs();
-Cookbook.mount({ deck, onStage: docs.onStage, tutorial: [...Cookbook.Tutorial.shellSteps, ...tutorial], status, labels: { sidebar: "Workspace" } }).run(app);
+Cookbook.mount({ deck, onStage: docs.onStage, tutorial: [...Cookbook.Tutorial.shellSteps, ...tutorial], status: null, labels: { sidebar: "Workspace" } }).run(app);
 docs.mount();
+
+// Remove the unused hard-coded shell control before the first app open too.
+document.querySelector(".ck-header .ck-export")?.remove();
