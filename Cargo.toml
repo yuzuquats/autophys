@@ -15,6 +15,8 @@ name = "autophys"
 path = "src/main.rs"
 
 [dependencies]
+zip = { version = "4.6.1", default-features = false, features = ["deflate-flate2"] }
+flate2 = "1"
 autophys = { path = "sdks/rust" }
 # The tento crates in vendor/tento: tento-web is the file-based router and
 # bundler, tento-dirs the app dirs.
