@@ -51,12 +51,16 @@ pub struct FitResult {
     pub success: bool,
     pub loss_kind: String,
     pub at_bounds: Vec<String>,
+    #[serde(default)]
     pub starts: Vec<StartResult>,
     pub dataset_version: Option<usize>,
     pub source_hash: String,
     pub seed: Option<u64>,
 }
 impl FitResult {
+    pub fn from_dict(value: serde_json::Value) -> Result<Self> {
+        serde_json::from_value(value).map_err(|e| invalid(format!("invalid fit result: {e}")))
+    }
     pub fn to_dict(&self) -> serde_json::Value {
         serde_json::to_value(self).unwrap()
     }

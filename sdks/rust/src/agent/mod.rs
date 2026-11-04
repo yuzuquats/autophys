@@ -310,7 +310,23 @@ impl Investigation {
                             .into();
                     }
                 }
-                "run" => s.fit_id = s.fit_id.max(p["fit_id"].as_u64().unwrap_or(0) as usize),
+                "run" => {
+                    s.fit_id = p["fit_id"]
+                        .as_u64()
+                        .ok_or_else(|| crate::Error::BadRequest("run has no fit_id".into()))?
+                        as usize;
+                    let model = p["model"]
+                        .as_str()
+                        .ok_or_else(|| crate::Error::BadRequest("run has no model".into()))?;
+                    if !s.variants.contains_key(model) {
+                        return Err(crate::Error::BadRequest(
+                            "run refers to unknown model".into(),
+                        ));
+                    }
+                    s.fit_model = Some(model.into());
+                    s.model = model.into();
+                    s.fit = Some(FitResult::from_dict(p.clone()).map_err(err)?);
+                }
                 "step" => {
                     s.outcome = None;
                     s.steps += 1;
@@ -577,17 +593,7 @@ impl Investigation {
                 .map(|(k, v)| (k, v * self.noise_scale()))
                 .collect();
             let j = if self.sens_fit == Some(self.fit_id) {
-                self.jac.clone()
-            } else if !self.dataset.split("train").is_empty() {
-                Some(
-                    sensitivity::jacobian(
-                        sim,
-                        &p,
-                        &self.dataset.split("train"),
-                        1e-4,
-                        FIT_OPTIONS,
-                    )? / self.noise_scale(),
-                )
+                self.jac.as_ref()
             } else {
                 None
             };
@@ -597,7 +603,7 @@ impl Investigation {
                 .get(experiment)
                 .map(|c| c.edit.clone())
                 .unwrap_or_default();
-            let (grid, score, _) = design::outlook(
+            let (grid, score, _) = design::outlook_with_options(
                 sim,
                 &p,
                 &self.dataset.split("train"),
@@ -606,7 +612,12 @@ impl Investigation {
                 &edit,
                 &self.ranking_criterion,
                 12,
-                j.as_ref(),
+                j,
+                &design::OutlookOptions {
+                    max_simulations: self.project.budgets.max_outlook_simulations,
+                    at: if self.fit.is_some() { "fit" } else { "initial" }.into(),
+                    jacobian_scale: self.noise_scale(),
+                },
             )?;
             Ok((json!(grid), score, sim.calls() - c0))
         })();
@@ -637,10 +648,23 @@ impl Investigation {
             getrandom::getrandom(&mut bytes).map_err(|e| invalid(e.to_string()))?;
             let pid = format!("prop_{}", hex::encode(bytes));
             let (grid, score, calls) = self.proposal_outlook(experiment, &settings)?;
+            let points: IndexMap<String, usize> = grid["axes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|a| {
+                    (
+                        a["name"].as_str().unwrap().into(),
+                        a["values"].as_array().unwrap().len(),
+                    )
+                })
+                .collect();
             self.write("proposal",json!({"proposal_id":pid,"event":"proposed","experiment":experiment,"settings":settings,"rationale":d.map(|d|d.hypothesis.as_str()).unwrap_or(""),"expected_information":d.map(|d|d.expected_information.as_str()).unwrap_or(""),"criterion":self.ranking_criterion,"score":score,"outlook":grid})).map_err(|e|invalid(e.to_string()))?;
             self.pending = Some(pid.clone());
             self.pending_experiment = Some(experiment.into());
-            return Ok(json!({"proposal_id":pid,"status":"proposed","outlook_simulations":calls}));
+            return Ok(
+                json!({"proposal_id":pid,"status":"proposed","outlook_simulations":calls,"outlook_points":points}),
+            );
         }
         let mut o = self.runner.run(experiment, &settings)?;
         o.split = "train".into();
@@ -1011,14 +1035,41 @@ impl Investigation {
         settings: Option<Value>,
     ) -> crate::Result<crate::Appended> {
         self.require_pending(pid)?;
-        self.record.approve(pid, by, settings)
+        let mut payload = json!({"proposal_id":pid,"event":if settings.is_some() {"edited"} else {"approved"},"by":by,"via":"sdk"});
+        if let Some(settings) = settings {
+            payload["settings"] = self.sim().experiment(&settings).map_err(err)?;
+        }
+        self.record.append("proposal", payload, None)
     }
     pub fn reject(&mut self, pid: &str, by: &str, reason: &str) -> crate::Result<crate::Appended> {
         self.require_pending(pid)?;
-        let a = self.record.reject(pid, by, reason)?;
+        let a = self.record.append(
+            "proposal",
+            json!({"proposal_id":pid,"event":"rejected","by":by,"via":"sdk","reason":reason}),
+            None,
+        )?;
         self.pending = None;
+        self.pending_experiment = None;
         self.history
             .push(format!("proposal {pid} rejected: {reason}"));
+        Ok(a)
+    }
+    pub fn withdraw(
+        &mut self,
+        pid: &str,
+        by: &str,
+        reason: &str,
+    ) -> crate::Result<crate::Appended> {
+        self.require_pending(pid)?;
+        let a = self.record.append(
+            "proposal",
+            json!({"proposal_id":pid,"event":"withdrawn","by":by,"via":"sdk","reason":reason}),
+            None,
+        )?;
+        self.pending = None;
+        self.pending_experiment = None;
+        self.history
+            .push(format!("proposal {pid} withdrawn: {reason}"));
         Ok(a)
     }
     pub fn attach_data(&mut self, pid: &str, mut o: Observation) -> crate::Result<crate::Appended> {
@@ -1040,12 +1091,14 @@ impl Investigation {
         &mut self,
         timeout: std::time::Duration,
     ) -> crate::Result<crate::Proposal> {
-        if self.pending.is_none() {
-            return Err(crate::Error::BadRequest("no pending proposal".into()));
-        }
-        let p = self.record.wait_for_approval(timeout)?;
-        if p.status == "rejected" {
+        let pid = self
+            .pending
+            .as_deref()
+            .ok_or_else(|| crate::Error::BadRequest("no pending proposal".into()))?;
+        let p = self.record.wait_for_approval(pid, timeout)?;
+        if ["rejected", "withdrawn"].contains(&p.status.as_str()) {
             self.pending = None;
+            self.pending_experiment = None;
         }
         Ok(p)
     }

@@ -15,6 +15,7 @@ pub struct Budgets {
     pub max_steps: usize,
     pub max_simulations: usize,
     pub max_experiments: usize,
+    pub max_outlook_simulations: usize,
 }
 impl Default for Budgets {
     fn default() -> Self {
@@ -22,6 +23,7 @@ impl Default for Budgets {
             max_steps: 24,
             max_simulations: 20000,
             max_experiments: 2,
+            max_outlook_simulations: 50000,
         }
     }
 }
@@ -223,7 +225,14 @@ impl Project {
                 (k, v)
             })
             .collect();
-        json!({"name":self.name,"simulator":{"name":sim.name,"source_hash":sim.source_hash(),"outputs":sim.outputs},"params":params,"catalog":catalog,"noise":self.noise,"budgets":self.budgets,"stop":self.stop,"policy":self.policy,"n_starts":self.n_starts})
+        let mut budgets = json!(self.budgets);
+        if self.budgets.max_outlook_simulations == Budgets::default().max_outlook_simulations {
+            budgets
+                .as_object_mut()
+                .unwrap()
+                .remove("max_outlook_simulations");
+        }
+        json!({"name":self.name,"simulator":{"name":sim.name,"source_hash":sim.source_hash(),"outputs":sim.outputs},"params":params,"catalog":catalog,"noise":self.noise,"budgets":budgets,"stop":self.stop,"policy":self.policy,"n_starts":self.n_starts})
     }
     pub fn config_version(&self) -> String {
         use sha2::{Digest, Sha256};

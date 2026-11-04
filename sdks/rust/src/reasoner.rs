@@ -1,5 +1,7 @@
-//! Text-only reason lane and injectable deterministic test reasoners.
+//! Text-only HTTP reasoners and injectable deterministic test reasoners.
+mod chat;
 use crate::simulator::{Result, invalid};
+pub use chat::{ChatReasoner, ChatReasonerConfig, reasoner_from_env};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
@@ -144,9 +146,13 @@ pub fn parse_json_content(content: &Value) -> Result<Value> {
     };
     let v = serde_json::from_str::<Value>(s)
         .or_else(|_| {
-            let a = s.find('{').unwrap_or(0);
-            let b = s.rfind('}').map(|i| i + 1).unwrap_or(s.len());
-            serde_json::from_str(&s[a..b])
+            let nested = s
+                .find('{')
+                .zip(s.rfind('}'))
+                .filter(|(a, b)| a < b)
+                .map(|(a, b)| &s[a..=b])
+                .unwrap_or(s);
+            serde_json::from_str(nested)
         })
         .map_err(|e| invalid(format!("not JSON: {e}")))?;
     if !v.is_object() {

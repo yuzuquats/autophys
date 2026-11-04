@@ -194,3 +194,126 @@ fn scripted_runs_through_refit_and_validation() {
     );
     assert!(wb.verify().unwrap().ok);
 }
+
+#[test]
+fn resume_preserves_fit_and_warm_start() {
+    let temp = tempfile::tempdir().unwrap();
+    let client = autophys::connect(Some(temp.path().to_str().unwrap())).unwrap();
+    let (p, ds, _) = input();
+    let wb = client.project_with(p).unwrap();
+    let mut inv = wb
+        .investigate(ds, ProposalRunner, ScriptedPolicy::default())
+        .unwrap();
+    inv.tool_optimize_parameters(Some(1), "linear").unwrap();
+    let old_fit = inv.fit.as_ref().unwrap().to_dict();
+    let id = inv.id.clone();
+    let mut resumed = wb
+        .resume(&id, ProposalRunner, ScriptedPolicy::default())
+        .unwrap();
+    assert_eq!(resumed.fit.as_ref().unwrap().to_dict(), old_fit);
+    assert_eq!(resumed.fit_id, inv.fit_id);
+    assert_eq!(resumed.facts()["fit"]["current"], true);
+    inv.tool_optimize_parameters(Some(1), "linear").unwrap();
+    resumed.tool_optimize_parameters(Some(1), "linear").unwrap();
+    assert_eq!(
+        resumed.fit.as_ref().unwrap().to_dict(),
+        inv.fit.as_ref().unwrap().to_dict()
+    );
+}
+#[test]
+fn withdrawal_and_outlook_metadata() {
+    let temp = tempfile::tempdir().unwrap();
+    let client = autophys::connect(Some(temp.path().to_str().unwrap())).unwrap();
+    let (mut p, ds, _) = input();
+    p.catalog
+        .get_mut("step_long")
+        .unwrap()
+        .edit
+        .insert("power".into(), [1., 10.]);
+    let wb = client.project_with(p).unwrap();
+    let mut inv = wb
+        .investigate(
+            ds,
+            ProposalRunner,
+            script(&[("request_experiment", json!({"experiment":"step_long"}))]),
+        )
+        .unwrap();
+    let out = inv.run().unwrap();
+    let pid = out.proposal_id.unwrap();
+    let proposal = inv.records(Some("proposal")).unwrap();
+    let grid = &proposal[0].payload["outlook"];
+    assert_eq!(grid["at"], "initial");
+    assert_eq!(grid["after_resolved_max"], 1.);
+    let steps = inv.records(Some("step")).unwrap();
+    assert_eq!(
+        steps[0].payload["result"]["outlook_points"]["power"],
+        grid["axes"][0]["values"].as_array().unwrap().len()
+    );
+    inv.withdraw(&pid, "reviewer", "change plan").unwrap();
+    assert!(inv.pending.is_none());
+    let records = inv.records(Some("proposal")).unwrap();
+    assert_eq!(records[1].payload["via"], "sdk");
+    assert_eq!(records[1].payload["event"], "withdrawn");
+    assert_eq!(inv.proposal(&pid).unwrap().status, "withdrawn");
+    assert!(
+        wb.resume(&inv.id, ProposalRunner, ScriptedPolicy::default())
+            .unwrap()
+            .pending
+            .is_none()
+    );
+    assert!(wb.verify().unwrap().ok);
+}
+
+#[test]
+fn wait_uses_explicit_older_proposal_among_two_pending() {
+    use std::time::Duration;
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().to_str().unwrap().to_string();
+    let client = autophys::connect(Some(&root)).unwrap();
+    let (p, ds, _) = input();
+    let wb = client.project_with(p).unwrap();
+    let mut inv = wb
+        .investigate(
+            ds,
+            ProposalRunner,
+            script(&[("request_experiment", json!({"experiment":"step_long"}))]),
+        )
+        .unwrap();
+    let pid = inv.run().unwrap().proposal_id.unwrap();
+    inv.append(
+        "proposal",
+        json!({"proposal_id":"newer","event":"proposed",
+        "experiment":"step_long","settings":{"power":10.}}),
+        None,
+    )
+    .unwrap();
+    assert!(matches!(
+        inv.record.wait_for_approval("unknown", Duration::ZERO),
+        Err(autophys::Error::NotFound(_))
+    ));
+    let id = inv.id.clone();
+    let older = pid.clone();
+    let decider = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(100));
+        autophys::connect(Some(&root))
+            .unwrap()
+            .find_investigation(&id)
+            .unwrap()
+            .approve(&older, "other writer", None)
+            .unwrap();
+    });
+    // The agent must forward its pending id, rather than selecting the newer record.
+    let approved = inv.wait_for_approval(Duration::from_secs(5)).unwrap();
+    decider.join().unwrap();
+    assert_eq!(approved.proposal_id, pid);
+    assert_eq!(approved.status, "approved");
+    assert_eq!(inv.proposal("newer").unwrap().status, "proposed");
+    // Already decided proposals return immediately, even with a zero timeout.
+    assert_eq!(
+        inv.record
+            .wait_for_approval(&pid, Duration::ZERO)
+            .unwrap()
+            .proposal_id,
+        pid
+    );
+}

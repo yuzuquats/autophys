@@ -380,14 +380,14 @@ fn wait_for_approval_sees_a_decision_from_another_connection() {
         .unwrap();
     assert_eq!(
         code(
-            inv.wait_for_approval(Duration::from_millis(10))
+            inv.wait_for_approval("p-1", Duration::from_millis(10))
                 .unwrap_err()
         ),
         (404, "not_found")
     );
     inv.append("proposal", proposed("p-1"), None).unwrap();
     let err = inv
-        .wait_for_approval(Duration::from_millis(150))
+        .wait_for_approval("p-1", Duration::from_millis(150))
         .unwrap_err();
     assert!(matches!(err, Error::Timeout(_)), "{err}");
 
@@ -403,7 +403,9 @@ fn wait_for_approval_sees_a_decision_from_another_connection() {
             .reject("p-1", "browser", "no")
             .unwrap();
     });
-    let p = inv.wait_for_approval(Duration::from_secs(5)).unwrap();
+    let p = inv
+        .wait_for_approval("p-1", Duration::from_secs(5))
+        .unwrap();
     assert_eq!(p.status, "rejected");
     decider.join().unwrap();
 }

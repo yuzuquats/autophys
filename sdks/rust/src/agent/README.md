@@ -16,7 +16,7 @@ Numerical dependencies:
   transformed bounds, Jacobian scaling and SciPy termination rules.
 - `nalgebra` 0.33 supplies SVD, symmetric eigenvalues and dense matrix operations.
 - `indexmap` 2 preserves parameter, channel, catalog and outlook-axis order.
-- `ureq` 3 supplies blocking reason-lane HTTP without an application runtime.
+- `ureq` 3 supplies blocking reason-lane and Meta/Baseten chat HTTP without an application runtime.
 
 SeedSequence, PCG64, ziggurat normals and Latin-hypercube draws reproduce the
 Python RNG. The normal test checks 10,000 reference draws, including rejection
@@ -40,6 +40,19 @@ All three scripted runs match Python's actions, arguments, experiment choices
 and final validated status. Bound and identification decisions match the
 fixtures. No tolerances were relaxed.
 
+Resume restores the last fit, its model and warm start. Outlooks carry
+`after_resolved_max` and `at`, shrink uniformly to fit the configured
+`max_outlook_simulations` and 900 KiB payload limit, and report axis counts.
+The default outlook budget is hash-neutral in the project configuration.
+Record waits require a proposal id; agent waits forward their pending id.
+Withdrawals clear pending state and decision records stamp `via: "sdk"`.
+Local workbooks have no loaded HTTP credential, so they omit `key_id`.
+
+`ChatReasoner` and `reasoner_from_env` match Meta/Baseten routing,
+private file/environment credentials, response schemas, token budgets and
+bounded rate-limit retries. Mock HTTP tests cover requests, retry exhaustion,
+billing errors and response parsing without an external request.
+
 One intentional contract difference remains: Python inserts the proposed value
 into an outlook axis and may produce 13 values with the default 12-point grid.
 The requested Rust contract caps each axis at 12; for an off-grid proposal it
@@ -49,5 +62,5 @@ shape difference, not a fitted or ranked decision mismatch.
 
 Rust types are available in their named public modules. Phase-1's root `Project`
 and `Investigation` remain the record types; executable types are
-`project::Project` and `agent::Investigation`. No network reason-lane request
-was made during validation; FakeReasoner and response parsing are tested.
+`project::Project` and `agent::Investigation`. No external reasoner request
+was made during validation; local HTTP, FakeReasoner and parsing are tested.

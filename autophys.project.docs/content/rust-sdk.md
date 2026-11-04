@@ -59,7 +59,7 @@ Three rules make the layers line up:
 | `inv.approve(pid, by=, settings=)`     | `inv.approve(pid, by, settings)`                        | `POST …/proposals/{pid}/approvals` (event `approved`/`edited`) |
 | `inv.reject(pid, by=, reason=)`        | `inv.reject(pid, by, reason)`                           | `POST …/proposals/{pid}/approvals` (event `rejected`) |
 | `inv.attach_data(pid, observation)`    | `inv.attach_data(pid, observation)`                     | `POST …/proposals/{pid}/data`                    |
-| `inv.wait_for_approval(timeout=)`      | `inv.wait_for_approval(timeout)`                        | `GET /api/v1/stream?investigation=` (remote) or `PRAGMA data_version` (local) |
+| `inv.wait_for_approval(proposal_id, timeout=)` | `inv.wait_for_approval(proposal_id, timeout)`                        | `GET /api/v1/stream?investigation=` (remote) or `PRAGMA data_version` (local) |
 | `wb.config_versions()`                 | `wb.config_versions()`, `wb.put_config_version(v, body)` | `GET/PUT /api/v1/projects/{pid}/config_versions[/{v}]` |
 | `wb.verify()` → `{ok, records, investigations, chain_errors, projections_match}` | `wb.verify() -> VerifyReport` (same five fields) | `autophys db verify` |
 ```
@@ -366,12 +366,15 @@ The implementation is covered by two-workbook reconnect and external-writer
 tests. Reversal costs a daemon cursor/index change plus consumer migration;
 scoped streams keep integers. This is the phase-1 daemon commit's choice.
 
-Agent choice RS-WAIT-1, **pending operator review**: `wait_for_approval(timeout)`
-waits on the newest currently proposed proposal, since this signature has no
-proposal id. It opens a dedicated read-only connection and polls
-`data_version`, so writes through the same Client and other clients are
-visible. An explicit proposal-id variant is the alternative; adding it later
-costs an API addition without file changes.
+RS-WAIT-1, **operator decided, 2026-11-04**: the record API uses
+`wait_for_approval(proposal_id, timeout)`, matching Python. It waits for that
+proposal to leave `proposed`, returning its decided state immediately or
+`NotFound` for an unknown id. A dedicated read-only connection polls
+`data_version`, so decisions from any writer are visible. Selecting the newest
+pending proposal could race onto a different writer's proposal and has been
+removed. The agent's `wait_for_approval(timeout)` passes its pending proposal id.
+The two-pending-proposal test approves the older proposal and verifies that the
+wait returns it while the newer one remains proposed. No file-format change.
 
 Questions for autophys/api: confirm RS-CURSOR-1's unscoped cursor is consumed as an
 opaque string; consider making Python's measurement-plus-data-attachment
@@ -406,7 +409,7 @@ Cargo/SDK attempts are blocked by the parallel implementer's uncommitted
 those files are excluded from these scoped commits and the archive.
 Task CLI is unavailable on this host, as already recorded in the project
 cover. Remaining work is the reserved phase-2 API, remote Rust transport,
-and review of RS-CURSOR-1 / RS-WAIT-1; no format-v1 blocker remains.
+and review of RS-CURSOR-1; no format-v1 blocker remains.
 
 ## Embedded web release (B-1)
 

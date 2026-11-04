@@ -770,18 +770,12 @@ impl Investigation {
         })
     }
 
-    /// Block until this investigation's pending proposal (the newest one in
-    /// `proposed`) leaves `proposed`, whoever decides it: this process, the
-    /// browser through the daemon, or another process on the same file. The
-    /// file is re-read only when `PRAGMA data_version` says another
-    /// connection committed. `NotFound` when nothing is pending, `Timeout`
-    /// after `timeout`.
-    pub fn wait_for_approval(&self, timeout: Duration) -> Result<Proposal> {
-        let pending = projections::proposals(&*self.wb.conn()?, None)?
-            .into_iter()
-            .filter(|p| p.investigation == self.id && p.status == "proposed")
-            .max_by(|a, b| a.updated.total_cmp(&b.updated))
-            .ok_or(Error::NotFound("pending proposal"))?;
+    /// Block until proposal `proposal_id` leaves `proposed`, whoever decides
+    /// it: this process, the browser through the daemon, or another process
+    /// on the same file. Returns its current state immediately if already
+    /// decided. The file is re-read when `PRAGMA data_version` changes.
+    /// Unknown ids return `NotFound`; pending decisions time out after `timeout`.
+    pub fn wait_for_approval(&self, proposal_id: &str, timeout: Duration) -> Result<Proposal> {
         let watch = self.wb.watcher()?;
         let deadline = Instant::now() + timeout;
         let mut seen: Option<i64> = None;
@@ -789,7 +783,7 @@ impl Investigation {
             let version: i64 = watch.query_row("PRAGMA data_version", [], |r| r.get(0))?;
             if seen != Some(version) {
                 seen = Some(version);
-                let p = proposal_in(&watch, &self.id, &pending.proposal_id)?;
+                let p = proposal_in(&watch, &self.id, proposal_id)?;
                 if p.status != "proposed" {
                     return Ok(p);
                 }
@@ -798,7 +792,7 @@ impl Investigation {
             if now >= deadline {
                 return Err(Error::Timeout(format!(
                     "proposal {} still awaiting approval",
-                    pending.proposal_id
+                    proposal_id
                 )));
             }
             std::thread::sleep(WATCH_INTERVAL.min(deadline - now));

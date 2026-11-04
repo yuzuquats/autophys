@@ -19,6 +19,23 @@ impl Candidate {
 }
 pub const OUTLOOK_POINTS: usize = 12;
 pub const OUTLOOK_MAX_AXES: usize = 3;
+pub const AFTER_RESOLVED_MAX: f64 = 1.;
+pub const OUTLOOK_MAX_BYTES: usize = 900 * 1024;
+#[derive(Clone, Debug)]
+pub struct OutlookOptions {
+    pub max_simulations: usize,
+    pub at: String,
+    pub jacobian_scale: f64,
+}
+impl Default for OutlookOptions {
+    fn default() -> Self {
+        Self {
+            max_simulations: 50000,
+            at: "fit".into(),
+            jacobian_scale: 1.,
+        }
+    }
+}
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Axis {
     pub name: String,
@@ -29,6 +46,8 @@ pub struct Outlook {
     pub axes: Vec<Axis>,
     pub score: Vec<f64>,
     pub after: IndexMap<String, Vec<f64>>,
+    pub after_resolved_max: f64,
+    pub at: String,
 }
 pub fn fisher(j: &DMatrix<f64>) -> DMatrix<f64> {
     j.transpose() * j
@@ -223,23 +242,85 @@ pub fn outlook(
     points: usize,
     j0: Option<&DMatrix<f64>>,
 ) -> Result<(Outlook, f64, Params)> {
+    outlook_with_options(
+        sim,
+        p,
+        obs,
+        noise,
+        settings,
+        edit,
+        which,
+        points,
+        j0,
+        &Default::default(),
+    )
+}
+/// Outlook with bounded simulation/payload costs and estimate-origin metadata.
+#[allow(clippy::too_many_arguments)]
+pub fn outlook_with_options(
+    sim: &dyn Simulator,
+    p: &Params,
+    obs: &[Observation],
+    noise: &Params,
+    settings: &Value,
+    edit: &IndexMap<String, [f64; 2]>,
+    which: &str,
+    mut points: usize,
+    j0: Option<&DMatrix<f64>>,
+    options: &OutlookOptions,
+) -> Result<(Outlook, f64, Params)> {
     if edit.len() > OUTLOOK_MAX_AXES || !(2..=OUTLOOK_POINTS).contains(&points) {
         return Err(invalid(
             "outlook permits at most 3 axes and 2..12 points per axis",
         ));
     }
-    let f0 = base_information(sim, p, obs, j0)?;
-    let (score, after) = settings_score(sim, p, &f0, noise, settings, which)?;
-    let mut axes = vec![];
-    for (n, [lo, hi]) in edit {
-        axes.push(Axis {
-            name: n.clone(),
-            values: axis(*lo, *hi, number(settings, n)?, points)?,
-        });
+    if !options.jacobian_scale.is_finite() || options.jacobian_scale <= 0. {
+        return Err(invalid("jacobian_scale must be finite and positive"));
     }
-    let grid = outlook_axes(sim, p, &f0, noise, settings, axes, which)?;
+    let n = sim.params().len();
+    let per_cell = 2 * n + 1;
+    let base = per_cell + if j0.is_none() { 2 * n * obs.len() } else { 0 };
+    let axes = loop {
+        let axes: Vec<_> = edit
+            .iter()
+            .map(|(name, [lo, hi])| {
+                Ok(Axis {
+                    name: name.clone(),
+                    values: axis(*lo, *hi, number(settings, name)?, points)?,
+                })
+            })
+            .collect::<Result<_>>()?;
+        let cells = axes.iter().map(|a| a.values.len()).product::<usize>();
+        let skeleton = serde_json::json!({"axes":axes,"score":[],
+            "after":sim.param_names().into_iter().map(|n| (n, Vec::<f64>::new())).collect::<IndexMap<_,_>>(),
+            "after_resolved_max":AFTER_RESOLVED_MAX,"at":options.at});
+        let bytes = crate::canonical::canonical(&skeleton).len() + cells * (n + 1) * 25;
+        if base + cells * per_cell <= options.max_simulations && bytes <= OUTLOOK_MAX_BYTES {
+            break axes;
+        }
+        if points == 2 || edit.is_empty() {
+            return Err(invalid(
+                "outlook limits cannot fit the minimum grid (2 points per axis plus the proposed value)",
+            ));
+        }
+        points -= 1;
+    };
+    let owned_j;
+    let j = match j0 {
+        Some(j) => Some(j),
+        None if !obs.is_empty() => {
+            owned_j = jacobian(sim, p, obs, 1e-4, FIT_OPTIONS)? / options.jacobian_scale;
+            Some(&owned_j)
+        }
+        None => None,
+    };
+    let f0 = base_information(sim, p, &[], j)?;
+    let (score, after) = settings_score(sim, p, &f0, noise, settings, which)?;
+    let mut grid = outlook_axes(sim, p, &f0, noise, settings, axes, which)?;
+    grid.at = options.at.clone();
     Ok((grid, score, after))
 }
+
 pub fn outlook_axes(
     sim: &dyn Simulator,
     p: &Params,
@@ -261,6 +342,8 @@ pub fn outlook_axes(
     let count = axes.iter().map(|a| a.values.len()).product::<usize>();
     let mut grid = Outlook {
         axes,
+        after_resolved_max: AFTER_RESOLVED_MAX,
+        at: "fit".into(),
         score: vec![],
         after: sim.param_names().into_iter().map(|n| (n, vec![])).collect(),
     };
@@ -290,6 +373,55 @@ mod tests {
         assert!(a.contains(&0.5));
         assert_eq!(a[0], 0.);
         assert_eq!(*a.last().unwrap(), 1.);
+    }
+    #[test]
+    fn outlook_limits_preflight_and_shrink() {
+        let sim = crate::models::thermal_rc();
+        let params = [("C".into(), 500.), ("R".into(), 2.)].into_iter().collect();
+        let noise = [("T".into(), 0.05)].into_iter().collect();
+        let settings = sim.experiment(&Value::from("step_long")).unwrap();
+        let edit = [("power".into(), [1., 10.])].into_iter().collect();
+        let before = sim.calls();
+        assert!(
+            outlook_with_options(
+                &sim,
+                &params,
+                &[],
+                &noise,
+                &settings,
+                &edit,
+                "min_eig",
+                12,
+                None,
+                &OutlookOptions {
+                    max_simulations: 4,
+                    ..Default::default()
+                }
+            )
+            .is_err()
+        );
+        assert_eq!(sim.calls(), before);
+        let (grid, _, _) = outlook_with_options(
+            &sim,
+            &params,
+            &[],
+            &noise,
+            &settings,
+            &edit,
+            "min_eig",
+            12,
+            None,
+            &OutlookOptions {
+                max_simulations: 25,
+                at: "initial".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(grid.axes[0].values.len(), 4);
+        assert_eq!(sim.calls() - before, 25);
+        assert_eq!(grid.at, "initial");
+        assert_eq!(grid.after_resolved_max, 1.);
     }
     #[test]
     fn fisher_matrix() {
