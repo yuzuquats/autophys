@@ -96,3 +96,12 @@ this record I81f7837f7c0ee007ff06.
 | --- | --- | --- | --- |
 | PURPOSE | autophys is a **general physics-investigation workbench**, not a battery-calibration product. Battery is one example domain beside oscillator and thermal_rc | operator, 2026-11-04 (relayed from the progress-review thread) | unblocks B2 planning; B2 includes the generic display-manifest contract (DM-1): Display type and `PUT /projects/{pid}/display` outside the config hash. Rust SDK and daemon parts are autophys/rs's |
 ```
+
+## Fit curves and ground truth, 2026-11-04 (autophys/design)
+
+```review-table
+| Id | Decision | Who | Consequence |
+| --- | --- | --- | --- |
+| FC-1 | A `run` record carries `curves`: the model simulated at the fitted and at the initial parameters, per trained or predicted measurement, downsampled to at most 2,000 points. The Fit tab adds a residual strip under each chart, and the Residuals tab works from the same data. Reason: the UI does no numerics and the daemon does not read payloads, so only the SDK can produce the curves. Strongest alternative: compute the curves on demand through a daemon endpoint that calls the SDK, which keeps the workbook smaller but needs a live SDK just to view a run. Reversal: drop the field; it is optional, so nothing breaks | **agent-chosen, pending operator review** ([fit-curves-and-truth.md](fit-curves-and-truth.md)) | `sdks/python`, `sdks/rust`, `html/client/wire.ts`, `derive/charts.ts` |
+| GT-1 | Synthetic and benchmark investigations append a `reveal` record after `outcome`: per identifiable quantity, the truth, the estimate, the ratio, the ±1σ ratio and whether it is within tolerance. The UI shows a Ground truth page. An SDK refuses to resume an investigation once it has a reveal. Reason: this keeps the truth hidden from the agent by construction. Strongest alternative: show the truth only in the offline `research.py` scores, which needs no new record kind but leaves no page to look at. Reversal: drop the kind and the endpoint; there is no migration, because older workbooks have no reveal | **agent-chosen, pending operator review** | `synthetic.py`, `bench.py`, daemon kinds and endpoint, `html/client` |
+```
