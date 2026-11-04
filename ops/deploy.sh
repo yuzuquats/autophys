@@ -8,13 +8,16 @@ set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
 addr=${AUTOPHYS_ADDR:-127.0.0.1:4794}
-case "$addr" in
-  127.*:* | "[::1]":*) ;;
-  *) echo "deploy: refusing non-loopback address $addr" >&2; exit 2 ;;
-esac
+# The address also lands in the unit file through sed, so accept only a
+# loopback IP and a port: nothing else can reach the substitution.
+if ! [[ "$addr" =~ ^(127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|\[::1\]):[0-9]{1,5}$ ]]; then
+  echo "deploy: refusing non-loopback address $addr" >&2; exit 2
+fi
 export PATH="$HOME/.deno/bin:$HOME/.cargo/bin:$PATH"
 # rwc-dev-01 has one NVMe; build output lives in the cache, never in the checkout.
 export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$HOME/.cache/autophys/target}
+# A release bundles with the tento-web in vendor/, never one TENTO_WEB names.
+unset TENTO_WEB
 
 if [ -n "$(git -C "$repo" status --porcelain)" ]; then
   echo "deploy: autophys working tree is not clean; commit first so the release names its source" >&2
@@ -32,7 +35,7 @@ if [ -e "$release" ]; then
     exit 1
   fi
 else
-  (cd "$repo" && cargo test -q && deno test -q --allow-read --permit-no-files html/)
+  (cd "$repo" && cargo test -q --workspace --locked && deno test -q --allow-read --permit-no-files html/)
   (cd "$repo" && AUTOPHYS_COMMIT=$commit AUTOPHYS_RELEASE=1 cargo build -q --release --locked --bin autophys)
   mkdir -p "$release_root"
   stage=$(mktemp -d "$release_root/.staging-XXXXXX")

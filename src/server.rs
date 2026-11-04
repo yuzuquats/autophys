@@ -239,8 +239,30 @@ pub fn webapp(config: &AppConfig, info: BuildInfo, build: bool) -> Result<Webapp
     .with_project_root(Some(config.project_root.clone())))
 }
 
+/// tento-web deletes the output folder before every build. A hand-typed
+/// `--out ~/notes` would delete the notes, so `build-web` only writes into a
+/// folder that is missing, empty, or an earlier build (it has
+/// `build-status.json`). tento-web also keeps a module store two levels above
+/// the folder; that store only adds files.
+pub fn check_out_dir(out: &Path) -> Result<()> {
+    let mut entries = match std::fs::read_dir(out) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(e).with_context(|| format!("read --out {}", out.display())),
+    };
+    if entries.next().is_none() || out.join("build-status.json").is_file() {
+        return Ok(());
+    }
+    anyhow::bail!(
+        "--out {}: not empty and not an earlier build-web output; the build \
+         deletes this folder first, so pick a new or empty one",
+        out.display()
+    )
+}
+
 /// `autophys build-web`: bundle `html/routes` into `out` and return it.
 pub async fn build_web(project_root: PathBuf, out: PathBuf) -> Result<PathBuf> {
+    check_out_dir(&out)?;
     let config = AppConfig {
         project_root,
         web_root: out.clone(),
@@ -576,6 +598,21 @@ mod tests {
             check_build_status(&dir).is_err(),
             "a missing status is not a clean build"
         );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn build_web_never_replaces_a_folder_it_did_not_write() {
+        let dir = tree("out-guard");
+        let out = dir.join("web");
+        assert!(check_out_dir(&out).is_ok(), "a missing folder");
+        std::fs::create_dir_all(&out).unwrap();
+        assert!(check_out_dir(&out).is_ok(), "an empty folder");
+        std::fs::write(out.join("notes.txt"), "keep").unwrap();
+        let err = check_out_dir(&out).unwrap_err().to_string();
+        assert!(err.contains("not an earlier build-web output"), "{err}");
+        std::fs::write(out.join("build-status.json"), "{}").unwrap();
+        assert!(check_out_dir(&out).is_ok(), "an earlier build");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
