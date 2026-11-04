@@ -55,7 +55,12 @@ export namespace Cookbook {
     export type Stat = DeckTypes.DeckStat;
     export type Bar = DeckTypes.DeckBar;
     export type Cta = DeckTypes.Cta;
-    /** Six neutral slides, one of each body kind; slide one carries the title. */
+    export type Axis = DeckTypes.DeckAxis;
+    export type Series = DeckTypes.DeckSeries;
+    export type Lines = DeckTypes.DeckLines;
+    export type Profile = DeckTypes.DeckProfile;
+    export type Uncertainty = DeckTypes.DeckUncertainty;
+    /** Nine neutral slides, one of each body kind; slide one carries the title. */
     export const placeholderDeck = placeholder;
   }
 

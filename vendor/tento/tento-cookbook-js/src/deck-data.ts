@@ -17,7 +17,45 @@ export type DeckBody =
     rows: { label: string; before: string; after: string }[];
   }
   | { kind: "demo"; caption: string }
-  | { kind: "result"; bars: DeckBar[]; primary: Cta | null };
+  | { kind: "result"; bars: DeckBar[]; primary: Cta | null }
+  | DeckLines
+  | DeckProfile
+  | DeckUncertainty;
+
+/** Chart bodies (src/deck-charts.ts). The values are supplied by the app; the deck only scales them. */
+export type DeckAxis = { label: string; min: number; max: number; ticks?: number[]; unit?: string };
+export type DeckSeries = {
+  label: string;
+  points: [number, number][];
+  emphasis?: boolean;
+  /** One labelled point on the series, such as where it crosses the threshold. */
+  marker?: { at: [number, number]; label: string };
+};
+/** Series over shared axes, with an optional horizontal threshold. */
+export type DeckLines = {
+  kind: "lines";
+  x: DeckAxis;
+  y: DeckAxis;
+  series: DeckSeries[];
+  threshold?: { value: number; label: string };
+};
+/** A curve over one axis (values 0..1, evenly spaced), a fixed plan's marks
+ * above it and numbered picks on it; `at` positions are 0..1 along the axis. */
+export type DeckProfile = {
+  kind: "profile";
+  axis: string[];
+  curve: { label: string; values: number[] };
+  fixed: { label: string; at: number[] };
+  picks: { label: string; at: number[] };
+};
+/** Joint uncertainty of two quantities as ellipses around the estimate,
+ * inside a target box. Sizes are fractions of the square plot (0..1); angle in degrees. */
+export type DeckUncertainty = {
+  kind: "uncertainty";
+  axes: [string, string];
+  target: { label: string; size: number };
+  regions: { label: string; rx: number; ry: number; angle: number; emphasis?: boolean }[];
+};
 export type DeckSlide = {
   eyebrow: { label: string } | { icon: "mark" };
   /** Under about 60 characters: two lines from 640px, three on phones. */

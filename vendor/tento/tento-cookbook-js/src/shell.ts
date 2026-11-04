@@ -37,7 +37,7 @@ export const cookbookClasses: Required<CookbookClasses> = {
   listItem: "ck-list-item",
 };
 
-/** Six neutral slides, one of each body kind; slide one carries the title. */
+/** Nine neutral slides, one of each body kind; slide one carries the title. */
 export function placeholderDeck(title: string, appPath = "/app"): DeckSlide[] {
   const open = { label: "Open app", href: appPath };
   const stat = (label: string) => ({ value: "—", label });
@@ -81,6 +81,41 @@ export function placeholderDeck(title: string, appPath = "/app"): DeckSlide[] {
         kind: "result",
         bars: [{ label: "Bar A", value: "—", share: 100 }, { label: "Bar B", value: "—", share: 40, emphasis: true }],
         primary: open,
+      },
+    },
+    {
+      ...lead(7, "seven"),
+      body: {
+        kind: "lines",
+        x: { label: "X", min: 0, max: 10, ticks: [0, 5, 10] },
+        y: { label: "Y", min: 0, max: 10 },
+        threshold: { value: 3, label: "Threshold" },
+        series: [
+          { label: "Series A", points: [[0, 9], [5, 6], [10, 4]] },
+          { label: "Series B", points: [[0, 9], [5, 2], [10, 1]], emphasis: true },
+        ],
+      },
+    },
+    {
+      ...lead(8, "eight"),
+      body: {
+        kind: "profile",
+        axis: ["Start", "End"],
+        curve: { label: "Placeholder curve", values: [0.2, 0.8, 0.3, 0.6, 0.2] },
+        fixed: { label: "Fixed", at: [0, 0.25, 0.5, 0.75, 1] },
+        picks: { label: "Picks", at: [0.25, 0.75] },
+      },
+    },
+    {
+      ...lead(9, "nine"),
+      body: {
+        kind: "uncertainty",
+        axes: ["A", "B"],
+        target: { label: "Target", size: 0.4 },
+        regions: [
+          { label: "Region A", rx: 0.9, ry: 0.15, angle: 40 },
+          { label: "Region B", rx: 0.3, ry: 0.2, angle: 15, emphasis: true },
+        ],
       },
     },
   ];

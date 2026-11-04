@@ -160,6 +160,47 @@ html[data-ck-stage="tour"] .ck-tour-peek { opacity: 1; transition-duration: 300m
 .ck-bars .ck-track { height: 16px; border-radius: 999px; background: var(--ck-n100); overflow: hidden; }
 .ck-bars .ck-fill { height: 100%; border-radius: 999px; background: var(--ck-n300); }
 .ck-bars .ck-emphasis .ck-fill { background: var(--ck-n900); }
+.ck-plot { position: relative; height: calc(var(--ck-body-h) - 60px); margin-top: 20px; padding-bottom: 28px; }
+.ck-uncertainty-wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 32px; }
+.ck-uncertainty-wrap .ck-legend { flex: 1 1 180px; flex-direction: column; margin: 0; }
+.ck-plot.ck-uncertainty { height: var(--ck-body-h); aspect-ratio: 1; flex: none; margin: 0; padding: 0; }
+@media (max-width: 639px) { .ck-plot.ck-uncertainty { height: calc(var(--ck-body-h) - 72px); margin-inline: auto; } .ck-uncertainty-wrap .ck-legend { flex-basis: 100%; } }
+.ck-plot-area { position: relative; width: 100%; height: 100%; }
+.ck-plot svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.ck-plot svg * { vector-effect: non-scaling-stroke; fill: none; }
+.ck-plot .ck-grid { stroke: var(--ck-n200); stroke-width: 1; }
+.ck-plot .ck-rail { stroke: var(--ck-n200); stroke-width: 2; }
+.ck-plot .ck-threshold, .ck-plot .ck-target { stroke: var(--ck-n500); stroke-width: 1.5; stroke-dasharray: 4 4; }
+.ck-plot .ck-series { stroke: var(--ck-n300); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.ck-plot .ck-series.ck-emphasis { stroke: var(--ck-n900); }
+.ck-plot .ck-area { fill: var(--ck-n100); }
+.ck-plot .ck-drop { stroke: var(--ck-n400); stroke-width: 1; stroke-dasharray: 2 3; }
+.ck-plot .ck-region { fill: rgb(0 0 0 / 3%); stroke: var(--ck-n300); stroke-width: 2; }
+.ck-plot .ck-region.ck-emphasis { fill: rgb(0 0 0 / 8%); stroke: var(--ck-n900); }
+.ck-plot-area span { position: absolute; font-size: 12px; line-height: 16px; color: var(--ck-n500); white-space: nowrap; }
+.ck-ticks { position: absolute; left: 0; right: 0; top: 100%; height: 28px; }
+.ck-plot .ck-tick { top: 10px !important; transform: translateX(-50%); font-variant-numeric: tabular-nums; }
+.ck-plot .ck-tick:first-child { transform: none; }
+.ck-plot .ck-tick:last-child { transform: translateX(-100%); }
+.ck-plot .ck-axis-label { transform: translateY(-120%); }
+.ck-plot .ck-target-label { transform: translateY(-120%); }
+.ck-plot .ck-axis-x { transform: translate(-100%, 6px); }
+.ck-plot .ck-axis-y { transform: translateX(8px); }
+.ck-plot .ck-row-tag { transform: translate(-100%, -150%); font-weight: 500; }
+.ck-plot .ck-dot { width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: var(--ck-n300); box-shadow: 0 0 0 2px #fff; }
+.ck-plot .ck-dot.ck-center { width: 6px; height: 6px; margin: -3px 0 0 -3px; box-shadow: none; }
+.ck-plot .ck-dot.ck-numbered { width: 20px; height: 20px; margin: -10px 0 0 -10px; display: grid; place-items: center;
+  font-size: 11px; line-height: 1; font-weight: 600; }
+.ck-plot .ck-dot-label { transform: translate(8px, -130%); }
+.ck-plot .ck-dot-label.ck-end { transform: translate(calc(-100% - 8px), -130%); }
+.ck-plot .ck-emphasis { color: var(--ck-n900); font-weight: 500; }
+.ck-plot .ck-dot.ck-emphasis { background: var(--ck-n900); color: #fff; }
+.ck-legend { display: flex; flex-wrap: wrap; gap: 4px 20px; margin: 4px 0 0; padding: 0; list-style: none; font-size: 13px; line-height: 20px; color: var(--ck-n500); }
+.ck-legend i { display: inline-block; width: 12px; height: 3px; margin-right: 8px; vertical-align: middle; border-radius: 2px; background: var(--ck-n300); }
+.ck-legend .ck-emphasis { color: var(--ck-n900); font-weight: 500; }
+.ck-legend .ck-emphasis i { background: var(--ck-n900); }
+.ck-legend .ck-dashed i { height: 0; border-top: 1.5px dashed var(--ck-n500); border-radius: 0; background: none; }
+@media (max-width: 639px) { .ck-plot .ck-dot-label:not(.ck-emphasis) { display: none; } }
 .ck-bar-value { font-size: 20px; line-height: 28px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--ck-n500); text-align: right; }
 .ck-bars .ck-emphasis .ck-bar-value { color: #000; }
 .ck-bars + .ck-slide-actions { margin-top: 56px; }

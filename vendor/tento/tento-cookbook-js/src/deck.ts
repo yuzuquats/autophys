@@ -5,6 +5,7 @@ import {
   type DeckSlide,
   type DeckStat,
 } from "./deck-data.ts";
+import { renderLines, renderProfile, renderUncertainty } from "./deck-charts.ts";
 import { h } from "./dom.ts";
 import { createTexture } from "./texture.ts";
 
@@ -429,6 +430,12 @@ function renderBody(body: DeckBody): HTMLElement {
       );
     case "result":
       return frame(bars(body.bars), ...actions(body.primary));
+    case "lines":
+      return frame(renderLines(body));
+    case "profile":
+      return frame(renderProfile(body));
+    case "uncertainty":
+      return frame(renderUncertainty(body));
   }
 }
 
