@@ -86,10 +86,21 @@ pub struct CatalogEntry {
     pub max_runs: Option<usize>,
     /// MQ-5: physical test hours one run costs; absent means 0. Serialized
     /// only when declared, so configs without it keep their hash.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "declared_cost_hours",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub cost_hours: Option<f64>,
     #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
     pub edit: IndexMap<String, [f64; 2]>,
+}
+// Absence means uncosted, but an explicitly declared null is invalid in
+// Python. Deserializing Option<f64> directly would silently treat it as absent.
+fn declared_cost_hours<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> std::result::Result<Option<f64>, D::Error> {
+    f64::deserialize(d).map(Some)
 }
 #[derive(Clone, Debug)]
 pub struct Project {

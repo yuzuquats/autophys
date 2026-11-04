@@ -398,3 +398,65 @@ fn battery_case_matches_python_dataset_and_catalog() {
         ]
     );
 }
+
+#[test]
+fn declared_cost_cannot_be_null() {
+    use autophys::project::CatalogEntry;
+    let absent: CatalogEntry = serde_json::from_value(json!({"max_runs":null})).unwrap();
+    assert_eq!(absent.cost_hours, None);
+    for invalid in [Value::Null, json!(true), json!("1")] {
+        assert!(serde_json::from_value::<CatalogEntry>(json!({"cost_hours":invalid})).is_err());
+    }
+    for cost in [0., 1.] {
+        let entry: CatalogEntry = serde_json::from_value(json!({"cost_hours":cost})).unwrap();
+        assert_eq!(entry.cost_hours, Some(cost));
+    }
+}
+
+#[test]
+fn affordability_uses_total_and_python_tolerance() {
+    for (delta, allowed) in [(0., true), (5e-13, true), (2e-12, false)] {
+        let limit = 2. * PULSE - delta;
+        let mut s = investigation(Some(limit), false);
+        s.inv.tool_request_experiment("pulse_2A", None).unwrap();
+        assert_eq!(s.inv.test_hours_used(), PULSE);
+        assert_eq!(
+            s.inv
+                .available_experiments()
+                .contains(&"pulse_train".into()),
+            allowed
+        );
+        let result = s.inv.tool_request_experiment("pulse_train", None);
+        assert_eq!(result.is_ok(), allowed);
+        if allowed {
+            assert_eq!(s.inv.test_hours_used(), 2. * PULSE);
+        } else {
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("exceeds the test-hour budget")
+            );
+            assert_eq!(s.inv.test_hours_used(), PULSE);
+        }
+    }
+}
+
+#[test]
+fn mixed_catalog_keeps_zero_cost_candidates_and_recomputes_dataset() {
+    let mut s = investigation(Some(0.), false);
+    s.inv.project.catalog["pulse_train"].cost_hours = None;
+    assert_eq!(s.inv.available_experiments(), ["pulse_train"]);
+    s.inv.tool_optimize_parameters(None, "linear").unwrap();
+    let ranking = s.inv.tool_rank_experiments("min_eig").unwrap();
+    assert_eq!(ranking["ranking"].as_array().unwrap().len(), 1);
+    assert_eq!(ranking["ranking"][0]["experiment"], "pulse_train");
+    assert_eq!(ranking["ranking"][0]["cost_hours"], json!(0.));
+    // Hours come from every dataset observation, including direct additions
+    // and splits other than train, rather than an experiment-count cache.
+    let mut o = s.view.runner.run(&json!("pulse_2A")).unwrap();
+    o.split = "validation".into();
+    s.inv.dataset.add(o).unwrap();
+    assert_eq!(s.inv.test_hours_used(), PULSE);
+    assert!(s.inv.available_experiments().is_empty());
+}
