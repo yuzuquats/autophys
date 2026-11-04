@@ -21,6 +21,7 @@ import { landingDocs } from "./docs.ts";
 import { quietLoading, signedOutView } from "../client/derive/signed-out.ts";
 import { signInInPlace } from "../client/sign-in-in-place.ts";
 import "./brand.ts";
+import "./light-only.ts";
 
 const USER = "james";
 /** How often the open app re-reads the devices waiting to pair (pairings have no stream). */
