@@ -445,6 +445,73 @@ rwc-dev-01.
   identical at 1 and 4 jobs. The replay still costs $0.002360. The 46
   existing conformance files are unchanged.
 
+## First real-data investigation: Onori lab M50T HPPC, 2026-11-04
+
+Relayed as the operator's choice (autophys/master): the Stanford Onori lab
+datasets, starting with Pozzato, Allam and Onori 2022.
+
+- **Data:** Pozzato, Allam, Onori, "Lithium-ion battery aging dataset based
+  on electric vehicle real-driving profiles", Data in Brief 41 (2022)
+  107995, OSF `qsabn`. The license is CC BY 4.0 (the OSF node license; the
+  lab page states none). The diagnostics include HPPC tests, so Catenaro &
+  Onori 2021 was not needed.
+- **What was downloaded:** one cell, V5: a Samsung INR21700-M50T (NMC,
+  4.85 Ah) at 23 °C, first diagnostic, logged by an Arbin cycler at 1 s. It
+  is kept with its source, hashes and scripts in
+  `~/.local/state/autophys/evidence/onori-pozzato-2022/` on rwc-dev-01
+  (`SOURCE.md`, `SHA256SUMS`), never in git.
+- **Model:** a user project, `m50t_hppc`. It has R0 plus one R1‖C1 branch,
+  solved exactly for piecewise-constant current, with the OCV and its slope
+  known from the rest before each window. There are nine catalog windows,
+  one per 10% of state of charge. Each covers the rest sample, a 10 s
+  2.66 A discharge pulse, a 40 s rest, a 10 s 2.0 A charge pulse and a 40 s
+  rest (105 samples). σ is the declared 1 mV voltage accuracy of the
+  Arbin.
+- **Path:** the MCP session's tools, the same ones Muse drives:
+  `import_measurements` (train at 50% SOC, validation at 60%), `fit` (8
+  starts), `identifiability`, `rank_experiments` and `report`. These ran
+  against `/home/james/autophys`.
+- **Result:** investigation `inv_239c73b12dfce244` in
+  `m50t_hppc.ap-workbook` is **validated**:
+  - R0 = 27.2 mΩ, R1 = 22.3 mΩ, C1 = 2,759 F (τ ≈ 62 s);
+  - train χ²/N 1.05;
+  - held-out window at 60% SOC: χ²/N 1.45, RMSE 1.2 mV;
+  - all three parameters identified (condition number 13.7).
+
+  The daemon serves the project, its records and both measurements'
+  curves. In the live app the project appeared in the project list. I
+  captured no screenshot of the investigation's views before a later
+  daemon deploy put `/app` behind an email and password sign-in.
+
+### Ingest findings (gaps in the measured-data path)
+
+1. **The CSV grid must equal the declared grid.** A file must start at
+   t = 0 and match `time_grid(settings)` to 1e-9. Real cycler logs jitter
+   (here, 1.0006 s steps), so the only route is to put each measurement's
+   own times in its catalog settings. Each measurement then becomes its own
+   catalog experiment, and the catalog (and config version) grows with the
+   data.
+2. **Measured inputs can't be imported.** For a user project, `read_csv`
+   maps only `t` and the output channels. The measured current has to be
+   restated as a schedule in settings. The built-in battery path reads
+   current only to check it against a synthetic waveform.
+3. **`battery_ecm` can't describe a real cell.** Its OCV table (generic
+   2.5 Ah NMC), capacity and three waveforms are fixed, so a real cell
+   needs a user simulator.
+4. **Every experiment needs a `kind`,** even a measured window with no
+   generator.
+5. **Size limits:** 1 MiB and 10,000 rows per CSV. The full HPPC (55,257
+   rows) has to be windowed by hand.
+6. **No vendor formats or conventions:** no reader for Arbin `.xlsx` (and
+   no openpyxl or pandas in the environment), and no way to declare a sign
+   convention. Arbin's negative-is-discharge current was flipped by hand.
+7. **No display manifest for local workbooks:** the project shows
+   `display: null`, so the UI has no labels or units for it.
+8. **UI confirmation on rwc-dev-01:** the cached
+   `chrome-headless-shell` is an x86-64 build on this ARM64 host. Only
+   Playwright's Chromium with `--no-sandbox` runs. `/app` now requires a
+   sign-in that agents have no account for.
+
 ## First live Muse smoke (MQ-8, MQ-9), 2026-11-04
 
 A smoke test of the real reasoning path and the MCP tools, not a benchmark.
