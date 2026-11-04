@@ -25,9 +25,11 @@ if [ -n "$(git -C "$repo" status --porcelain)" ]; then
 fi
 commit=$(git -C "$repo" rev-parse HEAD)
 release_root=${AUTOPHYS_RELEASE_ROOT:-$HOME/.local/share/tento/services/autophys}
-# It is rendered into a systemd unit with sed below; reject metacharacters.
-if [[ "$release_root" != /* || "$release_root" == *'&'* || "$release_root" == *'|'* || "$release_root" == *$'\n'* ]]; then
-  echo "deploy: AUTOPHYS_RELEASE_ROOT must be an absolute path without &, | or newlines" >&2; exit 2
+# This literal is used by both sed and systemd (ExecStart/WorkingDirectory).
+# Validate before building, installing, or switching current. Keep the grammar
+# deliberately small instead of applying one escaping rule to two parsers.
+if ! [[ "$release_root" =~ ^/[A-Za-z0-9_./-]+$ ]]; then
+  echo "deploy: AUTOPHYS_RELEASE_ROOT must be absolute and use only ASCII letters, digits, _, ., / and -" >&2; exit 2
 fi
 release=$release_root/${commit:0:7}-$(date +%Y%m%d)
 

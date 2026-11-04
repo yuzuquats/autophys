@@ -44,13 +44,22 @@ def build(output, *, python="autophys", project=None, workbook=None, root=None, 
             env += ["PYTHONPATH=" + source_root]
         script = "#!/bin/sh\nexec ssh " + shlex.quote(ssh_host) + " " + shlex.quote(shlex.join(env + remote)) + "\n"
         (output / "mcp-stdio.sh").write_text(script)
-        command = ["sh", "mcp-stdio.sh"]
+        command = None
     elif config:
         # Muse validates path-like argv as package sources; put lab paths in JSON.
         (output / "mcp-config.json").write_text(json.dumps(config, indent=2) + "\n")
-        command += ["--config", "mcp-config.json"]
     if not ssh_host:
-        command += ["--playbook", "skills/autophys/SKILL.md"]
+        # Muse relocates a package-relative executable in argv[0], not arbitrary
+        # argument strings. Resolve package resources inside that executable,
+        # without changing the lab cwd used by relative paths and simulators.
+        script = '#!/bin/sh\nplugin_root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit\n'
+        script += "exec " + shlex.join(command)
+        if config:
+            script += ' --config "$plugin_root/mcp-config.json"'
+        script += ' --playbook "$plugin_root/skills/autophys/SKILL.md"\n'
+        (output / "mcp-stdio.sh").write_text(script)
+    (output / "mcp-stdio.sh").chmod(0o755)
+    command = ["./mcp-stdio.sh"]
     manifest = {
         "schemaVersion": 1, "name": "autophys", "displayName": "autophys",
         "version": "0.1.0", "description": "Calibrate local simulators with honest identifiability and human-reviewed experiments.",
