@@ -26,6 +26,7 @@ import { shellTokenizer } from "@tento-ui/components/code/languages/shell";
 import { pythonTokenizer } from "@tento-ui/components/code/languages/python";
 import { tomlTokenizer } from "@tento-ui/components/code/languages/toml";
 import { rustTokenizer } from "./rust-tokenizer.ts";
+import { inlineCodeTokenizer } from "./inline-code.ts";
 import { LispExampleView } from "@tento-ui/components/lisp-example/lisp-example-view";
 import { ReviewFence } from "@tento-ui/components/review-notes/review-fence";
 import { LOOPS_FENCE, LoopsFigureView } from "./loops-figure.ts";
@@ -482,6 +483,8 @@ Code.registerLanguage(["sh", "bash", "shell", "zsh", "console"], shellTokenizer)
 Code.registerLanguage(["python", "py"], pythonTokenizer);
 Code.registerLanguage(["rust", "rs"], rustTokenizer);
 Code.registerLanguage(["toml"], tomlTokenizer);
+// Inline code picks shell, Python, Rust or plain per span (inline-code.ts).
+Code.registerLanguage(["autophys-inline"], inlineCodeTokenizer);
 
 /** std-documentation's code block view, drawing with Code's static, tokenizer-coloured path. */
 class StaticCodeBlockView {
@@ -543,7 +546,7 @@ export function landingDocs(): { onStage(stage: Cookbook.Stage): void; mount(): 
       const footer = document.querySelector(".ck-footer");
       if (footer) footer.before(section);
       else document.body.append(section);
-      void doc.bind({ markdown: DOCS_MARKDOWN, nodeViews: NODE_VIEWS });
+      void doc.bind({ markdown: DOCS_MARKDOWN, nodeViews: NODE_VIEWS, inlineCodeLanguage: "autophys-inline" });
     },
   };
 }
