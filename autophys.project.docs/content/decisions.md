@@ -18,7 +18,7 @@ its own page.
 | S-3 | tento's `tento-autophys-js` may be removed from tento master once imported here | operator, 2026-11-04 | import done in this repo; the tento removal is the orchestrator's, not yet made |
 | N-1 | the cookbook's public API is one `Cookbook` namespace (`Cookbook.mount(…).run(app)`, `Cookbook.View.mount`) | operator, 2026-11-04 | `html/routes/index.root.ts`; `tento-cookbook-js` |
 | E-1 | an edited proposal is re-scored by interpolating an outlook grid the SDK precomputes (at most 3 axes); nothing simulates in the browser | operator, 2026-11-04 | `sdks/python` (sdk.md), `html/client/derive` (UI-3) |
-| O-3 | whether the UI approves device pairings or only `autophys pair approve` on the host | operator, 2026-11-04 | **answer not recorded in any page this agent could read**; the deciding agent should fill it in here |
+| O-3 | whether the UI approves device pairings or only `autophys pair approve` on the host | operator, 2026-11-04 | **both**: a pairing can be approved in the UI and with `autophys pair approve` on the host. The keyless state-changing routes the UI uses require `Content-Type: application/json` (otherwise 415) and an `Origin` equal to the daemon's own origin (otherwise 403) | `src/http` pairing routes (store agent); Devices UI section to follow |
 | AX-1 | the cookbook hands out slots; it never asks for components | operator, 2026-11-04 | `architecture.md`; `html/routes/index.root.ts` |
 | AX-2 | numerics live in the SDK only; the client formats | operator, 2026-11-04 | `html/client/derive`, `sdks/python` |
 | AX-3 | one SQLite file: an append-only record log with projections derived from it | operator, 2026-11-04 | `src/store` (store agent) |
