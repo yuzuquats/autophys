@@ -41,13 +41,13 @@ autophys fits a physical model to your measurements, then tells you which parame
 
 ## Overview
 
-A parameter counts as **identified** only if the data determines it to better than ±10%. That verdict comes from a sensitivity analysis (an SVD of the log-Jacobian), not from how good the fit looks.
+By default, a parameter counts as **identified** when the data determines it to within about ±10% at one standard deviation, and it is not tied to an unresolved combination of other parameters. That verdict comes from a sensitivity analysis (an SVD of the noise-weighted Jacobian in log coordinates), not from how good the fit looks.
 
 When parameters are tied together, autophys ranks the candidate experiments by Fisher information and proposes the one that would separate them. An agent (Muse Spark, or a scripted policy) can drive that loop, and a person approves each experiment in this workbench before it runs.
 
 ## Quick start: fit a battery cell
 
-You need Python 3.10 or newer. There are no accounts or keys.
+You need Python 3.10 or newer. This local fit needs no account or API key.
 
 \`\`\`sh
 git clone https://github.com/yuzuquats/autophys.git
@@ -56,7 +56,7 @@ cd autophys/examples/battery_fit
 ./run.sh my_cell.csv --sigma 0.002 --ocv my_ocv.csv --out my_cell.png
 \`\`\`
 
-\`examples/battery_fit/README.md\` covers inputs, sample data, expected output and how to read the result, including the R1 ↔ C1 trade-off that a single pulse leaves unresolved.
+\`examples/battery_fit/README.md\` covers inputs, sample data, expected output and how to read the result, including the R1 ↔ C1 trade-off that a single pulse leaves unresolved. Connecting to a remote daemon needs a paired device key, a daemon started with \`serve --login\` needs a browser sign-in, and live model calls need your own provider access.
 
 ## The closed loop
 
@@ -67,11 +67,11 @@ cd autophys/examples/battery_fit
 5. You approve, edit or reject it here in the workbench.
 6. The new data is attached to the proposal, and the loop fits again.
 
-A proposal moves from \`proposed\` to \`approved\`, \`edited\` or \`rejected\` (or \`withdrawn\` by the SDK), then to \`data_attached\`. The final report's identified list is always recomputed and checked in code; the agent cannot assert it.
+A proposal starts as \`proposed\`. A reviewer approves it unchanged (\`approved\`), approves it with edited settings (\`edited\`) or rejects it (\`rejected\`); the SDK can also withdraw it (\`withdrawn\`). Only an approved or edited proposal can move on to \`data_attached\`. The final report's identified list is always recomputed and checked in code; the agent cannot assert it.
 
 ## Python SDK
 
-Wrap your simulator with \`@ap.simulator\`, describe the project and its budgets, and run an investigation. It stops at \`awaiting_data\` at the first proposal; any later process can resume it from the records.
+Wrap your simulator with \`@ap.simulator\`, describe the project and its budgets, and run an investigation. It stops at \`awaiting_data\` at the first proposal; any later process can resume it from the records. This is a sketch: fill in the simulator and supply your measurements as an \`ap.Dataset\`. The examples further down run as written.
 
 \`\`\`python
 import autophys as ap
@@ -87,10 +87,10 @@ wb = ap.connect("~/autophys").project(project)
 inv = wb.investigate(measurements, ap.ProposalRunner(), policy=ap.ScriptedPolicy())
 outcome = inv.run()            # ends "awaiting_data" at the first proposal
 
-# later, in any process:
+# later, in any process, with the same Project:
 inv = ap.connect("~/autophys").project(project).investigation(outcome.investigation)
-inv.wait_for_approval()        # your approve/edit in the workbench lands in the workbook
-inv.attach_data(outcome.proposal_id, observation)
+state = inv.wait_for_approval()  # your approve/edit in the workbench lands in the workbook
+inv.attach_data(outcome.proposal_id, observation)  # run state["settings"] on your rig first
 inv.run()
 \`\`\`
 
@@ -104,17 +104,23 @@ inv.run()
 
 ## Workbooks
 
-Each project lives in one workbook, \`<project>.ap-workbook\`, a SQLite file. Records are appended to a hash-chained log under the daemon's validation and proposal rules, so the SDK, a second process and this workbench can all write the same file. The Rust and Python SDKs implement the same format.
+Each project lives in one workbook, \`<project>.ap-workbook\`, a SQLite file. Records are appended to a hash-chained log. The SDKs and the daemon enforce the same validation and proposal rules, so the SDK, a second process and this workbench can all work with the same workbook; local SDK use needs no daemon. The Rust and Python SDKs implement the same format.
 
 ## Muse Code plugin
 
-The plugin runs a local MCP server next to your simulator, so Muse can drive the calibration while the numerical work stays in the SDK.
+The plugin lets Muse drive the calibration through a local MCP server, while the numerical work stays in the SDK. Build a bundle configured for your project, then install it. From the repository root:
 
 \`\`\`sh
-pip install -e 'sdks/python[mcp]'
-muse plugins install plugins/muse-autophys
-python -m autophys.cli mcp --project mypkg.module:project --workbook ~/autophys
+python3 -m venv .venv
+.venv/bin/pip install -e 'sdks/python[mcp]'
+.venv/bin/python plugins/muse-autophys/build.py \\
+  --output "$HOME/.cache/autophys-muse-plugin" \\
+  --python "$PWD/.venv/bin/python" \\
+  --project battery_ecm --workbook "$HOME/autophys" --root "$PWD"
+muse plugins install "$HOME/.cache/autophys-muse-plugin"
 \`\`\`
+
+For your own simulator, pass \`--project mypkg.module:project\` (a \`Project\` or a decorated simulator) and set \`--root\` to the directory that holds it. Muse starts the bundled server itself; running \`autophys mcp\` by hand starts a separate server and does not configure the plugin.
 
 Tools: \`describe_project\`, \`import_measurements\`, \`fit\`, \`identifiability\`, \`rank_experiments\`, \`propose_experiment\`, \`status\`, \`attach_data\` and \`report\`. There is no approve or reject tool: experiments are approved here, in the browser.
 
@@ -122,27 +128,31 @@ Tools: \`describe_project\`, \`import_measurements\`, \`fit\`, \`identifiability
 
 Open the workbench from the top of this page. The sidebar lists projects and their investigations; the main pane draws measured data, parameter estimates and sensitivity; the details panel shows the selected record. The workbench reads the daemon's recorded investigation and updates live as records arrive.
 
-It does not draw the fitted curve yet; use the battery example for curves.
+The Fit view overlays the recorded initial and fitted model curves on the measurements, with normalized residuals beneath; older records without curves say "fit curve not recorded". New project creates a thermal starter that the daemon runs itself: approving its proposal generates synthetic data from a simulated reference specimen and fits again.
 
 ## Repository map
 
 | Path | What it is |
 | --- | --- |
 | \`examples/battery_fit\` | Fit a measured battery trace, check identifiability, plot the curve. |
-| \`sdks/python\` | Python SDK: simulator, fit, identifiability, experiment ranking, agent loop, workbook. |
-| \`sdks/rust\` | Rust SDK. |
-| \`plugins/muse-autophys\` | Muse Code plugin (local MCP server). |
+| \`sdks/python\` | Python SDK and CLI: simulator, fit, identifiability, experiment ranking, agent loop, workbook, playbook research, and the MCP server. |
+| \`sdks/rust\` | Rust SDK: local and HTTP workbooks, simulators, numerics and the investigation loop. |
+| \`plugins/muse-autophys\` | Muse Code bundle: the calibration skill, the \`/calibrate\` command and the bundle builder. The MCP server itself is in \`sdks/python\`. |
 | \`src/\`, \`html/\` | Rust daemon and this browser workbench. |
+| \`train/sft\` | Decision datasets, training workers and held-out evaluation for policy training. |
+| \`ops\` | Standalone Linux packaging and optional service setup. |
+| \`vendor/tento\` | The vendored browser compiler, UI and Rust dependencies this checkout builds with. |
 | \`autophys.project.docs\` | Design notes and decisions. |
 
 ## How the loops nest
 
-autophys has two loops. They are nested, not concurrent: the outer loop calls the inner one.
+The investigation is the calibration loop. Playbook research runs many investigations to improve the strategy a model policy follows, so the research loop calls the investigation loop; they are nested, not concurrent. Policy training is a separate workflow.
 
-- **Investigation (inner).** One calibration: an agent fits the model, checks identifiability, ranks experiments, requests data and stops. Its strategy is a playbook, a \`SKILL.md\` file.
-- **Research (outer).** \`autophys research\` improves that playbook. It scores a playbook by running complete investigations on synthetic cases with a hidden truth, asks a researcher model for an edit, and keeps the edit only if the score improves.
+- **Investigation (inner).** One calibration: an agent fits the model, checks identifiability, ranks experiments, requests data and stops. A model policy follows a playbook, a \`SKILL.md\` file; the scripted policy implements the same strategy in code.
+- **Research (outer).** \`autophys research\` improves that playbook. It scores a playbook by running complete investigations on synthetic cases with a hidden truth, asks a researcher model for an edit, and keeps the edit only if the score improves. \`autophys autoloop\` repeats this until a stop condition, keeping a journal and resumable state.
+- **Policy training.** The daemon's \`train\` commands turn scripted investigation decisions into a dataset, train a model adapter and evaluate it.
 
-Each research step waits for all of its investigations before it decides. The investigations within a step are independent and run in parallel with \`--jobs\`.
+Each research step waits for all of its investigations before it decides. The investigations within a step are independent and run on up to \`--jobs\` workers; recording model replies forces them to run one at a time.
 
 \`\`\`autophys-loops
 \`\`\`
@@ -154,34 +164,193 @@ Inside each evaluation, an investigation is not a fixed cycle. At every step the
 | Mode | What runs | Where new data comes from |
 | --- | --- | --- |
 | \`autophys research\` | the outer loop, calling many investigations | a synthetic case's hidden truth, with no person in the loop |
+| \`autophys autoloop\` | the outer loop until a stop condition, with a journal and resume | the same synthetic truth |
 | \`autophys bench\` | investigations across policies, cases and seeds, with no playbook search | the same synthetic truth |
-| Workbench or Muse Code | one investigation at a time, on your measurements | an experiment you approve here and run on your hardware |
+| SDK or Muse Code | one investigation at a time, on your simulator and measurements | an experiment you approve here and run on your hardware |
+| Workbench thermal starter | a scripted investigation that the daemon runs | a simulated reference specimen, when you approve |
+| Daemon \`train\` | dataset generation, adapter training and policy evaluation | scripted synthetic trajectories and held-out synthetic cases |
 
-Live model calls are off by default: \`research\` and \`bench --policy reason\` need a recorded replay, or \`AUTOPHYS_ALLOW_LIVE_REASON=1\`. With the defaults (every built-in case, three train seeds and two held-out seeds), a research run evaluates three investigations per case for the baseline and for each valid edit, and four per case on the held-out seeds at the end (two seeds, for the starting and the final playbook).
+Live model calls are off by default. The \`reason\` policy and the \`api\` and \`muse\` researchers each need a recorded replay, or \`AUTOPHYS_ALLOW_LIVE_REASON=1\`; the \`scripted\` and \`fake-reasoner\` policies and the \`scripted\` and \`heuristic\` researchers run offline. With the defaults (every built-in case, three train seeds and two held-out seeds), a research run evaluates three investigations per case for the baseline and for each valid edit, and four per case on the held-out seeds at the end (two seeds, for the starting and the final playbook).
 
-Not built yet, and under discussion in the design notes: a research journal that feeds rejected edits back to the researcher, procedurally sampled and misspecified cases, a statistical acceptance rule, and model discovery, where the agent proposes rival model structures when validation fails.
+\`autoloop\` records each edit's hypothesis, diff, scores and decision in a journal, feeds recent history back to the researcher, and can accept an edit by a paired bootstrap test. A planted sensor-bias case, \`battery-biased\`, exercises a playbook fix offline. Not built yet, and under discussion in the design notes: procedurally sampled and misspecified cases, and model discovery, where the agent proposes rival model structures when validation fails.
+
+## Examples
+
+Each example runs as written from the repository root, after the install steps under Reference: the daemon at \`./target/release/autophys\` and the Python SDK in \`.venv\`. Your IDs will differ from the ones shown.
+
+### Run the loop to a validated fit (Python)
+
+The built-in thermal model stands in for your rig: \`measure\` simulates the true specimen. The loop proposes an experiment, the script approves it and "runs" it, and the loop fits again until it stops. The second trace is held out for validation, which a \`validated\` result needs.
+
+\`\`\`python
+import autophys as ap
+from autophys.models import thermal_rc
+
+truth = {"C": 500.0, "R": 2.0}
+def measure(name, settings):
+    run = thermal_rc(truth, settings, options=ap.TRUTH_OPTIONS)
+    return ap.Observation(name, settings, run["t"], {"T": run["T"]}, {"T": 0.05})
+
+project = ap.Project("thermal-loop", thermal_rc)
+with ap.connect("./workbooks") as client:
+    wb = client.project(project)
+    first = measure("step_short", thermal_rc.experiment("step_short"))
+    validation = measure("sine_slow", thermal_rc.experiment("sine_slow"))
+    validation.split = "validation"
+    inv = wb.investigate(ap.Dataset([first, validation]), ap.ProposalRunner(),
+                         policy=ap.ScriptedPolicy())
+    out = inv.run()
+    while out.status == "awaiting_data":
+        print(out.status)
+        inv.approve(out.proposal_id)
+        approved = inv.wait_for_approval(timeout=1, interval=0.01)
+        print(approved["status"], approved["experiment"])
+        obs = measure(approved["experiment"], approved["settings"])
+        inv.attach_data(out.proposal_id, obs)
+        out = inv.run()
+    print(out.status)
+    print("identified:", ", ".join(out.identified))
+    print("estimate:", ", ".join(f"{k}={v:.6g}" for k, v in out.estimate.items()))
+\`\`\`
+
+Save it as \`loop.py\` and run \`.venv/bin/python loop.py\`:
+
+\`\`\`text
+awaiting_data
+approved pulse
+validated
+identified: C, R
+estimate: C=500, R=2
+\`\`\`
+
+On real hardware, a person approves in the workbench instead, and \`measure\` is your experiment.
+
+### Review an investigation from the terminal
+
+This records an investigation that stops at its first proposal, then lists it, reads the proposal, approves it and verifies the workbook with the daemon CLI.
+
+\`\`\`sh
+D="$PWD/target/release/autophys"; P="$PWD/.venv/bin/python"
+mkdir terminal-review && cd terminal-review
+"$P" - <<'PY' > ids
+import autophys as ap
+from autophys.models import thermal_rc as model
+r = model({"C": 500., "R": 2.}, "step_short")
+obs = ap.Observation("step_short", model.experiment("step_short"), t=r["t"], y={"T": r["T"]}, sigma={"T": .05})
+w = ap.connect("./books").project(ap.Project("terminal-demo", model))
+o = w.investigate(ap.Dataset([obs]), ap.ProposalRunner(), policy=ap.ScriptedPolicy()).run()
+print(o.investigation, o.proposal_id)
+PY
+read -r INV PROP < ids
+"$D" investigations --target ./books
+"$D" records "$INV" --target ./books --kind proposal
+"$D" approve "$INV" "$PROP" --target ./books --by reviewer
+"$D" verify --target ./books
+\`\`\`
+
+Approving records the decision. To continue, run the approved experiment and attach its data from the SDK, as in the example above.
+
+### Review and approve from Rust
+
+A Rust program can record the same proposal and approve it through a record handle, which needs no simulator. The repository root is a Cargo workspace, so make the crate beside the checkout. From the repository root:
+
+\`\`\`sh
+REPO="$PWD"
+cargo new ../rust-review && cd ../rust-review
+cargo add autophys --path "$REPO/sdks/rust"
+\`\`\`
+
+Replace \`src/main.rs\` with:
+
+\`\`\`rust
+use autophys::agent::{ProposalRunner, ScriptedPolicy};
+use autophys::data::{Dataset, Observation};
+use autophys::models;
+use autophys::project::Project;
+use autophys::simulator::{Simulator, FIT_OPTIONS};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let sim = models::thermal_rc();
+    // Stand-in measurements: C = 500 J/K, R = 2 K/W.
+    let truth = [("C".into(), 500.0), ("R".into(), 2.0)].into_iter().collect();
+    let settings = sim.experiments()["step_short"].clone();
+    let run = sim.simulate(&truth, &settings, FIT_OPTIONS)?;
+    let step = Observation::new(
+        "step_short",
+        settings,
+        run["t"].clone(),
+        [("T".into(), run["T"].clone())].into_iter().collect(),
+        [("T".into(), 0.05)].into_iter().collect(),
+    )?;
+
+    let client = autophys::connect(Some("./review-demo"))?;
+    let wb = client.project_with(Project::new("thermal-demo", sim))?;
+    let dataset = Dataset::new([step])?;
+    let mut inv = wb.investigate(dataset, ProposalRunner, ScriptedPolicy::default())?;
+    let outcome = inv.run()?;
+    let pid = outcome.proposal_id.ok_or("expected a proposal")?;
+    let id = inv.id.clone();
+    drop(inv);
+
+    // A reviewer needs only the workbook and the IDs.
+    let reviewer = autophys::connect(Some("./review-demo"))?;
+    let record = reviewer.project("thermal-demo")?.investigation(&id)?;
+    println!("before: {}", record.proposal(&pid)?.status);
+    record.approve(&pid, "reviewer", None)?;
+    let p = record.wait_for_approval(&pid, std::time::Duration::from_secs(1))?;
+    println!("after: {}", p.status);
+    println!("verified: {}", record.workbook().verify()?.ok);
+    Ok(())
+}
+\`\`\`
+
+Then \`cargo run\` prints:
+
+\`\`\`text
+before: proposed
+after: approved
+verified: true
+\`\`\`
+
+### Benchmark the policies offline
+
+\`bench\` runs complete investigations on synthetic cases with a known truth, here for the scripted policy and the fake reasoner. It makes no model calls.
+
+\`\`\`sh
+.venv/bin/autophys bench --case thermal --seeds 1 --policy scripted --policy fake-reasoner --json > bench.json
+.venv/bin/python - <<'PY'
+import json
+for row in json.load(open("bench.json")):
+    print(row["case"], row["policy"], row["status"], "requested=" + ",".join(row["requested"]))
+PY
+\`\`\`
+
+\`\`\`text
+thermal scripted validated requested=pulse
+thermal fake-reasoner validated requested=pulse
+\`\`\`
 
 ## Reference
 
 Two different programs are called \`autophys\`:
 
-- The **daemon** is a Rust binary built from \`src/\`. It serves this workbench and the \`/api/v1\` endpoints, and manages device keys and workbooks. Its commands include \`serve\`, \`build-web\`, \`approve\` and \`verify\`.
-- The **Python CLI** is the console script the Python SDK installs (\`autophys.cli:main\`). It pairs a device with a daemon, runs benchmarks and playbook research, and serves the Muse Code tools. Its commands include \`pair\`, \`bench\`, \`research\` and \`mcp\`.
+- The **daemon** is a Rust binary built from \`src/\`. It serves this workbench and the \`/api/v1\` endpoints, manages browser accounts, device keys and workbooks, reviews proposals, and drives policy training. Its commands include \`serve\`, \`build-web\`, \`pack\`, \`users\`, \`approve\`, \`verify\` and \`train\`.
+- The **Python CLI** is the console script the Python SDK installs (\`autophys.cli:main\`). It pairs a device with a daemon, runs benchmarks and playbook research, exports decisions, and serves the Muse Code tools. Its commands include \`pair\`, \`bench\`, \`research\`, \`autoloop\`, \`export-trajectories\` and \`mcp\`.
 
-Install them separately and call each one by path, so you always know which one runs. From the repository root:
+Install them separately and call each one by path, so you always know which one runs. Building from source needs Rust (edition 2024) and a C toolchain, and building the browser app needs Deno 2; the Tento sources it uses are vendored in the repository. From the repository root:
 
 \`\`\`sh
 # The daemon (Rust)
 cargo build --release --bin autophys
-./target/release/autophys --help            # serve, build-web, projects, approve, verify, …
+./target/release/autophys --help            # serve, build-web, users, approve, verify, train, …
 
 # The Python SDK and its CLI
 python3 -m venv .venv
 .venv/bin/pip install -e 'sdks/python[mcp]'
-.venv/bin/autophys --help                   # pair, whoami, bench, research, mcp, …
+.venv/bin/autophys --help                   # pair, whoami, bench, research, autoloop, mcp, …
 \`\`\`
 
-The examples below use \`./target/release/autophys\` for the daemon and \`.venv/bin/autophys\` for the Python CLI. If \`CARGO_TARGET_DIR\` is set, the daemon binary is under that directory instead of \`./target\`.
+The examples below use \`./target/release/autophys\` for the daemon and \`.venv/bin/autophys\` for the Python CLI. If \`CARGO_TARGET_DIR\` is set, the daemon binary is under that directory instead of \`./target\`. On Linux, \`ops/package.sh --out /absolute/path/to/autophys\` builds and packs one executable that serves its embedded app without Deno or the checkout.
 
 ### Daemon CLI
 
@@ -199,38 +368,55 @@ $D approve inv_fe6a6d95a665b172 prop_bd8b605925d9 --target ./autophys-demo --by 
 $D verify --target ./autophys-demo --json
 \`\`\`
 
-\`--help\` lists the commands, \`--help --json\` prints the command tree as JSON, and \`--version\` prints the version and build commit. Every command accepts \`--json\`. The exit status is 0 on success, 1 on a failure (including a \`verify\` that finds a problem), and 2 for a usage error.
+\`--help\` lists the commands, \`--help --json\` prints the command tree as JSON, and \`--version\` prints the version and build commit (\`dev\` for an unstamped build). Every command accepts \`--json\`. The exit status is 0 on success, 1 on a failure (including a \`verify\` that finds a problem), and 2 for a usage error.
 
 **Serving and building**
 
 | Command | Options |
 | --- | --- |
-| \`serve\` | Serve the workbench and \`/api/v1\`. \`--addr\` (default \`127.0.0.1:4794\`, loopback only), \`--web-root DIR\` (a \`build-web\` output), \`--collection DIR\` (alias \`--db\`), \`--server-db FILE\`, \`--browser-origin ORIGIN\` (repeatable or comma-separated). Without \`--web-root\`, a packed binary serves its embedded web app; a plain build builds the app from this checkout (this needs Deno) and rebuilds it when the source changes. |
+| \`serve\` | Serve the workbench and \`/api/v1\`. \`--addr\` (default \`127.0.0.1:4794\`, loopback only), \`--web-root DIR\` (a \`build-web\` output), \`--collection DIR\` (alias \`--db\`), \`--server-db FILE\`, \`--browser-origin ORIGIN\` (repeatable or comma-separated), \`--login\` (require browser sign-in with an invited account; off by default), \`--public-url ORIGIN\` (the external origin for pairing and invite links; it does not change the bind address). Without \`--web-root\`, a packed binary serves its embedded web app; a plain build builds the app from this checkout (this needs Deno) and rebuilds it when the source changes. |
 | \`build-web\` | Build the web app. \`--out DIR\` (default \`web/local.web\` in the app cache, \`~/.cache/tento/autophys/web/local.web\` on Linux), \`--bundle FILE\` (also write a single packed binary). |
 | \`pack\` | Write one executable that holds the binary and a built web app. \`--web-root DIR\`, \`--out FILE\`, \`--no-maps\`. |
 
 **Reading and reviewing workbooks**
 
-These commands take \`--target\`: a collection directory, one \`.ap-workbook\` file, or an \`http(s)://\` daemon URL. The default is \`$AUTOPHYS_HOME\`, or \`~/autophys\` when that is unset. URL targets use pairing-key credentials from \`AUTOPHYS_API_KEY\` or \`~/.config/autophys/credentials\`.
+These commands take \`--target\`: a collection directory, one \`.ap-workbook\` file, or an \`http(s)://\` daemon URL. The default is \`$AUTOPHYS_HOME\`, or \`~/autophys\` when that is unset. URL targets use the device key from \`AUTOPHYS_API_KEY\`, or the credentials \`pair\` saved in \`$AUTOPHYS_CONFIG_DIR\` (default \`~/.config/autophys\`).
 
 | Command | Options |
 | --- | --- |
 | \`projects\` | List projects. |
 | \`investigations\` | List investigations. \`--project NAME\`. |
-| \`records INVESTIGATION\` | Print an investigation's records. \`--kind KIND\` filters by record kind. |
-| \`approve INVESTIGATION PROPOSAL\` | Approve a proposal. \`--by NAME\` (default \`operator\`), \`--settings JSON\` (edited settings; leave it out to approve unchanged). |
+| \`records INVESTIGATION\` | Print an investigation's records. \`--kind KIND\` filters by record kind (approvals are \`proposal\` records). |
+| \`approve INVESTIGATION PROPOSAL\` | Approve a proposal. \`--by NAME\` (default \`operator\`), \`--settings JSON\` (approve with edited settings: only the proposal's outlook axes can change, within their ranges; leave it out to approve unchanged). |
 | \`reject INVESTIGATION PROPOSAL\` | Reject a proposal. \`--by NAME\`, \`--reason TEXT\`. |
 | \`verify\` | Check each workbook's hash chain and projections. \`--project NAME\`. |
 
 **Administration**
 
-The admin commands work on the daemon's own files. Each takes \`--collection DIR\` (alias \`--db\`) and \`--server-db FILE\`.
+The admin commands work on the daemon's own files. Each takes \`--collection DIR\` (alias \`--db\`) and \`--server-db FILE\`, the same files \`serve\` uses.
 
 | Command | What it does |
 | --- | --- |
 | \`pair list\`, \`pair approve CODE\`, \`pair deny CODE\` | Review devices waiting to pair (a device starts this with the Python CLI's \`pair\`). |
 | \`keys list\`, \`keys revoke KEY_ID\` | List or revoke paired devices' API keys. |
+| \`users list\` | List browser accounts, with their read-only and demo flags. |
+| \`users add EMAIL\` | Create or re-invite an account, printing a one-time password link valid for seven days. \`--public-url ORIGIN\` sets the link's origin, \`--read-only\` blocks browser writes, and \`--demo\` makes it the single passwordless demo account that anyone can continue as from the sign-in page. |
+| \`users set EMAIL\` | Change an account with \`--read-only\` or \`--read-write\`, and \`--demo\` or \`--no-demo\`. Turning demo off ends its sessions; re-invite it before it can sign in with a password. |
+| \`users remove EMAIL\` | Delete the account and end its sessions. |
 | \`db verify\` (or \`db check\`) | Verify the collection's workbooks. \`--rebuild\` rebuilds the projections, and \`--project NAME\` limits the check. |
+
+Browser accounts and paired device keys are separate: an account's read-only flag does not restrict a device key.
+
+**Policy training**
+
+The \`train\` commands drive the Python workers in \`train/sft\` (see its \`README.md\`). Each takes \`--train-dir DIR\` (default \`$AUTOPHYS_TRAIN_DIR\`, then \`train/sft\`) and \`--python FILE\` (default \`$AUTOPHYS_TRAIN_PYTHON\`, then \`python3\` on \`PATH\`); that Python needs the SDK and the workers' own dependencies.
+
+| Command | Options |
+| --- | --- |
+| \`train dataset\` | Generate decision rows from scripted investigations. \`--out DIR\` (default \`<train-dir>/data\`), \`--train-seeds 0,1,2\`, \`--val-seeds 5,6\`, \`--heldout-seeds 3,4\` (disjoint), \`--case NAME\` (repeatable; default all), \`--playbook default\`, \`--backend local\\|modal\` (Modal also needs \`--usd-per-hour\` and \`--max-usd\`). |
+| \`train run\` | Plan or run adapter training. \`--name NAME --base-model HF_ID --data DIR\` are required. It only plans unless you pass \`--live\`. \`--backend loops\\|modal\` (default \`loops\`); hyperparameters \`--rank 32\`, \`--epochs 4\`, \`--batch-size 8\`, \`--lr 0.0002\`, \`--max-seq-len 2048\`, \`--warmup 5\`, \`--eval-every 10\`, \`--seed 0\`. A live run needs \`--max-usd\` and a price (\`--usd-per-mtok\` or \`--usd-per-hour\`); Modal also needs \`--gpu\`. |
+| \`train eval\` | Evaluate policies on held-out cases. \`--out DIR\` (new), \`--seeds 3,4\`, \`--case NAME\`, \`--policy reason\\|scripted\` (repeatable; default both), \`--route baseten\\|meta\\|lane\` (default \`baseten\`), \`--model NAME\` (needed for \`reason\`), \`--replay FILE\`. Live calls need \`AUTOPHYS_ALLOW_LIVE_REASON=1\`. \`--backend modal --run NAME --gpu GPU --usd-per-hour X --max-usd Y\` evaluates a trained Modal adapter. |
+| \`train runs\` | List run manifests, newest first. Plans and history live under \`<train-dir>/runs/NAME/\`. |
 
 **Environment.** \`serve\` also reads these variables; a flag takes precedence over its variable.
 
@@ -239,8 +425,12 @@ The admin commands work on the daemon's own files. Each takes \`--collection DIR
 | \`AUTOPHYS_ADDR\` | \`--addr\` | \`127.0.0.1:4794\` |
 | \`AUTOPHYS_WEB_ROOT\` | \`--web-root\` | embedded app, or a build from source |
 | \`AUTOPHYS_HOME\` | \`--collection\` | \`~/autophys\` |
-| \`AUTOPHYS_SERVER_DB\` | \`--server-db\` | \`server.db\` in the app's data directory |
+| \`AUTOPHYS_SERVER_DB\` | \`--server-db\` | \`server.db\` in the app's data directory (\`~/.local/share/tento/autophys/server.db\` on Linux) |
 | \`AUTOPHYS_BROWSER_ORIGINS\` | \`--browser-origin\` | none (comma-separated) |
+| \`AUTOPHYS_LOGIN\` | \`--login\` | off (\`1\`, \`true\` or \`yes\` turns it on) |
+| \`AUTOPHYS_PUBLIC_URL\` | \`--public-url\` | unset: pairing links use the bound address |
+
+The \`train\` commands read \`AUTOPHYS_TRAIN_DIR\` and \`AUTOPHYS_TRAIN_PYTHON\`, and URL targets read \`AUTOPHYS_API_KEY\` and \`AUTOPHYS_CONFIG_DIR\`.
 
 ### Python CLI
 
@@ -250,26 +440,37 @@ $P pair --server https://autophys.example.com --name lab-laptop
 $P whoami
 $P bench --seeds 5 --jobs 4
 $P research --output-dir ./research-1 --replay policy.jsonl --researcher-replay researcher.jsonl
+$P autoloop --output-dir ./autoloop-1 --policy fake-reasoner --researcher heuristic --max-iterations 3
 $P export-trajectories ./research-1 --output decisions.jsonl
 $P mcp --project mypkg.module:project --workbook ~/autophys
 \`\`\`
 
 | Command | Options |
 | --- | --- |
-| \`pair\` | Pair this device with a daemon by device code. The daemon's operator then approves it with \`pair approve\`. \`--server URL\` (default \`$AUTOPHYS_SERVER\`, then the saved server, then \`http://127.0.0.1:4794\`), \`--name\` (the name shown on the approval page). |
-| \`whoami\` | Show the account and workspace this device's key belongs to. \`--server\`, \`--json\`. |
-| \`bench\` | Run the synthetic benchmark. \`--jobs N\` (default 1), \`--seeds N\` (default 3), \`--case NAME\` (repeatable; default all cases), \`--policy scripted\\|fake-reasoner\\|reason\` (repeatable; default \`scripted\` and \`fake-reasoner\`), \`--json\`. For \`--policy reason\`, \`--model\` is required; \`--route meta\\|baseten\\|lane\`, \`--effort\`, \`--playbook\`, \`--replay FILE\` and \`--record FILE\` configure the model. |
+| \`pair\` | Pair this device with a daemon by device code. The daemon's operator then approves it with \`pair approve\`. \`--server URL\` (default \`$AUTOPHYS_SERVER\`, then the saved server, then \`http://127.0.0.1:4794\`), \`--name\` (the name shown on the approval page; default the hostname). |
+| \`whoami\` | Show the account and workspace this device's key belongs to. \`--server\` (same order as \`pair\`), \`--json\`. |
+| \`bench\` | Run the synthetic benchmark. \`--jobs N\` (default 1), \`--seeds N\` (default 3), \`--case NAME\` (repeatable; default all six cases below), \`--policy scripted\\|fake-reasoner\\|reason\` (repeatable; default \`scripted\` and \`fake-reasoner\`), \`--json\`. For \`--policy reason\`, \`--model\` is required; \`--route meta\\|baseten\\|lane\\|muse\` (default \`meta\`), \`--effort\`, \`--images\`, \`--playbook\`, \`--replay FILE\` and \`--record FILE\` configure the model. |
 | \`research\` | Improve a playbook. \`--output-dir DIR\` is required and must not exist yet. The defaults are one iteration, one job, the \`reason\` policy and the API researcher. The options are listed below. |
+| \`autoloop\` | Improve a playbook until a stop condition, with a journal and resumable state. It takes the \`research\` options plus the ones listed below. \`--output-dir DIR\` is required, and must be new unless you pass \`--resume\`. |
 | \`export-trajectories SOURCE\` | Write each recorded reasoner decision in a workbook, collection or research directory as one JSONL line. \`--output FILE\` (a new file; default stdout). |
-| \`mcp\` | Serve the calibration tools over MCP stdio. This needs the \`mcp\` extra. \`--project\` (\`battery_ecm\` or \`mypkg.module:project\`), \`--workbook\` (anything \`ap.connect\` accepts), \`--investigation ID\` (resume one), \`--root DIR\` (default the current directory), \`--playbook\`, \`--config FILE\` (default \`.autophys-mcp.json\`). |
+| \`mcp\` | Serve the calibration tools over MCP stdio. This needs the \`mcp\` extra. \`--project\` (default \`battery_ecm\`, or \`mypkg.module:project\`), \`--workbook\` (anything \`ap.connect\` accepts), \`--investigation ID\` (resume one), \`--root DIR\` (default the current directory), \`--playbook\`, \`--config FILE\` (default \`.autophys-mcp.json\`). |
+
+The benchmark cases are \`oscillator-free-only\`, \`oscillator\`, \`thermal-short-only\`, \`thermal\`, \`battery-short-only\` and \`battery\`. The planted \`battery-biased\` case runs only when named.
 
 **\`research\` options**
 
 - Run: \`--playbook\` (default \`default\`), \`--case\` (repeatable), \`--train-seeds 0,1,2\`, \`--heldout-seeds 3,4\` (the two sets must not overlap), \`--iterations N\` (default 1), \`--jobs N\` (default 1).
-- Investigation policy: \`--policy reason|scripted|fake-reasoner\` (default \`reason\`), \`--model\` (default \`muse-spark-1.3\`), \`--route meta|baseten|lane\`, \`--effort\`, \`--replay FILE\`, \`--record FILE\`.
-- Researcher: \`--researcher api|muse\` (default \`api\`), \`--researcher-model\` (default \`muse-wonder-1.0\`), \`--researcher-route meta|baseten\`, \`--researcher-effort\`, \`--researcher-replay FILE\`, \`--researcher-record FILE\`. With \`muse\`, also \`--muse-binary\` (default \`muse\`), \`--timeout\` (seconds, default 300) and \`--max-model-steps\`.
-- Replays: the policy and the researcher each need their own replay (\`--replay\` and \`--researcher-replay\`) unless live calls are allowed.
-- Output: the directory holds \`summary.json\` and \`iterations.json\`, a \`scores.json\` for each evaluation, one workbook per case and seed, and each candidate playbook as \`playbook-NNN.md\` with a matching \`.sha256\` file. The input playbook is never overwritten.
+- Investigation policy: \`--policy reason|scripted|fake-reasoner\` (default \`reason\`), \`--model\` (default \`muse-spark-1.3\`), \`--route meta|baseten|lane|muse\` (default \`meta\`), \`--effort\`, \`--images\`, \`--replay FILE\`, \`--record FILE\`. The \`muse\` route runs one headless \`muse exec\` per decision on your Muse coding plan.
+- Researcher: \`--researcher api|muse|scripted|heuristic\` (default \`api\`), \`--researcher-model\` (default \`muse-wonder-1.0\`), \`--researcher-route meta|baseten\`, \`--researcher-effort\`, \`--researcher-images\`, \`--researcher-replay FILE\`, \`--researcher-record FILE\`. With \`scripted\`, repeat \`--edit FILE\` to supply each complete \`SKILL.md\` edit in order. With \`muse\`, also \`--muse-binary\` (default \`muse\`), \`--timeout\` (seconds, default 300) and \`--max-model-steps\`.
+- Replays: the \`reason\` policy needs \`--replay\`, and the \`api\` and \`muse\` researchers need \`--researcher-replay\`, unless live calls are allowed. The other policies and researchers run offline.
+- Output: the directory holds \`summary.json\`, \`iterations.json\` once an edit has been tried, a \`scores.json\` for each evaluation, one workbook per case and seed, and each candidate playbook as \`playbook-NNN.md\` with a matching \`.sha256\` file. The input playbook is never overwritten.
+
+**\`autoloop\` options**
+
+- Limits: \`--max-iterations N\` (default 10; \`--iterations\` has no effect here), \`--patience N\` (stop after N rejected edits in a row; default 3), \`--max-usd USD\` and \`--max-wall-s SECONDS\` (unset by default). Creating a \`STOP\` file in the output directory stops it before the next edit. Limits are checked between iterations, and costs the provider does not report (such as coding-plan use) do not count toward \`--max-usd\`.
+- Acceptance: \`--acceptance auto|lexicographic|bootstrap\` (default \`auto\`: bootstrap for the \`reason\` policy, lexicographic otherwise), \`--repeats N\` (evaluations per seed; default 1), \`--alpha A\` (default 0.05).
+- Resume: \`--resume\` continues a run with its saved cases, seeds, policy and acceptance settings; a \`reason\` run must keep the same model settings.
+- Output: \`state.json\`, \`journal.jsonl\`, \`playbooks/\`, \`train/\`, \`heldout/\` and \`summary.json\`, plus \`spend.jsonl\` for known charges.
 
 **Environment**
 
@@ -278,14 +479,16 @@ $P mcp --project mypkg.module:project --workbook ~/autophys
 | \`AUTOPHYS_HOME\` | The collection \`ap.connect()\` opens when it is given no target (default \`~/autophys\`). |
 | \`AUTOPHYS_API_KEY\` | The key for \`whoami\` and for a remote \`ap.connect\`. When it is unset, the credentials saved by \`pair\` are used. |
 | \`AUTOPHYS_SERVER\` | The daemon \`pair\` and \`whoami\` talk to when \`--server\` is not given; it wins over the saved server. |
-| \`AUTOPHYS_ALLOW_LIVE_REASON\` | Set it to \`1\` to let \`bench\` and \`research\` make live model calls. Without it, they need a replay. SDK reasoners you build yourself are not gated. |
-| \`AUTOPHYS_REASON_REPLAY\`, \`AUTOPHYS_REASON_RECORD\` | Replay or record the policy model's replies as a JSONL cassette. |
-| \`AUTOPHYS_REASON_ROUTE\`, \`AUTOPHYS_REASON_MODEL\` | Configure \`ap.reasoner_from_env()\`. The route is \`meta\` (the default; key in \`MODEL_API_KEY\`), \`baseten\` (key in \`BASETEN_API_KEY\`; set the model too) or \`lane\`. The CLI ignores these; pass \`--route\` and \`--model\` instead. |
-| \`AUTOPHYS_REASON_URL\` | Overrides the model endpoint, for the SDK and the CLI alike. The \`lane\` route requires it. |
+| \`AUTOPHYS_CONFIG_DIR\` | Where \`pair\` saves \`credentials\` (default \`~/.config/autophys\`). |
+| \`AUTOPHYS_ALLOW_LIVE_REASON\` | Set it to \`1\` to let \`bench\`, \`research\` and \`autoloop\` make live model calls. Without it, model-backed policies and researchers need a replay. SDK reasoners you build yourself are not gated. |
+| \`AUTOPHYS_REASON_REPLAY\`, \`AUTOPHYS_REASON_RECORD\` | Default cassette paths for \`ap.reasoner_for()\`, to replay or record model replies as JSONL. Explicit arguments win. |
+| \`AUTOPHYS_REASON_ROUTE\`, \`AUTOPHYS_REASON_MODEL\` | Configure \`ap.reasoner_from_env()\`. The route is \`meta\` (the default; key in \`MODEL_API_KEY\`), \`baseten\` (key in \`BASETEN_API_KEY\`; set the model too), \`lane\` or \`muse\`. The default model is \`muse-spark-1.3\`. The CLI ignores these; pass \`--route\` and \`--model\` instead. |
+| \`AUTOPHYS_REASON_URL\` | Overrides the HTTP endpoint for the \`meta\`, \`baseten\` and \`lane\` routes, for the SDK and the CLI alike. The \`lane\` route requires it. |
+| \`AUTOPHYS_MUSE_BINARY\` | The \`muse\` executable for the \`muse\` policy route (default \`muse\`). |
 
 ### Python SDK
 
-\`import autophys as ap\` exports everything below. This script runs as written: it uses a built-in model to stand in for your measurements, and stops when the loop proposes its first experiment.
+\`import autophys as ap\` exports everything below except the built-in simulators, which you import from \`autophys.models\`. This script runs as written: it uses a built-in model to stand in for your measurements, and stops when the loop proposes its first experiment.
 
 \`\`\`python
 import autophys as ap
@@ -306,13 +509,13 @@ print(outcome.status, outcome.investigation, outcome.proposal_id)
 # awaiting_data inv_… prop_…
 \`\`\`
 
-Save it as \`demo.py\` and run \`.venv/bin/python -i demo.py\` from the repository root; \`-i\` keeps \`inv\` available when the script finishes, and the workbook lands in \`./autophys-demo\`. To review it, start \`./target/release/autophys serve --collection ./autophys-demo\` in another terminal and open \`http://127.0.0.1:4794\`, or use the daemon's \`approve\` with \`--target ./autophys-demo\` and the printed IDs. Then call \`inv.wait_for_approval()\`, \`inv.attach_data(outcome.proposal_id, measured)\` and \`inv.run()\` again.
+Save it as \`demo.py\` and run \`.venv/bin/python -i demo.py\` from the repository root; \`-i\` keeps \`inv\` available when the script finishes, and the workbook lands in \`./autophys-demo\`. To review it, start \`./target/release/autophys serve --collection ./autophys-demo\` in another terminal and open \`http://127.0.0.1:4794\`, or use the daemon's \`approve\` with \`--target ./autophys-demo\` and the printed IDs. Then \`state = inv.wait_for_approval()\`; if \`state["status"]\` is \`approved\` or \`edited\`, run \`state["experiment"]\` with \`state["settings"]\`, and call \`inv.attach_data(outcome.proposal_id, measured)\` and \`inv.run()\` again. A \`validated\` result also needs a held-out validation trace, which this demo does not have, so its loop ends \`inconclusive\`; the first example above adds one.
 
 **Connections and workbooks**
 
 | Name | What it is |
 | --- | --- |
-| \`ap.connect(target=None, *, api_key=None)\` | A \`LocalClient\` for a directory or a \`.ap-workbook\` file, or a \`RemoteClient\` for an \`http(s)://\` daemon URL. |
+| \`ap.connect(target=None, *, api_key=None)\` | A \`LocalClient\` for a directory or a \`.ap-workbook\` file, or a \`RemoteClient\` for an \`http(s)://\` daemon URL. Use it as a context manager to close it. |
 | \`client.projects()\` | \`[{id, name}]\`, plus \`path\` locally. |
 | \`client.project(project)\` | Pass a \`Project\` to create or open its workbook and run investigations. Pass a name to open an existing workbook for listing and verification; a missing one raises \`WorkbookError\` locally, or \`StoreError\` from a daemon. |
 | \`wb.investigate(dataset, runner, policy=…)\` | Start a recorded \`Investigation\`. Needs a workbook opened with the \`Project\`. |
@@ -324,25 +527,29 @@ Save it as \`demo.py\` and run \`.venv/bin/python -i demo.py\` from the reposito
 
 | Name | What it is |
 | --- | --- |
-| \`inv.run() -> Outcome\` | Run the loop until it stops, a budget runs out, or it proposes an experiment (status \`awaiting_data\`). |
-| \`Outcome\` | \`status\`, \`reasons\`, \`estimate\`, \`identified\`, \`non_identified\`, \`non_identifiable_combinations\`, \`investigation\`, \`proposal_id\`, \`summary\`; \`to_dict()\` for JSON. |
+| \`inv.run() -> Outcome\` | Run the loop until it stops, a budget runs out, or it proposes an experiment (status \`awaiting_data\`). It raises \`ToolError\` while a proposal is waiting for data. |
+| \`Outcome\` | \`status\`, \`reasons\`, \`estimate\`, \`units\`, \`fixed\`, \`identified\`, \`non_identified\`, \`non_identifiable_combinations\`, \`guardrail_overrides\`, \`model\`, \`fit\` (a summary dict), \`validation\`, \`steps\`, \`simulations\`, \`experiments\`, \`wall_s\`, \`investigation\`, \`proposal_id\`, \`summary\`, \`usage_total\`; \`to_dict()\` for JSON. |
 | \`inv.wait_for_approval(*, timeout=3600, interval=5) -> dict\` | Block until the pending proposal leaves \`proposed\`, then return its state. Attach data only when \`status\` is \`approved\` or \`edited\`; at \`data_attached\`, another writer has already attached it and the handle picks that up. Raises \`TimeoutError\` when the time runs out. |
-| \`inv.attach_data(proposal_id, observation)\` | Attach the measured result of an approved experiment, then call \`inv.run()\` again. |
+| \`inv.attach_data(proposal_id, observation)\` | Attach the measured result of an approved experiment as training data, then call \`inv.run()\` again. |
 | \`inv.approve(proposal_id, *, by="user", settings=None)\`, \`inv.reject(proposal_id, *, by="user", reason="")\` | Decide a proposal from code; reviewers normally do this in the workbench. |
 | \`inv.records(kind=None)\`, \`inv.proposal(proposal_id)\` | The investigation's records; one proposal's current state. |
 | \`ProposalRunner()\` | The runner that turns a requested experiment into a proposal for a person to run. |
-| \`ScriptedPolicy()\`, \`ReasonLanePolicy(reasoner, …)\` | A deterministic policy, and one a model drives through a \`Reasoner\`. |
+| \`ScriptedPolicy(misfit=2.0)\` | The deterministic policy. |
+| \`ReasonLanePolicy(reasoner, *, playbook=None, model_spec=None, effort="low", max_tokens=2400)\` | A policy a model drives through a \`Reasoner\`; with no playbook it uses the bundled default. |
 
 **Models and data**
 
 | Name | What it is |
 | --- | --- |
-| \`@ap.simulator(params, experiments=None, *, outputs=(), stochastic=False, name=None, display=None)\` | Declare a simulator: parameters as \`name: (unit, low, high)\`, the experiment catalogue, the output channels, and optionally a \`Display\` for the workbench. |
-| \`ap.Observation(experiment, settings, t, y, sigma, split="train", source="measured", meta={})\` | One measured run. \`y\` maps each channel to an array shaped like \`t\`, and \`sigma\` gives a positive noise level per channel. \`split\` is \`train\` or \`validation\` (\`test\` is reserved for evaluators). |
+| \`@ap.simulator(params, experiments=None, *, outputs=(), stochastic=False, name=None, display=None)\` | Declare a simulator: parameters as \`name: (unit, low, high)\`, the experiment catalogue, the output channels, and optionally a \`Display\` for the workbench. It returns an \`ap.Simulator\`. |
+| \`ap.Observation(experiment, settings, t, y, sigma, split="train", source="measured", meta={})\` | One measured run. \`y\` maps each channel to an array shaped like \`t\`, and \`sigma\` gives a positive noise level per channel. \`split\` is \`train\` or \`validation\` (\`test\` is reserved for evaluators). Non-finite samples are left out of the fit. |
 | \`ap.Dataset(observations=())\` | The versioned set of observations an investigation fits. |
-| \`ap.Project(name, simulator, …)\` | A simulator plus its configuration: \`initial\`, \`fixed\`, \`catalog\` (per-experiment \`max_runs\` and editable settings), \`noise\`, \`budgets\`, \`stop\`, \`policy\`, \`n_starts\`. Each distinct configuration is stored as a content-hashed config version. |
+| \`ap.Project(name, simulator, …)\` | A simulator plus its configuration: \`initial\`, \`fixed\`, \`catalog\` (per-experiment \`max_runs\`, editable settings and \`cost_hours\`), \`noise\`, \`budgets\`, \`stop\`, \`policy\`, \`n_starts=4\`. With no catalog, every experiment is available without limit. Each distinct configuration is stored as a content-hashed config version. |
 | \`ap.Budgets(…)\` | \`max_steps=24\`, \`max_simulations=20000\`, \`max_experiments=2\`, \`max_outlook_simulations=50000\`, \`max_test_hours=None\`. |
-| \`ap.NoiseConfig\`, \`ap.StopRules\`, \`ap.PolicyConfig\` | Noise: declared or estimated sigma, and sensor bias (\`off\`, \`fit\` or \`compare\`). Stop rules: validation and misfit thresholds, and the identifiability rule. Policy: kind, effort and token limit. |
+| \`ap.NoiseConfig(sigma=None, estimate=False, bias="compare")\` | Declared or estimated sigma, and sensor bias (\`off\`, \`fit\` or \`compare\`). |
+| \`ap.StopRules(validation_threshold=2.0, misfit_threshold=2.0, rule=DEFAULT_RULE)\` | Validation and misfit thresholds, and the identifiability rule. |
+| \`ap.PolicyConfig(kind="scripted", effort="low", max_tokens=2400)\` | The policy kind (\`scripted\` or \`reason-lane\`), effort and token limit. |
+| \`ap.SimOptions(rtol=1e-8, atol=1e-10, seed=None)\`, \`ap.FIT_OPTIONS\`, \`ap.TRUTH_OPTIONS\` | Solver tolerances and seed. \`TRUTH_OPTIONS\` is tighter, for generating reference data; stochastic simulators need a seed. |
 | \`ap.Display\` | How the workbench draws a simulator's channels, inputs and parameters. |
 | \`autophys.models\` | Built-in simulators: \`oscillator\`, \`thermal_rc\` and \`battery_ecm\`. |
 
@@ -350,23 +557,26 @@ Save it as \`demo.py\` and run \`.venv/bin/python -i demo.py\` from the reposito
 
 | Name | What it is |
 | --- | --- |
-| \`ap.fit(sim, observations, *, initial=None, n_starts=4, loss="linear", …) -> FitResult\` | Weighted multistart least squares in log/scaled coordinates. |
-| \`ap.analyze(sim, params, observations, *, rule=DEFAULT_RULE) -> (SensitivityReport, ndarray)\` | Identifiability from the SVD of the log-Jacobian. It returns the report and the Jacobian: \`report, jac = ap.analyze(...)\`. |
-| \`ap.IdentifiabilityRule\`, \`ap.DEFAULT_RULE\` | The thresholds. A direction is unidentified when its singular value is below 1e-3 of the largest, or when its one-sigma uncertainty is worse than about ±10%. |
-| \`ap.rank_experiments(sim, params, observations, noise, *, candidates=None, …)\` | Rank catalogue experiments by Fisher information: the minimum eigenvalue by default, or D-optimality. |
+| \`ap.fit(sim, observations, *, initial=None, n_starts=4, loss="linear", f_scale=1.0, seed=0, max_nfev=200, options=FIT_OPTIONS) -> FitResult\` | Weighted multistart least squares in log/scaled coordinates, over the observations you pass. |
+| \`ap.analyze(sim, params, observations, *, rule=DEFAULT_RULE, jac=None) -> (SensitivityReport, ndarray)\` | Identifiability from the SVD of the noise-weighted Jacobian: log coordinates for positive parameters, range-scaled otherwise. It returns the report and the Jacobian: \`report, jac = ap.analyze(...)\`. |
+| \`ap.IdentifiabilityRule(rel_tol=1e-3, max_log_std=0.1, loading_tol=0.2)\`, \`ap.DEFAULT_RULE\` | A direction is unresolved when its singular value is below \`rel_tol\` of the largest, or its one-sigma uncertainty is above \`max_log_std\` (about ±10%). A parameter is identified when its own uncertainty is within \`max_log_std\` and it loads no more than \`loading_tol\` on any unresolved direction. |
+| \`ap.rank_experiments(sim, params, observations, noise, *, candidates=None, criterion="min_eig", J0=None)\` | Rank catalogue experiments by Fisher information, by the minimum eigenvalue (\`min_eig\`) or D-optimality (\`d_opt\`). Each candidate has \`experiment\`, \`min_eig\`, \`d_opt\`, \`min_eig_gain\`, \`worst_direction\`, \`cost_hours\`, and \`after\`: each parameter's expected one-sigma uncertainty once that experiment's data is added. |
+| \`ap.FitResult\`, \`ap.SensitivityReport\` | The results of \`fit\` and \`analyze\`; both have \`to_dict()\`. |
 
 **Reasoners and playbooks**
 
 | Name | What it is |
 | --- | --- |
-| \`ap.reasoner_from_env()\`, \`ap.reasoner_for(spec)\`, \`ap.ModelSpec\` | Build a reasoner from the \`AUTOPHYS_REASON_*\` variables, or from an explicit route, model and effort. |
+| \`ap.ModelSpec(role, route, model, effort=None, max_tokens=None, images=False)\` | An explicit model choice. \`role\` is \`policy\` or \`researcher\`; \`route\` is \`meta\`, \`baseten\`, \`lane\` or \`muse\`. \`ap.MUSE_SPARK\` and \`ap.MUSE_WONDER\` name the default models. |
+| \`ap.reasoner_from_env()\`, \`ap.reasoner_for(spec, **options)\` | Build a reasoner from the \`AUTOPHYS_REASON_*\` variables, or from a \`ModelSpec\` (options include replay and record paths). |
 | \`ap.ChatReasoner\`, \`ap.HttpReasoner\`, \`ap.FakeReasoner\` | Chat completions (Muse or Baseten), a reason-lane endpoint, and a deterministic stand-in for tests. |
 | \`ap.RecordingReasoner\`, \`ap.ReplayReasoner\` | Record replies to a cassette, or replay them with no network. |
+| \`ap.Reasoner\`, \`ap.BudgetError\` | The completion protocol a reasoner implements, and the error a provider's billing refusal raises. |
 | \`ap.Playbook\`, \`ap.load_playbook(path_or_name="default")\` | A strategy \`SKILL.md\`, loaded by bundled name or by path. |
 
 ### Rust SDK
 
-The crate is \`autophys\` in \`sdks/rust\`. It reads and writes the same \`.ap-workbook\` files as the Python SDK, and the daemon serves each \`/api/v1\` route with one call into it. Its names follow Python's. Where Python takes an optional argument, Rust has two functions: \`project\` and \`project_with\`, \`investigation\` and \`resume\`. Add it with a path relative to your own \`Cargo.toml\`:
+The crate is \`autophys\` in \`sdks/rust\`. It reads and writes the same \`.ap-workbook\` files as the Python SDK, connects to a daemon over HTTP through the same API, and the daemon delegates its workbook operations to it. Its names follow Python's. Where Python takes an optional argument, Rust has two functions: \`project(name)\` opens a workbook for its records, and \`project_with(Project)\` attaches the simulator so you can run investigations; \`investigation(id)\` returns a record handle, and \`resume(id, runner, policy)\` rebuilds a running loop. Add it with a path relative to your own \`Cargo.toml\`:
 
 \`\`\`toml
 [dependencies]
@@ -417,38 +627,49 @@ for row in wb.investigations()? {
 wb.investigation("inv_0017968045745e3a")?.approve("prop_e055775d9f66", "james", None)?;
 \`\`\`
 
+In the tables, \`Result\` is \`autophys::Result\`, \`Value\` is \`serde_json::Value\` and \`Duration\` is \`std::time::Duration\`; \`agent\`, \`data\` and \`project\` are modules of the crate. \`autophys::Project\` is a project's metadata (\`id\`, \`name\`), while \`autophys::project::Project\` is the simulator and its configuration.
+
 **Collections and workbooks**
 
 | Name | What it is |
 | --- | --- |
-| \`autophys::connect(target: Option<&str>) -> Result<Client>\` | A collection directory, one \`.ap-workbook\` file, or an \`http(s)://\` daemon URL; \`None\` means \`$AUTOPHYS_HOME\`, or \`~/autophys\`. URL targets use the same Workbook/Investigation API with pairing-key authentication. |
-| \`client.projects()\`, \`client.workbooks()\`, \`client.project(name)\` | List projects; open every workbook; open a workbook by name, creating it if it is missing. |
-| \`client.find_investigation(id)\`, \`client.investigations_in(project: Option<&str>)\` | Find an investigation anywhere in the collection; list investigations, optionally in one project. |
-| \`client.project_with(Project) -> Result<ProjectWorkbook>\` | Open a workbook with its simulator attached, storing the config version. |
+| \`autophys::connect(target: Option<&str>) -> Result<Client>\` | A collection directory, one \`.ap-workbook\` file, or an \`http(s)://\` daemon URL; \`None\` means the local \`$AUTOPHYS_HOME\`, or \`~/autophys\`. |
+| \`Client::connect_remote(server: &str, api_key: &str) -> Result<Client>\` | Connect to a daemon with an explicit key. For a URL, \`connect\` uses \`AUTOPHYS_API_KEY\`, or the credentials \`pair\` saved in \`$AUTOPHYS_CONFIG_DIR\` (default \`~/.config/autophys\`; keep the file mode \`0600\`). |
+| \`client.projects() -> Result<Vec<Project>>\`, \`client.workbooks() -> Result<Vec<Workbook>>\` | List projects; open every workbook. |
+| \`client.project(name: &str) -> Result<Workbook>\`, \`client.project_by_id(id: &str)\` | Open a workbook by name (created if missing), or an existing one by its \`prj_…\` ID. |
+| \`client.project_with(project: project::Project) -> Result<ProjectWorkbook>\` | Open a workbook with its simulator attached, storing the config version. \`wb.with_project(project)\` attaches one to an open workbook. |
+| \`client.find_investigation(id: &str) -> Result<Investigation>\`, \`client.investigations_in(project: Option<&str>)\` | Find an investigation anywhere in the collection; list investigations, optionally in one project (by \`prj_…\` ID). |
 | \`wb.investigations()\`, \`wb.proposals()\` | Projection rows, and every proposal's current state. |
-| \`wb.config_versions()\`, \`wb.put_config_version(v, body)\` | Read and store config versions. |
-| \`wb.verify() -> Result<VerifyReport>\`, \`wb.rebuild_projections()\` | The chain and projection check, with the same five fields as Python's. |
+| \`wb.config_versions()\`, \`wb.put_config_version(v: &str, body: &[u8]) -> Result<bool>\` | Read and store config versions; \`v\` is \`sha256:\` and the body's hash. |
+| \`wb.verify() -> Result<VerifyReport>\` | The chain and projection check, locally or over HTTP, with the same five fields as Python's. |
+| \`wb.rebuild_projections() -> Result<VerifyReport>\` | Rebuild the projection tables from the records, then verify. Local workbooks only; over HTTP it returns \`Error::Unsupported\`. |
 
 **Record handles** (\`autophys::Investigation\`, from \`wb.investigation(id)\` or \`client.find_investigation(id)\`)
 
 | Name | What it is |
 | --- | --- |
-| \`records(kind: Option<&str>)\`, \`records_after(gseq)\`, \`proposal(pid)\` | Records, the records after a cursor (for streaming), and one proposal. |
-| \`approve(pid, by, settings: Option<Value>)\`, \`reject(pid, by, reason)\` | Decide a proposal. |
-| \`wait_for_approval(pid, timeout: Duration) -> Result<Proposal>\` | Block until the proposal is decided. |
-| \`attach_data(pid, observation: serde_json::Value) -> Result<Appended>\` | Attach measured data as JSON. |
-| \`append(kind, payload, id)\` | Append one validated record. This is the record writer, not \`run\`. |
+| \`records(kind: Option<&str>) -> Result<Vec<Record>>\`, \`records_after(gseq: i64)\`, \`proposal(pid: &str) -> Result<Proposal>\` | Records, the records after a workbook cursor (for streaming), and one proposal. |
+| \`approve(pid, by, settings: Option<Value>) -> Result<Appended>\`, \`reject(pid, by, reason)\` | Decide a proposal; settings approve it as edited. |
+| \`wait_for_approval(pid, timeout: Duration) -> Result<Proposal>\` | Block until the proposal leaves \`proposed\`; check its status before attaching data. Returns \`Error::Timeout\` when the time runs out. |
+| \`attach_data(pid, observation: Value) -> Result<Appended>\` | Attach measured data as JSON to an approved or edited proposal. |
+| \`append(kind: &str, payload: Value, id: Option<&str>) -> Result<Appended>\` | Append one validated record; \`id\` is an optional idempotency key. This is the record writer, not \`run\`. |
+| \`info()\`, \`workbook()\` | The investigation's projection row, and its workbook. |
 
-**Running loops** (\`autophys::agent::Investigation\`, from \`ProjectWorkbook::investigate\` or \`::resume(id, runner, policy)\`)
+**Running loops** (\`autophys::agent::Investigation\`, from \`ProjectWorkbook\`)
 
 | Name | What it is |
 | --- | --- |
+| \`wb.investigate(dataset, runner, policy) -> Result<agent::Investigation>\` | Start a loop. \`investigate_with(dataset, runner, policy, free, seed, title)\` also sets the free parameters, seed and title. |
+| \`wb.resume(id: &str, runner, policy) -> Result<agent::Investigation>\` | Rebuild a loop from its records, with the same simulator configuration. |
 | \`run() -> Result<Outcome>\` | Run the loop. \`Outcome\` has the same fields as Python's. |
 | \`wait_for_approval(timeout: Duration) -> Result<Proposal>\` | Wait for the pending proposal. |
-| \`attach_data(pid, observation: data::Observation) -> Result<Appended>\` | Attach the measured result, then \`run()\` again. |
-| \`approve(…)\`, \`reject(pid, by, reason)\` | Decide a proposal from code. |
+| \`attach_data(pid, observation: data::Observation) -> Result<Appended>\` | Attach the measured result as training data, then \`run()\` again. |
+| \`approve(pid, by, settings)\`, \`reject(pid, by, reason)\`, \`withdraw(pid, by, reason)\` | Decide or withdraw the pending proposal from code. |
+
+Attached measurements count toward \`max_experiments\` and the proposed experiment's \`cost_hours\` toward \`max_test_hours\`, including after \`resume\`. If another process attaches data through a record handle, \`resume\` the loop to pick it up. Each fit records display curves for the workbench, bounded so a run record stays under 256 KiB; drawing them does not use the simulation budget.
 
 The modules \`simulator\`, \`models\`, \`data\`, \`fit\`, \`sensitivity\`, \`design\`, \`project\`, \`agent\`, \`reasoner\` and \`playbook\` port the Python numerics and loop. Python is the reference for numerical behaviour: Rust must match its results within each conformance case's tolerance and make the same decisions.
+
 `;
 
 /** std-documentation sizes type with Lona's cap-height scale, which tento apps get from
