@@ -99,6 +99,10 @@ Deno.test("tutorial: stepper advances to the last step, then reports done", () =
   assertEquals(stepper.advance(), true);
   assertEquals([stepper.step, stepper.last], ["c", true]);
   assertEquals(stepper.advance(), false);
+  assertEquals(stepper.back(), true);
+  assertEquals(stepper.step, "b");
+  assertEquals(stepper.back(), true);
+  assertEquals(stepper.back(), false);
   stepper.restart();
   assertEquals(stepper.index, 0);
   assertThrows(() => new Stepper([]));

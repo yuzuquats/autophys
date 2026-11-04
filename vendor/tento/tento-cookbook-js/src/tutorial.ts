@@ -30,6 +30,8 @@ export type Tutorial = {
   start(): void;
   /** Remove the ring; call when the tutorial hides. */
   clear(): void;
+  /** One step forwards (as Next does) or backwards; false past either end. */
+  step(delta: number): boolean;
   /** Runs on Done and on the close button. */
   onDone: (() => void) | null;
 };
@@ -69,6 +71,11 @@ export function createTutorial(steps: readonly TutorialStep[]): Tutorial {
       render(false);
     },
     clear: () => ring.hide(),
+    step(delta) {
+      const moved = delta > 0 ? stepper.advance() : stepper.back();
+      if (moved) render(true);
+      return moved;
+    },
     onDone: null,
   };
   show.addEventListener("click", () => {

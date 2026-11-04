@@ -20,6 +20,10 @@ export type Drawer = {
  * starts from the surface's displayed position, so an interrupted move
  * reverses without a jump.
  *
+ * Left and right step the deck on the landing and the tutorial in the tour;
+ * past either end of the tutorial they return to the deck. A deck slide
+ * marked opensApp opens the app as the deck steps onto it (Deck.onLaunch).
+ *
  * The URL holds the open/closed state (route.ts): opening and closing push
  * history, so Back and Forward retrace them. `onOpen` runs as the app starts
  * to open (mount the app); `onClosed` once the deck has settled back.
@@ -128,6 +132,8 @@ export function installDrawer(parts: {
   }
 
   tutorial.onDone = () => void setStage("app");
+  // A slide marked opensApp opens the app when the deck steps onto it.
+  deck.onLaunch = () => open();
 
   // Any same-origin link into the app path opens the drawer in place.
   document.addEventListener("click", (event) => {
@@ -149,6 +155,14 @@ export function installDrawer(parts: {
     if ((event.key === "ArrowLeft" || event.key === "ArrowRight") && stage === "landing") {
       event.preventDefault();
       deck.step(event.key === "ArrowRight" ? 1 : -1);
+    } else if ((event.key === "ArrowLeft" || event.key === "ArrowRight") && stage === "tour") {
+      // The arrows step through the tutorial. Past either end they return to
+      // the deck: forwards it continues after the slide that opened the app.
+      event.preventDefault();
+      const forward = event.key === "ArrowRight";
+      if (tutorial.step(forward ? 1 : -1)) return;
+      close();
+      if (forward && deck.opensApp) deck.step(1);
     } else if ((event.key === "ArrowDown" || event.key === "ArrowUp") && !event.repeat) {
       const next = arrowStage(stage, event.key);
       if (!next) return;

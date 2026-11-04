@@ -151,6 +151,8 @@ export function deck(app: Cookbook.App, appPath = "/app"): Cookbook.Deck.Slide[]
       eyebrow: { label: "Get started" },
       title: "Try it in your browser.",
       description: "Nothing to install, and no account. The hosted workbench opens a demo workspace of example investigations.",
+      // Stepping onto this slide opens the app and its tutorial (as the down arrow does).
+      opensApp: true,
       body: {
         kind: "browser",
         url: "https://autophys.lona.so/app",

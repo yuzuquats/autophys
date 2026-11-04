@@ -177,8 +177,13 @@ export type DeckSlide = {
    * body. An element marked `data-ck-share` in both bodies moves between its
    * two places (FLIP) instead of fading, such as the loop bodies' card. */
   builds?: DeckBuild[];
+  /** Stepping forward onto this slide also opens the app, as the down arrow
+   * does, and starts the tutorial; the slide stays behind it, shown on the way
+   * back. The arrows then step through the tutorial, and the right arrow on
+   * its last step returns to the deck at the following slide. */
+  opensApp?: boolean;
 };
-export type DeckBuild = Omit<DeckSlide, "builds">;
+export type DeckBuild = Omit<DeckSlide, "builds" | "opensApp">;
 
 /** Where one step lands, given each slide's build count: through the current
  * slide's builds first, then to the next slide's first build (forwards) or

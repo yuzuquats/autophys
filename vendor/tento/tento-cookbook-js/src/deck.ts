@@ -18,8 +18,12 @@ import { createTexture } from "./texture.ts";
 export type Deck = {
   readonly el: HTMLElement;
   readonly index: number;
+  /** Whether the current slide is one that opens the app (DeckSlide.opensApp). */
+  readonly opensApp: boolean;
   go(index: number): void;
   step(delta: number): void;
+  /** Runs when a forward move lands on a slide that opens the app. */
+  onLaunch: (() => void) | null;
 };
 
 const lerp = (a: number, b: number, p: number) => a + (b - a) * p;
@@ -200,6 +204,7 @@ export function createDeck(slides: readonly DeckSlide[]): Deck {
   function go(target: number, duration = 500, landing?: number): void {
     endDrag();
     const to = clampSlide(target, count);
+    const launch = to > index && slides[to].opensApp === true;
     if (to !== index) {
       views[index].show(build, false);
       build = landing ?? (to < index ? builds[to] - 1 : 0);
@@ -208,6 +213,7 @@ export function createDeck(slides: readonly DeckSlide[]): Deck {
     index = to;
     update();
     render(index, true, duration);
+    if (launch) api.onLaunch?.();
   }
   function showBuild(to: number): void {
     build = to;
@@ -381,14 +387,19 @@ export function createDeck(slides: readonly DeckSlide[]): Deck {
   }, { signal });
   update();
   render(index, false);
-  return {
+  const api: Deck = {
     el,
     get index() {
       return index;
     },
+    get opensApp() {
+      return slides[index].opensApp === true;
+    },
     go,
     step,
+    onLaunch: null,
   };
+  return api;
 }
 
 const mark = `<svg viewBox="0 0 56 40" width="56" height="40" aria-hidden="true" focusable="false">

@@ -63,6 +63,12 @@ export class Stepper<T> {
     this.position++;
     return true;
   }
+  /** Move to the previous step; false when already on the first one. */
+  back(): boolean {
+    if (this.position === 0) return false;
+    this.position--;
+    return true;
+  }
   restart(): void {
     this.position = 0;
   }
