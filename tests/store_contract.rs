@@ -1,0 +1,1373 @@
+//! HTTP contract tests for every `/api/v1` route: the SDK's fake server
+//! (`hacks-site/exp/modellab/python/tests/fake_server.py`) made real, plus the
+//! browser routes, auth, the proposal state machine and SSE resume.
+
+mod common;
+
+use actix_web::{App, test};
+use autophys::http::configure;
+use autophys::store::{GENESIS, Options, canonical::sha256_hex, chain_hash};
+use common::*;
+use serde_json::{Value, json};
+
+macro_rules! app {
+    ($store:expr) => {{
+        let store = $store.clone();
+        test::init_service(App::new().configure(move |cfg| configure(cfg, store.clone()))).await
+    }};
+}
+
+const CONFIG: &[u8] = br#"{"name":"thermal","x":1.5}"#;
+
+/// Object keys in sorted order: serde_json may preserve insertion order
+/// (its `preserve_order` feature is on in the daemon build).
+fn sorted_keys(v: &Value) -> Vec<String> {
+    let mut keys: Vec<String> = v.as_object().unwrap().keys().cloned().collect();
+    keys.sort();
+    keys
+}
+
+fn version() -> String {
+    format!("sha256:{}", sha256_hex([CONFIG]))
+}
+
+fn env(id: &str, kind: &str, payload: Value) -> Value {
+    json!({"id": id, "kind": kind, "payload": payload})
+}
+
+fn proposed(pid: &str) -> Value {
+    json!({"proposal_id": pid, "event": "proposed", "experiment": "sine", "settings": {"f": 0.44}})
+}
+
+/// A project, its config version and one investigation; returns (key, inv).
+async fn seeded<S, B>(app: &S, store: &autophys::store::Store) -> (String, String)
+where
+    S: actix_web::dev::Service<
+            actix_http::Request,
+            Response = actix_web::dev::ServiceResponse<B>,
+            Error = actix_web::Error,
+        >,
+    B: actix_web::body::MessageBody,
+{
+    let key = pair(app, store, "lab-pc").await;
+    let k = Some(key.as_str());
+    let (_, p) = call(
+        app,
+        post("/projects", k, &json!({"name": "thermal"})).to_request(),
+    )
+    .await;
+    let pid = p["project"]["id"].as_str().unwrap().to_string();
+    let (s, _) = call(
+        app,
+        put_raw(
+            &format!("/projects/{pid}/config_versions/{}", version()),
+            k,
+            CONFIG,
+        )
+        .to_request(),
+    )
+    .await;
+    assert_eq!(s, 201);
+    let body = json!({"project_id": pid, "config_version": version(), "overrides": {"free": ["C"]}, "meta": {"name": "thermal"}});
+    let (s, inv) = call(app, post("/investigations", k, &body).to_request()).await;
+    assert_eq!(s, 201, "{inv}");
+    (key, inv["id"].as_str().unwrap().to_string())
+}
+
+#[actix_web::test]
+async fn pairing_issues_a_key_once_and_stores_only_hashes() {
+    let f = fixture();
+    let app = app!(f.store);
+    let (s, start) = call(
+        &app,
+        post(
+            "/pair/start",
+            None,
+            &json!({"device_name": "lab-pc", "client": "modellab-python/0.1"}),
+        )
+        .to_request(),
+    )
+    .await;
+    assert_eq!(s, 200);
+    for field in [
+        "device_code",
+        "user_code",
+        "verification_url",
+        "interval",
+        "expires_in",
+    ] {
+        assert!(start.get(field).is_some(), "{field} missing: {start}");
+    }
+    let code = json!({"device_code": start["device_code"]});
+    let (s, pending) = call(&app, post("/pair/poll", None, &code).to_request()).await;
+    assert_eq!(
+        (s, pending["error"].as_str()),
+        (400, Some("authorization_pending"))
+    );
+
+    assert!(f.store.pair_approve("NOPE-0000").await.is_err());
+    // People type codes loosely; approval normalises them.
+    let typed = start["user_code"]
+        .as_str()
+        .unwrap()
+        .replace('-', " ")
+        .to_lowercase();
+    let approved = f.store.pair_approve(&typed).await.unwrap();
+    assert_eq!(approved.device_name, "lab-pc");
+
+    let (s, issued) = call(&app, post("/pair/poll", None, &code).to_request()).await;
+    assert_eq!(s, 200, "{issued}");
+    let api_key = issued["api_key"].as_str().unwrap().to_string();
+    assert!(api_key.starts_with("apk_"));
+    assert_eq!(issued["workspace"], "local");
+    let (s, again) = call(&app, post("/pair/poll", None, &code).to_request()).await;
+    assert_eq!((s, again["error"].as_str()), (400, Some("expired_token")));
+
+    let (s, me) = call(&app, get("/whoami", Some(&api_key)).to_request()).await;
+    assert_eq!(s, 200);
+    assert_eq!(me["device_name"], "lab-pc");
+    assert_eq!(me["key_id"], issued["key_id"]);
+    assert!(!me.to_string().contains(&api_key));
+
+    // Neither secret is anywhere on disk, and no listing shows the key.
+    let keys = f.store.keys_list().await.unwrap();
+    assert_eq!(keys.len(), 1);
+    assert!(!format!("{keys:?}").contains(&api_key));
+    let device_code = start["device_code"].as_str().unwrap();
+    for name in ["autophys.db", "autophys.db-wal"] {
+        if let Ok(bytes) = std::fs::read(f.dir.path().join(name)) {
+            let text = String::from_utf8_lossy(&bytes);
+            assert!(!text.contains(&api_key), "{name} holds the key");
+            assert!(!text.contains(device_code), "{name} holds the device code");
+        }
+    }
+    let fresh = f.store.pair_start("x", "y").await.unwrap();
+    assert!(
+        !format!("{fresh:?}").contains(&fresh.device_code),
+        "Debug never prints the device code"
+    );
+    assert!(!format!("{issued:?}").is_empty());
+}
+
+#[actix_web::test]
+async fn pairing_denied_expired_and_slow_down() {
+    let f = fixture_with(Options {
+        poll_interval: std::time::Duration::from_secs(5),
+        ..options()
+    });
+    let app = app!(f.store);
+    let start = f.store.pair_start("a", "t").await.unwrap();
+    let code = json!({"device_code": start.device_code});
+    let (_, first) = call(&app, post("/pair/poll", None, &code).to_request()).await;
+    assert_eq!(first["error"], "authorization_pending");
+    let (s, fast) = call(&app, post("/pair/poll", None, &code).to_request()).await;
+    assert_eq!((s, fast["error"].as_str()), (400, Some("slow_down")));
+    f.store.pair_deny(&start.user_code).await.unwrap();
+    let (_, denied) = call(&app, post("/pair/poll", None, &code).to_request()).await;
+    assert_eq!(denied["error"], "access_denied");
+
+    let g = fixture_with(Options {
+        pairing_ttl: std::time::Duration::ZERO,
+        ..options()
+    });
+    let app = app!(g.store);
+    let start = g.store.pair_start("b", "t").await.unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    let (_, expired) = call(
+        &app,
+        post(
+            "/pair/poll",
+            None,
+            &json!({"device_code": start.device_code}),
+        )
+        .to_request(),
+    )
+    .await;
+    assert_eq!(expired["error"], "expired_token");
+    assert!(
+        g.store.pair_approve(&start.user_code).await.is_err(),
+        "an expired code cannot be approved"
+    );
+    let (_, unknown) = call(
+        &app,
+        post("/pair/poll", None, &json!({"device_code": "nope"})).to_request(),
+    )
+    .await;
+    assert_eq!(unknown["error"], "expired_token");
+}
+
+#[actix_web::test]
+async fn every_keyed_route_refuses_missing_wrong_and_revoked_keys() {
+    let f = fixture();
+    let app = app!(f.store);
+    let (key, inv) = seeded(&app, &f.store).await;
+    // (method, path); the keyless-write routes answer 403, not 401, when no
+    // key is sent (O-3), and are covered by their own test.
+    let routes: Vec<(&str, String)> = vec![
+        ("GET", "/whoami".into()),
+        ("GET", "/projects".into()),
+        ("POST", "/projects".into()),
+        ("GET", "/projects/p/config_versions".into()),
+        ("PUT", "/projects/p/config_versions/v".into()),
+        ("GET", "/investigations".into()),
+        ("POST", "/investigations".into()),
+        ("GET", format!("/investigations/{inv}/records")),
+        ("POST", format!("/investigations/{inv}/measurements")),
+        ("POST", format!("/investigations/{inv}/runs")),
+        ("POST", format!("/investigations/{inv}/steps")),
+        ("POST", format!("/investigations/{inv}/outcome")),
+        ("POST", format!("/investigations/{inv}/proposals")),
+        ("GET", format!("/investigations/{inv}/proposals/p1")),
+        ("POST", format!("/investigations/{inv}/proposals/p1/data")),
+        ("GET", "/workspace".into()),
+        ("GET", "/stream".into()),
+        ("GET", "/pairings".into()),
+    ];
+    let request = |method: &str, path: &str, k: Option<&str>| match method {
+        "GET" => get(path, k),
+        "PUT" => put_raw(path, k, b"{}"),
+        _ => post(path, k, &json!({})),
+    };
+    for (method, path) in &routes {
+        for k in [None, Some("apk_wrong")] {
+            let (s, body) = call(&app, request(method, path, k).to_request()).await;
+            assert_eq!(
+                (s, body["error"].as_str()),
+                (401, Some("unauthorized")),
+                "{method} {path} key={k:?}"
+            );
+        }
+    }
+    // Browser headers do not open the SDK-only routes.
+    for (method, path) in &routes[..15] {
+        let (s, _) = call(
+            &app,
+            browser(request(method, path, None), true).to_request(),
+        )
+        .await;
+        assert_eq!(s, 401, "{method} {path} must need a key");
+    }
+    let id = f.store.keys_list().await.unwrap()[0].id.clone();
+    assert!(f.store.keys_revoke(&id).await.unwrap());
+    assert!(
+        !f.store.keys_revoke(&id).await.unwrap(),
+        "second revoke reports already revoked"
+    );
+    assert!(f.store.keys_revoke("k_missing").await.is_err());
+    let (s, _) = call(&app, get("/whoami", Some(&key)).to_request()).await;
+    assert_eq!(s, 401, "a revoked key is refused");
+    assert!(f.store.keys_list().await.unwrap()[0].revoked.is_some());
+}
+
+#[actix_web::test]
+async fn same_origin_loopback_browser_needs_no_key_on_browser_routes_only() {
+    let f = fixture();
+    let app = app!(f.store);
+    let (key, inv) = seeded(&app, &f.store).await;
+    call(
+        &app,
+        post(
+            &format!("/investigations/{inv}/proposals"),
+            Some(&key),
+            &env("rp", "proposal", proposed("p1")),
+        )
+        .to_request(),
+    )
+    .await;
+
+    let (s, ws) = call(&app, browser(get("/workspace", None), false).to_request()).await;
+    assert_eq!(s, 200, "{ws}");
+
+    let cross = get("/workspace", None)
+        .insert_header(("host", "127.0.0.1:8080"))
+        .insert_header(("sec-fetch-site", "cross-site"));
+    assert_eq!(call(&app, cross.to_request()).await.0, 401, "cross-site");
+    let rebind = get("/workspace", None)
+        .insert_header(("host", "evil.example:8080"))
+        .insert_header(("sec-fetch-site", "same-origin"));
+    assert_eq!(
+        call(&app, rebind.to_request()).await.0,
+        401,
+        "DNS rebinding host"
+    );
+    let proxied = get("/workspace", None)
+        .insert_header(("host", "autophys.rwc-dev-01.tento.localhost"))
+        .insert_header(("sec-fetch-site", "same-origin"));
+    assert_eq!(
+        call(&app, proxied.to_request()).await.0,
+        200,
+        "tento.localhost proxy host"
+    );
+    let remote =
+        browser(get("/workspace", None), false).peer_addr("100.64.0.9:5000".parse().unwrap());
+    assert_eq!(
+        call(&app, remote.to_request()).await.0,
+        403,
+        "non-loopback peer"
+    );
+}
+
+/// O-3: keyless writes are JSON from the daemon's own origin; keyed calls
+/// need neither.
+#[actix_web::test]
+async fn keyless_writes_refuse_cross_origin_and_form_posts() {
+    let f = fixture();
+    let app = app!(f.store);
+    let (key, inv) = seeded(&app, &f.store).await;
+    let base = format!("/investigations/{inv}/proposals");
+    call(
+        &app,
+        post(&base, Some(&key), &env("rp1", "proposal", proposed("p1"))).to_request(),
+    )
+    .await;
+    call(
+        &app,
+        post(&base, Some(&key), &env("rp2", "proposal", proposed("p2"))).to_request(),
+    )
+    .await;
+    let approve = |id: &str, pid: &str| {
+        env(
+            id,
+            "proposal",
+            json!({"proposal_id": pid, "event": "approved", "by": "dashboard"}),
+        )
+    };
+    let path = format!("{base}/p1/approvals");
+
+    let (s, e) = call(
+        &app,
+        browser(post(&path, None, &approve("a1", "p1")), false).to_request(),
+    )
+    .await;
+    assert_eq!(
+        (s, e["error"].as_str()),
+        (403, Some("forbidden")),
+        "no Origin"
+    );
+    let cross = browser(post(&path, None, &approve("a1", "p1")), false)
+        .insert_header(("origin", "http://evil.example"));
+    assert_eq!(
+        call(&app, cross.to_request()).await.0,
+        403,
+        "cross-origin JSON POST"
+    );
+    let other_port = browser(post(&path, None, &approve("a1", "p1")), false)
+        .insert_header(("origin", "http://127.0.0.1:9999"));
+    assert_eq!(
+        call(&app, other_port.to_request()).await.0,
+        403,
+        "another local origin"
+    );
+    let form = actix_web::test::TestRequest::post()
+        .uri(&format!("/api/v1{path}"))
+        .insert_header(("content-type", "application/x-www-form-urlencoded"))
+        .insert_header(("origin", "http://evil.example"))
+        .set_payload("id=a1&kind=proposal");
+    let (s, e) = call(&app, form.to_request()).await;
+    assert_eq!(
+        (s, e["error"].as_str()),
+        (415, Some("unsupported_media_type")),
+        "form-encoded POST"
+    );
+    let text = browser(post(&path, None, &approve("a1", "p1")), true)
+        .insert_header(("content-type", "text/plain"));
+    assert_eq!(
+        call(&app, text.to_request()).await.0,
+        415,
+        "text/plain POST"
+    );
+    let (_, p) = call(&app, get(&format!("{base}/p1"), Some(&key)).to_request()).await;
+    assert_eq!(p["status"], "proposed", "nothing refused was written");
+
+    let (s, rec) = call(
+        &app,
+        browser(post(&path, None, &approve("a1", "p1")), true).to_request(),
+    )
+    .await;
+    assert_eq!(s, 201, "same-origin JSON POST: {rec}");
+    let localhost = browser(
+        post(&format!("{base}/p2/approvals"), None, &approve("a2", "p2")),
+        false,
+    )
+    .insert_header(("origin", "http://localhost:8080"));
+    assert_eq!(
+        call(&app, localhost.to_request()).await.0,
+        201,
+        "http://localhost:<port> is ours too"
+    );
+
+    // The SDK sends a key and no Origin.
+    call(
+        &app,
+        post(&base, Some(&key), &env("rp3", "proposal", proposed("p3"))).to_request(),
+    )
+    .await;
+    let (s, _) = call(
+        &app,
+        post(
+            &format!("{base}/p3/approvals"),
+            Some(&key),
+            &approve("a3", "p3"),
+        )
+        .to_request(),
+    )
+    .await;
+    assert_eq!(s, 201, "keyed call without Origin");
+}
+
+/// O-3: the browser lists and decides pairings; nothing secret is shown.
+#[actix_web::test]
+async fn browser_approves_and_denies_pairings() {
+    let f = fixture();
+    let app = app!(f.store);
+    let start = |name: &'static str| {
+        post(
+            "/pair/start",
+            None,
+            &json!({"device_name": name, "client": "modellab-python/0.1"}),
+        )
+    };
+    let (_, a) = call(&app, start("laptop").to_request()).await;
+    let (_, b) = call(&app, start("lab-pc").to_request()).await;
+
+    let (s, list) = call(&app, browser(get("/pairings", None), false).to_request()).await;
+    assert_eq!(s, 200, "{list}");
+    let rows = list["pairings"].as_array().unwrap();
+    assert_eq!(rows.len(), 2);
+    assert_eq!(
+        sorted_keys(&rows[0]),
+        ["client", "device_name", "expires", "user_code"]
+    );
+    assert!(
+        !list
+            .to_string()
+            .contains(a["device_code"].as_str().unwrap())
+    );
+
+    let code_a = a["user_code"].as_str().unwrap();
+    let approve = format!("/pairings/{code_a}/approve");
+    let (s, _) = call(
+        &app,
+        browser(post(&approve, None, &json!({})), false)
+            .insert_header(("origin", "http://evil.example"))
+            .to_request(),
+    )
+    .await;
+    assert_eq!(s, 403, "cross-origin approve");
+    let (s, _) = call(
+        &app,
+        browser(post(&approve, None, &json!({})), true)
+            .insert_header(("content-type", "application/x-www-form-urlencoded"))
+            .to_request(),
+    )
+    .await;
+    assert_eq!(s, 415, "form approve");
+    let (s, done) = call(
+        &app,
+        browser(post(&approve, None, &json!({})), true).to_request(),
+    )
+    .await;
+    assert_eq!(
+        (s, done["pairing"]["device_name"].as_str()),
+        (200, Some("laptop"))
+    );
+    let (s, _) = call(
+        &app,
+        browser(post(&approve, None, &json!({})), true).to_request(),
+    )
+    .await;
+    assert_eq!(s, 404, "an approved code is no longer pending");
+    let (s, issued) = call(
+        &app,
+        post(
+            "/pair/poll",
+            None,
+            &json!({"device_code": a["device_code"]}),
+        )
+        .to_request(),
+    )
+    .await;
+    assert_eq!(s, 200);
+    assert!(issued["api_key"].as_str().unwrap().starts_with("apk_"));
+
+    let code_b = b["user_code"].as_str().unwrap();
+    let (s, _) = call(
+        &app,
+        browser(
+            post(&format!("/pairings/{code_b}/deny"), None, &json!({})),
+            true,
+        )
+        .to_request(),
+    )
+    .await;
+    assert_eq!(s, 200);
+    let (_, denied) = call(
+        &app,
+        post(
+            "/pair/poll",
+            None,
+            &json!({"device_code": b["device_code"]}),
+        )
+        .to_request(),
+    )
+    .await;
+    assert_eq!(denied["error"], "access_denied");
+    let (_, list) = call(&app, browser(get("/pairings", None), false).to_request()).await;
+    assert_eq!(list["pairings"], json!([]));
+    assert_eq!(
+        call(&app, get("/pairings", None).to_request()).await.0,
+        401,
+        "no key, no browser"
+    );
+}
+
+#[actix_web::test]
+async fn projects_and_config_versions() {
+    let f = fixture();
+    let app = app!(f.store);
+    let key = pair(&app, &f.store, "d").await;
+    let k = Some(key.as_str());
+    let (s, a) = call(
+        &app,
+        post("/projects", k, &json!({"name": "thermal"})).to_request(),
+    )
+    .await;
+    assert_eq!(s, 201);
+    let (s, b) = call(
+        &app,
+        post("/projects", k, &json!({"name": "thermal"})).to_request(),
+    )
+    .await;
+    assert_eq!(s, 200, "idempotent by name");
+    assert_eq!(a["project"]["id"], b["project"]["id"]);
+    let (s, bad) = call(&app, post("/projects", k, &json!({})).to_request()).await;
+    assert_eq!((s, bad["path"].as_str()), (422, Some("name")));
+    let (_, list) = call(&app, get("/projects", k).to_request()).await;
+    assert_eq!(list["projects"].as_array().unwrap().len(), 1);
+
+    let pid = a["project"]["id"].as_str().unwrap();
+    let path = format!("/projects/{pid}/config_versions/{}", version());
+    let (s, v) = call(&app, put_raw(&path, k, CONFIG).to_request()).await;
+    assert_eq!((s, v["version"].as_str()), (201, Some(version().as_str())));
+    assert_eq!(
+        call(&app, put_raw(&path, k, CONFIG).to_request()).await.0,
+        200
+    );
+    let (s, mismatch) = call(&app, put_raw(&path, k, br#"{"name":"other"}"#).to_request()).await;
+    assert_eq!(
+        (s, mismatch["error"].as_str()),
+        (422, Some("hash_mismatch"))
+    );
+    let (s, _) = call(
+        &app,
+        put_raw(
+            &format!("/projects/prj_nope/config_versions/{}", version()),
+            k,
+            CONFIG,
+        )
+        .to_request(),
+    )
+    .await;
+    assert_eq!(s, 404);
+    let (s, list) = call(
+        &app,
+        get(&format!("/projects/{pid}/config_versions"), k).to_request(),
+    )
+    .await;
+    assert_eq!(s, 200);
+    assert_eq!(
+        list["config_versions"],
+        json!([{"version": version(), "config": {"name": "thermal", "x": 1.5}}])
+    );
+    assert_eq!(
+        call(
+            &app,
+            get("/projects/prj_nope/config_versions", k).to_request()
+        )
+        .await
+        .0,
+        404
+    );
+}
+
+#[actix_web::test]
+async fn investigations_pin_a_config_and_replay_by_idempotency_key() {
+    let f = fixture();
+    let app = app!(f.store);
+    let (key, inv) = seeded(&app, &f.store).await;
+    let k = Some(key.as_str());
+    let (s, e) = call(
+        &app,
+        post(
+            "/investigations",
+            k,
+            &json!({"project_id": "prj_nope", "config_version": "sha256:00"}),
+        )
+        .to_request(),
+    )
+    .await;
+    assert_eq!(
+        (s, e["error"].as_str()),
+        (409, Some("unknown_config_version"))
+    );
+    let (s, e) = call(
+        &app,
+        post("/investigations", k, &json!({"config_version": "x"})).to_request(),
+    )
+    .await;
+    assert_eq!((s, e["path"].as_str()), (422, Some("project_id")));
+
+    let (_, list) = call(&app, get("/investigations", k).to_request()).await;
+    let row = &list["investigations"][0];
+    let pid = row["project_id"].as_str().unwrap().to_string();
+    assert_eq!(row["id"], inv.as_str());
+    assert_eq!(row["overrides"], json!({"free": ["C"]}));
+    assert_eq!(row["status"], "open");
+
+    let body = json!({"project_id": pid, "config_version": version(), "meta": {}});
+    let req = || post("/investigations", k, &body).insert_header(("idempotency-key", "create-1"));
+    let (s1, a) = call(&app, req().to_request()).await;
+    let (s2, b) = call(&app, req().to_request()).await;
+    assert_eq!((s1, s2), (201, 200));
+    assert_eq!(a["id"], b["id"]);
+
+    let (_, recs) = call(
+        &app,
+        get(&format!("/investigations/{inv}/records"), k).to_request(),
+    )
+    .await;
+    let first = &recs["records"][0];
+    assert_eq!(
+        (first["seq"].as_i64(), first["kind"].as_str()),
+        (Some(0), Some("investigation"))
+    );
+    assert_eq!(first["prev_hash"], GENESIS);
+    assert_eq!(first["payload"]["name"], "thermal");
+    assert_eq!(first["payload"]["project_id"], pid.as_str());
+    assert_eq!(
+        sorted_keys(first),
+        [
+            "hash",
+            "id",
+            "investigation",
+            "kind",
+            "payload",
+            "prev_hash",
+            "seq",
+            "ts"
+        ],
+        "exactly the SDK Record fields"
+    );
+    assert_eq!(
+        call(
+            &app,
+            get("/investigations/inv_nope/records", k).to_request()
+        )
+        .await
+        .0,
+        404
+    );
+}
+
+#[actix_web::test]
+async fn appends_are_idempotent_validated_and_routed_by_kind() {
+    let f = fixture();
+    let app = app!(f.store);
+    let (key, inv) = seeded(&app, &f.store).await;
+    let k = Some(key.as_str());
+    let runs = format!("/investigations/{inv}/runs");
+    let run = env("abc", "run", json!({"loss": 1.0}));
+    let (s1, r1) = call(
+        &app,
+        post(&runs, k, &run)
+            .insert_header(("idempotency-key", "abc"))
+            .to_request(),
+    )
+    .await;
+    let (s2, r2) = call(
+        &app,
+        post(&runs, k, &run)
+            .insert_header(("idempotency-key", "abc"))
+            .to_request(),
+    )
+    .await;
+    assert_eq!(
+        (s1, s2),
+        (201, 200),
+        "first write creates, replay returns the stored record"
+    );
+    assert_eq!(r1, r2);
+    assert_eq!(r1["record"]["seq"], 1);
+
+    let (s, e) = call(
+        &app,
+        post(&runs, k, &env("abc", "run", json!({"loss": 2.0}))).to_request(),
+    )
+    .await;
+    assert_eq!(
+        (s, e["error"].as_str()),
+        (409, Some("idempotency_conflict"))
+    );
+    let (s, _) = call(
+        &app,
+        post(&runs, k, &env("x1", "run", json!({})))
+            .insert_header(("idempotency-key", "other"))
+            .to_request(),
+    )
+    .await;
+    assert_eq!(s, 400, "Idempotency-Key must equal the envelope id");
+    let (s, e) = call(
+        &app,
+        post(&runs, k, &env("x2", "step", json!({}))).to_request(),
+    )
+    .await;
+    assert_eq!(
+        (s, e["error"].as_str()),
+        (400, Some("invalid_request")),
+        "kind must match the route"
+    );
+    let (s, e) = call(
+        &app,
+        post(
+            &format!("/investigations/{inv}/measurements"),
+            k,
+            &env("x3", "measurement", json!({"version": 1})),
+        )
+        .to_request(),
+    )
+    .await;
+    assert_eq!((s, e["path"].as_str()), (422, Some("payload.observation")));
+    let (s, e) = call(
+        &app,
+        post(
+            &format!("/investigations/{inv}/outcome"),
+            k,
+            &env("x4", "outcome", json!({})),
+        )
+        .to_request(),
+    )
+    .await;
+    assert_eq!((s, e["path"].as_str()), (422, Some("payload.status")));
+    let (s, e) = call(
+        &app,
+        post(
+            &runs,
+            k,
+            &json!({"id": "x5", "kind": "run", "payload": [1]}),
+        )
+        .to_request(),
+    )
+    .await;
+    assert_eq!((s, e["path"].as_str()), (422, Some("payload")));
+    let (s, _) = call(&app, post(&runs, k, &json!("not an object")).to_request()).await;
+    assert_eq!(s, 422);
+    let bad_json = post(&runs, k, &json!({})).set_payload("{nope");
+    assert_eq!(call(&app, bad_json.to_request()).await.0, 400);
+    let (s, _) = call(
+        &app,
+        post(
+            "/investigations/inv_nope/runs",
+            k,
+            &env("x6", "run", json!({})),
+        )
+        .to_request(),
+    )
+    .await;
+    assert_eq!(s, 404);
+    let big = env("x7", "run", json!({"blob": "x".repeat(1 << 20)}));
+    assert_eq!(call(&app, post(&runs, k, &big).to_request()).await.0, 413);
+
+    for (route, kind, payload) in [
+        (
+            "measurements",
+            "measurement",
+            json!({"version": 2, "observation": {"experiment": "step"}}),
+        ),
+        ("steps", "step", json!({"action": "fit"})),
+        ("outcome", "outcome", json!({"status": "validated"})),
+    ] {
+        let (s, r) = call(
+            &app,
+            post(
+                &format!("/investigations/{inv}/{route}"),
+                k,
+                &env(&format!("ok-{kind}"), kind, payload),
+            )
+            .to_request(),
+        )
+        .await;
+        assert_eq!(s, 201, "{route}: {r}");
+    }
+    let (_, only) = call(
+        &app,
+        get(&format!("/investigations/{inv}/records?kind=run"), k).to_request(),
+    )
+    .await;
+    assert_eq!(only["records"].as_array().unwrap().len(), 1);
+    let (s, e) = call(
+        &app,
+        get(&format!("/investigations/{inv}/records?kind=bogus"), k).to_request(),
+    )
+    .await;
+    assert_eq!((s, e["path"].as_str()), (422, Some("kind")));
+    let (_, list) = call(&app, get("/investigations", k).to_request()).await;
+    assert_eq!(list["investigations"][0]["status"], "validated");
+    assert_eq!(list["investigations"][0]["budget_used"], 1);
+}
+
+#[actix_web::test]
+async fn proposal_state_machine() {
+    let f = fixture();
+    let app = app!(f.store);
+    let (key, inv) = seeded(&app, &f.store).await;
+    let k = Some(key.as_str());
+    let base = format!("/investigations/{inv}/proposals");
+    let ev = |id: &str, pid: &str, event: &str| {
+        env(
+            id,
+            "proposal",
+            json!({"proposal_id": pid, "event": event, "by": "test", "measurement_version": 3}),
+        )
+    };
+
+    let (s, _) = call(
+        &app,
+        post(
+            &format!("{base}/p1/approvals"),
+            k,
+            &ev("e0", "p1", "approved"),
+        )
+        .to_request(),
+    )
+    .await;
+    assert_eq!(s, 404, "approving an unknown proposal");
+    assert_eq!(
+        call(
+            &app,
+            post(&base, k, &env("e1", "proposal", proposed("p1"))).to_request()
+        )
+        .await
+        .0,
+        201
+    );
+    let (s, e) = call(
+        &app,
+        post(&base, k, &env("e1b", "proposal", proposed("p1"))).to_request(),
+    )
+    .await;
+    assert_eq!((s, e["error"].as_str()), (409, Some("proposal_exists")));
+    let (s, p) = call(&app, get(&format!("{base}/p1"), k).to_request()).await;
+    assert_eq!(
+        (s, p["status"].as_str(), p["experiment"].as_str()),
+        (200, Some("proposed"), Some("sine"))
+    );
+    assert_eq!(
+        call(&app, get(&format!("{base}/p404"), k).to_request())
+            .await
+            .0,
+        404
+    );
+
+    let (s, e) = call(
+        &app,
+        post(
+            &format!("{base}/p1/data"),
+            k,
+            &ev("e2", "p1", "data_attached"),
+        )
+        .to_request(),
+    )
+    .await;
+    assert_eq!(
+        (s, e["error"].as_str()),
+        (409, Some("conflict")),
+        "data before approval"
+    );
+    let (s, e) = call(
+        &app,
+        post(
+            &format!("{base}/p1/approvals"),
+            k,
+            &ev("e3", "p1", "data_attached"),
+        )
+        .to_request(),
+    )
+    .await;
+    assert_eq!(
+        (s, e["path"].as_str()),
+        (422, Some("payload.event")),
+        "approvals takes decisions only"
+    );
+    let (s, e) = call(
+        &app,
+        post(
+            &format!("{base}/p1/approvals"),
+            k,
+            &ev("e4", "p2", "approved"),
+        )
+        .to_request(),
+    )
+    .await;
+    assert_eq!((s, e["path"].as_str()), (422, Some("payload.proposal_id")));
+    let edited_without = env(
+        "e5",
+        "proposal",
+        json!({"proposal_id": "p1", "event": "edited"}),
+    );
+    let (s, e) = call(
+        &app,
+        post(&format!("{base}/p1/approvals"), k, &edited_without).to_request(),
+    )
+    .await;
+    assert_eq!((s, e["path"].as_str()), (422, Some("payload.settings")));
+
+    let edited = env(
+        "e6",
+        "proposal",
+        json!({"proposal_id": "p1", "event": "edited", "settings": {"f": 0.5}}),
+    );
+    let (s1, a) = call(
+        &app,
+        post(&format!("{base}/p1/approvals"), k, &edited).to_request(),
+    )
+    .await;
+    let (s2, b) = call(
+        &app,
+        post(&format!("{base}/p1/approvals"), k, &edited).to_request(),
+    )
+    .await;
+    assert_eq!(
+        (s1, s2),
+        (201, 200),
+        "a replayed decision is returned, not refused"
+    );
+    assert_eq!(a, b);
+    let (s, e) = call(
+        &app,
+        post(
+            &format!("{base}/p1/approvals"),
+            k,
+            &ev("e7", "p1", "rejected"),
+        )
+        .to_request(),
+    )
+    .await;
+    assert_eq!(
+        (s, e["error"].as_str()),
+        (409, Some("conflict")),
+        "a second decision"
+    );
+    let (_, p) = call(&app, get(&format!("{base}/p1"), k).to_request()).await;
+    assert_eq!(
+        (p["status"].as_str(), &p["settings"]),
+        (Some("edited"), &json!({"f": 0.5}))
+    );
+    let (_, list) = call(&app, get("/investigations", k).to_request()).await;
+    assert_eq!(list["investigations"][0]["status"], "awaiting_data");
+
+    assert_eq!(
+        call(
+            &app,
+            post(
+                &format!("{base}/p1/data"),
+                k,
+                &ev("e8", "p1", "data_attached")
+            )
+            .to_request()
+        )
+        .await
+        .0,
+        201
+    );
+    let (s, _) = call(
+        &app,
+        post(
+            &format!("{base}/p1/data"),
+            k,
+            &ev("e9", "p1", "data_attached"),
+        )
+        .to_request(),
+    )
+    .await;
+    assert_eq!(s, 409, "data is attached once");
+    let (_, p) = call(&app, get(&format!("{base}/p1"), k).to_request()).await;
+    assert_eq!(p["status"], "data_attached");
+
+    // The SDK withdraws through /proposals; withdrawn is terminal.
+    call(
+        &app,
+        post(&base, k, &env("w1", "proposal", proposed("p2"))).to_request(),
+    )
+    .await;
+    assert_eq!(
+        call(
+            &app,
+            post(&base, k, &ev("w2", "p2", "withdrawn")).to_request()
+        )
+        .await
+        .0,
+        201
+    );
+    assert_eq!(
+        call(
+            &app,
+            post(
+                &format!("{base}/p2/approvals"),
+                k,
+                &ev("w3", "p2", "approved")
+            )
+            .to_request()
+        )
+        .await
+        .0,
+        409
+    );
+    let (s, e) = call(
+        &app,
+        post(&base, k, &ev("w4", "p2", "approved")).to_request(),
+    )
+    .await;
+    assert_eq!(
+        (s, e["path"].as_str()),
+        (422, Some("payload.event")),
+        "/proposals does not take decisions"
+    );
+}
+
+#[actix_web::test]
+async fn outlook_is_validated_and_passed_through_untouched() {
+    let f = fixture();
+    let app = app!(f.store);
+    let (key, inv) = seeded(&app, &f.store).await;
+    let k = Some(key.as_str());
+    let base = format!("/investigations/{inv}/proposals");
+    let outlook = json!({
+        "axes": [{"name": "f", "values": [0.1, 0.2, 0.4]}, {"name": "amp", "values": [1.0, 2.0]}],
+        "score": [0.9, 0.8, 0.7, 0.6, 0.5, 0.4],
+        "after": {"C": [1.1, 1.2, 1.3, 1.4, 1.5, 1.6], "k": [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]}
+    });
+    let mut payload = proposed("p1");
+    payload["outlook"] = outlook.clone();
+    let (s, r) = call(
+        &app,
+        post(&base, k, &env("o1", "proposal", payload)).to_request(),
+    )
+    .await;
+    assert_eq!(s, 201, "{r}");
+    assert_eq!(r["record"]["payload"]["outlook"], outlook);
+
+    // Edits stay inside the outlook's axes; other settings cannot move.
+    let edit = |id: &str, settings: Value| {
+        env(
+            id,
+            "proposal",
+            json!({"proposal_id": "p1", "event": "edited", "settings": settings}),
+        )
+    };
+    let decide = format!("{base}/p1/approvals");
+    let (s, e) = call(
+        &app,
+        post(&decide, k, &edit("ed1", json!({"f": 0.5}))).to_request(),
+    )
+    .await;
+    assert_eq!(
+        (s, e["path"].as_str()),
+        (422, Some("payload.settings.f")),
+        "above the f axis: {e}"
+    );
+    let (s, e) = call(
+        &app,
+        post(&decide, k, &edit("ed2", json!({"f": 0.2, "amp": 9.0}))).to_request(),
+    )
+    .await;
+    assert_eq!(
+        (s, e["path"].as_str()),
+        (422, Some("payload.settings.amp")),
+        "amp is not an axis here"
+    );
+    let (s, e) = call(
+        &app,
+        post(&decide, k, &edit("ed3", json!({"f": "fast"}))).to_request(),
+    )
+    .await;
+    assert_eq!((s, e["path"].as_str()), (422, Some("payload.settings.f")));
+    let (s, r) = call(
+        &app,
+        post(&decide, k, &edit("ed4", json!({"f": 0.4}))).to_request(),
+    )
+    .await;
+    assert_eq!(s, 201, "inclusive upper bound: {r}");
+    let (_, p) = call(&app, get(&format!("{base}/p1"), k).to_request()).await;
+    assert_eq!(
+        (p["status"].as_str(), &p["settings"]),
+        (Some("edited"), &json!({"f": 0.4}))
+    );
+
+    let mut short = proposed("p2");
+    short["outlook"] = json!({"axes": [{"name": "f", "values": [0.1, 0.2, 0.4]}], "score": [0.9, 0.8], "after": {"C": [1, 2, 3]}});
+    let (s, e) = call(
+        &app,
+        post(&base, k, &env("o2", "proposal", short)).to_request(),
+    )
+    .await;
+    assert_eq!(
+        (s, e["error"].as_str(), e["path"].as_str()),
+        (422, Some("invalid_payload"), Some("payload.outlook.score"))
+    );
+    let mut after = proposed("p3");
+    after["outlook"] = json!({"axes": [{"name": "f", "values": [0.1, 0.2]}], "score": [0.9, 0.8], "after": {"C": [1]}});
+    let (s, e) = call(
+        &app,
+        post(&base, k, &env("o3", "proposal", after)).to_request(),
+    )
+    .await;
+    assert_eq!(
+        (s, e["path"].as_str()),
+        (422, Some("payload.outlook.after.C"))
+    );
+}
+
+#[actix_web::test]
+async fn hash_chain_is_continuous_and_matches_the_sdk_rule() {
+    let f = fixture();
+    let app = app!(f.store);
+    let (key, inv) = seeded(&app, &f.store).await;
+    let k = Some(key.as_str());
+    for i in 0..5 {
+        let p = json!({"i": i, "x": 0.1 * i as f64, "tiny": 1e-7, "name": "naïve"});
+        call(
+            &app,
+            post(
+                &format!("/investigations/{inv}/steps"),
+                k,
+                &env(&format!("s{i}"), "step", p),
+            )
+            .to_request(),
+        )
+        .await;
+    }
+    let (_, recs) = call(
+        &app,
+        get(&format!("/investigations/{inv}/records"), k).to_request(),
+    )
+    .await;
+    let mut prev = GENESIS.to_string();
+    for (i, r) in recs["records"].as_array().unwrap().iter().enumerate() {
+        assert_eq!(r["seq"], i as i64);
+        assert_eq!(r["prev_hash"], prev.as_str());
+        let h = chain_hash(
+            &prev,
+            r["id"].as_str().unwrap(),
+            r["kind"].as_str().unwrap(),
+            &r["payload"],
+        );
+        assert_eq!(r["hash"], h.as_str());
+        prev = h;
+    }
+    let report = f.store.db_check(false).await.unwrap();
+    assert!(report.ok(), "{report:?}");
+    assert_eq!(report.records, 6);
+}
+
+#[actix_web::test]
+async fn workspace_is_one_snapshot_with_a_cursor() {
+    let f = fixture();
+    let app = app!(f.store);
+    let (key, inv) = seeded(&app, &f.store).await;
+    call(
+        &app,
+        post(
+            &format!("/investigations/{inv}/proposals"),
+            Some(&key),
+            &env("p", "proposal", proposed("p1")),
+        )
+        .to_request(),
+    )
+    .await;
+    let (s, ws) = call(&app, get("/workspace", Some(&key)).to_request()).await;
+    assert_eq!(s, 200);
+    assert_eq!(ws["cursor"], 2);
+    assert_eq!(ws["projects"].as_array().unwrap().len(), 1);
+    assert_eq!(ws["config_versions"][0]["config"]["x"], 1.5);
+    assert_eq!(ws["investigations"][0]["status"], "awaiting_approval");
+    assert_eq!(ws["proposals"][0]["proposal_id"], "p1");
+    assert_eq!(ws["records"].as_array().unwrap().len(), 2);
+}
+
+#[actix_web::test]
+async fn stream_resumes_after_a_cursor_then_goes_live() {
+    let f = fixture();
+    let app = app!(f.store);
+    let (key, inv) = seeded(&app, &f.store).await; // gseq 1: the investigation record
+    let k = Some(key.as_str());
+    for i in 0..3 {
+        call(
+            &app,
+            post(
+                &format!("/investigations/{inv}/runs"),
+                k,
+                &env(&format!("r{i}"), "run", json!({"i": i})),
+            )
+            .to_request(),
+        )
+        .await;
+    } // gseq 2, 3, 4
+
+    let resp = test::call_service(&app, get("/stream?after=2", k).to_request()).await;
+    assert_eq!(resp.status().as_u16(), 200);
+    assert_eq!(
+        resp.headers().get("content-type").unwrap(),
+        "text/event-stream"
+    );
+    let mut body = resp.into_body();
+    let backlog = sse_records(&mut body, 2).await;
+    assert_eq!(backlog.iter().map(|(g, _)| *g).collect::<Vec<_>>(), [3, 4]);
+    assert_eq!(backlog[0].1["id"], "r1");
+    assert!(
+        backlog[0].1.get("gseq").is_none(),
+        "records keep the SDK's 8 fields"
+    );
+
+    call(
+        &app,
+        post(
+            &format!("/investigations/{inv}/runs"),
+            k,
+            &env("live", "run", json!({})),
+        )
+        .to_request(),
+    )
+    .await;
+    let live = sse_records(&mut body, 1).await;
+    assert_eq!((live[0].0, live[0].1["id"].as_str()), (5, Some("live")));
+
+    // EventSource reconnects with Last-Event-ID; it wins over a lower `after`.
+    let resumed = test::call_service(
+        &app,
+        get("/stream?after=0", k)
+            .insert_header(("last-event-id", "4"))
+            .to_request(),
+    )
+    .await;
+    let mut body = resumed.into_body();
+    let again = sse_records(&mut body, 1).await;
+    assert_eq!(again[0].0, 5);
+
+    // The browser may stream without a key.
+    let resp = test::call_service(
+        &app,
+        browser(get("/stream?after=4", None), false).to_request(),
+    )
+    .await;
+    assert_eq!(resp.status().as_u16(), 200);
+}
+
+#[actix_web::test]
+async fn appends_return_their_cursor_and_the_stream_filters_by_investigation() {
+    let f = fixture();
+    let app = app!(f.store);
+    let (key, a) = seeded(&app, &f.store).await; // gseq 1
+    let k = Some(key.as_str());
+    let (_, list) = call(&app, get("/investigations", k).to_request()).await;
+    let pid = list["investigations"][0]["project_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let (_, b) = call(
+        &app,
+        post(
+            "/investigations",
+            k,
+            &json!({"project_id": pid, "config_version": version()}),
+        )
+        .to_request(),
+    )
+    .await;
+    let b = b["id"].as_str().unwrap().to_string(); // gseq 2
+    let (s, r) = call(
+        &app,
+        post(
+            &format!("/investigations/{a}/runs"),
+            k,
+            &env("a1", "run", json!({})),
+        )
+        .to_request(),
+    )
+    .await;
+    assert_eq!((s, r["gseq"].as_i64()), (201, Some(3)));
+    assert!(r["record"].get("gseq").is_none());
+    let (s, again) = call(
+        &app,
+        post(
+            &format!("/investigations/{a}/runs"),
+            k,
+            &env("a1", "run", json!({})),
+        )
+        .to_request(),
+    )
+    .await;
+    assert_eq!(
+        (s, again["gseq"].as_i64()),
+        (200, Some(3)),
+        "a replay reports the stored cursor"
+    );
+    call(
+        &app,
+        post(
+            &format!("/investigations/{b}/runs"),
+            k,
+            &env("b1", "run", json!({})),
+        )
+        .to_request(),
+    )
+    .await; // 4
+    call(
+        &app,
+        post(
+            &format!("/investigations/{a}/runs"),
+            k,
+            &env("a2", "run", json!({})),
+        )
+        .to_request(),
+    )
+    .await; // 5
+
+    let resp = test::call_service(
+        &app,
+        get(&format!("/stream?after=0&investigation={b}"), k).to_request(),
+    )
+    .await;
+    let mut body = resp.into_body();
+    let backlog = sse_records(&mut body, 2).await;
+    assert_eq!(backlog.iter().map(|(g, _)| *g).collect::<Vec<_>>(), [2, 4]);
+    call(
+        &app,
+        post(
+            &format!("/investigations/{a}/runs"),
+            k,
+            &env("a3", "run", json!({})),
+        )
+        .to_request(),
+    )
+    .await; // 6, filtered out
+    call(
+        &app,
+        post(
+            &format!("/investigations/{b}/runs"),
+            k,
+            &env("b2", "run", json!({})),
+        )
+        .to_request(),
+    )
+    .await; // 7
+    let live = sse_records(&mut body, 1).await;
+    assert_eq!((live[0].0, live[0].1["id"].as_str()), (7, Some("b2")));
+}
+
+#[actix_web::test]
+async fn unknown_routes_are_json_404() {
+    let f = fixture();
+    let app = app!(f.store);
+    let (s, e) = call(&app, get("/nope", None).to_request()).await;
+    assert_eq!((s, e["error"].as_str()), (404, Some("not_found")));
+}

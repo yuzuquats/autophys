@@ -32,6 +32,7 @@ async fn start(name: &str) -> Running {
     let config = AppConfig {
         project_root: PathBuf::from(env!("CARGO_MANIFEST_DIR")),
         web_root: fixture(name),
+        store: None,
     };
     let info = BuildInfo {
         version: "0.1.0".into(),

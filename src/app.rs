@@ -11,6 +11,8 @@ use tento_web::{
     compiler::{Action, Compiler},
 };
 
+use crate::store::Store;
+
 pub const APP_ID: &str = "autophys";
 
 /// The tento tree this app builds against, relative to the project root: the
@@ -52,6 +54,9 @@ pub struct AppConfig {
     /// The route tree that is served: written by a build, or prebuilt by
     /// `autophys build-web` and passed as `serve --web-root`.
     pub web_root: PathBuf,
+    /// The record store behind `/api/v1`. `None` (a bare `build-web`) leaves
+    /// `/api/v1/*` on the JSON 404.
+    pub store: Option<Store>,
 }
 
 #[derive(Serialize)]
@@ -82,6 +87,7 @@ pub fn domain(config: &AppConfig, info: BuildInfo) -> DomainConfig {
         .build();
     let info = web::Data::new(info);
     let shell = web::Data::new(Shell(config.web_root.join("routes/index.anon.html")));
+    let store = config.store.clone();
 
     DomainConfig::builder()
         .hostname("localhost")
@@ -91,7 +97,7 @@ pub fn domain(config: &AppConfig, info: BuildInfo) -> DomainConfig {
             cfg.app_data(info.clone());
             cfg.app_data(shell.clone());
             cfg.route("/api/healthz", web::get().to(healthz));
-            configure_api_v1(cfg);
+            configure_api_v1(cfg, store.as_ref());
             // Anything else under /api is a JSON 404, never the page.
             cfg.route("/api", web::route().to(api_not_found));
             cfg.route("/api/{tail:.*}", web::route().to(api_not_found));
@@ -106,13 +112,17 @@ pub fn domain(config: &AppConfig, info: BuildInfo) -> DomainConfig {
 // ---------------------------------------------------------------------------
 // HOOK: /api/v1
 //
-// The store lands here: `src/store/`, `src/ingest.rs` and `src/http.rs` (owned
-// by the store agent) replace this body with `crate::http::configure(cfg, …)`,
-// registering every `/api/v1` route and the SSE stream. It runs after
-// `/api/healthz` and before the `/api` JSON 404 catch-all, so routes added
-// here win over the catch-all. Until then `/api/v1/*` answers that 404.
+// `crate::http::configure` registers every `/api/v1` route and the SSE stream
+// (`src/http.rs`; decisions in store.md). It runs after `/api/healthz` and
+// before the `/api` JSON 404 catch-all, so its scope wins over the catch-all;
+// unknown `/api/v1/*` paths get the scope's own JSON 404. Without a store
+// (`build-web`) nothing is registered and the catch-all answers.
 // ---------------------------------------------------------------------------
-fn configure_api_v1(_cfg: &mut web::ServiceConfig) {}
+fn configure_api_v1(cfg: &mut web::ServiceConfig, store: Option<&Store>) {
+    if let Some(store) = store {
+        crate::http::configure(cfg, store.clone());
+    }
+}
 
 async fn healthz(info: web::Data<BuildInfo>) -> HttpResponse {
     HttpResponse::Ok().json(Health {

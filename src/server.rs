@@ -14,11 +14,12 @@ use tento_dirs::AppDirs;
 use tento_web::{BuildState, Bundler, DomainConfigLike, EsbuildClient, TentoWeb, Webapp};
 
 use crate::app::{APP_ID, AppConfig, BuildInfo, TENTO, domain};
+use crate::store::{Options, Store};
 
 /// The default listen address: loopback, port 4794 (decision AP-3).
 pub const DEFAULT_ADDR: &str = "127.0.0.1:4794";
 
-pub const USAGE: &str = "usage: autophys serve [--addr 127.0.0.1:4794] [--web-root DIR]
+pub const USAGE: &str = "usage: autophys serve [--addr 127.0.0.1:4794] [--web-root DIR] [--db FILE]
        autophys build-web [--out DIR]
        autophys pair | keys | db      (not yet available: they land with the store)";
 
@@ -43,22 +44,27 @@ pub struct ServeConfig {
     pub addr: SocketAddr,
     /// A prebuilt route tree (`build-web` output). `None` bundles from source.
     pub web_root: Option<PathBuf>,
+    /// The record store's SQLite file. `None` means [`default_db`].
+    pub db: Option<PathBuf>,
 }
 
-/// `serve` flags: `--addr` / `AUTOPHYS_ADDR` (default [`DEFAULT_ADDR`]) and
-/// `--web-root` / `AUTOPHYS_WEB_ROOT`. Flags win over the environment.
+/// `serve` flags: `--addr` / `AUTOPHYS_ADDR` (default [`DEFAULT_ADDR`]),
+/// `--web-root` / `AUTOPHYS_WEB_ROOT` and `--db` / `AUTOPHYS_DB` (default
+/// [`default_db`]). Flags win over the environment.
 pub fn parse_serve(
     args: impl IntoIterator<Item = String>,
     env: impl Fn(&str) -> Option<String>,
 ) -> Result<ServeConfig, String> {
     let mut addr = env("AUTOPHYS_ADDR");
     let mut web_root = env("AUTOPHYS_WEB_ROOT").filter(|v| !v.is_empty());
+    let mut db = env("AUTOPHYS_DB").filter(|v| !v.is_empty());
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         let (key, inline) = split_flag(&arg);
         match key.as_str() {
             "--addr" => addr = Some(flag_value(&key, inline, &mut args)?),
             "--web-root" => web_root = Some(flag_value(&key, inline, &mut args)?),
+            "--db" => db = Some(flag_value(&key, inline, &mut args)?),
             other => return Err(format!("unknown argument {other:?}\n{USAGE}")),
         }
     }
@@ -67,7 +73,11 @@ pub fn parse_serve(
     if let Some(root) = &web_root {
         check_route_tree(root)?;
     }
-    Ok(ServeConfig { addr, web_root })
+    Ok(ServeConfig {
+        addr,
+        web_root,
+        db: db.map(PathBuf::from),
+    })
 }
 
 /// `build-web` flags: `--out DIR` (default [`default_web_root`]).
@@ -174,6 +184,7 @@ pub async fn build_web(project_root: PathBuf, out: PathBuf) -> Result<PathBuf> {
     let config = AppConfig {
         project_root,
         web_root: out.clone(),
+        store: None,
     };
     webapp(&config, BuildInfo::current(), true)?
         .build_beta()
@@ -183,6 +194,16 @@ pub async fn build_web(project_root: PathBuf, out: PathBuf) -> Result<PathBuf> {
         eprintln!("autophys: warning: {warning}");
     }
     Ok(out)
+}
+
+/// The record store's file: `AUTOPHYS_DB`, else the app's tento data dir
+/// (`~/.local/share/tento/autophys/autophys.db`). `serve` and the `pair`,
+/// `keys` and `db` commands share it.
+pub fn default_db() -> Result<PathBuf> {
+    if let Some(db) = std::env::var_os("AUTOPHYS_DB").filter(|v| !v.is_empty()) {
+        return Ok(PathBuf::from(db));
+    }
+    Ok(AppDirs::resolve(APP_ID)?.data.join("autophys.db"))
 }
 
 /// tento-web returns `Ok` from a build whose bundle reported errors; the
@@ -271,12 +292,23 @@ pub async fn run(serve_config: ServeConfig) -> Result<()> {
     let listener = std::net::TcpListener::bind(serve_config.addr)
         .with_context(|| format!("bind {}", serve_config.addr))?;
     let build = serve_config.web_root.is_none();
+    let db = match serve_config.db {
+        Some(db) => db,
+        None => default_db()?,
+    };
+    let options = Options {
+        verification_url: format!("http://{}/pair", listener.local_addr()?),
+        ..Options::default()
+    };
+    let store = Store::open_with(&db, options)
+        .with_context(|| format!("open the store {}", db.display()))?;
     let config = AppConfig {
         project_root: project_root(),
         web_root: match serve_config.web_root {
             Some(root) => root,
             None => default_web_root()?,
         },
+        store: Some(store),
     };
     let info = BuildInfo::current();
     let webapp = Arc::new(webapp(&config, info.clone(), build)?);
@@ -299,12 +331,13 @@ pub async fn run(serve_config: ServeConfig) -> Result<()> {
         None
     };
     eprintln!(
-        "autophys {} ({}, tento {}) serving {} {} on http://{}",
+        "autophys {} ({}, tento {}) serving {} {} and store {} on http://{}",
         info.version,
         info.commit,
         info.tento_commit,
         if build { "dev build" } else { "prebuilt" },
         config.web_root.display(),
+        db.display(),
         listener.local_addr()?,
     );
     serve(http_server(listener, webapp)?, termination()).await?;
@@ -360,6 +393,9 @@ mod tests {
         assert!(parse_serve(["--addr".into(), "0.0.0.0:2".into()], env).is_err());
         assert!(parse_serve(["--bogus".into()], env).is_err());
         assert!(parse_serve(["--addr".into()], env).is_err());
+        assert_eq!(from_env.db, None);
+        let with_db = parse_serve(["--db=/tmp/a.db".to_string()], env).unwrap();
+        assert_eq!(with_db.db.as_deref(), Some(Path::new("/tmp/a.db")));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
