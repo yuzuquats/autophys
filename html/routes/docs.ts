@@ -27,6 +27,7 @@ import { pythonTokenizer } from "@tento-ui/components/code/languages/python";
 import { tomlTokenizer } from "@tento-ui/components/code/languages/toml";
 import { rustTokenizer } from "./rust-tokenizer.ts";
 import { inlineCodeTokenizer } from "./inline-code.ts";
+import { MUSE_PEEK_CSS, museSectionPeek } from "./muse-peek.ts";
 import { LispExampleView } from "@tento-ui/components/lisp-example/lisp-example-view";
 import { ReviewFence } from "@tento-ui/components/review-notes/review-fence";
 import { LOOPS_FENCE, LoopsFigureView } from "./loops-figure.ts";
@@ -568,7 +569,7 @@ export function landingDocs(): { onStage(stage: Cookbook.Stage): void; mount(): 
     mount() {
       if (!InstanceUrl.hasStaticBase()) InstanceUrl.setStaticBase("");
       const style = document.createElement("style");
-      style.textContent = CSS;
+      style.textContent = CSS + MUSE_PEEK_CSS;
       document.head.append(style);
       const doc = Documentation.make();
       const inlineCode = new CSSStyleSheet();
@@ -579,6 +580,7 @@ export function landingDocs(): { onStage(stage: Cookbook.Stage): void; mount(): 
       if (footer) footer.before(section);
       else document.body.append(section);
       void doc.bind({ markdown: DOCS_MARKDOWN, nodeViews: NODE_VIEWS, inlineCodeLanguage: "autophys-inline" });
+      museSectionPeek(section, doc);
     },
   };
 }
