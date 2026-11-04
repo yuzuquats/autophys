@@ -6,7 +6,6 @@
 import type * as Types from "./types.ts";
 import { cookbookClasses, mountHost, placeholderDeck as placeholder, type ShellOptions } from "./shell.ts";
 import type * as DeckTypes from "./deck-data.ts";
-import type * as DocsTypes from "./docs.ts";
 import { shellSteps as steps, type TutorialStep } from "./tutorial.ts";
 import {
   describeHealth as describe,
@@ -58,13 +57,6 @@ export namespace Cookbook {
     export type Cta = DeckTypes.Cta;
     /** Six neutral slides, one of each body kind; slide one carries the title. */
     export const placeholderDeck = placeholder;
-  }
-
-  /** The landing's single documentation page (Options.docs). */
-  export namespace Docs {
-    export type Page = DocsTypes.DocsPage;
-    export type Section = DocsTypes.DocsSection;
-    export type Block = DocsTypes.DocsBlock;
   }
 
   export namespace Tutorial {
