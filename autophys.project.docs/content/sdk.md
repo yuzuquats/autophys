@@ -1,6 +1,6 @@
 # The Python SDK: moved from hacks-site, renamed autophys, speaking /api/v1
 
-Status: SDK page, rev 2, 2026-11-04. Python and Rust now share format-1 Display declarations and canonical bench manifest bytes; see [display-manifest.md](display-manifest.md) for the contract and scoped validation. Owner: autophys/api (thread 755eea02). It covers the SDK half of phase 5 in
+Status: SDK page, rev 2, 2026-11-04. MQ-5 battery cases and test-hour budgets are implemented in both SDKs; the Rust landing is independently reviewed. Python and Rust now share format-1 Display declarations and canonical bench manifest bytes; see [display-manifest.md](display-manifest.md) for the contract and scoped validation. Owner: autophys/api (thread 755eea02). It covers the SDK half of phase 5 in
 tento's `projects/autophys.project.docs/content/architecture.md` ("SDK
 retargeted to `/api/v1` (renamed to autophys)"). That means the package at
 `autophys/sdks/python`, what changed in the move, the decisions it carries,
@@ -241,7 +241,7 @@ then M-4.
 | MQ-2 | Live Spark/Wonder token budget | Replay-only for now. No live Meta API or `muse exec` calls; the budget question is deferred. | Operator, 2026-11-04. No number or transcript may be labelled Spark or Wonder until a live run happens under an approved budget. | enforced: `bench --policy reason` refuses live calls without `--replay` or `AUTOPHYS_ALLOW_LIVE_REASON=1` |
 | MQ-3 | Probe the `muse` CLI on the laptop | Allowed, once, over ssh on macbookpro-laptop: `muse --version`, `muse exec --help`, `muse skills --help`, and `muse skills validate` on a temporary copy of our SKILL.md. | Operator, 2026-11-04. No installs, settings changes or real `muse exec`; stop if validate needs the network or the account. | SKILL.md format settled: the MCP agent ran the probe and recorded it in muse-plugin.md. `skills validate` on Muse Code 1.4.14 is valid with no diagnostics for sha256 `cd65c7b3...e0e35a`, which is the committed `playbooks/default/SKILL.md`, so the probe is not repeated. Still open for M-5: the `muse exec --json` event schema from a real model. The echo provider (`--provider echo`, zero tokens) could capture it, but an echo `muse exec` is outside MQ-3's authorization, so M-5 starts against a fake `muse` built from `exec --help`. |
 | MQ-4 | Research-loop score (M-9) | Lexicographic: the count of correct status-and-diagnosis results first, then lower mean log parameter error, then lower cost as the tiebreak. Every component is logged so runs can be re-scored. | Operator, 2026-11-04. | to implement in M-9 |
-| MQ-5 | Who owns the battery case suite | autophys/py owns all of it: R0/R1/C1 cases, an experiment catalog costed in test hours, a short-data non-identifiable case, goldens and the experiment-cost budget in bench. | Operator, 2026-11-04. sdks/python keeps a single writer; a test-hour budget field is a new config version that autophys/rs mirrors. About 3-4 h agent time, after batch 2 and before M-4. | planned |
+| MQ-5 | Who owns the battery case suite | autophys/py owns all of it: R0/R1/C1 cases, an experiment catalog costed in test hours, a short-data non-identifiable case, goldens and the experiment-cost budget in bench. | Operator, 2026-11-04. sdks/python keeps a single writer; a test-hour budget field is a new config version that autophys/rs mirrors. About 3-4 h agent time, after batch 2 and before M-4. | implemented in Python (7e20524) and Rust (f5ad648); reviewed, with null-cost validation fixed in 11f2787 |
 | MQ-6 | 402 handling | Stop on the first 402 everywhere: no retry; the investigation records the step, ends `failed` with reason `billing: provider refused the call (HTTP 402)` and raises `BudgetError`; bench (including `--jobs` pools) and research stop the whole run. | Operator, 2026-11-04, choosing the recommendation over keeping the earlier behaviour, which made three 402 calls per investigation, reported "three unusable decisions in a row" and continued through every batch unit. Meta documents 402 as billing_not_configured, so waiting does not help. | implemented (batch 2 commit) |
 | MQ-7 | One zero-token `muse exec` echo run to learn the event format | Allowed once. Run on macbookpro-laptop with isolated XDG dirs, `--provider echo --json --no-session-log`, shell/writes/web off; output kept as `sdks/python/tests/data/muse-exec-echo-1.4.14.jsonl`, temp dirs removed. | Operator, 2026-11-04. Exit 0, 14 events, zero tokens, SKILL.md unchanged (sha256 cd65c7b3...). Events are `{schema_version: 1, payload_type, payload}`; final text in `run.terminal.completed` payload.text, streamed text in `run.output.delta`, usage in `run.usage` payload.models[] (`input_tokens`, `cached_tokens`, `output_tokens`, `reasoning_tokens`, `calls`). Real-model usage values remain unverified until a live run. | implemented: `parse_muse_events` reads this envelope; a non-completed terminal is an error |
 | MQ-8 | Billing for the first live Muse run | The Muse coding plan, through the `muse exec` / Muse Code adapter; not metered API tokens. | Operator, 2026-11-04, relayed from the progress-review thread. MQ-6 still applies: stop at the first 402 or quota error. If the coding plan cannot reach the reasoning path the run needs (for example, MCP tools not starting under `muse exec`), ask the operator before any fallback to metered tokens; never fall back unasked. Supersedes MQ-2's replay-only rule for this run only. | pending: set up after the battery suite (done, I1f9b4d7e2c6a08e3b5d4) |
@@ -279,7 +279,7 @@ four existing cases, configs and goldens are unchanged. The numerics set
 gains battery `analyze-short`, `rank-short` and `run-scripted`. There is no
 battery `run-policy` case, because the case format has no catalog costs yet.
 
-The Rust SDK mirrors:
+The Rust SDK landed in `f5ad648` (`I80eae9dd2c2e790f9b2c`) and mirrors:
 - `Budgets.max_test_hours`, omitted from the config when unset;
 - catalog `cost_hours` (finite and nonnegative; absent means 0);
 - hours recomputed from measurements and `data_attached` links;
@@ -287,6 +287,16 @@ The Rust SDK mirrors:
   requests refused;
 - costs in rankings and hours in facts only for costed catalogs;
 - the three new numerics cases.
+
+Independent Codex review fixed explicit JSON `cost_hours: null` acceptance in
+`11f2787` (`I408586676b4150a403e6`); Python rejects that declared value.
+The null-cost regression fails before the fix and all 12 Rust battery tests
+pass afterward. The review checkpoint passes 93 Rust SDK tests (0 failed)
+and 590 Python tests (6 skipped), including concurrent committed work; the
+original battery implementation gate was 142 Rust workspace tests (2 ignored)
+and 510 Python tests (6 skipped). The final commit is checked again from a
+clean archive; see [the Rust landing](rust-sdk.md#battery-case-suite-mq-5-rust-landing-2026-11-04)
+for scope, reference commits and the validation receipt location.
 
 ## Contract questions
 
@@ -394,8 +404,6 @@ rwc-dev-01.
 
 ## Remaining work
 
-- Battery case suite (MQ-5, owned here): cases, an experiment catalog costed
-  in test hours, a short-data case, goldens and the experiment-cost budget.
 - M-4 image input (the Rust reasoner already accepts `images`).
 - First live Spark/Wonder runs, once the operator approves a token budget
   (MQ-2); until then no result may be labelled Muse.

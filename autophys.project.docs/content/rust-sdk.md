@@ -1,6 +1,6 @@
 # autophys-rs: the daemon's endpoints are a thin layer over a Rust library that matches the Python SDK
 
-Status: phase 1 implemented, rev 4, 2026-11-04. Display-manifest step 3 is implemented: `autophys::Display`, trajectory `.u`, uncounted previews and byte-identical bench manifests ([contract](display-manifest.md)); HTTP registration is outside this step. Rev 2: full API parity (AX-2 revised). Rev 3: the numerics case format, the `autophys-cli` layout, the conformance tree as committed. Operator direction (autophys/rs thread): the
+Status: phase 1 implemented, rev 4, 2026-11-04. MQ-5 battery cases and test-hour budgets are implemented and independently reviewed (see the battery landing below). Display-manifest step 3 is implemented: `autophys::Display`, trajectory `.u`, uncounted previews and byte-identical bench manifests ([contract](display-manifest.md)); HTTP registration is outside this step. Rev 2: full API parity (AX-2 revised). Rev 3: the numerics case format, the `autophys-cli` layout, the conformance tree as committed. Operator direction (autophys/rs thread): the
 Rust binary produces the app and serves the endpoints, and each endpoint
 calls a Rust library crate that is the Rust counterpart of the Python SDK, so
 Rust programs can import it directly. Phase 1 is implemented; phase 2 remains pending. It refines W-4
@@ -657,3 +657,50 @@ The second publication, `4a098cb..63606eb` (14 commits), carried:
 Only commit messages were rewritten, to merge split trailer blocks and give
 the two battery commits a Change-Id. An independent review returned ready
 with no findings. Receipt: `fleet/evidence/autophys/sink-20261104b/`.
+
+## Battery case suite (MQ-5, Rust landing, 2026-11-04)
+
+Rust implementation `f5ad648` (`I80eae9dd2c2e790f9b2c`) mirrors the Python
+plan `845ecd5` (`I4c8e2a6f0b3d19e7a5c1`) and implementation `7e20524`
+(`I1f9b4d7e2c6a08e3b5d4`), under AX-2 full numerical parity. The contract
+and BT-1 through BT-4 choices remain in [sdk.md](sdk.md#battery-case-suite-mq-5-plan-2026-11-04).
+Those agent-chosen battery case choices now require matching updates in both
+SDKs and the shared numerics cases if the operator changes them.
+
+`Budgets.max_test_hours` and catalog `cost_hours` are optional, finite and
+nonnegative. Unset fields stay out of serialized configs, preserving existing
+hashes. Hours are recomputed from the dataset; attached observations use their
+proposal experiment even when the lab renames the observation. Resume resolves
+both Python's integer measurement versions and Rust's measurement record hashes.
+Affordability is `used + cost <= max + 1e-12`; unaffordable candidates leave
+the rankings and requests return Python's test-hour budget message. Costs in
+rankings and hours in facts appear only for costed catalogs, retaining the
+uncosted shapes and rendered budget line.
+
+Both `battery` and `battery-short-only` are available through `synthetic::case`.
+The three battery numerics fixtures (`analyze-short`, `rank-short`,
+`run-scripted`) pass with the same discrete decisions as Python; numerical
+values use the shared fixture tolerances. Battery integration tests also check
+config hashes, ranking shape, lab-renamed attachments, resume and scripted
+outcomes against the Python reference.
+
+Independent Codex review found one MQ-5 mismatch: explicit JSON
+`cost_hours: null` was accepted as an absent cost, whereas Python rejects it.
+Follow-up `11f2787` (`I408586676b4150a403e6`) rejects that declared value and
+adds coverage for mixed catalogs, dataset additions and the affordability
+tolerance. The null-cost regression fails against the original implementation;
+all 12 battery tests pass after the fix. No MQ-5 review finding remains open.
+
+Qualification checkpoints: the original implementation's clean archive passed
+142 Rust workspace tests (0 failed, 2 ignored) and 510 Python tests (6 skipped).
+The review checkpoint, including concurrent display/curves work already committed
+to master, passes 93 Rust SDK tests (0 failed, 0 ignored) and 590 Python tests
+(6 skipped). These are different scopes and commit states. The closure reruns
+`cargo test --locked` from `sdks/rust` and the Python suite from a
+`git archive` export of this documentation commit, with
+`CARGO_TARGET_DIR=~/.cache/autophys/rs-mq5-target`; the target is removed afterward.
+Logs, final commit identity and exact counts are retained under
+`~/.cache/autophys/rs-mq5-review/` on rwc-dev-01. No branch, worktree or push
+is part of this review. Private indexes and compare-and-swap commits preserve
+concurrent source and staged work. The supported task-board CLI is unavailable
+on this host; the external task record carries the review steps instead.
