@@ -41,7 +41,7 @@ export function deck(app: Cookbook.App, appPath = "/app"): Cookbook.Deck.Slide[]
         kind: "actions",
         primary: open,
         stats: [
-          { value: "6.8×", label: "fewer test hours to a validated model" },
+          { value: "6.3×", label: "fewer test hours to a validated model" },
           { value: "12", label: "held-out cells in the benchmark" },
           { value: "±10%", label: "bar for “identified”, enforced in code" },
         ],
