@@ -129,7 +129,7 @@ benchmark reproduces the source's table (see Test).
 | `design.py` | experiment ranking by min eigenvalue (default) and D-optimality of the stacked Fisher information; the E-1 outlook grid |
 | `project.py` | `Project`: the declared configuration and its content-hashed config version |
 | `agent.py` | `Investigation`, tools, decision schema, `ScriptedPolicy`, `ReasonLanePolicy`, guardrail |
-| `reasoner.py` | `HttpReasoner` (reason lane), `FakeReasoner` |
+| `reasoner.py` | `ChatReasoner` (Muse or Baseten chat completions), `reasoner_from_env`, `HttpReasoner` (reason lane), `FakeReasoner` |
 | `workbook.py` | `WorkbookStore`: the `.ap-workbook` file (format, validation, state machine, projections, `check()`) |
 | `client.py` | `connect`, `LocalClient`, `RemoteClient`, `Workbook` |
 | `store.py`, `http.py` | append-only `MemoryStore`/`JsonlStore` (tests); `HttpStore` (`/api/v1`, record stream), pairing and credentials |
@@ -168,6 +168,23 @@ uncertainty after the experiment (relative for log parameters, a fraction of
 the range for linear ones), row-major over the axes. With nothing editable
 the grid is the single proposed point. The browser interpolates it; the grid's
 simulations are not charged to the investigation's simulation budget.
+
+## Model routes for `ReasonLanePolicy` (R-1)
+
+`reasoner_from_env()` picks the route from `AUTOPHYS_REASON_ROUTE`:
+
+| Route | Endpoint | Model | Key |
+| --- | --- | --- | --- |
+| `meta` (default) | `https://api.meta.ai/v1` | `muse-spark-1.3` | `MODEL_API_KEY` |
+| `baseten` | `https://inference.baseten.co/v1` or a deployment URL | operator-chosen (`AUTOPHYS_REASON_MODEL`) | `BASETEN_API_KEY` |
+| `lane` | `AUTOPHYS_REASON_URL` (`HttpReasoner`) | the lane's | the lane's |
+
+`AUTOPHYS_REASON_URL` and `AUTOPHYS_REASON_MODEL` override a route's defaults.
+Keys come from the argument, the environment, or the 0600
+`reason.json` in the autophys config directory, and are never logged. On
+`meta`, `max_tokens` is at least 1800, 402 is terminal and 429 is retried up to
+three times after `Retry-After` (at most 30 s). Baseten cannot serve Muse, so
+its decisions come from the open model you deploy.
 
 ## REST contract (`/api/v1` on the autophys daemon)
 
@@ -229,7 +246,7 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src ~/.cache/autophys/venv/bin/python -m au
 ```
 
 On rwc-dev-01 (Python 3.12.3, SQLite 3.45.1, NumPy 2.5.4, SciPy 1.18.1,
-aarch64) the suite is 93 passed, 2 skipped, in about 50 s with no network.
+aarch64) the suite is 289 passed, 1 skipped, in about 80 s with no network.
 HTTP code is tested against an in-process fake of `/api/v1`
 (`tests/fake_server.py`), including the stream. Workbook tests include a
 second process approving while the SDK waits. The skips are an opt-in smoke
