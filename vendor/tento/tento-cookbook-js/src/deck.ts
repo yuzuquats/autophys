@@ -8,6 +8,7 @@ import {
 import { renderLines, renderProfile, renderUncertainty } from "./deck-charts.ts";
 import { renderBrowser, renderChat, renderTerminal } from "./deck-convo.ts";
 import { renderUses } from "./deck-uses.ts";
+import { renderFeedback, renderLoops } from "./deck-loops.ts";
 import { h } from "./dom.ts";
 import { createTexture } from "./texture.ts";
 
@@ -446,6 +447,10 @@ function renderBody(body: DeckBody): HTMLElement {
       return frame(renderBrowser(body), ...actions(body.primary));
     case "uses":
       return frame(renderUses(body));
+    case "loops":
+      return frame(renderLoops(body));
+    case "feedback":
+      return frame(renderFeedback(body));
   }
 }
 

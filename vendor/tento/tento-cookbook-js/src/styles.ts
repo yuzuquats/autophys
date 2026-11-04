@@ -279,6 +279,36 @@ html[data-ck-stage="tour"] .ck-tour-peek { opacity: 1; transition-duration: 300m
 .ck-use.ck-emphasis .ck-use-live { background: #fff; }
 .ck-uses-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: -10px 0 0; position: relative; font-size: 12px; line-height: 16px; color: var(--ck-n500); }
 .ck-uses-legend .ck-use-live { position: static; display: inline-block; margin-right: 6px; vertical-align: 1px; }
+/* loop bodies (deck-loops.ts): HTML cells on a design canvas, every connector in one SVG layer */
+.ck-loops { position: relative; height: var(--ck-body-h); }
+.ck-loop-stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.ck-loop-stage > *, .ck-loop-card > * { position: absolute; }
+.ck-loop-wires { left: 0; top: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.ck-loop-wires path { fill: none; stroke: var(--ck-n300); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.ck-loop-cell { display: flex; align-items: center; gap: 10px; padding: 8px 14px 8px 8px; border-radius: 12px; background: var(--ck-n100); white-space: nowrap; }
+.ck-loop-cell b { display: block; font-size: 13.5px; line-height: 17px; font-weight: 600; color: #000; }
+.ck-loop-caption { display: block; font-size: 12px; line-height: 15px; color: var(--ck-n500); }
+.ck-loop-cell.ck-emphasis { background: var(--ck-n900); }
+.ck-loop-cell.ck-emphasis b { color: #fff; } .ck-loop-cell.ck-emphasis .ck-loop-caption { color: var(--ck-n400); }
+.ck-loop-cell.ck-planned { background: #fff; box-shadow: inset 0 0 0 1.5px var(--ck-n200); }
+.ck-loop-step { width: 257px; }
+.ck-loop-glyph { display: grid; place-items: center; width: 28px; height: 28px; flex: none; }
+.ck-loop-glyph svg { width: 20px; height: 20px; fill: none; stroke: var(--ck-n600); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.ck-emphasis .ck-loop-glyph svg { stroke: #fff; }
+.ck-loop-avatar { width: 28px; height: 28px; flex: none; border-radius: 50%; background: #f1ebe2 center / cover;
+  box-shadow: 0 0 0 2px #fff, 0 1px 6px rgb(0 0 0 / 14%); }
+.ck-loop-tag { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 999px; font-size: 10.5px; line-height: 15px;
+  font-weight: 500; vertical-align: 1px; background: var(--ck-n900); color: #fff; }
+.ck-emphasis .ck-loop-tag { background: #fff; color: var(--ck-n900); }
+.ck-planned .ck-loop-tag { background: none; color: var(--ck-n500); box-shadow: inset 0 0 0 1px var(--ck-n200); }
+.ck-loop-card { width: 286px; height: 172px; border-radius: 18px; background: #fff;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 6%), 0 1px 2px rgb(0 0 0 / 6%), 0 6px 20px rgb(0 0 0 / 8%); }
+.ck-loop-cell.ck-loop-head { left: 14px; top: 14px; padding: 0; background: none; }
+.ck-loop-badge { right: 14px; top: 20px; padding: 1px 8px; border-radius: 999px; font-size: 11px; line-height: 16px; background: var(--ck-n900); color: #fff; }
+.ck-loop-pill { padding: 4px 11px; border-radius: 999px; background: var(--ck-n100); font-size: 12.5px; line-height: 17px; font-weight: 500; white-space: nowrap; }
+.ck-loop-note { width: 112px; margin: 0; text-align: center; font-size: 12px; line-height: 15px; color: var(--ck-n500); }
+.ck-loop-label { font-size: 12px; line-height: 16px; color: var(--ck-n500); white-space: nowrap; }
+.ck-loop-stage[data-layout="narrow"] .ck-loop-label { transform: rotate(-90deg); }
 .ck-bar-value { font-size: 20px; line-height: 28px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--ck-n500); text-align: right; }
 .ck-bars .ck-emphasis .ck-bar-value { color: #000; }
 .ck-bars + .ck-slide-actions { margin-top: 56px; }

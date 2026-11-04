@@ -8,7 +8,12 @@ import { createPanels } from "./panels.ts";
 import { describeHealth, readHealthz, type StatusLine } from "./status.ts";
 import { cookbookCss } from "./styles.ts";
 import { createTutorial, shellSteps, type TutorialStep } from "./tutorial.ts";
-import type { CookbookApp, CookbookClasses, CookbookHost, CookbookShell } from "./types.ts";
+import type {
+  CookbookApp,
+  CookbookClasses,
+  CookbookHost,
+  CookbookShell,
+} from "./types.ts";
 
 export type ShellOptions = {
   /** The pitch deck for an app; default: placeholderDeck(app.title). */
@@ -46,14 +51,36 @@ export function placeholderDeck(title: string, appPath = "/app"): DeckSlide[] {
     title: `Placeholder title for slide ${word}.`,
     description: "Placeholder description.",
   });
+  const loopCard = {
+    title: "Placeholder",
+    caption: "Placeholder",
+    steps: ["Placeholder", "Placeholder", "Placeholder", "Placeholder"] as [
+      string,
+      string,
+      string,
+      string,
+    ],
+    note: "Placeholder",
+  };
   return [
     {
       eyebrow: { icon: "mark" },
       title,
       description: "Placeholder description for the first slide.",
-      body: { kind: "actions", primary: open, stats: [stat("Placeholder"), stat("Placeholder"), stat("Placeholder")] },
+      body: {
+        kind: "actions",
+        primary: open,
+        stats: [stat("Placeholder"), stat("Placeholder"), stat("Placeholder")],
+      },
     },
-    { ...lead(2, "two"), body: { kind: "person", name: "Placeholder name", role: "Placeholder role" } },
+    {
+      ...lead(2, "two"),
+      body: {
+        kind: "person",
+        name: "Placeholder name",
+        role: "Placeholder role",
+      },
+    },
     {
       ...lead(3, "three"),
       body: {
@@ -71,7 +98,11 @@ export function placeholderDeck(title: string, appPath = "/app"): DeckSlide[] {
       body: {
         kind: "comparison",
         columns: ["Column A", "Column B"],
-        rows: [1, 2, 3].map((n) => ({ label: `Row ${n}`, before: "Placeholder", after: "Placeholder" })),
+        rows: [1, 2, 3].map((n) => ({
+          label: `Row ${n}`,
+          before: "Placeholder",
+          after: "Placeholder",
+        })),
       },
     },
     { ...lead(5, "five"), body: { kind: "demo", caption: "Placeholder" } },
@@ -79,7 +110,12 @@ export function placeholderDeck(title: string, appPath = "/app"): DeckSlide[] {
       ...lead(6, "six"),
       body: {
         kind: "result",
-        bars: [{ label: "Bar A", value: "—", share: 100 }, { label: "Bar B", value: "—", share: 40, emphasis: true }],
+        bars: [{ label: "Bar A", value: "—", share: 100 }, {
+          label: "Bar B",
+          value: "—",
+          share: 40,
+          emphasis: true,
+        }],
         primary: open,
       },
     },
@@ -92,7 +128,11 @@ export function placeholderDeck(title: string, appPath = "/app"): DeckSlide[] {
         threshold: { value: 3, label: "Threshold" },
         series: [
           { label: "Series A", points: [[0, 9], [5, 6], [10, 4]] },
-          { label: "Series B", points: [[0, 9], [5, 2], [10, 1]], emphasis: true },
+          {
+            label: "Series B",
+            points: [[0, 9], [5, 2], [10, 1]],
+            emphasis: true,
+          },
         ],
       },
     },
@@ -101,7 +141,10 @@ export function placeholderDeck(title: string, appPath = "/app"): DeckSlide[] {
       body: {
         kind: "profile",
         axis: ["Start", "End"],
-        curve: { label: "Placeholder curve", values: [0.2, 0.8, 0.3, 0.6, 0.2] },
+        curve: {
+          label: "Placeholder curve",
+          values: [0.2, 0.8, 0.3, 0.6, 0.2],
+        },
         fixed: { label: "Fixed", at: [0, 0.25, 0.5, 0.75, 1] },
         picks: { label: "Picks", at: [0.25, 0.75] },
       },
@@ -120,7 +163,16 @@ export function placeholderDeck(title: string, appPath = "/app"): DeckSlide[] {
     },
     {
       ...lead(10, "ten"),
-      body: { kind: "terminal", lines: ["# Placeholder step", "placeholder --flag 1 path/to/file", "", "# Placeholder step", "placeholder run"] },
+      body: {
+        kind: "terminal",
+        lines: [
+          "# Placeholder step",
+          "placeholder --flag 1 path/to/file",
+          "",
+          "# Placeholder step",
+          "placeholder run",
+        ],
+      },
     },
     {
       ...lead(11, "eleven"),
@@ -130,9 +182,18 @@ export function placeholderDeck(title: string, appPath = "/app"): DeckSlide[] {
         messages: [
           { from: "user", text: "Placeholder request." },
           { from: "agent", text: "Placeholder reasoning.", source: "source" },
-          { from: "agent", text: "Placeholder proposal, long enough to wrap onto a second line of the bubble." },
+          {
+            from: "agent",
+            text:
+              "Placeholder proposal, long enough to wrap onto a second line of the bubble.",
+          },
         ],
-        approval: { label: "Needs approval", title: "Placeholder", rows: [{ label: "Detail", value: "Placeholder" }], actions: ["Approve", "Reject"] },
+        approval: {
+          label: "Needs approval",
+          title: "Placeholder",
+          rows: [{ label: "Detail", value: "Placeholder" }],
+          actions: ["Approve", "Reject"],
+        },
       },
     },
     {
@@ -140,7 +201,9 @@ export function placeholderDeck(title: string, appPath = "/app"): DeckSlide[] {
       body: {
         kind: "browser",
         url: "example.com",
-        steps: [{ title: "Placeholder step", detail: "Placeholder detail" }, { title: "Placeholder step" }],
+        steps: [{ title: "Placeholder step", detail: "Placeholder detail" }, {
+          title: "Placeholder step",
+        }],
         primary: open,
       },
     },
@@ -156,6 +219,40 @@ export function placeholderDeck(title: string, appPath = "/app"): DeckSlide[] {
           emphasis: i === 0,
         })),
         legend: { live: "Placeholder", other: "Placeholder" },
+      },
+    },
+    {
+      ...lead(14, "fourteen"),
+      body: {
+        kind: "loops",
+        inner: loopCard,
+        outer: {
+          top: { title: "Placeholder", caption: "Placeholder" },
+          bottom: {
+            title: "Placeholder",
+            caption: "Placeholder",
+            emphasis: true,
+          },
+          left: { title: "Placeholder", caption: "Placeholder" },
+        },
+      },
+    },
+    {
+      ...lead(15, "fifteen"),
+      body: {
+        kind: "feedback",
+        inner: { ...loopCard, badge: "Placeholder" },
+        steps: [
+          { title: "Placeholder", caption: "Placeholder" },
+          {
+            title: "Placeholder",
+            caption: "Placeholder",
+            tag: "Placeholder",
+            emphasis: true,
+          },
+          { title: "Placeholder", caption: "Placeholder", planned: true },
+        ],
+        back: "Placeholder",
       },
     },
   ];
@@ -190,7 +287,11 @@ export function mountHost(options: ShellOptions = {}): CookbookHost {
         appPath,
         onHome: () => drawer.close(),
         onExport: () =>
-          shell.download(`${scopeId}-export.json`, "application/json", JSON.stringify(app.export(), null, 2)),
+          shell.download(
+            `${scopeId}-export.json`,
+            "application/json",
+            JSON.stringify(app.export(), null, 2),
+          ),
       });
       const shell: CookbookShell = {
         get slots() {
@@ -223,15 +324,31 @@ export function mountHost(options: ShellOptions = {}): CookbookHost {
       };
       let slotsNow = panels.freshSlots();
       const tutorial = createTutorial(options.tutorial ?? shellSteps);
-      const deck = createDeck(options.deck?.(app) ?? placeholderDeck(app.title, appPath));
-      const backToTop = h("button", "ck-footer-link", { type: "button" }, "Back to top");
+      const deck = createDeck(
+        options.deck?.(app) ?? placeholderDeck(app.title, appPath),
+      );
+      const backToTop = h(
+        "button",
+        "ck-footer-link",
+        { type: "button" },
+        "Back to top",
+      );
       backToTop.addEventListener("click", () => {
-        window.scrollTo({ top: 0, behavior: reducedMotion() ? "instant" : "smooth" });
+        window.scrollTo({
+          top: 0,
+          behavior: reducedMotion() ? "instant" : "smooth",
+        });
         header.brand.focus({ preventScroll: true });
       });
-      const footer = h("footer", "ck-footer", null,
+      const footer = h(
+        "footer",
+        "ck-footer",
+        null,
         h("span", "ck-footer-name", null, app.title),
-        h("nav", "ck-footer-links", { "aria-label": "Footer" },
+        h(
+          "nav",
+          "ck-footer-links",
+          { "aria-label": "Footer" },
           h("a", "ck-footer-link", { href: appPath }, "Open app"),
           backToTop,
         ),
@@ -260,10 +377,14 @@ export function mountHost(options: ShellOptions = {}): CookbookHost {
         },
         onStage: options.onStage,
       });
-      const status = options.status === undefined ? () => readHealthz() : options.status;
+      const status = options.status === undefined
+        ? () => readHealthz()
+        : options.status;
       if (status) {
         panels.setStatus({ tone: "pending", text: "Checking server…" });
-        void status().then((line) => panels.setStatus(line)).catch(() => panels.setStatus(describeHealth(null)));
+        void status().then((line) => panels.setStatus(line)).catch(() =>
+          panels.setStatus(describeHealth(null))
+        );
       } else panels.setStatus(null);
     },
   };

@@ -5,7 +5,12 @@
  * and order. The app passes its own slides; the cookbook ships none.
  */
 export type DeckStat = { value: string; label: string };
-export type DeckBar = { label: string; value: string; share: number; emphasis?: boolean };
+export type DeckBar = {
+  label: string;
+  value: string;
+  share: number;
+  emphasis?: boolean;
+};
 export type Cta = { label: string; href: string };
 export type DeckBody =
   | { kind: "actions"; primary: Cta | null; stats: DeckStat[] }
@@ -24,10 +29,18 @@ export type DeckBody =
   | DeckTerminal
   | DeckChat
   | DeckBrowser
-  | DeckUses;
+  | DeckUses
+  | DeckLoops
+  | DeckFeedback;
 
 /** Chart bodies (src/deck-charts.ts). The values are supplied by the app; the deck only scales them. */
-export type DeckAxis = { label: string; min: number; max: number; ticks?: number[]; unit?: string };
+export type DeckAxis = {
+  label: string;
+  min: number;
+  max: number;
+  ticks?: number[];
+  unit?: string;
+};
 export type DeckSeries = {
   label: string;
   points: [number, number][];
@@ -58,12 +71,22 @@ export type DeckUncertainty = {
   kind: "uncertainty";
   axes: [string, string];
   target: { label: string; size: number };
-  regions: { label: string; rx: number; ry: number; angle: number; emphasis?: boolean }[];
+  regions: {
+    label: string;
+    rx: number;
+    ry: number;
+    angle: number;
+    emphasis?: boolean;
+  }[];
 };
 /** Conversation bodies (src/deck-convo.ts). */
 /** Shell lines in a dark card: `# …` is a comment, "" a blank line, anything
  * else a command (shown after a `$` prompt, with its words coloured). */
-export type DeckTerminal = { kind: "terminal"; label?: string; lines: string[] };
+export type DeckTerminal = {
+  kind: "terminal";
+  label?: string;
+  lines: string[];
+};
 /** A chat between the person and one agent, drawn as iOS message bubbles.
  * Consecutive messages from one sender form a run; `source` is a small
  * monospace line above the text (for example the tool a claim came from).
@@ -73,18 +96,74 @@ export type DeckChat = {
   kind: "chat";
   agent: { name: string; avatar?: string };
   messages: { from: "user" | "agent"; text: string; source?: string }[];
-  approval?: { label: string; title: string; rows: { label: string; value: string }[]; actions: string[] };
+  approval?: {
+    label: string;
+    title: string;
+    rows: { label: string; value: string }[];
+    actions: string[];
+  };
 };
 /** A browser window card: `url` in the address bar, numbered steps below,
  * and an optional primary action under the card (deck-convo.ts). */
-export type DeckBrowser = { kind: "browser"; url: string; steps: { title: string; detail?: string }[]; primary: Cta | null };
+export type DeckBrowser = {
+  kind: "browser";
+  url: string;
+  steps: { title: string; detail?: string }[];
+  primary: Cta | null;
+};
 /** A wall of use-case cards in a masonry grid, faded out at the bottom so a
  * long list reads as open-ended (deck-uses.ts). `icon` is trusted inner SVG
  * markup for a 24 px stroked line icon; `live` marks cases that run today. */
 export type DeckUses = {
   kind: "uses";
-  uses: { name: string; pair: string; choice: string; note?: string; icon?: string; live?: boolean; emphasis?: boolean }[];
+  uses: {
+    name: string;
+    pair: string;
+    choice: string;
+    note?: string;
+    icon?: string;
+    live?: boolean;
+    emphasis?: boolean;
+  }[];
   legend?: { live: string; other: string };
+};
+/** Loop bodies (src/deck-loops.ts). `icon` is trusted inner SVG markup for a
+ * 24 px stroked line icon; `avatar` is an image URL drawn as a round icon instead. */
+export type DeckCell = {
+  title: string;
+  caption: string;
+  icon?: string;
+  avatar?: string;
+  /** A small badge after the title, such as "today". */
+  tag?: string;
+  emphasis?: boolean;
+  /** Drawn outlined: a step that does not run yet. */
+  planned?: boolean;
+};
+/** One inner loop: a titled card with four steps on a ring, clockwise from
+ * the top left, and an optional note in the middle (such as when it stops). */
+export type DeckLoopCard = {
+  title: string;
+  caption: string;
+  avatar?: string;
+  badge?: string;
+  steps: [string, string, string, string];
+  note?: string;
+};
+/** An outer ring of three steps around the inner-loop card, travelling
+ * clockwise: top, then the card, then bottom, then left. */
+export type DeckLoops = {
+  kind: "loops";
+  inner: DeckLoopCard;
+  outer: { top: DeckCell; bottom: DeckCell; left: DeckCell };
+};
+/** Steps beside the inner-loop card: the card feeds the first, and the last
+ * feeds back into the card along an arrow labelled `back`. */
+export type DeckFeedback = {
+  kind: "feedback";
+  inner: DeckLoopCard;
+  steps: DeckCell[];
+  back: string;
 };
 export type DeckSlide = {
   eyebrow: { label: string } | { icon: "mark" };
@@ -120,6 +199,7 @@ export function swipeTarget(
 /** Legacy exported helper retained for API compatibility. The live adapter
  * uses the bounded shared deckPull layer instead. */
 export function dragOffset(index: number, dx: number, count: number): number {
-  const pastStart = index === 0 && dx > 0, pastEnd = index === count - 1 && dx < 0;
+  const pastStart = index === 0 && dx > 0,
+    pastEnd = index === count - 1 && dx < 0;
   return pastStart || pastEnd ? dx * 0.35 : dx;
 }

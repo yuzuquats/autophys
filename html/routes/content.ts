@@ -42,6 +42,24 @@ const ICONS = {
   tank: '<rect x="6" y="3" width="12" height="18" rx="5"/><circle cx="10.5" cy="14" r="1"/><circle cx="13.5" cy="10" r="1"/><circle cx="12" cy="17" r=".6"/>',
 };
 
+/** Line icons for the loop slides' steps (24 px, stroked by the cookbook). */
+const LOOP_ICONS = {
+  score: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  keep: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  record: '<path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r=".8"/><circle cx="4" cy="12" r=".8"/><circle cx="4" cy="18" r=".8"/>',
+  distil: '<rect x="8" y="8" width="12" height="12" rx="3"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
+  reinforce: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r=".8"/>',
+};
+
+/** The inner loop: one investigation, as both loop slides draw it. */
+const INVESTIGATION = {
+  title: "One investigation",
+  caption: "Inner loop · Muse Spark",
+  avatar: MUSE_AVATAR,
+  steps: ["Fit", "Identifiability", "Rank tests", "Run a test"] as [string, string, string, string],
+  note: "until identified or out of budget",
+};
+
 export function deck(app: Cookbook.App, appPath = "/app"): Cookbook.Deck.Slide[] {
   const open = { label: "Open the workbench", href: appPath };
   const rest = (n: number) =>
@@ -167,6 +185,35 @@ export function deck(app: Cookbook.App, appPath = "/app"): Cookbook.Deck.Slide[]
           ],
           actions: ["Approve", "Edit", "Reject"],
         },
+      },
+    },
+    {
+      eyebrow: { label: "The autoloop" },
+      title: "Two loops: one investigates, one improves it.",
+      description: "The inner loop calibrates a cell. The outer loop edits its playbook and keeps only the edits that score better.",
+      body: {
+        kind: "loops",
+        inner: INVESTIGATION,
+        outer: {
+          top: { title: "Muse Wonder", caption: "proposes a playbook edit", avatar: MUSE_AVATAR },
+          bottom: { title: "Keep it if better", caption: "otherwise discard it", icon: LOOP_ICONS.keep, emphasis: true },
+          left: { title: "Score", caption: "answer, error, cost", icon: LOOP_ICONS.score },
+        },
+      },
+    },
+    {
+      eyebrow: { label: "Post-training" },
+      title: "Then train the model that runs it.",
+      description: "Every investigation is training data: the policy copies the expert first, then learns from what scores best.",
+      body: {
+        kind: "feedback",
+        inner: { ...INVESTIGATION, badge: "improves" },
+        steps: [
+          { title: "Record each step", caption: "state and decision", icon: LOOP_ICONS.record },
+          { title: "Distil", tag: "today", caption: "copy the scripted expert", icon: LOOP_ICONS.distil, emphasis: true },
+          { title: "Reinforce", tag: "planned", caption: "reward the hidden-truth score", icon: LOOP_ICONS.reinforce, planned: true },
+        ],
+        back: "new weights",
       },
     },
     {

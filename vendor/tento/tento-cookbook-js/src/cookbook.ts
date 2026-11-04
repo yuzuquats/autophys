@@ -64,7 +64,11 @@ export namespace Cookbook {
     export type Chat = DeckTypes.DeckChat;
     export type Browser = DeckTypes.DeckBrowser;
     export type Uses = DeckTypes.DeckUses;
-    /** Thirteen neutral slides, one of each body kind; slide one carries the title. */
+    export type Cell = DeckTypes.DeckCell;
+    export type LoopCard = DeckTypes.DeckLoopCard;
+    export type Loops = DeckTypes.DeckLoops;
+    export type Feedback = DeckTypes.DeckFeedback;
+    /** Fifteen neutral slides, one of each body kind; slide one carries the title. */
     export const placeholderDeck = placeholder;
   }
 

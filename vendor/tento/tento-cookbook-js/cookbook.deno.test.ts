@@ -1,9 +1,17 @@
 import { assertAlmostEquals, assertEquals, assertThrows } from "@std/assert";
 import { readRoute, routeUrl } from "./src/route.ts";
-import { arrowStage, closePanel, initialPanels, Stepper, togglePanel, visiblePanels } from "./src/model.ts";
+import {
+  arrowStage,
+  closePanel,
+  initialPanels,
+  Stepper,
+  togglePanel,
+  visiblePanels,
+} from "./src/model.ts";
 import { clampSlide, dragOffset, swipeTarget } from "./src/deck-data.ts";
 import { deckPull, deckTransforms } from "./src/deck.ts";
 import { bubbleRadii, shellTokens } from "./src/deck-convo.ts";
+import { ringPath, ringPaths } from "./src/deck-loops.ts";
 import { describeHealth, parseHealth, readHealthz } from "./src/status.ts";
 import { invert } from "./src/flip.ts";
 import { cookbookClasses, placeholderDeck } from "./src/shell.ts";
@@ -31,6 +39,7 @@ import source18 from "./demo/routes/index.root.ts" with { type: "text" };
 import source19 from "./src/deck-charts.ts" with { type: "text" };
 import source20 from "./src/deck-convo.ts" with { type: "text" };
 import source21 from "./src/deck-uses.ts" with { type: "text" };
+import source22 from "./src/deck-loops.ts" with { type: "text" };
 
 Deno.test("routes: landing and app paths round-trip under any base", () => {
   assertEquals(readRoute("/"), { app: false });
@@ -45,17 +54,29 @@ Deno.test("routes: landing and app paths round-trip under any base", () => {
   assertEquals(routeUrl({ app: false }), "/");
   assertEquals(routeUrl({ app: true, item: null }), "/app");
   assertEquals(routeUrl({ app: true, item: "a b" }, "/w"), "/w/a%20b");
-  assertEquals(readRoute(routeUrl({ app: true, item: "a b" })), { app: true, item: "a b" });
+  assertEquals(readRoute(routeUrl({ app: true, item: "a b" })), {
+    app: true,
+    item: "a b",
+  });
 });
 
 Deno.test("panels: desktop flags are independent; phones show one pane", () => {
   const s1 = togglePanel(initialPanels, "sidebar", false);
   assertEquals(visiblePanels(s1, false), { sidebar: false, details: true });
-  assertEquals(visiblePanels(togglePanel(s1, "details", false), false), { sidebar: false, details: false });
-  assertEquals(visiblePanels(initialPanels, true), { sidebar: false, details: false });
+  assertEquals(visiblePanels(togglePanel(s1, "details", false), false), {
+    sidebar: false,
+    details: false,
+  });
+  assertEquals(visiblePanels(initialPanels, true), {
+    sidebar: false,
+    details: false,
+  });
   const phone = togglePanel(initialPanels, "details", true);
   assertEquals(visiblePanels(phone, true), { sidebar: false, details: true });
-  assertEquals(visiblePanels(togglePanel(phone, "sidebar", true), true), { sidebar: true, details: false });
+  assertEquals(visiblePanels(togglePanel(phone, "sidebar", true), true), {
+    sidebar: true,
+    details: false,
+  });
   assertEquals(togglePanel(phone, "details", true).mobile, "main");
   assertEquals(closePanel(phone, "details", true).mobile, "main");
   assertEquals(closePanel(initialPanels, "details", false).details, false);
@@ -81,16 +102,26 @@ Deno.test("tutorial: stepper advances to the last step, then reports done", () =
   assertEquals(stepper.index, 0);
   assertThrows(() => new Stepper([]));
   for (const step of shellSteps) {
-    for (const selector of step.target ?? []) assertEquals(selector.includes(".ck-"), true, selector);
+    for (const selector of step.target ?? []) {
+      assertEquals(selector.includes(".ck-"), true, selector);
+    }
   }
 });
 
 Deno.test("deck: clamping, swipes and edge resistance", () => {
   assertEquals(clampSlide(-1, 6), 0);
   assertEquals(clampSlide(9, 6), 5);
-  assertEquals(swipeTarget(2, -300, 1000, 0, 6), 3, "past a fifth goes forward");
+  assertEquals(
+    swipeTarget(2, -300, 1000, 0, 6),
+    3,
+    "past a fifth goes forward",
+  );
   assertEquals(swipeTarget(2, 300, 1000, 0, 6), 1, "past a fifth goes back");
-  assertEquals(swipeTarget(2, -100, 1000, 0.1, 6), 2, "short slow drag springs back");
+  assertEquals(
+    swipeTarget(2, -100, 1000, 0.1, 6),
+    2,
+    "short slow drag springs back",
+  );
   assertEquals(swipeTarget(2, -40, 1000, -0.9, 6), 3, "flick goes forward");
   assertEquals(swipeTarget(5, -400, 1000, 0, 6), 5, "no slide after the last");
   assertEquals(dragOffset(0, 100, 6), 35);
@@ -99,11 +130,31 @@ Deno.test("deck: clamping, swipes and edge resistance", () => {
 });
 
 Deno.test("deck: interrupted swipes settle relative to the displayed start", () => {
-  assertEquals(swipeTarget(.3, -500, 1000, 0, 6), 1, "a grab during 0 to 1 must not skip to slide 2");
-  assertEquals(swipeTarget(.3, -100, 1000, 0.1, 6), 0, "a short drag returns to the nearest starting slide");
-  assertEquals(swipeTarget(.7, 500, 1000, 0, 6), 0, "the reverse swipe uses the rounded start too");
-  assertEquals(swipeTarget(.7, -40, 1000, -0.9, 6), 2, "a flick advances from the rounded start");
-  assertEquals(swipeTarget(.3, -200, 1000, -0.4, 6), 0, "distance and velocity thresholds stay strict");
+  assertEquals(
+    swipeTarget(.3, -500, 1000, 0, 6),
+    1,
+    "a grab during 0 to 1 must not skip to slide 2",
+  );
+  assertEquals(
+    swipeTarget(.3, -100, 1000, 0.1, 6),
+    0,
+    "a short drag returns to the nearest starting slide",
+  );
+  assertEquals(
+    swipeTarget(.7, 500, 1000, 0, 6),
+    0,
+    "the reverse swipe uses the rounded start too",
+  );
+  assertEquals(
+    swipeTarget(.7, -40, 1000, -0.9, 6),
+    2,
+    "a flick advances from the rounded start",
+  );
+  assertEquals(
+    swipeTarget(.3, -200, 1000, -0.4, 6),
+    0,
+    "distance and velocity thresholds stay strict",
+  );
 });
 
 Deno.test("deck: page scale follows proximity to the fractional center", () => {
@@ -118,7 +169,9 @@ Deno.test("deck: page scale follows proximity to the fractional center", () => {
     assertAlmostEquals(page.scale, scale);
   }
   assertEquals(halfway[2].scale, .95);
-  const scales = [0, .25, .5, .75, 1].map((idx) => deckTransforms(idx, 2)[1].scale);
+  const scales = [0, .25, .5, .75, 1].map((idx) =>
+    deckTransforms(idx, 2)[1].scale
+  );
   assertEquals(
     scales.every((scale, i) => i === 0 || scale > scales[i - 1]),
     true,
@@ -143,19 +196,32 @@ Deno.test("deck: edge rubber-band is symmetric, monotone and bounded", () => {
 
 Deno.test("deck: the placeholder deck is neutral, uses every body kind and fits the template", () => {
   const slides = placeholderDeck("Example", "/w");
-  assertEquals(slides.length, 13);
+  assertEquals(slides.length, 15);
   assertEquals(slides[0].title, "Example");
-  assertEquals(new Set(slides.map((s) => s.body.kind)).size, 13);
+  assertEquals(new Set(slides.map((s) => s.body.kind)).size, 15);
   for (const slide of slides) {
-    if (slide.title.length > 60) throw new Error(`title too long: ${slide.title}`);
-    if (slide.description.length > 120) throw new Error(`description too long: ${slide.description}`);
+    if (slide.title.length > 60) {
+      throw new Error(`title too long: ${slide.title}`);
+    }
+    if (slide.description.length > 120) {
+      throw new Error(`description too long: ${slide.description}`);
+    }
   }
   const first = slides[0].body;
   assertEquals(first.kind === "actions" && first.primary?.href, "/w");
 });
 
 Deno.test("classes: every recipe the contract names is provided and ck- prefixed", () => {
-  for (const key of ["toolbar", "button", "primary", "name", "status", "decision"] as const) {
+  for (
+    const key of [
+      "toolbar",
+      "button",
+      "primary",
+      "name",
+      "status",
+      "decision",
+    ] as const
+  ) {
     assertEquals(cookbookClasses[key].startsWith("ck-"), true, key);
   }
   assertEquals(cookbookClasses.cardNameAttribute, "data-card-name");
@@ -187,18 +253,25 @@ Deno.test("classes: every assigned shell class has a stylesheet selector", () =>
     ["src/deck-charts.ts", source19],
     ["src/deck-convo.ts", source20],
     ["src/deck-uses.ts", source21],
+    ["src/deck-loops.ts", source22],
   ];
   const intentional: Record<string, string> = {
-    "ck-stat": "Grouping hook for ck-stat-value and ck-stat-label; uses block flow.",
-    "ck-queue": "Mount-slot hook; the containing ck-panel-body supplies layout.",
-    "ck-details-slot": "Mount-slot hook; the containing ck-panel-body supplies layout.",
+    "ck-stat":
+      "Grouping hook for ck-stat-value and ck-stat-label; uses block flow.",
+    "ck-queue":
+      "Mount-slot hook; the containing ck-panel-body supplies layout.",
+    "ck-details-slot":
+      "Mount-slot hook; the containing ck-panel-body supplies layout.",
     "ph-title": "Demo-local heading recipe installed by PlaceholderApp.mount.",
     "ph-stage": "Demo-local stage recipe installed by PlaceholderApp.mount.",
     "ph-detail": "Demo-local details recipe installed by PlaceholderApp.mount.",
     "ph-facts": "Demo-local facts recipe installed by PlaceholderApp.mount.",
-    "ph-label": "Demo text-update and settleIn hook; inherits the stage typography.",
+    "ph-label":
+      "Demo text-update and settleIn hook; inherits the stage typography.",
   };
-  const selectors = new Set([...cookbookCss.matchAll(/\.([a-zA-Z_][\w-]*)/g)].map((m) => m[1]));
+  const selectors = new Set(
+    [...cookbookCss.matchAll(/\.([a-zA-Z_][\w-]*)/g)].map((m) => m[1]),
+  );
   const missing: string[] = [];
   const assigned = new Set<string>();
   for (const [file, raw] of sources) {
@@ -207,56 +280,97 @@ Deno.test("classes: every assigned shell class has a stylesheet selector", () =>
       for (const token of value.trim().split(/\s+/)) {
         if (!token) continue;
         assigned.add(token);
-        if (!selectors.has(token) && !intentional[token]) missing.push(`${file}: ${token}`);
+        if (!selectors.has(token) && !intentional[token]) {
+          missing.push(`${file}: ${token}`);
+        }
       }
     };
     // All current class assignment forms: h's second argument, className,
     // class object properties and classList state changes.
-    for (const match of source.matchAll(
-      /\bh\(\s*["'][^"']+["']\s*,\s*((?:"[^"]*"|'[^']*'|[^,"')])*)[,)]|\.className\s*=\s*([^;]+)|\bclass(?:Name)?\s*:\s*([^,}]+)|\.classList\.(?:add|remove|toggle|replace)\(([^)]*)\)/g,
-    )) {
+    for (
+      const match of source.matchAll(
+        /\bh\(\s*["'][^"']+["']\s*,\s*((?:"[^"]*"|'[^']*'|[^,"')])*)[,)]|\.className\s*=\s*([^;]+)|\bclass(?:Name)?\s*:\s*([^,}]+)|\.classList\.(?:add|remove|toggle|replace)\(([^)]*)\)/g,
+      )
+    ) {
       const expression = match.slice(1).find((part) => part !== undefined)!;
       for (const literal of expression.matchAll(/(["'])(.*?)\1/g)) {
         // "icon" in slide.eyebrow tests the slide variant; it is not a class.
-        if (/^\s*in\b/.test(expression.slice(literal.index! + literal[0].length))) continue;
+        if (
+          /^\s*in\b/.test(expression.slice(literal.index! + literal[0].length))
+        ) continue;
         add(literal[2]);
       }
     }
     // Remove interpolation before scanning HTML attributes, so quotes in an
     // expression such as classes.name ?? "" cannot end the attribute early.
-    for (const match of source.replace(/\$\{[^}]*\}/g, "").matchAll(/\bclass=(["'])(.*?)\1/g)) add(match[2]);
+    for (
+      const match of source.replace(/\$\{[^}]*\}/g, "").matchAll(
+        /\bclass=(["'])(.*?)\1/g,
+      )
+    ) add(match[2]);
     // The deck passes a conditional emphasis class through this variable.
     for (const match of source.matchAll(/const tone\s*=\s*([^;]+);/g)) {
-      for (const literal of match[1].matchAll(/(["'])(.*?)\1/g)) add(literal[2]);
+      for (const literal of match[1].matchAll(/(["'])(.*?)\1/g)) {
+        add(literal[2]);
+      }
     }
   }
   for (const [key, value] of Object.entries(cookbookClasses)) {
-    if (key !== "cardNameAttribute") assertEquals(selectors.has(value), true, value);
+    if (key !== "cardNameAttribute") {
+      assertEquals(selectors.has(value), true, value);
+    }
   }
-  assertEquals(assigned.size > 60, true, "the audit must include templates and h calls");
-  assertEquals(missing, [], "assigned classes need CSS or a documented nonvisual/demo hook");
+  assertEquals(
+    assigned.size > 60,
+    true,
+    "the audit must include templates and h calls",
+  );
+  assertEquals(
+    missing,
+    [],
+    "assigned classes need CSS or a documented nonvisual/demo hook",
+  );
 });
 
-
 Deno.test("status: parse, describe and fetch healthz", async () => {
-  assertEquals(parseHealth({ ok: true, version: "0.1.0", commit: "abcdef0123" }), {
-    ok: true,
-    version: "0.1.0",
-    commit: "abcdef0123",
-  });
+  assertEquals(
+    parseHealth({ ok: true, version: "0.1.0", commit: "abcdef0123" }),
+    {
+      ok: true,
+      version: "0.1.0",
+      commit: "abcdef0123",
+    },
+  );
   assertEquals(parseHealth({ ok: "yes" }), null);
   assertEquals(parseHealth(null), null);
-  assertEquals(describeHealth({ ok: true, version: "0.1.0", commit: "abcdef0123" }), {
-    tone: "ok",
-    text: "Server ok · 0.1.0 · abcdef0",
-  });
+  assertEquals(
+    describeHealth({ ok: true, version: "0.1.0", commit: "abcdef0123" }),
+    {
+      tone: "ok",
+      text: "Server ok · 0.1.0 · abcdef0",
+    },
+  );
   assertEquals(describeHealth(null).tone, "down");
-  assertEquals(describeHealth({ ok: false, version: "0.1.0", commit: "x" }).tone, "down");
-  const okFetch = (() => Promise.resolve(Response.json({ ok: true, version: "0.1.0", commit: "dev" }))) as typeof fetch;
-  assertEquals(await readHealthz("/api/healthz", okFetch), { tone: "ok", text: "Server ok · 0.1.0 · dev" });
-  const failing = (() => Promise.reject(new TypeError("offline"))) as typeof fetch;
-  assertEquals((await readHealthz("/api/healthz", failing)).text, "Server unreachable");
-  const notFound = (() => Promise.resolve(new Response("", { status: 404 }))) as typeof fetch;
+  assertEquals(
+    describeHealth({ ok: false, version: "0.1.0", commit: "x" }).tone,
+    "down",
+  );
+  const okFetch = (() =>
+    Promise.resolve(
+      Response.json({ ok: true, version: "0.1.0", commit: "dev" }),
+    )) as typeof fetch;
+  assertEquals(await readHealthz("/api/healthz", okFetch), {
+    tone: "ok",
+    text: "Server ok · 0.1.0 · dev",
+  });
+  const failing =
+    (() => Promise.reject(new TypeError("offline"))) as typeof fetch;
+  assertEquals(
+    (await readHealthz("/api/healthz", failing)).text,
+    "Server unreachable",
+  );
+  const notFound =
+    (() => Promise.resolve(new Response("", { status: 404 }))) as typeof fetch;
   assertEquals((await readHealthz("/api/healthz", notFound)).tone, "down");
 });
 
@@ -277,9 +391,17 @@ Deno.test("namespace: lib exports only Cookbook, with the old names gone", async
   assertEquals(typeof Cookbook.mount().run, "function");
   assertEquals(typeof Cookbook.View.mount, "function");
   assertEquals(Cookbook.classes.toolbar, "ck-toolbar");
-  assertEquals(Cookbook.Deck.placeholderDeck("T").length, 13);
+  assertEquals(Cookbook.Deck.placeholderDeck("T").length, 15);
   assertEquals(Cookbook.Tutorial.shellSteps.length, 3);
-  for (const gone of ["cookbook", "createCookbook", "cookbookClasses", "placeholderDeck", "PlaceholderApp"]) {
+  for (
+    const gone of [
+      "cookbook",
+      "createCookbook",
+      "cookbookClasses",
+      "placeholderDeck",
+      "PlaceholderApp",
+    ]
+  ) {
     assertEquals(gone in lib, false, gone);
   }
 });
@@ -288,7 +410,10 @@ Deno.test("View.mount: draws once, redraws inside reflow from the current model,
   const { Cookbook } = await import("./lib.ts");
   const renders: number[] = [];
   let destroyed = 0, reflows = 0, value = 1;
-  const view = { render: (m: number) => void renders.push(m), destroy: () => void destroyed++ };
+  const view = {
+    render: (m: number) => void renders.push(m),
+    destroy: () => void destroyed++,
+  };
   const shell = {
     reflow: (change: () => void) => {
       reflows++;
@@ -296,18 +421,33 @@ Deno.test("View.mount: draws once, redraws inside reflow from the current model,
     },
   };
   const handle = Cookbook.View.mount(shell, view, () => value);
-  assertEquals([renders, reflows], [[1], 0], "first draw is immediate, outside reflow");
+  assertEquals(
+    [renders, reflows],
+    [[1], 0],
+    "first draw is immediate, outside reflow",
+  );
   value = 2;
   handle.redraw();
   value = 3;
   handle.redraw();
-  assertEquals([renders, reflows], [[1, 2, 3], 2], "each redraw reads the model inside reflow");
+  assertEquals(
+    [renders, reflows],
+    [[1, 2, 3], 2],
+    "each redraw reads the model inside reflow",
+  );
   handle.dispose();
   handle.dispose();
   handle.redraw();
-  assertEquals([renders, destroyed], [[1, 2, 3], 1], "dispose destroys once; redraw after dispose is a no-op");
+  assertEquals(
+    [renders, destroyed],
+    [[1, 2, 3], 1],
+    "dispose destroys once; redraw after dispose is a no-op",
+  );
   const plain: number[] = [];
-  Cookbook.View.mount({}, { render: (m: number) => void plain.push(m), destroy() {} }, () => 7).redraw();
+  Cookbook.View.mount({}, {
+    render: (m: number) => void plain.push(m),
+    destroy() {},
+  }, () => 7).redraw();
   assertEquals(plain, [7, 7], "a shell without reflow still redraws");
 });
 
@@ -315,7 +455,12 @@ Deno.test("PlaceholderApp: neutral rows, model and export without a DOM", async 
   const { Cookbook } = await import("./lib.ts");
   const app = new Cookbook.PlaceholderApp("demo", "Demo");
   assertEquals([app.id, app.title], ["demo", "Demo"]);
-  assertEquals(app.model(), { row: { id: "item-1", title: "Item 1" }, position: 1, count: 3, title: "Demo" });
+  assertEquals(app.model(), {
+    row: { id: "item-1", title: "Item 1" },
+    position: 1,
+    count: 3,
+    title: "Demo",
+  });
   assertEquals((app.export() as { selected: string }).selected, "item-1");
 });
 
@@ -340,12 +485,33 @@ Deno.test("deck chat: iOS bubble corners tighten only where bubbles touch", () =
     "5px 5px 18px 18px",
   ]);
   // User run on the right mirrors it; a single bubble stays fully round.
-  assertEquals(bubbleRadii([300, 150], true), ["18px 18px 5px 18px", "18px 5px 18px 18px"]);
+  assertEquals(bubbleRadii([300, 150], true), [
+    "18px 18px 5px 18px",
+    "18px 5px 18px 18px",
+  ]);
   assertEquals(bubbleRadii([120], true), ["18px 18px 18px 18px"]);
 });
 
 Deno.test("deck terminal: shell words get a fixed colour class", () => {
-  assertEquals(shellTokens("# a comment"), [{ kind: "comment", text: "# a comment" }]);
-  const kinds = shellTokens("./run.sh my_cell.csv --sigma 0.002 agent").filter((t) => t.kind !== "space").map((t) => t.kind);
+  assertEquals(shellTokens("# a comment"), [{
+    kind: "comment",
+    text: "# a comment",
+  }]);
+  const kinds = shellTokens("./run.sh my_cell.csv --sigma 0.002 agent").filter((
+    t,
+  ) => t.kind !== "space").map((t) => t.kind);
   assertEquals(kinds, ["cmd", "path", "flag", "num", "arg"]);
+});
+
+Deno.test("deck loops: connectors leave and enter cells with fixed gaps and turn at the corners", () => {
+  const ring = { x: 0, y: 0, w: 100, h: 60, r: 10 };
+  const a = { l: 20, t: -10, r: 40, b: 10, cx: 30, cy: 0 };
+  const b = { l: 60, t: -10, r: 80, b: 10, cx: 70, cy: 0 };
+  const c = { l: 90, t: 20, r: 110, b: 40, cx: 100, cy: 30 };
+  assertEquals(ringPath(ring, a, 0, b, 0), "M45 0 L54 0");
+  assertEquals(
+    ringPath(ring, b, 0, c, 1),
+    "M85 0 L90 0 A10 10 0 0 1 100 10 L100 14",
+  );
+  assertEquals(ringPaths(ring, [[a, 0], [b, 0], [c, 1]]).length, 3);
 });
