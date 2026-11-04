@@ -483,3 +483,29 @@ The final archived-tree rerun is recorded on rwc-dev-01 at
 `~/.cache/autophys/daemon-dm1-work/c-workspace-test.log`, using exactly
 `CARGO_TARGET_DIR=~/.cache/autophys/daemon-dm1-target cargo test --workspace`.
 That target is disposable and removed after qualification. No push or deploy.
+
+## UI step 4, Configuration part (2026-11-04)
+
+Implemented by autophys/ui (Change-Ids Ib3cdc761fdc5ea9c0abfcd92cfd575369e5b2aec and
+I3248a2f142edd5535d353acee536304dc365757d). `wire.ts` `applyDisplay`
+maps a project's manifest onto each config version: channel, setting and
+parameter labels and units, setting roles, experiment labels, descriptions,
+views (`edges`/`spectrum` to the UI's existing hints; unknown names listed as
+"not supported by this UI") and input previews. An experiment gets the
+input channel only when its preview of that channel is not all zero, so free
+decay stays "Measures …". No manifest, or another format, leaves the config
+as it was; every setting then renders as `other` under its raw name.
+
+The Configuration page groups by role: drive and `other` settings in each
+experiment table, sampling as one line ("Recorded for 10 s @ 100 Hz"), and
+known settings once on a "Known values" card (facts, not chips). The
+whitelist and unit map in `configuration.ts` are deleted. The fixtures
+declare manifests and go through `applyDisplay` after hashing.
+`html/client/display.deno.test.ts` covers the mapping and the cards.
+
+Still open in step 4:
+- the `display` stream event (an open page picks up a new manifest on reload);
+- the `force (N)` fallback in `charts.ts`, the `default_view` field and the
+  sine proposal label in `shared.ts`, and the product-word guard test;
+- the Fit and proposal views reading `preview` and the renamed views;
+- the Details panel still lists configuration in its older flat form.
