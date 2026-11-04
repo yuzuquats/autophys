@@ -5,7 +5,8 @@ Every investigation is one ordered log of records. A record is
 ``sha256(prev_hash + canonical JSON of {id, kind, payload})`` so a log can be
 checked for edits or gaps (:meth:`Store.verify`). Nothing is updated in place:
 a proposal's life is a sequence of ``proposal`` records whose ``event`` is
-``proposed``, ``approved``, ``edited``, ``rejected`` or ``data_attached``.
+``proposed``, ``approved``, ``edited``, ``rejected``, ``withdrawn`` or
+``data_attached``.
 
 Kinds: ``investigation`` (first record), ``measurement`` (one observation
 added to the versioned measurement set), ``run``, ``step``, ``proposal``,
@@ -17,8 +18,10 @@ Above investigations sit projects and their immutable config versions
 first record names the ``project_id`` and ``config_version`` it pins.
 
 Backends: :class:`MemoryStore`, :class:`JsonlStore` (one ``<id>.jsonl`` file per
-investigation plus ``investigations.jsonl``) and, in :mod:`autophys.http`,
-``HttpStore`` against the draft server contract.
+investigation plus ``investigations.jsonl``), in :mod:`autophys.workbook`
+``WorkbookStore`` (one ``.ap-workbook`` SQLite file per project, the system of
+record) and, in :mod:`autophys.http`, ``HttpStore`` against a daemon's
+``/api/v1``.
 """
 
 from __future__ import annotations
@@ -37,7 +40,7 @@ from typing import Any
 import numpy as np
 
 KINDS = ("investigation", "measurement", "run", "step", "proposal", "outcome")
-PROPOSAL_EVENTS = ("proposed", "approved", "edited", "rejected", "data_attached")
+PROPOSAL_EVENTS = ("proposed", "approved", "edited", "rejected", "withdrawn", "data_attached")
 GENESIS = "0" * 64
 
 
