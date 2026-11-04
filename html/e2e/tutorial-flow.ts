@@ -36,7 +36,7 @@ await withHeadless(async b => {
     if(width===390) await p.emulateMediaFeatures([{name:"prefers-reduced-motion",value:"reduce"}]);
     p.on("pageerror",e => errors.push(String(e)));
     p.on("console",m => { if (m.type() === "error") errors.push(m.text()); });
-    await p.evaluateOnNewDocument(() => { localStorage.setItem("autophys.tour.seen.local","true"); });
+    await p.evaluateOnNewDocument(() => { localStorage.removeItem("autophys.tour.seen.local"); sessionStorage.setItem("autophys.tour.seen.local.offered","true"); });
     await p.goto(base+"/app?source=fixtures",{waitUntil:"load"}); await p.waitForSelector(".ck-panels[data-ready]"); await settle(p);
     // Use a non-default selection, a closed panel, and actual nonzero scrolling.
     if (width < 640) await p.click(".ck-sidebar-toggle");
@@ -72,7 +72,7 @@ await withHeadless(async b => {
       });
       check(state.selected === expected && state.expected === expected,width+": step "+step+"."+substep+" uses the actual selected row ("+state.selected+")");
       const crumb = await p.$eval(".ap-crumb",e=>e.textContent ?? "");
-      const leaf = step===1 || step===2 || step===9 ? "Configuration" : step===3 ? "Investigation" : step===4 ? "free_response" : step===5 ? substep ? "Residuals" : "Fit" : step===6 ? "Sensitivity" : step===7 ? "Sine" : "Validate";
+      const leaf = step===1 || step===2 || step===9 ? "Configuration" : step===3 ? "bench A" : step===4 ? "free_response" : step===5 ? substep ? "Residuals" : "Fit" : step===6 ? "Sensitivity" : step===7 ? "Sine" : "Validate";
       check(crumb.includes(leaf),width+": Main follows the selected "+leaf+" row");
       check(state.preview,width+": step "+step+"."+substep+" has a real DOM preview");
       check(state.rings.length > 0 && state.rings.every(r=>r.exact && r.clear),width+": step "+step+"."+substep+" halo follows a visible target above the sheet "+JSON.stringify(state.rings));
@@ -91,8 +91,10 @@ await withHeadless(async b => {
     await p.keyboard.press("Escape"); await p.waitForSelector("html:not([data-ap-tour])"); await settle(p);
     await new Promise(r=>setTimeout(r,420));
     check(JSON.stringify(await snapshot(p))===JSON.stringify(before),width+": Esc restores selection, expansions, panels, scroll and source view exactly");
+    check(await p.evaluate(()=>!localStorage.getItem("autophys.tour.seen.local")),width+": Esc does not mark tour seen");
     await start(p); await p.click(".ap-tour-close"); await settle(p); await new Promise(r=>setTimeout(r,420));
     check(JSON.stringify(await snapshot(p))===JSON.stringify(before),width+": close restores the same snapshot");
+    check(await p.evaluate(()=>!localStorage.getItem("autophys.tour.seen.local")),width+": close does not mark tour seen");
     await start(p);
     for(let i=1;i<sequence.length;i++){await p.click(".ap-tour-next");await ready(p,sequence[i][0],sequence[i][1]);}
     await p.click(".ap-tour-next"); await settle(p); await new Promise(r=>setTimeout(r,420));

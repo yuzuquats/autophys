@@ -171,7 +171,7 @@ export function mountGuidedTour(host: Host) {
     session.finish();
   }
   function move(delta: 1 | -1) {
-    if (paused) { enter(); return; }
+    if (paused && delta === 1) { enter(); return; }
     if (delta === 1 && session.pager.last) finish(true);
     else session.move(delta);
   }
