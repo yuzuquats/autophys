@@ -9,7 +9,7 @@ import type { ProseMirrorEditor } from "@tento-ui/components/prosemirror";
 
 export const LOOPS_FENCE = "autophys-loops";
 
-const SVG = `<svg viewBox="0 0 860 580" role="img" aria-label="Nested loops. The outer research loop proposes a playbook edit, evaluates it, and keeps it only if the score improves. Evaluation runs one inner investigation loop per case and train seed: fit, identifiability, rank experiments, request an experiment, refit, until the parameters are identified or the budget runs out." style="width:100%;height:auto;display:block;font-family:inherit">
+const SVG = `<svg viewBox="0 0 860 580" role="img" aria-label="Nested loops. The outer research loop proposes a playbook edit, evaluates it, and keeps it only if the score improves. Evaluation runs one inner investigation loop per case and train seed: fit, identifiability, rank experiments, request an experiment, refit, until the parameters are identified or the budget runs out." style="width:100%;min-width:620px;height:auto;display:block;font-family:inherit">
 <defs>
 <marker id="ap-ao" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0L10,5L0,10z" fill="#2f6fde"/></marker>
 <marker id="ap-ai" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0L10,5L0,10z" fill="#1a9466"/></marker>
@@ -80,7 +80,8 @@ export class LoopsFigureView {
   constructor(_node: ProseMirrorEditor.ProseMirrorNode) {
     this.dom = document.createElement("figure");
     this.dom.className = "ap-loops-figure";
-    this.dom.style.cssText = "margin: 24px 0; max-width: 760px;";
+    // Below ~620px the labels would shrink past legibility, so the figure scrolls sideways instead.
+    this.dom.style.cssText = "margin: 24px 0; max-width: 760px; overflow-x: auto;";
     this.dom.innerHTML = SVG;
   }
   update(node: ProseMirrorEditor.ProseMirrorNode): boolean {
