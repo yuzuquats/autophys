@@ -2,6 +2,7 @@
 //! touches the database. Every refusal is a 422 naming the field path
 //! (`payload.outlook.axes[0].values[3]`), so the SDK can say which field.
 
+mod trace;
 use serde_json::{Map, Value};
 
 use crate::error::{Error, Result};
@@ -151,6 +152,7 @@ pub fn payload_shape(kind: Kind, payload: &Value) -> Result<()> {
     let Some(obj) = payload.as_object() else {
         return Err(Error::invalid("payload", "must be a JSON object"));
     };
+    trace::shape(kind, obj)?;
     match kind {
         Kind::Investigation => {
             string_field(obj, "payload", "project_id")?;

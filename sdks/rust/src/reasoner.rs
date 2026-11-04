@@ -1,6 +1,8 @@
 //! HTTP reasoners and injectable deterministic test reasoners.
+mod cassette;
 mod chat;
 use crate::simulator::{Result, invalid};
+pub use cassette::*;
 pub use chat::{ChatReasoner, ChatReasonerConfig, reasoner_from_env};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -17,6 +19,8 @@ pub struct ReasonReply {
     pub usage: Value,
     pub route: Option<String>,
     pub elapsed_ms: Option<f64>,
+    #[serde(default)]
+    pub replayed: bool,
 }
 /// An image sent to a direct chat reasoner as a data URI.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -33,9 +37,35 @@ pub struct ReasonOptions {
     pub images: Vec<ReasonImage>,
 }
 pub trait Reasoner: Send {
+    fn route(&self) -> &str {
+        "meta"
+    }
+    fn model(&self) -> &str {
+        MUSE_SPARK
+    }
+    fn request_body(&self, messages: &[Value], options: &ReasonOptions) -> Result<Value> {
+        request_body(self.route(), self.model(), messages, options)
+    }
     fn complete(&mut self, messages: &[Value], options: &ReasonOptions) -> Result<ReasonReply>;
     fn description(&self) -> String {
         "Reasoner".into()
+    }
+}
+impl<T: Reasoner + ?Sized> Reasoner for Box<T> {
+    fn route(&self) -> &str {
+        (**self).route()
+    }
+    fn model(&self) -> &str {
+        (**self).model()
+    }
+    fn description(&self) -> String {
+        (**self).description()
+    }
+    fn request_body(&self, m: &[Value], o: &ReasonOptions) -> Result<Value> {
+        (**self).request_body(m, o)
+    }
+    fn complete(&mut self, m: &[Value], o: &ReasonOptions) -> Result<ReasonReply> {
+        (**self).complete(m, o)
     }
 }
 pub struct HttpReasoner {
@@ -58,6 +88,12 @@ impl HttpReasoner {
     }
 }
 impl Reasoner for HttpReasoner {
+    fn route(&self) -> &str {
+        "lane"
+    }
+    fn model(&self) -> &str {
+        ""
+    }
     fn description(&self) -> String {
         format!("HttpReasoner({:?})", self.url)
     }
@@ -75,13 +111,7 @@ impl Reasoner for HttpReasoner {
                 return Err(invalid("the reason lane is text-only"));
             }
         }
-        let mut body = json!({"messages":messages,"max_tokens":o.max_tokens.unwrap_or(MIN_TOKENS).max(MIN_TOKENS)});
-        if let Some(v) = &o.response_schema {
-            body["response_schema"] = v.clone();
-        }
-        if let Some(v) = &o.effort {
-            body["effort"] = json!(v);
-        }
+        let body = self.request_body(messages, o)?;
         let config = ureq::Agent::config_builder()
             .timeout_global(Some(self.timeout))
             .build();
@@ -108,6 +138,7 @@ impl Reasoner for HttpReasoner {
             usage: v.get("usage").cloned().unwrap_or(json!({})),
             route: v["route"].as_str().map(String::from),
             elapsed_ms: v["elapsed_ms"].as_f64(),
+            replayed: false,
         })
     }
 }
@@ -126,6 +157,12 @@ impl FakeReasoner {
     }
 }
 impl Reasoner for FakeReasoner {
+    fn route(&self) -> &str {
+        "fake"
+    }
+    fn model(&self) -> &str {
+        &self.model
+    }
     fn description(&self) -> String {
         "FakeReasoner".into()
     }
@@ -139,6 +176,7 @@ impl Reasoner for FakeReasoner {
             usage: json!({"prompt_tokens":messages.iter().map(|m|m["content"].as_str().unwrap_or("").len()/4).sum::<usize>()}),
             route: Some("fake".into()),
             elapsed_ms: Some(t.elapsed().as_secs_f64() * 1000.),
+            replayed: false,
         })
     }
 }

@@ -245,6 +245,30 @@ impl Workbook {
 
     // --- investigations ------------------------------------------------------
 
+    /// Store exact bytes under a sha256-prefixed content address (format v1).
+    pub fn put_blob(&self, data: &[u8], media_type: &str) -> Result<String> {
+        let hash = format!("sha256:{}", crate::sha256_hex([data]));
+        self.conn()?.execute("INSERT OR IGNORE INTO blobs (sha256, media_type, bytes, created) VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![hash, media_type, data, now_ts()])?;
+        Ok(hash)
+    }
+    /// Read a blob by prefixed address or the bare playbook digest.
+    pub fn get_blob(&self, hash: &str) -> Result<(Vec<u8>, String)> {
+        let hash = if hash.starts_with("sha256:") {
+            hash.to_string()
+        } else {
+            format!("sha256:{hash}")
+        };
+        self.conn()?
+            .query_row(
+                "SELECT bytes, media_type FROM blobs WHERE sha256 = ?1",
+                [hash],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?
+            .ok_or(Error::NotFound("blob"))
+    }
+
     /// Every investigation's projection row, oldest first.
     pub fn investigations(&self) -> Result<Vec<InvestigationInfo>> {
         projections::investigations(&*self.conn()?)

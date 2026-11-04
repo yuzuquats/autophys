@@ -66,6 +66,8 @@ pub struct Outcome {
     pub investigation: String,
     pub proposal_id: Option<String>,
     pub summary: String,
+    #[serde(default)]
+    pub usage_total: Value,
 }
 impl Outcome {
     pub fn to_dict(&self) -> Value {
@@ -226,6 +228,9 @@ impl Investigation {
         let mut meta = json!({"project_id":wb.id(),"config_version":version,"title":title,"overrides":{"free":fr,"fixed":fx},"policy":policy.name(),"seed":seed});
         if let Some(m) = policy.meta().as_object() {
             meta.as_object_mut().unwrap().extend(m.clone());
+        }
+        if let Some(playbook) = policy.playbook() {
+            wb.put_blob(&playbook.data().map_err(err)?, "text/markdown")?;
         }
         let (record, _) = wb.create_investigation(meta, None)?;
         let s = Self::setup(project, dataset, record, runner, policy, free, seed).map_err(err)?;
@@ -822,6 +827,11 @@ impl Investigation {
             let d = match decision {
                 Ok(d) => d,
                 Err(e) => {
+                    if let SimulationError::ReasonerTrace { trace, .. } = &e {
+                        if let Some(m) = trace.as_object() {
+                            step.as_object_mut().unwrap().extend(m.clone());
+                        }
+                    }
                     failures += 1;
                     self.last_error = e.to_string();
                     step["valid"] = json!(false);
@@ -1023,6 +1033,12 @@ impl Investigation {
             investigation: self.record.id.clone(),
             proposal_id: self.pending.clone(),
             summary: summary.into(),
+            usage_total: crate::usage::usage_total(
+                self.record
+                    .records(Some("step"))?
+                    .iter()
+                    .map(|r| &r.payload),
+            ),
         };
         self.write("outcome", json!(out))?;
         self.outcome = Some(out.clone());

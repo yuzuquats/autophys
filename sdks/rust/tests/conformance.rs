@@ -100,6 +100,13 @@ fn read_back(golden: &Path) {
         exp["records"],
         "{case}: record count"
     );
+    for entry in wb.records_after(0, i64::MAX).unwrap() {
+        autophys::validate::payload_shape(
+            autophys::Kind::parse(&entry.record.kind).unwrap(),
+            &entry.record.payload,
+        )
+        .unwrap();
+    }
     let got = expected(&copy, &wb);
     for key in ["format", "project", "records", "kinds", "heads"] {
         assert_eq!(got[key], exp[key], "{case}: {key}");
@@ -140,8 +147,8 @@ fn python_goldens_read_back_exactly() {
     let found = goldens("python");
     assert_eq!(
         found.len(),
-        3,
-        "expected the three Python workbook goldens in {}",
+        4,
+        "expected the four Python workbook goldens in {}",
         conformance().join("python").display()
     );
     for golden in found {
@@ -292,10 +299,133 @@ fn two_investigations(wb: &Workbook) {
         .unwrap();
 }
 
+/// Replays the seed-0 Python prompts against the shared fake cassette. No
+/// provider or numerical fitter participates in this record-format case.
+fn reason_replayed(wb: &Workbook) {
+    use autophys::{
+        agent::{Policy, ReasonLanePolicy, decision_schema, system_prompt},
+        playbook::load_playbook,
+        reasoner::{
+            ModelSpec, ReasonOptions, Reasoner, ReasonerConfig, ReplayReasoner, parse_json_content,
+            reasoner_for,
+        },
+        usage::{normalize_usage, usage_total},
+    };
+    let (_tmp, _path, _client, python) =
+        open_copy(&conformance().join("python/reason-replayed.ap-workbook"));
+    let source = python.records_after(0, i64::MAX).unwrap();
+    let head = &source[0].record.payload;
+    assert_eq!(
+        autophys::sha256_hex([system_prompt().as_bytes()]),
+        head["system_prompt_sha256"].as_str().unwrap()
+    );
+    let spec = ModelSpec::new("policy", "meta", autophys::reasoner::MUSE_SPARK).unwrap();
+    let mut replay = reasoner_for(
+        spec.clone(),
+        ReasonerConfig {
+            replay: Some(conformance().join("reasoner/spark-oscillator.jsonl")),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let policy = ReasonLanePolicy::new(
+        ReplayReasoner::new(conformance().join("reasoner/spark-oscillator.jsonl")).unwrap(),
+    )
+    .with_model_spec(spec)
+    .unwrap();
+    let mut meta = policy.meta();
+    meta["config_version"] = json!(config(
+        wb,
+        &json!({"name":"reason-replayed","writer":"autophys-rs"})
+    ));
+    meta["seed"] = json!(0);
+    let playbook = load_playbook("default").unwrap();
+    assert_eq!(
+        wb.put_blob(&playbook.data().unwrap(), "text/markdown")
+            .unwrap(),
+        format!("sha256:{}", playbook.sha256)
+    );
+    let (inv, _) = wb.create_investigation(meta, None).unwrap();
+    let mut written = vec![];
+    for r in source
+        .iter()
+        .filter(|r| r.record.kind == "step" && r.record.payload.get("usage").is_some())
+    {
+        let p = &r.record.payload;
+        let reply = replay
+            .complete(
+                &[
+                    json!({"role":"developer","content":system_prompt()}),
+                    json!({"role":"user","content":p["evidence_text"]}),
+                ],
+                &ReasonOptions {
+                    response_schema: Some(decision_schema()),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert!(reply.replayed);
+        assert_eq!(reply.content, p["raw_output"]);
+        assert_eq!(normalize_usage(&reply), p["usage"]);
+        let step = json!({"index":written.len()+1,"evidence_text":p["evidence_text"],"raw_output":reply.content,
+            "decision":parse_json_content(&reply.content).unwrap(),"model":reply.model,"elapsed_ms":reply.elapsed_ms,
+            "usage":normalize_usage(&reply),"replayed":reply.replayed});
+        inv.append("step", step.clone(), None).unwrap();
+        written.push(step);
+    }
+    assert_eq!(written.len(), 8);
+    let total = usage_total(&written);
+    assert_eq!(
+        total,
+        source
+            .iter()
+            .find(|r| r.record.kind == "outcome")
+            .unwrap()
+            .record
+            .payload["usage_total"]
+    );
+    let image = &source.last().unwrap().record.payload["images"][0];
+    let (bytes, media) = python.get_blob(image["sha256"].as_str().unwrap()).unwrap();
+    let hash = wb.put_blob(&bytes, &media).unwrap();
+    inv.append(
+        "step",
+        json!({"images":[{"sha256":hash,"media_type":media,"caption":"Rust image fixture"}]}),
+        None,
+    )
+    .unwrap();
+    let legacy = json!({"usage":{"prompt_tokens":7,"provider_extra":{"opaque":true}}});
+    inv.append("step", legacy.clone(), None).unwrap();
+    assert_eq!(
+        usage_total(
+            inv.records(Some("step"))
+                .unwrap()
+                .iter()
+                .map(|r| &r.payload)
+        ),
+        total
+    );
+    inv.append(
+        "outcome",
+        json!({"status":"validated","usage_total":total}),
+        None,
+    )
+    .unwrap();
+    let info = serde_json::to_value(inv.info().unwrap()).unwrap();
+    assert_eq!(info["playbook"], playbook.metadata());
+    assert_eq!(info["model"], head["model"]);
+    assert_eq!(info["usage_total"], total);
+    assert_eq!(info["steps"].as_array().unwrap().last().unwrap(), &legacy);
+    assert_eq!(
+        wb.get_blob(&playbook.sha256).unwrap().0,
+        playbook.data().unwrap()
+    );
+}
+
 type Case = (&'static str, fn(&Workbook));
 const CASES: &[Case] = &[
     ("events-and-values", events_and_values),
     ("two-investigations", two_investigations),
+    ("reason-replayed", reason_replayed),
 ];
 
 /// Write every case into `out` as `<case>.ap-workbook` (a single vacuumed
@@ -304,6 +434,9 @@ fn write_cases(out: &Path) -> Vec<PathBuf> {
     std::fs::create_dir_all(out).unwrap();
     let mut written = Vec::new();
     for (case, build) in CASES {
+        if std::env::var("AUTOPHYS_WRITE_GOLDENS_CASE").is_ok_and(|v| v != *case) {
+            continue;
+        }
         let path = out.join(format!("{case}.ap-workbook"));
         for p in [
             path.clone(),

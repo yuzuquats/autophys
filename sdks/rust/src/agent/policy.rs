@@ -1,5 +1,7 @@
 use super::*;
-use crate::reasoner::{ReasonOptions, Reasoner, parse_json_content};
+use crate::playbook::{Playbook, load_playbook};
+use crate::reasoner::{ModelSpec, ReasonOptions, Reasoner, parse_json_content};
+use crate::usage::{normalize_usage, price_for};
 pub const ACTIONS: [&str; 8] = [
     "inspect_data",
     "optimize_parameters",
@@ -116,6 +118,9 @@ pub fn decision_schema() -> Value {
     json!({"type":"object","required":["hypothesis","evidence","action","arguments","expected_information"],"additionalProperties":false,"properties":{"hypothesis":{"type":"string"},"evidence":{"type":"array","items":{"type":"string"}},"action":{"type":"string","enum":ACTIONS},"arguments":{"type":"object"},"expected_information":{"type":"string"}}})
 }
 pub trait Policy: Send {
+    fn playbook(&self) -> Option<&Playbook> {
+        None
+    }
     fn name(&self) -> &str;
     fn decide(&mut self, facts: &Value) -> NumResult<(Value, Value)>;
     fn meta(&self) -> Value {
@@ -457,49 +462,83 @@ pub fn actions() -> Value {
     serde_json::from_str(include_str!("actions.json")).unwrap()
 }
 pub fn system_prompt() -> String {
-    include_str!("system-prompt.txt").into()
+    system_prompt_with(&load_playbook("default").expect("embedded default playbook"))
+}
+pub fn system_prompt_with(playbook: &Playbook) -> String {
+    format!(
+        "{}\n\nStrategy:\n{}",
+        include_str!("system-prompt.txt"),
+        playbook.text
+    )
 }
 pub struct ReasonLanePolicy {
     pub reasoner: Box<dyn Reasoner>,
     pub effort: Option<String>,
-    pub max_tokens: usize,
+    pub max_tokens: Option<usize>,
+    pub playbook: Playbook,
+    pub model_spec: Option<ModelSpec>,
 }
 impl ReasonLanePolicy {
     pub fn new(reasoner: impl Reasoner + 'static) -> Self {
         Self {
             reasoner: Box::new(reasoner),
             effort: Some("low".into()),
-            max_tokens: 2400,
+            max_tokens: Some(2400),
+            playbook: load_playbook("default").expect("embedded default playbook"),
+            model_spec: None,
         }
     }
 }
+impl ReasonLanePolicy {
+    pub fn with_model_spec(mut self, spec: ModelSpec) -> NumResult<Self> {
+        spec.validate()?;
+        self.effort = spec.effort.clone();
+        self.max_tokens = spec.max_tokens;
+        self.model_spec = Some(spec);
+        Ok(self)
+    }
+}
 impl Policy for ReasonLanePolicy {
+    fn playbook(&self) -> Option<&Playbook> {
+        Some(&self.playbook)
+    }
     fn name(&self) -> &str {
         "reason-lane"
     }
     fn meta(&self) -> Value {
         use sha2::{Digest, Sha256};
-        json!({"system_prompt_sha256":format!("{:x}",Sha256::digest(system_prompt())),"reasoner":self.reasoner.description()})
+        let mut meta = json!({"system_prompt_sha256":format!("{:x}",Sha256::digest(system_prompt_with(&self.playbook))),"reasoner":self.reasoner.description(),"playbook":self.playbook.metadata()});
+        if let Some(spec) = &self.model_spec {
+            meta["model"] = json!(spec);
+            if let Some(price) = price_for(&spec.model) {
+                meta["price"] = price;
+            }
+        }
+        meta
     }
     fn decide(&mut self, f: &Value) -> NumResult<(Value, Value)> {
         let text = render_facts(f);
         let reply = self.reasoner.complete(
             &[
-                json!({"role":"developer","content":system_prompt()}),
+                json!({"role":"developer","content":system_prompt_with(&self.playbook)}),
                 json!({"role":"user","content":text}),
             ],
             &ReasonOptions {
                 response_schema: Some(decision_schema()),
                 effort: self.effort.clone(),
-                max_tokens: Some(self.max_tokens),
+                max_tokens: self.max_tokens,
                 ..Default::default()
             },
         )?;
-        let d = parse_json_content(&reply.content)?;
-        Ok((
-            d,
-            json!({"evidence_text":text,"raw_output":reply.content,"model":reply.model,"usage":reply.usage,"elapsed_ms":reply.elapsed_ms}),
-        ))
+        let mut trace = json!({"evidence_text":text,"raw_output":reply.content,"model":reply.model,"usage":normalize_usage(&reply),"elapsed_ms":reply.elapsed_ms});
+        if reply.replayed {
+            trace["replayed"] = json!(true);
+        }
+        let d = parse_json_content(&reply.content).map_err(|e| SimulationError::ReasonerTrace {
+            message: e.to_string(),
+            trace: trace.clone(),
+        })?;
+        Ok((d, trace))
     }
 }
 /// An explicit decision script, useful for deterministic integration and conformance.

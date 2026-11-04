@@ -185,10 +185,17 @@ impl ChatReasoner {
                 .unwrap_or(json!({})),
             route: Some(self.route.clone()),
             elapsed_ms: Some(started.elapsed().as_secs_f64() * 1000.),
+            replayed: false,
         })
     }
 }
 impl Reasoner for ChatReasoner {
+    fn route(&self) -> &str {
+        &self.route
+    }
+    fn model(&self) -> &str {
+        &self.model
+    }
     fn description(&self) -> String {
         format!("ChatReasoner(route={:?})", self.route)
     }
@@ -198,41 +205,7 @@ impl Reasoner for ChatReasoner {
                 "chat completions are text-only; message content must be a string",
             ));
         }
-        let mut budget = options.max_tokens.unwrap_or(MIN_TOKENS);
-        if self.route == "meta" || [MUSE_SPARK, MUSE_WONDER].contains(&self.model.as_str()) {
-            budget = budget.max(MIN_TOKENS);
-        }
-        let mut messages = messages.to_vec();
-        if !options.images.is_empty() {
-            let user = messages
-                .iter_mut()
-                .rev()
-                .find(|m| m["role"] == "user")
-                .ok_or_else(|| invalid("images require a user message"))?;
-            let mut parts = vec![json!({"type":"text", "text":user["content"]})];
-            for image in &options.images {
-                if !image.media_type.starts_with("image/")
-                    || image.media_type.contains([
-                        char::from(10),
-                        char::from(13),
-                        char::from(59),
-                        char::from(44),
-                    ])
-                {
-                    return Err(invalid("invalid image media_type"));
-                }
-                parts.push(json!({"type":"image_url", "image_url":{"url":format!("data:{};base64,{}", image.media_type, image.data)}}));
-            }
-            user["content"] = json!(parts);
-        }
-        let mut body = json!({"model":self.model,"messages":messages,"max_tokens":budget});
-        if let Some(schema) = &options.response_schema {
-            body["response_format"] =
-                json!({"type":"json_schema","json_schema":{"name":"decision","schema":schema}});
-        }
-        if let Some(effort) = &options.effort {
-            body["reasoning_effort"] = json!(effort);
-        }
+        let body = self.request_body(messages, options)?;
         let started = Instant::now();
         let config = ureq::Agent::config_builder()
             .timeout_global(Some(self.timeout))
@@ -262,7 +235,12 @@ impl Reasoner for ChatReasoner {
                 } else {
                     ""
                 };
-                return Err(invalid(format!("chat completions: HTTP {status}{detail}")));
+                let message = format!("chat completions: HTTP {status}{detail}");
+                return Err(if status == 402 {
+                    crate::simulator::SimulationError::BudgetError(message)
+                } else {
+                    invalid(message)
+                });
             }
             let reply: Value = response
                 .body_mut()
@@ -275,19 +253,13 @@ impl Reasoner for ChatReasoner {
 }
 pub fn reasoner_from_env() -> Result<Box<dyn Reasoner>> {
     let route = env::var("AUTOPHYS_REASON_ROUTE").unwrap_or("meta".into());
-    let base_url = env::var("AUTOPHYS_REASON_URL").ok();
-    if route == "lane" {
-        return Ok(Box::new(HttpReasoner::new(
-            &nonempty(base_url).ok_or_else(|| invalid("lane requires AUTOPHYS_REASON_URL"))?,
-            None,
-        )));
-    }
-    Ok(Box::new(ChatReasoner::new(ChatReasonerConfig {
-        route,
-        base_url,
-        model: env::var("AUTOPHYS_REASON_MODEL").ok(),
-        ..Default::default()
-    })?))
+    let model = nonempty(env::var("AUTOPHYS_REASON_MODEL").ok())
+        .or_else(|| (route != "baseten").then(|| MUSE_SPARK.to_string()))
+        .ok_or_else(|| invalid("baseten requires a model: set AUTOPHYS_REASON_MODEL"))?;
+    reasoner_for(
+        ModelSpec::new("policy", &route, &model)?,
+        ReasonerConfig::default(),
+    )
 }
 
 #[cfg(test)]
@@ -400,8 +372,12 @@ mod tests {
                     ..Default::default()
                 },
             )
-            .unwrap_err()
-            .to_string();
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            crate::simulator::SimulationError::BudgetError(_)
+        ));
+        let error = error.to_string();
         assert!(error.contains("HTTP 402 (billing_not_configured)"));
         assert!(!error.contains("private-test-key"));
         assert_eq!(server.join().unwrap()[0]["max_tokens"], 4);

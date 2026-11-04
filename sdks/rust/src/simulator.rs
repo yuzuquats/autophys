@@ -20,6 +20,10 @@ pub enum SimulationError {
     BudgetExceeded(usize),
     #[error("{0}")]
     Invalid(String),
+    #[error("{0}")]
+    BudgetError(String),
+    #[error("{message}")]
+    ReasonerTrace { message: String, trace: Value },
 }
 pub(crate) fn invalid(s: impl Into<String>) -> SimulationError {
     SimulationError::Invalid(s.into())

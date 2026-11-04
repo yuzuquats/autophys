@@ -1570,3 +1570,53 @@ async fn inference_context_is_read_from_records_in_investigations_and_proposals(
     );
     assert!(wb.verify().unwrap().ok);
 }
+
+#[actix_web::test]
+async fn python_replay_golden_exposes_chip_fields_on_api_read_views() {
+    let f = fixture();
+    std::fs::create_dir_all(f.dir.path().join("collection")).unwrap();
+    std::fs::copy(
+        concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/conformance/python/reason-replayed.ap-workbook"
+        ),
+        f.dir.path().join("collection/oscillator.ap-workbook"),
+    )
+    .unwrap();
+    let app = app!(f.api);
+    let key = pair(&app, &f.api, "replay-reader").await;
+    let (status, listing) = call(&app, get("/investigations", Some(&key)).to_request()).await;
+    assert_eq!(status, 200);
+    let inv = &listing["investigations"][0];
+    assert_eq!(inv["playbook"]["name"], "default");
+    assert_eq!(inv["playbook"]["version"], "1");
+    assert_eq!(inv["model"]["model"], autophys::reasoner::MUSE_SPARK);
+    assert_eq!(inv["usage_total"]["calls"], 8);
+    assert_eq!(inv["usage_total"]["input_tokens"], 800);
+    assert_eq!(inv["usage_total"]["output_tokens"], 320);
+    assert!((inv["usage_total"]["cost_usd"].as_f64().unwrap() - 0.00236).abs() < 1e-15);
+    let (status, workspace) = call(&app, get("/workspace", Some(&key)).to_request()).await;
+    assert_eq!(status, 200);
+    assert_eq!(workspace["investigations"][0], *inv);
+    let id = inv["id"].as_str().unwrap();
+    let (status, records) = call(
+        &app,
+        get(&format!("/investigations/{id}/records"), Some(&key)).to_request(),
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(
+        records["records"][0]["payload"]["playbook"],
+        inv["playbook"]
+    );
+    assert!(
+        f.api
+            .client
+            .find_investigation(id)
+            .unwrap()
+            .workbook()
+            .verify()
+            .unwrap()
+            .ok
+    );
+}

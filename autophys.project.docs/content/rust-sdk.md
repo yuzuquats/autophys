@@ -476,9 +476,9 @@ Direct calls retry 429 and 5xx up to four attempts, respecting numeric
 Retry-After (0–30 seconds) and otherwise backing off 1, 2, 4 seconds. A 402
 fails immediately with the committed Python `billing_not_configured` detail.
 
-The Muse Code CLI adapter remains Python-only. Writing record metadata,
-prices and cassette integration await the Python Muse batch being committed;
-Rust builds use committed inputs. Workbook schema and projection tables remain
+The Muse Code CLI adapter remains Python-only. Phase 3b now writes and
+validates the Muse record fields, embeds pricing and replays/records cassettes,
+using Python commit `d389c79` (`I7d2e5a9c3f1b84e06a51`) as its reference. Workbook schema and projection tables remain
 unchanged; workbook `user_version` remains 1. All tests use loopback HTTP or
 fixtures. No live provider call, deployment or restart is part of phase 3.
 The numerics reader selects ScriptedPolicy only for the top-level
@@ -501,8 +501,9 @@ handlers continue to call the crate and serialize its result without SQL.
 
 ### Phase-3 checkpoint and validation (2026-11-04)
 
-This checkpoint implements the numerics reader, direct Muse reasoner inputs
-and retry behavior, and daemon/API read scaffolding. Phase 3 is incomplete.
+This historical checkpoint implemented the numerics reader, direct Muse reasoner
+inputs and retry behavior, and daemon/API read scaffolding. The phase-3b
+completion below supersedes its integration cutoff.
 The operator requested a bounded wait for Python's committed Muse batch.
 Ten-minute checks through 15:15Z found no commit in
 `git log -- tests/conformance/reasoner sdks/python/src/autophys/usage.py`.
@@ -532,15 +533,10 @@ The committed Python names mirrored at this checkpoint are `ChatReasoner`,
 Muse constants and role names follow the agreed phase-3 contract; no
 committed Python Muse batch has yet qualified the remaining parity surface.
 
-Deferred until Python commits: optional-field type validators; playbook blob
-loading and investigation playbook/model/price writes; normalized step usage,
-image blob references and replay flags; outcome usage totals; embedded shared
-pricing and equality test; Python-compatible replay/record reasoners and env
-selection; Python `reason-replayed` golden verification; and a new Rust
-conformance workbook with the phase-3 fields. Distinct typed budget errors
-and any additional Python factory names must be reconciled from that commit.
-The existing API scaffolding exposes these optional values when present in
-records; it does not create them.
+The integration items deferred at this cutoff are delivered in phase 3b
+below: validators, playbook/model/price writes and blobs, normalized usage,
+images/replay fields, totals/pricing, replay/record factories, and both sides'
+reason-replayed conformance. The earlier scaffold remains the read path.
 
 Closure qualification note: the first documentation-only export failed the
 existing `binary_exits_cleanly_on_sigterm` HTTP test (8 passed, 1 failed in
@@ -549,6 +545,74 @@ the retry; the closure gate was repeated with another fresh export and target.
 The failed run log is
 `~/.cache/autophys/5faaee2eaa526e405546f01e26f585643b6090a6.test.log`.
 
-Relay question for autophys/py: which committed Muse slice should the follow-up
-use for validators, `prices.json`, cassette format/environment names and the
-`reason-replayed` golden? No schema-format question remains open.
+### Phase 3b: committed Python Muse batch integration
+
+Phase 3b mirrors `d389c79` with `usage::{normalize_usage, price_for,
+usage_total}`, embedded `prices.json` plus byte/value equality with the shared
+table, `playbook::load_playbook` (bundled default and scalar-only frontmatter),
+`ModelSpec`, `reasoner_for`, `ReplayReasoner` and `RecordingReasoner`.
+`reasoner_from_env` honors `AUTOPHYS_REASON_REPLAY` and
+`AUTOPHYS_REASON_RECORD`; replay selection precedes credential loading and
+a miss returns an error, never an HTTP fallback. Configured effort/token
+defaults participate in recording keys. HTTP 402 immediately returns the
+typed `SimulationError::BudgetError` with `billing_not_configured`.
+
+`ReasonLanePolicy` pins playbook bytes through `Workbook::put_blob`,
+writes playbook/model/price metadata when given a `ModelSpec`, and writes
+normalized usage, elapsed time and replay flags. Paid invalid replies retain
+their trace and count toward totals; resume recomputes totals from all stored
+steps. `Outcome.usage_total` counts normalized calls only and propagates an
+unknown counted cost to null. `Workbook::get_blob` returns `(bytes, media_type)`,
+accepting bare playbook digests or prefixed image addresses. Generic step
+appends accept images with captions and either hash spelling. The additive
+validators match Python's accepted shapes and preserve unknown raw usage keys.
+No migration, projection-column change or user_version bump was made.
+
+Rust validates every record in all four Python goldens, including
+`reason-replayed`, and verifies/rebuilds their chains/projections. The new
+`tests/conformance/rust/reason-replayed.{json,ap-workbook}` replays all eight
+recorded seed-0 oscillator prompts, checks each reply and normalized usage
+exactly, stores playbook/image blobs, preserves a legacy raw usage dictionary,
+and records 800 input / 320 output tokens for $0.002360. The conformance
+generator can select only this new case with
+`AUTOPHYS_WRITE_GOLDENS_CASE=reason-replayed`; existing goldens are retained.
+This is request/record conformance using the Python golden's exact prompts;
+it does not claim a native Rust numerical run generates identical prompts.
+The shared cassette covers oscillator seed 0 only.
+
+The chip reads these fields from investigation rows returned by
+`GET /api/v1/investigations` and `GET /api/v1/workspace`:
+
+- `playbook.name`, `playbook.version`;
+- `model.model` (e.g. `muse-spark-1.3`, displayed as Spark), plus
+  `model.role`, `model.route`, `model.effort`, `model.max_tokens` if needed;
+- `usage_total.cost_usd` (nullable), `usage_total.input_tokens` and
+  `usage_total.output_tokens` (sum these for displayed tokens), and
+  `usage_total.calls`.
+
+`GET /api/v1/investigations/{id}/proposals/{pid}` exposes the same
+investigation context. `GET /api/v1/investigations/{id}/records` returns
+the original seq-0, step and outcome payloads for detailed trace displays.
+The daemon test loads Python's actual replay golden and checks the listing,
+workspace and records views; the earlier proposal-context test remains.
+No HTML changes are part of phase 3b.
+
+Contract divergence for autophys/rs to resolve with autophys/py:
+in `d389c79`, Python `usage_total` sets cost to null for a raw usage
+dictionary before checking whether it has `input_tokens`. Thus an uncounted
+legacy provider dict can poison the cost of otherwise priced calls. Rust
+follows the explicitly agreed rule: skip legacy raw dictionaries entirely;
+only an unknown cost on a counted normalized call makes the total null.
+A test and the new Rust golden pin that behavior. This disagreement was
+reported, not resolved by changing Python.
+
+Qualification: `cargo test --workspace --locked` passes 126 tests, 0 failed,
+2 ignored (including SDK doc tests). The commit gate uses a fresh
+`git archive <tree>` export and fresh
+`CARGO_TARGET_DIR=~/.cache/autophys/rs-3b-gate-target-*`, then removes both.
+No live Meta/Baseten/Muse call, deployment or source push was made.
+The shared index and concurrent Python/HTML edits were preserved. Supported
+task-board CLI remains unavailable on rwc-dev-01; this completion record
+carries the task state. No item from the phase-3b deferred list remains;
+the Muse Code CLI adapter and broader numerical prompt parity are outside
+this workstream.

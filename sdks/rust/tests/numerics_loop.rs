@@ -317,3 +317,64 @@ fn wait_uses_explicit_older_proposal_among_two_pending() {
         pid
     );
 }
+
+#[test]
+fn muse_policy_pins_playbook_and_retains_usage_on_invalid_replies_and_resume() {
+    use autophys::{
+        agent::ReasonLanePolicy,
+        playbook::load_playbook,
+        reasoner::{MUSE_SPARK, ModelSpec, ReasonOptions, ReasonReply, Reasoner},
+    };
+    struct Offline;
+    impl Reasoner for Offline {
+        fn complete(
+            &mut self,
+            _: &[Value],
+            _: &ReasonOptions,
+        ) -> autophys::simulator::Result<ReasonReply> {
+            Ok(ReasonReply {
+                content: json!("not JSON"),
+                model: Some(MUSE_SPARK.into()),
+                route: Some("meta".into()),
+                usage: json!({"prompt_tokens":10,"completion_tokens":5}),
+                elapsed_ms: Some(1.),
+                replayed: true,
+            })
+        }
+    }
+    let temp = tempfile::tempdir().unwrap();
+    let client = autophys::connect(Some(temp.path().to_str().unwrap())).unwrap();
+    let (p, ds, _) = input();
+    let wb = client.project_with(p).unwrap();
+    let make = || {
+        ReasonLanePolicy::new(Offline)
+            .with_model_spec(ModelSpec::new("policy", "meta", MUSE_SPARK).unwrap())
+            .unwrap()
+    };
+    let mut inv = wb.investigate(ds, ProposalRunner, make()).unwrap();
+    let out = inv.run().unwrap();
+    assert_eq!(out.status, "failed");
+    assert_eq!(out.usage_total["calls"], 3);
+    assert_eq!(out.usage_total["input_tokens"], 30);
+    assert_eq!(out.usage_total["output_tokens"], 15);
+    let playbook = load_playbook("default").unwrap();
+    let head = inv.records(None).unwrap().remove(0);
+    assert_eq!(head.payload["playbook"], playbook.metadata());
+    assert_eq!(head.payload["price"]["model"], MUSE_SPARK);
+    assert_eq!(
+        wb.get_blob(&playbook.sha256).unwrap(),
+        (playbook.data().unwrap(), "text/markdown".into())
+    );
+    let steps = inv.records(Some("step")).unwrap();
+    assert!(steps.iter().all(|r| r.payload["valid"] == false
+        && r.payload["replayed"] == true
+        && r.payload["raw_output"] == "not JSON"
+        && r.payload["usage"]["input_tokens"] == 10));
+    let id = inv.id.clone();
+    drop(inv);
+    let mut resumed = wb.resume(&id, ProposalRunner, make()).unwrap();
+    let next = resumed.run().unwrap();
+    assert_eq!(next.usage_total["calls"], 6);
+    assert_eq!(next.usage_total["input_tokens"], 60);
+    assert!(wb.verify().unwrap().ok);
+}

@@ -251,7 +251,9 @@ pub fn policy_from_config(
         "reason-lane" => Ok(Box::new(agent::ReasonLanePolicy {
             reasoner: reasoner.ok_or_else(|| invalid("a reason-lane policy needs a reasoner"))?,
             effort: config.effort.clone(),
-            max_tokens: config.max_tokens,
+            max_tokens: Some(config.max_tokens),
+            playbook: crate::playbook::load_playbook("default")?,
+            model_spec: None,
         })),
         _ => Err(invalid("invalid policy kind")),
     }
