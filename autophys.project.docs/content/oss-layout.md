@@ -1,6 +1,9 @@
 # Autophys contributors should need one checkout, not a fleet host
 
-Status: **implementation complete, independent review pending. Checked code revision 189a4ddd12f618882bcea00417dad8c9a026ffe5.**
+Status: **independent review requested R1–R4 repairs; repair verification is in progress.**
+The original checked code revision was 189a4ddd12f618882bcea00417dad8c9a026ffe5.
+The repair round is bounded to the four findings and installed Python packaging;
+it does not start the five-judge campaign.
 User authorization is folder structure and host/fleet portability before open source.
 The five-judge productionize campaign remains unstarted. Read this page first;
 [productionize-prep.md](productionize-prep.md) carries the earlier baseline.
@@ -49,8 +52,11 @@ need an explicit migration decision, not a rename.
 Checks will cover Cargo metadata and relevant Rust tests, cached Deno tests/root
 imports, Python packaging/imports and focused plugin contracts, shell syntax and
 package/deploy flow. Capture HEAD plus scoped digests before and after checks.
-No dependency install, network requirement, GPU, running service/data mutation,
-push or deployment is authorized. A failed offline build or missing license is a
+For the original batch, no dependency install, network requirement, GPU, running
+service/data mutation, push or deployment was authorized. The repair assignment
+subsequently authorized acquisition of declared public build/test dependencies
+into an isolated external environment/cache; live services, providers, GPU,
+publication and deployment remain outside this repair. A failed offline build or missing license is a
 reported blocker, not a waived check.
 
 The active master owner accepted the reservation. Its children own UI tour,
@@ -157,3 +163,32 @@ unavailable, and no SQLite write or board update is claimed. The full five-judge
 productionize campaign remains unstarted. No push, release, dependency install,
 real service deployment, GPU/training run or runtime-data cleanup was performed
 by this executor.
+
+## Review 1 repairs are being verified against committed source
+
+Independent review identified executable coupling that the original inventory
+understated: DomainConfig unconditionally registers the upstream `/_` admin and
+harness routes. Autophys now reserves the entire namespace with its own JSON
+404 before those routes. The file router, bundled browser code and product
+auth/API remain in use. This is a product boundary, not a vendor API removal.
+
+Release roots now have a documented literal character grammar before build or
+installation. Muse manifests name an executable package source, and their
+wrappers resolve config/playbook next to the installed executable without
+changing lab cwd. `html/deno.json` and its integrity-checked lock land together;
+the worker receives the same frozen config explicitly through fleet patch 0016.
+The snapshot owner approved this tracked patch mechanism instead of hand edits.
+
+**OSS-3 — agent-chosen, pending operator review:** share the product Deno config
+and lock with the existing worker through an opt-in library constructor. The
+worker otherwise starts below the vendor config, so a frontend-only lock cannot
+freeze its graph. The alternative is a separate worker config/lock plus an
+explicit launcher seam, which duplicates dependency resolution. Switching later
+requires scoped constructor/config changes and cache reacquisition, with no
+data migration. The existing upstream constructor and vendor pin are retained.
+
+The executor acquired declared public dependencies into external task-owned
+caches and a new Python environment, preserving peer SDK environments. The
+initial focused checks passed; final code identity and complete affected checks
+will be recorded here before the parent starts independent re-review. Raw
+receipts stay in the existing external evidence directory, `repair-round-1/`.
