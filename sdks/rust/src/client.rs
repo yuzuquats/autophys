@@ -2,8 +2,8 @@
 //!
 //! `target` is a directory (a local collection of `<slug>.ap-workbook`
 //! files), a path ending in `.ap-workbook` (that one workbook), or nothing
-//! (`$AUTOPHYS_HOME`, default `~/autophys`). An `http(s)` URL is refused for
-//! now: the Remote client is not written yet.
+//! (`$AUTOPHYS_HOME`, default `~/autophys`). An `http(s)` URL opens the daemon
+//! with Python-compatible pairing credentials.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -68,10 +68,9 @@ pub fn connect(target: Option<&str>) -> Result<Client> {
     };
     let lower = text.to_ascii_lowercase();
     if lower.starts_with("http://") || lower.starts_with("https://") {
-        return Err(Error::Unsupported(format!(
-            "{text}: remote targets are not implemented yet in autophys-rs; \
-             open a local collection or a .ap-workbook path"
-        )));
+        let creds = crate::remote::auth::load_credentials(Some(text))?.ok_or_else(||
+            Error::BadRequest(format!("no API key for {text}: pass api_key=, set AUTOPHYS_API_KEY or run `autophys pair`")))?;
+        return Client::connect_remote(text, &creds.api_key);
     }
     let path = expand(text);
     if text.ends_with(SUFFIX) {
@@ -97,10 +96,12 @@ struct Inner {
 #[derive(Clone)]
 pub struct Client {
     inner: Arc<Inner>,
+    remote: Option<crate::remote::Remote>,
 }
 
 impl std::fmt::Debug for Client {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(remote) = &self.remote { return remote.fmt(f); }
         let shown = self.inner.only.as_ref().unwrap_or(&self.inner.root);
         write!(f, "Client({})", shown.display())
     }
@@ -112,8 +113,17 @@ fn lock<T>(m: &Mutex<T>) -> Result<MutexGuard<'_, T>> {
 }
 
 impl Client {
+    /// Explicit-key connection, equivalent to Python connect(url, api_key=...).
+    pub fn connect_remote(server: &str, api_key: &str) -> Result<Self> {
+        let mut client = Self::local(PathBuf::new(), None);
+        client.remote = Some(crate::remote::Remote::new(server, api_key)?);
+        Ok(client)
+    }
+    pub fn remote(&self) -> Option<&crate::remote::Remote> { self.remote.as_ref() }
+
     fn local(root: PathBuf, only: Option<PathBuf>) -> Client {
         Client {
+            remote: None,
             inner: Arc::new(Inner {
                 root,
                 only,
@@ -130,6 +140,7 @@ impl Client {
 
     /// Every workbook file in the collection, sorted by path.
     pub fn paths(&self) -> Result<Vec<PathBuf>> {
+        if self.remote.is_some() { return Err(Error::Unsupported("remote workbooks have no local paths".into())); }
         if let Some(only) = &self.inner.only {
             return Ok(if only.is_file() {
                 vec![only.clone()]
@@ -195,6 +206,7 @@ impl Client {
 
     /// Every workbook in the collection, opened.
     pub fn workbooks(&self) -> Result<Vec<Workbook>> {
+        if let Some(r) = &self.remote { return r.projects()?.into_iter().map(|p| Ok(Workbook::from_remote(r.clone(),p))).collect(); }
         self.paths()?
             .iter()
             .map(|p| self.open_path(p, None).map(|(wb, _)| wb))
@@ -218,6 +230,7 @@ impl Client {
     /// [`Client::project`], also saying whether the project was created now
     /// (the daemon's `POST /projects` answers 201 or 200 from it).
     pub fn ensure_project(&self, name: &str) -> Result<(Workbook, bool)> {
+        if let Some(r) = &self.remote { let (p,new) = r.ensure_project(name)?; return Ok((Workbook::from_remote(r.clone(),p),new)); }
         if name.trim().is_empty() || name.chars().count() > 200 {
             return Err(Error::invalid(
                 "name",
@@ -238,6 +251,10 @@ impl Client {
 
     /// Investigation `id`, in whichever workbook of the collection holds it.
     pub fn find_investigation(&self, id: &str) -> Result<Investigation> {
+        if let Some(r) = &self.remote {
+            let info = r.investigations(None)?.into_iter().find(|i| i.id == id).ok_or(Error::NotFound("investigation"))?;
+            return self.project_by_id(&info.project_id)?.investigation(id);
+        }
         let known = lock(&self.inner.investigations)?.get(id).cloned();
         if let Some(path) = known
             && let Ok((wb, _)) = self.open_path(&path, None)
@@ -266,6 +283,7 @@ impl Client {
 
     /// Investigations in one project, or the entire collection.
     pub fn investigations_in(&self, project: Option<&str>) -> Result<Vec<InvestigationInfo>> {
+        if let Some(r) = &self.remote { return r.investigations(project); }
         match project {
             Some(id) => self.project_by_id(id)?.investigations(),
             None => self.investigations(),
@@ -274,6 +292,7 @@ impl Client {
 
     /// Every investigation in the collection, by workbook path order.
     pub fn investigations(&self) -> Result<Vec<InvestigationInfo>> {
+        if let Some(r) = &self.remote { return r.investigations(None); }
         let mut out = Vec::new();
         for wb in self.workbooks()? {
             out.extend(wb.investigations()?);

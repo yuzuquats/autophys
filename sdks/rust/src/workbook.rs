@@ -17,7 +17,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use rusqlite::{Connection, OpenFlags, OptionalExtension, TransactionBehavior};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::canonical::{self, GENESIS, canonical, chain_hash};
@@ -28,14 +28,14 @@ use crate::schema;
 use crate::validate::{self, Envelope, Kind};
 
 /// A workbook's one project (`projects` holds exactly this row).
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Project {
     pub id: String,
     pub name: String,
 }
 
 /// A stored config version: its hash and the parsed body.
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ConfigVersion {
     pub version: String,
     pub config: Value,
@@ -125,13 +125,14 @@ fn configure(conn: &Connection) -> Result<()> {
 struct Inner {
     path: PathBuf,
     project: Project,
-    conn: Mutex<Connection>,
+    conn: Option<Mutex<Connection>>,
 }
 
 /// One project's workbook. Cheap to clone; clones share the connection.
 #[derive(Clone)]
 pub struct Workbook {
     inner: Arc<Inner>,
+    remote: Option<crate::remote::Remote>,
 }
 
 impl std::fmt::Debug for Workbook {
@@ -144,6 +145,14 @@ impl std::fmt::Debug for Workbook {
 }
 
 impl Workbook {
+    pub(crate) fn from_remote(remote: crate::remote::Remote, project: Project) -> Self {
+        Self { inner: Arc::new(Inner { path: PathBuf::new(), project, conn: None }), remote: Some(remote) }
+    }
+    pub fn remote(&self) -> Option<&crate::remote::Remote> { self.remote.as_ref() }
+    pub(crate) fn remote_investigation(&self, id: &str) -> Investigation {
+        Investigation { wb:self.clone(), id:id.into() }
+    }
+
     /// Open the workbook at `path`. With `name`, the file is created when
     /// missing and its project row is inserted when absent; a file that holds
     /// a different project is refused (a slug collision). Without `name` the
@@ -183,10 +192,11 @@ impl Workbook {
         };
         Ok((
             Workbook {
+                remote: None,
                 inner: Arc::new(Inner {
                     path: path.to_path_buf(),
                     project,
-                    conn: Mutex::new(conn),
+                    conn: Some(Mutex::new(conn)),
                 }),
             },
             created,
@@ -195,7 +205,7 @@ impl Workbook {
 
     fn conn(&self) -> Result<MutexGuard<'_, Connection>> {
         self.inner
-            .conn
+            .conn.as_ref().ok_or_else(|| Error::Unsupported("operation requires a local workbook".into()))?
             .lock()
             .map_err(|_| Error::Internal("workbook connection poisoned".into()))
     }
@@ -221,6 +231,7 @@ impl Workbook {
 
     /// The project's config versions, oldest first.
     pub fn config_versions(&self) -> Result<Vec<ConfigVersion>> {
+        if let Some(r) = &self.remote { return r.config_versions(self.id()); }
         list_configs(&*self.conn()?)
     }
 
@@ -228,6 +239,7 @@ impl Workbook {
     /// (`hash_mismatch`) and the body JSON. Returns whether it was new;
     /// re-putting identical bytes is a no-op.
     pub fn put_config_version(&self, v: &str, body: &[u8]) -> Result<bool> {
+        if let Some(r) = &self.remote { return r.put_config_version(self.id(),v,body); }
         let want = format!("sha256:{}", canonical::sha256_hex([body]));
         if want != v {
             return Err(Error::HashMismatch);
@@ -251,6 +263,7 @@ impl Workbook {
 
     /// Store exact bytes under a sha256-prefixed content address (format v1).
     pub fn put_blob(&self, data: &[u8], media_type: &str) -> Result<String> {
+        if let Some(r) = &self.remote { return r.put_blob(self.id(),data,media_type); }
         let hash = format!("sha256:{}", crate::sha256_hex([data]));
         self.conn()?.execute("INSERT OR IGNORE INTO blobs (sha256, media_type, bytes, created) VALUES (?1, ?2, ?3, ?4)",
             rusqlite::params![hash, media_type, data, now_ts()])?;
@@ -258,6 +271,7 @@ impl Workbook {
     }
     /// Read a blob by prefixed address or the bare playbook digest.
     pub fn get_blob(&self, hash: &str) -> Result<(Vec<u8>, String)> {
+        if let Some(r) = &self.remote { return r.get_blob(self.id(),hash); }
         let hash = if hash.starts_with("sha256:") {
             hash.to_string()
         } else {
@@ -275,11 +289,14 @@ impl Workbook {
 
     /// Every investigation's projection row, oldest first.
     pub fn investigations(&self) -> Result<Vec<InvestigationInfo>> {
+        if let Some(r) = &self.remote { return r.investigations(Some(self.id())); }
         projections::investigations(&*self.conn()?)
     }
 
     /// The investigation `id`, for its records and the approval verbs.
     pub fn investigation(&self, id: &str) -> Result<Investigation> {
+        if let Some(r) = &self.remote { if !r.investigations(Some(self.id()))?.iter().any(|i|i.id==id) { return Err(Error::NotFound("investigation")); }
+            return Ok(self.remote_investigation(id)); }
         if !projections::investigation_exists(&*self.conn()?, id)? {
             return Err(Error::NotFound("investigation"));
         }
@@ -300,6 +317,7 @@ impl Workbook {
         meta: Value,
         record_id: Option<&str>,
     ) -> Result<(Investigation, bool)> {
+        if let Some(r) = &self.remote { return r.create(self,meta,record_id); }
         let record_id = match record_id {
             Some(id) => {
                 validate::check_id("Idempotency-Key", id)?;
@@ -390,6 +408,7 @@ impl Workbook {
 
     /// Every proposal's folded state, by investigation.
     pub fn proposals(&self) -> Result<Vec<Proposal>> {
+        if let Some(r) = &self.remote { return Ok(r.snapshot(self.id())?.proposals); }
         projections::proposals(&*self.conn()?, None)
     }
 
@@ -397,17 +416,20 @@ impl Workbook {
 
     /// The highest `gseq` in this workbook (0 when it has no records).
     pub fn cursor(&self) -> Result<i64> {
+        if let Some(r) = &self.remote { return Ok(r.snapshot(self.id())?.cursor); }
         records::cursor(&*self.conn()?)
     }
 
     /// Up to `limit` records after `gseq`, in `gseq` order (Rust only: the
     /// daemon's `/stream`). `gseq` orders records within this workbook only.
     pub fn records_after(&self, gseq: i64, limit: i64) -> Result<Vec<Logged>> {
+        if let Some(r) = &self.remote { return r.records_after(self.id(),gseq,limit,None); }
         records::after(&*self.conn()?, gseq, limit, None)
     }
 
     /// The whole workbook in one read transaction.
     pub fn snapshot(&self) -> Result<Snapshot> {
+        if let Some(r) = &self.remote { return r.snapshot(self.id()); }
         let conn = self.conn()?;
         let tx = conn.unchecked_transaction()?;
         let cursor = records::cursor(&tx)?;
@@ -429,6 +451,7 @@ impl Workbook {
 
     /// `{investigation: Head}` of every chain's last record.
     pub fn heads(&self) -> Result<BTreeMap<String, Head>> {
+        if let Some(r) = &self.remote { let _ = r; return self.remote_heads(); }
         let conn = self.conn()?;
         let mut stmt = conn.prepare(
             "SELECT investigation, seq, hash FROM records r
@@ -449,6 +472,7 @@ impl Workbook {
 
     /// The projection rows as stored, shaped like the conformance files.
     pub fn projection_rows(&self) -> Result<Value> {
+        if let Some(r) = &self.remote { let _ = r; return self.remote_projection_rows(); }
         projections::rows(&*self.conn()?)
     }
 
@@ -458,6 +482,7 @@ impl Workbook {
     /// that the projection tables equal a fresh replay of the records. The
     /// file is not changed.
     pub fn verify(&self) -> Result<VerifyReport> {
+        if let Some(r) = &self.remote { let _ = r; return self.remote_verify(); }
         let conn = self.conn()?;
         let tx = conn.unchecked_transaction()?;
         let replay = Connection::open_in_memory()?;
@@ -668,6 +693,7 @@ impl Investigation {
 
     /// The investigation's projection row now.
     pub fn info(&self) -> Result<InvestigationInfo> {
+        if let Some(r) = &self.wb.remote { return r.investigations(Some(self.wb.id()))?.into_iter().find(|i|i.id==self.id).ok_or(Error::NotFound("investigation")); }
         projections::investigations(&*self.wb.conn()?)?
             .into_iter()
             .find(|i| i.id == self.id)
@@ -680,6 +706,7 @@ impl Investigation {
     /// `created = false`; the same id with other content is
     /// `idempotency_conflict`.
     pub fn append(&self, kind: &str, payload: Value, id: Option<&str>) -> Result<Appended> {
+        if let Some(r) = &self.wb.remote { return r.append(&self.id,kind,payload,id); }
         let kind = Kind::parse(kind)
             .ok_or_else(|| Error::invalid("kind", format!("unknown kind {kind:?}")))?;
         if kind == Kind::Investigation {
@@ -720,6 +747,7 @@ impl Investigation {
 
     /// The investigation's records in seq order, optionally one kind only.
     pub fn records(&self, kind: Option<&str>) -> Result<Vec<Record>> {
+        if let Some(r) = &self.wb.remote { return r.records(&self.id,kind); }
         if let Some(k) = kind {
             Kind::parse(k).ok_or_else(|| Error::invalid("kind", format!("unknown kind {k:?}")))?;
         }
@@ -733,11 +761,13 @@ impl Investigation {
     /// This investigation's records after workbook position `gseq`, in order
     /// (Rust only: `/stream?investigation=` and `…/records?after=`).
     pub fn records_after(&self, gseq: i64) -> Result<Vec<Logged>> {
+        if let Some(r) = &self.wb.remote { return r.records_after(self.wb.id(),gseq,i64::MAX,Some(&self.id)); }
         records::after(&*self.wb.conn()?, gseq, i64::MAX, Some(&self.id))
     }
 
     /// Proposal `pid`'s folded state.
     pub fn proposal(&self, pid: &str) -> Result<Proposal> {
+        if let Some(r) = &self.wb.remote { return r.proposal(&self.id,pid); }
         proposal_in(&*self.wb.conn()?, &self.id, pid)
     }
 
@@ -771,6 +801,7 @@ impl Investigation {
     /// measurement record's hash. Both records commit in one transaction.
     /// Returns the `data_attached` record.
     pub fn attach_data(&self, pid: &str, observation: Value) -> Result<Appended> {
+        if let Some(r) = &self.wb.remote { return r.attach_data(&self.id,pid,observation); }
         validate::check_id("payload.proposal_id", pid)?;
         let payload = serde_json::json!({ "observation": observation });
         validate::payload_shape(Kind::Measurement, &payload)?;
@@ -812,6 +843,7 @@ impl Investigation {
     /// decided. The file is re-read when `PRAGMA data_version` changes.
     /// Unknown ids return `NotFound`; pending decisions time out after `timeout`.
     pub fn wait_for_approval(&self, proposal_id: &str, timeout: Duration) -> Result<Proposal> {
+        if let Some(r) = &self.wb.remote { return r.wait_for_approval(&self.id,proposal_id,timeout); }
         let watch = self.wb.watcher()?;
         let deadline = Instant::now() + timeout;
         let mut seen: Option<i64> = None;

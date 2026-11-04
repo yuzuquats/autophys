@@ -331,6 +331,11 @@ impl crate::Workbook {
             &project.config_version(),
             crate::canonical::canonical(&project.config()).as_bytes(),
         )?;
+        if self.remote().is_some() {
+            if let Some(display) = project.simulator.display() {
+                self.put_display(&display.canonical(&project).map_err(store_error)?)?;
+            }
+        }
         Ok(ProjectWorkbook {
             workbook: self.clone(),
             project,

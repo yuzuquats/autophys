@@ -3,7 +3,7 @@
 Status: local SDK implemented, rev 5, 2026-11-04. FC-1/GT-1 step 2 is implemented (see [fit-curves-and-truth.md](fit-curves-and-truth.md)): fitted/initial curves and evaluator reveal publication match the Python reference. MQ-5 battery cases and test-hour budgets are implemented and independently reviewed (see the battery landing below). Display-manifest step 3 is implemented: `autophys::Display`, trajectory `.u`, uncounted previews and byte-identical bench manifests ([contract](display-manifest.md)); HTTP registration is outside this step. Rev 2: full API parity (AX-2 revised). Rev 3: the numerics case format, the `autophys-cli` layout, the conformance tree as committed. Operator direction (autophys/rs thread): the
 Rust binary produces the app and serves the endpoints, and each endpoint
 calls a Rust library crate that is the Rust counterpart of the Python SDK, so
-Rust programs can import it directly. Phase 1 and the phase-2 numerical SDK are implemented; Remote transport remains pending. It refines W-4
+Rust programs can import it directly. Phase 1 and the phase-2 numerical SDK are implemented; Remote transport is implemented against the daemon’s /api/v1. It refines W-4
 (`workbook.md`) and does not change the workbook format (`workbook-format.md`).
 
 ## The shape
@@ -263,8 +263,8 @@ tests/vectors/chain.json   hash-chain vectors; both suites read it at this path
 ```review-callout
 kind: risk
 title: Not settled yet
-- The Remote client in Rust is new code. Until it passes the same conformance
-  cases as Python's HttpStore, Rust callers should use Local.
+- Local and Remote use the same Workbook/Investigation record and agent APIs.
+  Remote conformance launches the workspace-built daemon binary on loopback.
 - `inv.records_after` and the HTTP `?after=` cursor are Rust- and server-only.
   `gseq` orders records within one workbook only (W-6), so a remote stream that
   spans projects needs a cursor per workbook.
@@ -279,7 +279,7 @@ title: Not settled yet
 The record store now lives in `sdks/rust`, crate `autophys`. Its dependencies
 contain no tento, actix or async runtime. `connect` supports a collection
 directory, one `.ap-workbook` path, or the default `AUTOPHYS_HOME` /
-`~/autophys`; HTTP targets return an explicit remote-not-implemented error.
+`~/autophys`; HTTP targets use pairing-key credentials and /api/v1.
 The Rust column above is implemented through `wait_for_approval`, config
 versions and `verify`. Phase-2 names remain reserved without stubs.
 
@@ -380,7 +380,7 @@ wait returns it while the newer one remains proposed. No file-format change.
 Questions for autophys/api: confirm RS-CURSOR-1's unscoped cursor is consumed as an
 opaque string; consider making Python's measurement-plus-data-attachment
 operation atomic too. Remote Rust transport and the investigation/numerics
-loop remain phase 2 or later. No schema-format question remains open.
+loop are now implemented. No schema-format question remains open.
 
 Repeated outlook axis names use the last axis's range when checking edits,
 matching Python. Operator confirmed this v1 interpretation on 2026-11-04;
@@ -412,8 +412,8 @@ Task CLI is unavailable on this host, as already recorded in the project
 cover. At that historical cutoff, phase 2 and remote transport remained. Phase 2
 has since landed: simulator, fit, sensitivity, design, agent/policy/reasoner,
 models, display and FC-1/GT-1 are implemented. Remaining SDK implementation
-work is **Remote transport only** (`connect(http(s)://…)` still returns
-`Unsupported`); RS-CURSOR-1 remains an operator decision, not missing SDK code.
+work in the record/agent transport surface is complete; RS-CURSOR-1 remains an
+operator decision, not missing SDK code.
 
 ## Embedded web release (B-1)
 
@@ -456,10 +456,8 @@ The SDK commands all call `autophys::connect` with `--target`, defaulting to
 
 Review decisions default `--by` to `operator`. Verification returns an array
 of `{project, report}` and exits 1 if a report fails. Directory and
-`.ap-workbook` targets work. URL targets are forwarded unchanged; the current
-SDK reports `Unsupported` for Remote, so those calls fail clearly until its
-Remote client is implemented. CLI routing does not substitute a local
-collection for a URL.
+`.ap-workbook` targets work. URL targets use Remote with the same SDK calls,
+pairing-key authentication and per-investigation stream cursors.
 
 B1-M1 (**agent-chosen, confirmed by the operator 2026-11-04; macOS check still owed**): macOS packaging relinks from
 the source checkout with `-sectcreate`, preserving the compiled release guard
@@ -747,4 +745,76 @@ The archived implementation passes Rust workspace 170/0/2
 review returned ready with no actionable findings. The final archived-tree
 rerun and cleanup receipt are linked from
 [fit-curves-and-truth.md](fit-curves-and-truth.md#rust-qualification-and-independent-review-receipt).
-Remaining SDK implementation work: **Remote transport only**.
+Remaining SDK implementation work in this scope: none; Remote is implemented below.
+
+
+## Rust Remote HTTP transport (2026-11-04)
+
+The same Client, Workbook and Investigation types now dispatch to Local or
+Remote. URL connections discover credentials exactly like Python HttpStore:
+AUTOPHYS_API_KEY, then the 0600 AUTOPHYS_CONFIG_DIR/credentials file
+(default ~/.config/autophys). Existing insecure files are refused even with
+an environment key. An explicit key uses Client::connect_remote(url, key).
+The remote::auth module provides pair_start, pair_poll, whoami and atomic
+0600 credential saving; keys and device codes are omitted from Debug.
+
+| Surface | Local | Remote |
+| --- | --- | --- |
+| Project/config, create, records, proposals, approvals/edit/reject/withdraw, measurements, runs, steps, outcome, reveal, blobs, display | implemented | /api/v1 implemented |
+| Synthetic/agent run, resume and project display registration | implemented | same API over HTTP |
+| wait_for_approval | data_version polling | scoped SSE, cursor resume/reconnect, bounded deadline, polling fallback |
+| snapshots, heads, verify, paged records | workbook | scoped workspace snapshot/SSE; verification folds records in memory |
+| paths, rebuild_projections | local administration | Unsupported: no daemon repair endpoint |
+
+Create uses the caller’s record_id as Idempotency-Key, or a fresh random
+32-hex id when omitted. The same key and metadata replay; changed metadata
+conflicts; identical metadata without a key creates another investigation.
+This matches Python’s explicit idempotency_key fix in d9946f9, which landed
+during implementation. Live-daemon conformance pins all three cases.
+HttpError preserves status, error, message, Retry-After and optional path;
+is_auth matches Python AuthError (401/403 except access_denied). Error::code
+now borrows dynamic remote codes rather than requiring a static string.
+
+RS-REMOTE-1 — **agent-chosen, pending operator review**: Remote uses the
+existing blocking ureq dependency, with HTTP adapters in remote/ and small
+dispatch hooks in the record types. No runtime, schema or config hash changes.
+The alternative is an async API and runtime dependency; switching requires
+new async entry points and agent integration. Current reversal cost is the
+transport modules and dispatch hooks. SSE sessions have a finite body budget
+(stream_idle) and reconnect with the investigation cursor; one absolute wait
+deadline bounds all sessions, state reads and backoff.
+
+RS-REMOTE-2 — **agent-chosen, pending operator review**: Rust preserves its
+existing non-optional Appended/StoredDisplay results. A daemon missing
+reveal/display returns the real HTTP error, whereas Python warns and skips
+on 404/405. Returning a fabricated stored record would misreport persistence.
+The strongest alternative is optional results in both transports, an SDK API
+change. Switching costs those return types and their callers. The daemon in
+this workspace supports both routes. Remote display created is 0.0 because
+the HTTP contract supplies a digest and body but no storage timestamp;
+Local keeps its real timestamp. Remote attach_data uses two appends with stable per-proposal ids (adapting Python
+HttpStore’s agent attachment does), pre-checks proposal state, and replays
+identical retries; Local commits both records atomically.
+
+Validation: tests/rust_remote.rs starts the workspace-built autophys-cli
+binary with temporary collection, keys and prebuilt web tree, and kills/waits
+it on drop. It covers Python HttpStore’s project/config and record contract,
+pairing/denial/expiry and revoked keys, environment/file discovery, explicit
+create replay/conflict and fresh no-key creates, scoped approval streams and
+timeouts, edit bounds, data attachment, withdraw, reveal ordering/replay,
+display, blobs and a full synthetic thermal run. remote/ tests cover raw
+Retry-After/error fields, SSE framing, transient retry, absent-stream
+fallback, auth failure and reconnect cursors. Archive gates and independent
+review receipts are retained on rwc-dev-01 under
+~/.cache/autophys/rs-remote-work/. The supported task-board CLI is unavailable;
+that directory’s task.json and this record carry the task state.
+
+
+Independent review found and corrected three transport bugs: competing
+attachments now share a measurement id per proposal so rejected content
+never becomes a budget-consuming orphan; internal paging scans advance
+cursors only through returned records; and each SSE connection/header
+attempt is bounded by the request/stream budget and remaining wait deadline.
+Live concurrent-attachment and limited-page/stream tests plus a stalled-header
+transport test pin the fixes. Review rounds and archive gate receipts remain
+under ~/.cache/autophys/rs-remote-work/.

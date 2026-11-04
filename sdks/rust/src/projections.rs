@@ -6,7 +6,7 @@
 //! the log in `gseq` order rebuilds both tables exactly ([`rebuild`]).
 
 use rusqlite::{Connection, OptionalExtension, params};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::canonical::canonical;
@@ -15,7 +15,7 @@ use crate::records::{self, Record};
 use crate::validate::{Envelope, Event, Kind};
 
 /// An investigation row (`GET /investigations`, `/workspace`).
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct InvestigationInfo {
     #[serde(flatten)]
     pub reason: records::ReasonMetadata,
@@ -32,7 +32,7 @@ pub struct InvestigationInfo {
 }
 
 /// A proposal's folded state (`GET …/proposals/{pid}`, `/workspace`).
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Proposal {
     /// Inference context of the owning investigation, read from its records.
     #[serde(flatten)]

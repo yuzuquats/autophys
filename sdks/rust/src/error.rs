@@ -5,6 +5,12 @@
 /// Everything a workbook operation can refuse or fail with.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// A remote daemon response; preserves status, code, message, path and Retry-After.
+    #[error(transparent)]
+    Http(Box<crate::remote::HttpError>),
+    /// The daemon has no usable SSE endpoint; approval waits may poll.
+    #[error("{0}")]
+    StreamUnavailable(String),
     /// 400 `invalid_request`: the call is not shaped like it should be.
     #[error("{0}")]
     BadRequest(String),
@@ -67,6 +73,8 @@ impl Error {
     /// The HTTP status a server maps this error to.
     pub fn status(&self) -> u16 {
         match self {
+            Error::Http(e) => e.status,
+            Error::StreamUnavailable(_) => 501,
             Error::BadRequest(_) => 400,
             Error::NotFound(_) => 404,
             Error::Conflict { .. } => 409,
@@ -80,8 +88,10 @@ impl Error {
     }
 
     /// The `error` field of the JSON body.
-    pub fn code(&self) -> &'static str {
+    pub fn code(&self) -> &str {
         match self {
+            Error::Http(e) => &e.error,
+            Error::StreamUnavailable(_) => "stream_unavailable",
             Error::BadRequest(_) => "invalid_request",
             Error::NotFound(_) => "not_found",
             Error::Conflict { code, .. } => code,
@@ -99,6 +109,10 @@ impl Error {
     /// The JSON error body: `{error, message}`, plus `path` for a 422.
     pub fn body(&self) -> serde_json::Value {
         let mut body = serde_json::json!({ "error": self.code(), "message": self.to_string() });
+        if let Error::Http(e) = self {
+            body["message"] = serde_json::json!(e.message);
+            if let Some(path) = &e.path { body["path"] = serde_json::json!(path); }
+        }
         if let Error::Invalid { path, message } = self {
             body["path"] = serde_json::json!(path);
             body["message"] = serde_json::json!(message);

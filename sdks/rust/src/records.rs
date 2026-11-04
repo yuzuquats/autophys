@@ -1,7 +1,7 @@
 //! The record log: the row type and the queries the store needs.
 
 use rusqlite::{Connection, OptionalExtension, Row, params};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::error::{Error, Result};
@@ -9,7 +9,7 @@ use crate::error::{Error, Result};
 /// A record exactly as the SDK's `Record` dataclass has it. The global cursor
 /// `gseq` travels beside it ([`Logged`]), never inside, because the SDK
 /// builds `Record(**json)` and would reject an extra field.
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Record {
     pub id: String,
     pub investigation: String,
@@ -134,7 +134,7 @@ pub(crate) fn cursor(conn: &Connection) -> Result<i64> {
 }
 
 /// Record-derived inference context. These fields are not projection columns.
-#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct ReasonMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub playbook: Option<Value>,
@@ -145,7 +145,7 @@ pub struct ReasonMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage_total: Option<Value>,
     /// Step payloads in record order; raw historical usage is preserved.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub steps: Vec<Value>,
 }
 impl ReasonMetadata {

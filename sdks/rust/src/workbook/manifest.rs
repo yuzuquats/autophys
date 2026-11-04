@@ -16,6 +16,7 @@ impl Workbook {
     /// Validate only format 1, canonicalise, then replace the project's display.
     /// Returns (latest, changed); an identical canonical body is a no-op.
     pub fn put_display(&self, body: &[u8]) -> Result<(StoredDisplay, bool)> {
+        if let Some(r) = self.remote() { return r.put_display(self.id(),body); }
         if body.len() > MAX_DISPLAY_BYTES {
             return Err(Error::TooLarge(MAX_DISPLAY_BYTES));
         }
@@ -67,6 +68,7 @@ impl Workbook {
 
     /// No manifest is represented by None; reading an old workbook adds no table.
     pub fn display(&self) -> Result<Option<StoredDisplay>> {
+        if let Some(r) = self.remote() { return Ok(r.snapshot(self.id())?.display); }
         read(&*self.conn()?, self.id())
     }
 }

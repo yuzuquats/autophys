@@ -28,6 +28,8 @@
 
 pub mod canonical;
 mod client;
+pub mod remote;
+pub use remote::HttpError;
 pub mod error;
 pub mod projections;
 pub mod records;

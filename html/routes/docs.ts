@@ -210,7 +210,7 @@ $D verify --target ./autophys-demo --json
 
 **Reading and reviewing workbooks**
 
-These commands take \`--target\`: a collection directory or one \`.ap-workbook\` file. The default is \`$AUTOPHYS_HOME\`, or \`~/autophys\` when that is unset. They read the files directly and do not open daemon URLs yet.
+These commands take \`--target\`: a collection directory, one \`.ap-workbook\` file, or an \`http(s)://\` daemon URL. The default is \`$AUTOPHYS_HOME\`, or \`~/autophys\` when that is unset. URL targets use pairing-key credentials from \`AUTOPHYS_API_KEY\` or \`~/.config/autophys/credentials\`.
 
 | Command | Options |
 | --- | --- |
@@ -420,7 +420,7 @@ wb.investigation("inv_0017968045745e3a")?.approve("prop_e055775d9f66", "james", 
 
 | Name | What it is |
 | --- | --- |
-| \`autophys::connect(target: Option<&str>) -> Result<Client>\` | A collection directory or one \`.ap-workbook\` file; \`None\` means \`$AUTOPHYS_HOME\`, or \`~/autophys\`. Daemon URLs return \`Error::Unsupported\` for now. |
+| \`autophys::connect(target: Option<&str>) -> Result<Client>\` | A collection directory, one \`.ap-workbook\` file, or an \`http(s)://\` daemon URL; \`None\` means \`$AUTOPHYS_HOME\`, or \`~/autophys\`. URL targets use the same Workbook/Investigation API with pairing-key authentication. |
 | \`client.projects()\`, \`client.workbooks()\`, \`client.project(name)\` | List projects; open every workbook; open a workbook by name, creating it if it is missing. |
 | \`client.find_investigation(id)\`, \`client.investigations_in(project: Option<&str>)\` | Find an investigation anywhere in the collection; list investigations, optionally in one project. |
 | \`client.project_with(Project) -> Result<ProjectWorkbook>\` | Open a workbook with its simulator attached, storing the config version. |

@@ -27,12 +27,12 @@ fn proposed(pid: &str) -> Value {
     json!({"proposal_id": pid, "event": "proposed", "experiment": "sine", "settings": {"f": 0.44}})
 }
 
-fn code(e: Error) -> (u16, &'static str) {
+fn code(e: &Error) -> (u16, &str) {
     (e.status(), e.code())
 }
 
 #[test]
-fn connect_takes_a_directory_a_workbook_path_or_refuses_a_url() {
+fn connect_takes_local_paths_and_remote_urls() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().to_str().unwrap();
     let client = connect(Some(root)).unwrap();
@@ -59,9 +59,9 @@ fn connect_takes_a_directory_a_workbook_path_or_refuses_a_url() {
     assert_eq!(one.project("Heated Block!").unwrap().id(), wb.id());
 
     for url in ["http://127.0.0.1:4794", "https://gb10.example/autophys"] {
-        let err = connect(Some(url)).unwrap_err();
-        assert!(matches!(err, Error::Unsupported(_)), "{err}");
-        assert!(err.to_string().contains("not implemented yet"), "{err}");
+        let remote = autophys::Client::connect_remote(url, "test-key").unwrap();
+        assert!(remote.remote().is_some());
+        assert_eq!(remote.remote().unwrap().base(), format!("{url}/api/v1"));
     }
 }
 
@@ -118,11 +118,11 @@ fn a_workbook_file_is_format_1_with_one_project_and_no_server_tables() {
     // A slug collision with another name is refused; the same name reopens.
     let client = connect(Some(dir.path().to_str().unwrap())).unwrap();
     let err = client.project("THERMAL").unwrap_err();
-    assert_eq!(code(err), (409, "conflict"));
+    assert_eq!(code(&err), (409, "conflict"));
     let fresh = connect(Some(dir.path().to_str().unwrap())).unwrap();
     assert_eq!(fresh.project("thermal").unwrap().id(), wb.id());
     let err = fresh.project("Thermal").unwrap_err();
-    assert_eq!(code(err), (409, "conflict"));
+    assert_eq!(code(&err), (409, "conflict"));
 }
 
 #[test]
@@ -159,12 +159,12 @@ fn config_versions_must_hash_to_their_body() {
         "re-put is a no-op"
     );
     let err = wb.put_config_version("sha256:00", CONFIG).unwrap_err();
-    assert_eq!(code(err), (422, "hash_mismatch"));
+    assert_eq!(code(&err), (422, "hash_mismatch"));
     let bad = b"not json";
     let err = wb
         .put_config_version(&format!("sha256:{}", sha256_hex([&bad[..]])), bad)
         .unwrap_err();
-    assert_eq!(code(err), (422, "invalid_payload"));
+    assert_eq!(code(&err), (422, "invalid_payload"));
     let versions = wb.config_versions().unwrap();
     assert_eq!(versions.len(), 1);
     assert_eq!(versions[0].config["x"], 1.5);
@@ -186,18 +186,18 @@ fn create_investigation_pins_a_stored_config_and_replays_by_record_id() {
     let err = wb
         .create_investigation(json!({"config_version": version()}), Some("key-1"))
         .unwrap_err();
-    assert_eq!(code(err), (409, "idempotency_conflict"));
+    assert_eq!(code(&err), (409, "idempotency_conflict"));
     let err = wb
         .create_investigation(json!({"config_version": "sha256:ff"}), None)
         .unwrap_err();
-    assert_eq!(code(err), (409, "unknown_config_version"));
+    assert_eq!(code(&err), (409, "unknown_config_version"));
     let err = wb
         .create_investigation(
             json!({"project_id": "prj_0000000000000000", "config_version": version()}),
             None,
         )
         .unwrap_err();
-    assert_eq!(code(err), (404, "not_found"));
+    assert_eq!(code(&err), (404, "not_found"));
 
     let head = &inv.records(None).unwrap()[0];
     assert_eq!((head.seq, head.kind.as_str()), (0, "investigation"));
@@ -226,21 +226,21 @@ fn appends_replay_refuse_reused_ids_and_chain() {
     let err = inv
         .append("measurement", json!({"observation": {}}), Some("m-1"))
         .unwrap_err();
-    assert_eq!(code(err), (409, "idempotency_conflict"));
+    assert_eq!(code(&err), (409, "idempotency_conflict"));
     let err = inv.append("run", json!({}), Some("m-1")).unwrap_err();
-    assert_eq!(code(err), (409, "idempotency_conflict"));
+    assert_eq!(code(&err), (409, "idempotency_conflict"));
 
     let err = inv.append("measurement", json!({}), None).unwrap_err();
-    assert_eq!(code(err), (422, "invalid_payload"));
+    assert_eq!(code(&err), (422, "invalid_payload"));
     let err = inv.append("bogus", json!({}), None).unwrap_err();
-    assert_eq!(code(err), (422, "invalid_payload"));
+    assert_eq!(code(&err), (422, "invalid_payload"));
     let err = inv.append("investigation", json!({}), None).unwrap_err();
-    assert_eq!(code(err), (400, "invalid_request"));
+    assert_eq!(code(&err), (400, "invalid_request"));
     let err = inv.append("run", json!({}), Some("bad id")).unwrap_err();
-    assert_eq!(code(err), (422, "invalid_payload"));
+    assert_eq!(code(&err), (422, "invalid_payload"));
     let big = json!({"blob": "x".repeat(autophys::MAX_PAYLOAD_BYTES)});
     let err = inv.append("run", big, None).unwrap_err();
-    assert_eq!(code(err), (413, "payload_too_large"));
+    assert_eq!(code(&err), (413, "payload_too_large"));
 
     let r = inv.append("run", json!({"loss": 0.5}), None).unwrap();
     assert_eq!(r.record.prev_hash, a.record.hash);
@@ -250,7 +250,7 @@ fn appends_replay_refuse_reused_ids_and_chain() {
     assert_eq!(after[0].record.id, r.record.id);
     assert_eq!(inv.records(Some("measurement")).unwrap().len(), 1);
     assert_eq!(
-        code(inv.records(Some("nope")).unwrap_err()),
+        code(&inv.records(Some("nope")).unwrap_err()),
         (422, "invalid_payload")
     );
     assert_eq!(inv.info().unwrap().budget_used, 1);
@@ -269,7 +269,7 @@ fn the_proposal_state_machine_and_the_approval_verbs() {
         .create_investigation(json!({"config_version": version()}), None)
         .unwrap();
     assert_eq!(
-        code(inv.approve("p-1", "james", None).unwrap_err()),
+        code(&inv.approve("p-1", "james", None).unwrap_err()),
         (404, "not_found")
     );
     inv.append("proposal", proposed("p-1"), Some("p-1.proposed"))
@@ -278,7 +278,7 @@ fn the_proposal_state_machine_and_the_approval_verbs() {
     let err = inv
         .append("proposal", proposed("p-1"), Some("p-1.again"))
         .unwrap_err();
-    assert_eq!(code(err), (409, "proposal_exists"));
+    assert_eq!(code(&err), (409, "proposal_exists"));
     let err = inv
         .append(
             "proposal",
@@ -286,7 +286,7 @@ fn the_proposal_state_machine_and_the_approval_verbs() {
             None,
         )
         .unwrap_err();
-    assert_eq!(code(err), (409, "conflict"));
+    assert_eq!(code(&err), (409, "conflict"));
 
     let ok = inv.approve("p-1", "james", None).unwrap();
     assert_eq!(ok.record.payload["event"], "approved");
@@ -298,7 +298,7 @@ fn the_proposal_state_machine_and_the_approval_verbs() {
     );
     assert_eq!(inv.info().unwrap().status, "awaiting_data");
     assert_eq!(
-        code(inv.reject("p-1", "james", "late").unwrap_err()),
+        code(&inv.reject("p-1", "james", "late").unwrap_err()),
         (409, "conflict")
     );
 
@@ -315,7 +315,7 @@ fn the_proposal_state_machine_and_the_approval_verbs() {
     assert_eq!(inv.info().unwrap().status, "open");
     assert_eq!(inv.info().unwrap().budget_used, 1);
     assert_eq!(
-        code(inv.attach_data("p-1", json!({})).unwrap_err()),
+        code(&inv.attach_data("p-1", json!({})).unwrap_err()),
         (409, "conflict")
     );
 
@@ -331,7 +331,7 @@ fn the_proposal_state_machine_and_the_approval_verbs() {
     )
     .unwrap();
     assert_eq!(inv.proposal("p-3").unwrap().status, "withdrawn");
-    assert_eq!(code(inv.proposal("p-9").unwrap_err()), (404, "not_found"));
+    assert_eq!(code(&inv.proposal("p-9").unwrap_err()), (404, "not_found"));
     assert_eq!(wb.proposals().unwrap().len(), 3);
     inv.append("outcome", json!({"status": "validated"}), None)
         .unwrap();
@@ -379,7 +379,7 @@ fn wait_for_approval_sees_a_decision_from_another_connection() {
         .create_investigation(json!({"config_version": version()}), None)
         .unwrap();
     assert_eq!(
-        code(
+        code(&
             inv.wait_for_approval("p-1", Duration::from_millis(10))
                 .unwrap_err()
         ),
@@ -529,7 +529,7 @@ fn concurrent_data_attachments_commit_exactly_one_measurement_and_event() {
     let b = worker.join().unwrap();
     assert_eq!(usize::from(a.is_ok()) + usize::from(b.is_ok()), 1);
     let error = a.err().or_else(|| b.err()).unwrap();
-    assert_eq!(code(error), (409, "conflict"));
+    assert_eq!(code(&error), (409, "conflict"));
     let measurements = inv.records(Some("measurement")).unwrap();
     assert_eq!(measurements.len(), 1);
     let events = inv.records(Some("proposal")).unwrap();
@@ -558,7 +558,7 @@ fn repeated_outlook_axis_names_use_the_last_range_as_python_does() {
     )
     .unwrap();
     assert_eq!(
-        code(
+        code(&
             inv.approve("duplicate-axis", "test", Some(json!({"f": 0.5})))
                 .unwrap_err()
         ),

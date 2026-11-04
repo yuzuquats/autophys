@@ -66,7 +66,7 @@ impl ApiError {
     }
 
     /// The `error` field of the JSON body.
-    pub fn code(&self) -> &'static str {
+    pub fn code(&self) -> &str {
         match self {
             ApiError::Lib(e) => e.code(),
             ApiError::Unauthorized => "unauthorized",
