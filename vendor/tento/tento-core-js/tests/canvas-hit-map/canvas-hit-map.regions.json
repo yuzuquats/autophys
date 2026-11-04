@@ -1,0 +1,67 @@
+{
+  "type": "canvas-hit-map",
+  "name": "regions",
+  "description": "4px resize handle zones at top and bottom of cells",
+  "cases": [
+    {
+      "name": "top 4px is top handle",
+      "input": {
+        "entries": [
+          { "id": "a", "rect": { "x": 0, "y": 0, "width": 100, "height": 48 }, "zIndex": 0 }
+        ],
+        "point": { "x": 50, "y": 2 }
+      },
+      "expected": { "id": "a", "region": "top" }
+    },
+    {
+      "name": "exactly 4px is top handle",
+      "input": {
+        "entries": [
+          { "id": "a", "rect": { "x": 0, "y": 0, "width": 100, "height": 48 }, "zIndex": 0 }
+        ],
+        "point": { "x": 50, "y": 4 }
+      },
+      "expected": { "id": "a", "region": "top" }
+    },
+    {
+      "name": "5px is body",
+      "input": {
+        "entries": [
+          { "id": "a", "rect": { "x": 0, "y": 0, "width": 100, "height": 48 }, "zIndex": 0 }
+        ],
+        "point": { "x": 50, "y": 5 }
+      },
+      "expected": { "id": "a", "region": "body" }
+    },
+    {
+      "name": "bottom 4px is bottom handle",
+      "input": {
+        "entries": [
+          { "id": "a", "rect": { "x": 0, "y": 0, "width": 100, "height": 48 }, "zIndex": 0 }
+        ],
+        "point": { "x": 50, "y": 46 }
+      },
+      "expected": { "id": "a", "region": "bottom" }
+    },
+    {
+      "name": "just before bottom handle is body",
+      "input": {
+        "entries": [
+          { "id": "a", "rect": { "x": 0, "y": 0, "width": 100, "height": 48 }, "zIndex": 0 }
+        ],
+        "point": { "x": 50, "y": 43 }
+      },
+      "expected": { "id": "a", "region": "body" }
+    },
+    {
+      "name": "offset-y cell top handle accounts for rect.y",
+      "input": {
+        "entries": [
+          { "id": "a", "rect": { "x": 0, "y": 100, "width": 100, "height": 48 }, "zIndex": 0 }
+        ],
+        "point": { "x": 50, "y": 102 }
+      },
+      "expected": { "id": "a", "region": "top" }
+    }
+  ]
+}

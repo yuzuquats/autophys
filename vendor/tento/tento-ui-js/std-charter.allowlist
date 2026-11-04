@@ -1,0 +1,240 @@
+# Tier-1: the core design library. A tag on this list promises the caller:
+#   no domain type crosses its Props; no product word in its name; it names an
+#   OBJECT, not a screen; it renders with no ambient CSS beyond baseStyle; and it
+#   fetches nothing, routes nothing, reads no global but design tokens.
+#
+# Adding a line is the reviewable act of admission. A `std-` registration that is
+# not on this list fails the Rebar charter check.
+#
+# Everything else in the tree is LEGACY: it keeps its name, and inherits none of
+# the obligations above. A grandfathered string is not a claim about quality.
+#
+# Columns: tag <TAB> category <TAB> # source. The category is one of the eleven
+# in std-charter.ts — the Astryx catalogue's, verbatim — and is what places the
+# tag's card on the catalogue page. Admission and placement are one diff line;
+# a card cannot appear in a section this file does not put it in.
+#
+# Generated first cut, then hand-edited. Re-check with:
+#   tento-rebar check tento-ui-js
+std-accordion	container	# tento-ui-js/components/accordion.ts:10
+std-anchor	action	# tento-ui-js/components/anchor.ts:20
+std-animated-panel	container	# tento-ui-js/components/animated-panel.ts:11
+std-app-bar	layout	# tento-ui-js/components/shell-layout/app-bar.ts
+std-apple-slider	form-controls	# tento-ui-js/components/controls/slider.ts:13
+std-aspect-ratio	layout	# tento-ui-js/components/aspect-ratio/aspect-ratio.ts:9
+std-avatar	content	# tento-ui-js/components/avatar.ts:14
+std-avatar-editable-badge	content	# tento-ui-js/components/core/avatar-editable.ts:181
+std-badge	feedback-status	# tento-ui-js/components/badge.ts:6
+std-banner	feedback-status	# tento-ui-js/components/banner/banner.ts:50
+std-blockquote	content	# tento-ui-js/components/blockquote/blockquote.ts:9
+std-bottom-sheet	overlay	# tento-ui-js/components/bottom-sheet.ts:46
+std-breadcrumb	navigation	# tento-ui-js/components/breadcrumb/breadcrumb.ts:24
+std-browser-chrome	container	# tento-ui-js/components/browser-chrome.ts:13
+std-button	action	# tento-ui-js/components/button/button.ts:6
+std-button-group-row	action	# tento-ui-js/components/button-group-row.ts:13
+std-calendar-icon	content	# tento-ui-js/components/icons/card-icon.ts:6
+std-card	container	# tento-ui-js/components/card/card.ts:21
+std-carousel	container	# tento-ui-js/components/carousel/carousel.ts:13
+std-carousel-indicator	container	# tento-ui-js/components/carousel/carousel-indicator.ts:7
+std-cc	content	# tento-ui-js/components/scroll/cartesian-coordinate.ts:9
+std-cc-axis	content	# tento-ui-js/components/scroll/cartesian-coordinate.ts:505
+std-cc-line	content	# tento-ui-js/components/scroll/cartesian-coordinate.ts:564
+std-cc-point	content	# tento-ui-js/components/scroll/cartesian-coordinate.ts:656
+std-cc-segment	content	# tento-ui-js/components/scroll/cartesian-coordinate.ts:374
+std-chart-icon	content	# tento-ui-js/components/icons/chart-icon.ts:6
+std-chat-codex-turn	chat	# tento-chat-js/chat/looks/codex-turn.ts (adjacent-package owner; core source edits excluded)
+std-chat-icon	content	# tento-ui-js/components/icons/chat-icon.ts:6
+std-checkbox	form-controls	# tento-ui-js/components/controls/checkbox.ts:13
+std-checkbox-cell	form-controls	# tento-ui-js/components/controls/checkbox.ts:190
+std-checkbox-list	form-controls	# tento-ui-js/components/checkbox-list/checkbox-list.ts:13
+std-chip	content	# tento-ui-js/components/chip/chip.ts:32
+std-chip-row	content	# tento-ui-js/components/chip/chip-row.ts:13
+std-citation	content	# tento-ui-js/components/citation/citation.ts:12
+std-clamp-box	container	# tento-ui-js/components/clamp-box/clamp-box.ts:19
+std-code	content	# tento-ui-js/components/code/code.ts:11
+std-code-input	form-controls	# tento-ui-js/components/input/code-input.ts:6
+std-codemirror	content	# tento-ui-js/components/codemirror.ts:15
+std-color-field	form-controls	# tento-ui-js/components/input/color-field.ts:5
+std-color-input	form-controls	# tento-ui-js/components/input/color-input.ts:20
+std-context-menu-anchor	action	# tento-ui-js/components/context-menu.ts:17
+std-context-meter	feedback-status	# tento-ui-js/components/context-meter.ts:38
+std-date-field	form-controls	# tento-ui-js/components/input/date-field.ts:20
+std-date-field-dropdown	form-controls	# tento-ui-js/components/input/date-field.ts:304
+std-date-input	form-controls	# tento-ui-js/components/input/date-input.ts:21
+std-date-picker	form-controls	# tento-ui-js/components/controls/date-picker.ts:12
+std-date-picker-input	form-controls	# tento-ui-js/components/input/date-picker-input.ts:11
+std-date-picker-modal	overlay	# tento-ui-js/components/input/date-picker-modal.ts:13
+std-date-range-input	form-controls	# tento-ui-js/components/date-range-input/date-range-input.ts:17
+std-datetimeregion-input	form-controls	# tento-ui-js/components/input/datetimeregion-input.ts:17
+std-diagnostic	feedback-status	# tento-ui-js/components/diagnostic.ts:63
+std-dialog	overlay	# tento-ui-js/components/dialog/dialog.ts:29
+std-disclaimer	content	# tento-ui-js/components/disclaimer.ts:6
+std-divider	layout	# tento-ui-js/components/divider-line/divider-line.ts:12
+std-drawer	overlay	# tento-ui-js/components/drawer.ts:11
+std-dropdown	form-controls	# tento-ui-js/components/controls/dropdown.ts:23
+std-dropdown-container	form-controls	# tento-ui-js/components/controls/dropdown.ts:369
+std-dropdown-input	form-controls	# tento-ui-js/components/input/dropdown-input.ts:5
+std-editable-avatar	content	# tento-ui-js/components/core/avatar-editable.ts:12
+std-editable-text	content	# tento-ui-js/components/editable-text.ts:54
+std-empty-state	feedback-status	# tento-ui-js/components/empty-state/empty-state.ts:17
+std-exception	feedback-status	# tento-ui-js/components/exception/exception.ts:32
+std-exception-trace	feedback-status	# tento-ui-js/components/exception/exception-trace.ts:26
+std-facepile	content	# tento-ui-js/components/facepile.ts:5
+std-file-input	form-controls	# tento-ui-js/components/file-input/file-input.ts:18
+std-flippable-card	container	# tento-ui-js/components/flippable-card.ts:6
+std-flow-container	layout	# tento-ui-js/components/flow-container.ts:9
+std-form	form-controls	# tento-ui-js/components/input/form.ts:36
+std-fraction-label	content	# tento-ui-js/components/fraction-label.ts:19
+std-globe-icon	content	# tento-ui-js/components/icons/globe-icon.ts:6
+std-grid-layout	layout	# tento-ui-js/components/grid/grid-layout.ts:31
+std-heart-icon	content	# tento-ui-js/components/icons/heart-icon.ts:6
+std-hero-layout	layout	# tento-ui-js/components/hero-layout/hero-layout.ts:5
+std-hero-layout-item	layout	# tento-ui-js/components/hero-layout/hero-layout.ts:714
+std-hover-card	overlay	# tento-ui-js/components/hover-card/hover-card.ts:16
+std-html-editor	content	# tento-ui-js/components/html-editor.ts:17
+std-html-editor-input	form-controls	# tento-ui-js/components/input/html-editor-input.ts:10
+std-html-editor-modal	overlay	# tento-ui-js/components/input/html-editor-modal.ts:12
+std-icon	content	# tento-ui-js/components/icon/icon.ts:14
+std-icon-button	action	# tento-ui-js/components/icon-button.ts:8
+std-inline-select	form-controls	# tento-ui-js/components/controls/inline-select.ts:40
+std-inline-select-panel	form-controls	# tento-ui-js/components/controls/inline-select.ts:200
+std-input-group	form-controls	# tento-ui-js/components/input-group/input-group.ts:14
+std-input-layout	form-controls	# tento-ui-js/components/input/input-layout.ts:6
+std-json-viewer	content	# tento-ui-js/components/data/json-viewer.ts:22
+std-kbd	utility	# tento-ui-js/components/kbd/kbd.ts:14
+std-lazy-image	content	# tento-ui-js/components/image/lazy-image.ts:15
+std-legend-tree	table-list	# tento-ui-js/components/legend/legend-tree.ts:55
+std-library-filter-sort-row	table-list	# tento-ui-js/components/library/library-filter-sort-row.ts:13
+std-library-toolbar	navigation	# tento-ui-js/components/library/library-toolbar.ts:8
+std-lightbox	overlay	# tento-ui-js/components/lightbox/lightbox.ts:27
+std-link	action	# tento-ui-js/components/link-text/link-text.ts:19
+std-link-edit-popover	overlay	# tento-ui-js/components/link-edit-popover.ts:10
+std-link-icon	content	# tento-ui-js/components/icons/link-icon.ts:6
+std-list	table-list	# tento-ui-js/components/list/list.ts:14
+std-list-cell-layout	table-list	# tento-ui-js/components/list/list-cell-layout.ts:10
+std-loading-button	action	# tento-ui-js/components/button/loading-button.ts:8
+std-markdown	content	# tento-ui-js/components/markdown/markdown.ts:61
+std-menu-bar	action	# tento-ui-js/components/menu-bar/menu-bar.ts:27
+std-mini-window	overlay	# tento-ui-js/components/mini-window.ts:47
+std-modal-close-button	action	# tento-ui-js/components/modal-close-button/modal-close-button.ts:22
+std-multi-select	form-controls	# tento-ui-js/components/multi-select/multi-select.ts:18
+std-number-field	form-controls	# tento-ui-js/components/number-field/number-field.ts:18
+std-number-input	form-controls	# tento-ui-js/components/input/number-input.ts:12
+std-number-input-accessory	form-controls	# tento-ui-js/components/input/number-input-accessory.ts:12
+std-outline	navigation	# tento-ui-js/components/outline/outline.ts:13
+std-overflow-list	table-list	# tento-ui-js/components/overflow-list/overflow-list.ts:19
+std-page-indicator-dots	navigation	# tento-ui-js/components/page-indicator-dots.ts:9
+std-pagination	navigation	# tento-ui-js/components/pagination/pagination.ts:12
+std-pill-button	action	# tento-ui-js/components/pill-button.ts:6
+std-pill-select	form-controls	# tento-ui-js/components/controls/pill-select.ts:7
+std-pill-text-input	form-controls	# tento-ui-js/components/pill-text-input.ts:9
+std-plot	content	# tento-ui-js/components/plot.ts:16
+std-plot-tooltip	content	# tento-ui-js/components/plot.ts:294
+std-pomodoro-icon	content	# tento-ui-js/components/icons/pomodoro-icon.ts:6
+std-popover	overlay	# tento-ui-js/components/popover/popover.ts:25
+std-progress-bar	feedback-status	# tento-ui-js/components/progress-bar/progress-bar.ts:12
+std-prompt	overlay	# tento-ui-js/components/prompt.ts:12
+std-prompt-alert	overlay	# tento-ui-js/components/prompt.ts:145
+std-prompt-layout	overlay	# tento-ui-js/components/prompt.ts:310
+std-property-list	table-list	# tento-ui-js/components/input/property-list.ts:11
+std-property-list-item	table-list	# tento-ui-js/components/input/property-list.ts:98
+std-prosemirror	content	# tento-ui-js/components/prosemirror.ts:30
+std-radio-button	form-controls	# tento-ui-js/components/input/radio-button.ts:6
+std-radio-button-cell	form-controls	# tento-ui-js/components/radio-button-cell.ts:15
+std-radio-list	form-controls	# tento-ui-js/components/radio-list/radio-list.ts:15
+std-rail	layout	# tento-ui-js/components/rail/rail.ts:50
+std-rail-section	navigation	# tento-ui-js/components/rail/rail-section.ts:37
+std-record-header	content	# tento-ui-js/components/record-header.ts:55
+std-resize-handle	layout	# tento-ui-js/components/resize-handle/resize-handle.ts:13
+std-rich-text-editor	content	# tento-ui-js/components/rich-text-editor/rich-text-editor.ts:11
+std-round	container	# tento-ui-js/components/round.ts:11
+std-scroll-horizontal	layout	# tento-ui-js/components/scroll/scroll-horizontal.ts:116
+std-scroll-layout-snapshot-overlay	layout	# tento-ui-js/components/scroll/scroll-layout-snapshot-overlay.ts:15
+std-scroll-vertical	layout	# tento-scroll-js/vertical/scroll-vertical.ts (adjacent-package owner; core source edits excluded)
+std-search-icon	content	# tento-ui-js/components/icons/search-icon.ts:6
+std-section-head	content	# tento-ui-js/components/section-head.ts:41
+std-section-tabs	navigation	# tento-ui-js/components/review/section-tabs.ts:13
+std-segmented-control	form-controls	# tento-ui-js/components/segmented-control/segmented-control.ts:15
+std-select-input	form-controls	# tento-ui-js/components/input/select-input.ts:7
+std-session-replay	content	# tento-chat-js/term/session-replay.ts (adjacent-package owner; core source edits excluded)
+std-sheets-icon	content	# tento-ui-js/components/icons/sheets-icon.ts:6
+std-side-nav	navigation	# tento-ui-js/components/side-nav/side-nav.ts:17
+std-sidebar-action-bar	navigation	# tento-ui-js/components/sidebar/sidebar-action-bar.ts:13
+std-sidebar-container	layout	# tento-ui-js/components/sidebar/sidebar-container.ts:14
+std-sidebar-expand-button	navigation	# tento-ui-js/components/sidebar/sidebar-expand-button.ts:8
+std-sidebar-section	navigation	# tento-ui-js/components/sidebar/sidebar-section.ts:11
+std-sidebar-section-container	navigation	# tento-ui-js/components/sidebar/sidebar-section-container.ts:8
+std-sidebar-section-nav	navigation	# tento-ui-js/components/sidebar/sidebar-section-nav.ts:10
+std-skeleton	feedback-status	# tento-ui-js/components/skeleton/skeleton.ts:14
+std-slider-input	form-controls	# tento-ui-js/components/input/slider-input.ts:10
+std-spinner	feedback-status	# tento-ui-js/components/spinner/spinner.ts:11
+std-split-buttons	action	# tento-ui-js/components/split-buttons/split-buttons.ts:10
+std-spotlight-layout	overlay	# tento-ui-js/components/spotlight/spotlight-layout.ts:16
+std-spotlight-row	overlay	# tento-ui-js/components/spotlight/spotlight-row.ts:8
+std-square-button	action	# tento-ui-js/components/button/square-button.ts:5
+std-squircle	container	# tento-ui-js/components/squircle/squircle.ts:9
+std-status-mark	feedback-status	# tento-ui-js/components/status/status-mark.ts:27
+std-stepper	navigation	# tento-ui-js/components/stepper.ts:147
+std-stepper-horizontal	navigation	# tento-ui-js/components/stepper.ts:514
+std-sticker-icon	content	# tento-ui-js/components/icons/sticker-icon.ts:6
+std-swatch-row	content	# tento-ui-js/components/swatch-row/swatch-row.ts:25
+std-switch	form-controls	# tento-ui-js/components/controls/switch.ts:6
+std-table	table-list	# tento-ui-js/components/table/table.ts:23
+std-table-body	table-list	# tento-ui-js/components/table/table-body.ts:11
+std-table-body-row	table-list	# tento-ui-js/components/table/table-body.ts:210
+std-table-footer	table-list	# tento-ui-js/components/table/table-footer.ts:8
+std-table-header	table-list	# tento-ui-js/components/table/table-header.ts:13
+std-table-header-column	table-list	# tento-ui-js/components/table/table-header.ts:273
+std-tasks-icon	content	# tento-ui-js/components/icons/tasks-icon.ts:7
+std-text-alignment-input	form-controls	# tento-ui-js/components/input/text-alignment-input.ts:9
+std-text-area	form-controls	# tento-ui-js/components/text-area/text-area.ts:21
+std-text-input	form-controls	# tento-ui-js/components/input/text-input.ts:8
+std-text-input-menubar	form-controls	# tento-ui-js/components/input/text-input-menubar.ts:9
+std-theme-context	utility	# tento-ui-js/components/theme-context/theme-context.ts:5
+std-theme-picker-icon	content	# tento-ui-js/components/icons/theme-picker-icon.ts:6
+std-thick-slider	form-controls	# tento-ui-js/components/controls/slider.ts:265
+std-thick-two-way-slider	form-controls	# tento-ui-js/components/controls/two-way-slider.ts:638
+std-thumbnail	content	# tento-ui-js/components/thumbnail/thumbnail.ts:21
+std-tilde-icon	content	# tento-ui-js/components/icons/tilde-icon.ts:6
+std-time-field	form-controls	# tento-ui-js/components/input/time-field.ts:18
+std-time-field-dropdown	form-controls	# tento-ui-js/components/input/time-field.ts:354
+std-time-input	form-controls	# tento-ui-js/components/input/time-input.ts:21
+std-time-picker	form-controls	# tento-ui-js/components/controls/time-picker.ts:16
+std-timestamp	content	# tento-ui-js/components/timestamp/timestamp.ts:12
+std-toast	feedback-status	# tento-ui-js/components/toast/toast.ts:13
+std-toaster	feedback-status	# tento-ui-js/components/toast/toaster.ts:21
+std-toaster-persistent-container	feedback-status	# tento-ui-js/components/toast/toaster.ts:594
+std-toggle-button	form-controls	# tento-ui-js/components/toggle-button/toggle-button.ts:12
+std-toggle-button-group	form-controls	# tento-ui-js/components/toggle-button/toggle-button.ts:159
+std-token	form-controls	# tento-ui-js/components/token/token.ts:17
+std-token-input	form-controls	# tento-ui-js/components/token/token.ts:146
+std-toolbar	action	# tento-ui-js/components/toolbar/toolbar.ts:11
+std-tooltip	overlay	# tento-ui-js/components/tooltip/tooltip.ts:26
+std-top-nav	navigation	# tento-ui-js/components/top-nav/top-nav.ts:12
+std-transition	utility	# tento-ui-js/components/transition.ts:6
+std-tree-list	table-list	# tento-ui-js/components/tree-list/tree-list.ts:16
+std-two-way-slider	form-controls	# tento-ui-js/components/controls/two-way-slider.ts:434
+std-typeahead	form-controls	# tento-ui-js/components/typeahead/typeahead.ts:25
+std-visually-hidden	utility	# tento-ui-js/components/visually-hidden/visually-hidden.ts:14
+
+# Evicted by a read, after passing every mechanical test:
+#   std-docs-nav — the documentation site's navigation — a surface, not an object
+#   std-shell-layout — an app shell: it slots a nav column and a docs body, so it names a SCREEN
+#
+# Permanent exceptions — vendor-mandated names, never flagged.
+google-signin-button	# vendor-mandated
+microsoft-signin-button	# vendor-mandated
+std-rail-nav	navigation	# Sections and selection are supplied by the caller; clicks only call out.
+std-library-collection-layout	layout	# Slot geometry only; no data or route ownership.
+std-library-page-shell	layout	# Document-flow slots only; content and routing belong to callers.
+std-library-search-mount	layout	# Reserves search geometry without reading or fetching application state.
+std-library-item-presentation	overlay	# Presents caller-supplied DOM; dismissal and routing are caller-owned.
+std-settings-body	layout	# tento-ui-js/components/settings/settings-body.ts
+std-settings-code	content	# tento-ui-js/components/settings/settings-code.ts
+std-settings-section	container	# tento-ui-js/components/settings/settings-section.ts
+std-settings-row	container	# tento-ui-js/components/settings/settings-row.ts
+std-settings-summary	content	# tento-ui-js/components/settings/settings-summary.ts
+std-branch-graph	table-list	# Caller-supplied rows, lanes and marks; emits selection/toggle callbacks; no product state, route or fetch.
+std-item-list	table-list	# Caller-supplied rows and selection; owns only virtual listbox presentation and keyboard focus.
+std-item-row	table-list	# Caller-supplied text, medallion and selection; presents one sibling row and emits activation.
+std-miniapp-action-bar	action	# Caller-supplied sections, labels and callbacks; owns floating toolbar presentation and toggle state, no domain model, route or transport.

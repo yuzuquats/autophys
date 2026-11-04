@@ -1,0 +1,75 @@
+{
+  "type": "drag-drop",
+  "name": "nested",
+  "tree": {
+    "0/nestable": {},
+    "1/nestable": {
+      "2/nestable": {
+        "3/nestable": {}
+      },
+      "4/nestable": {
+        "5/nestable": {
+          "6/nestable": {
+            "7": {},
+            "8": {}
+          },
+          "9/nestable": {}
+        }
+      },
+      "10/nestable": {
+        "11/nestable": {
+          "12/nestable": {}
+        }
+      }
+    }
+  },
+  "cases": [
+    {
+      "name": "Dropped at (x=0, y=0",
+      "input": { "start": 12, "movedTo": { "x": 0, "y": 0.7 } },
+      "expected": {
+        "validActions": [
+          { "type": "bottom", "idx": 0 },
+          { "type": "top", "idx": 1 }
+        ]
+      }
+    },
+    {
+      "name": "Dropped at (x=0, y=11",
+      "input": { "start": 12, "movedTo": { "x": 0, "y": 11.4 } },
+      "expected": {
+        "validActions": [
+          { "type": "top", "idx": 11 }
+        ]
+      }
+    },
+    {
+      "name": "Dropped at (x=0, y=10",
+      "input": { "start": 12, "movedTo": { "x": 0, "y": 10.77 } },
+      "expected": {
+        "validActions": [
+          { "type": "top", "idx": 11 }
+        ]
+      }
+    },
+    {
+      "name": "valid parents",
+      "input": {},
+      "expected": {
+        "0": { "top": ["root"], "bottom": ["root", "0"] },
+        "1": { "top": ["root"], "bottom": ["1"] },
+        "2": { "top": ["1"], "bottom": ["2"] },
+        "3": { "top": ["2"], "bottom": ["1", "2", "3"] },
+        "4": { "top": ["1"], "bottom": ["4"] },
+        "5": { "top": ["4"], "bottom": ["5"] },
+        "6": { "top": ["5"], "bottom": ["6"] },
+        "7": { "top": ["6"], "bottom": ["6"] },
+        "8": { "top": ["6"], "bottom": ["6"] },
+        "9": { "top": ["5"], "bottom": ["1", "4", "5", "9"] },
+        "10": { "top": ["1"], "bottom": ["10"] },
+        "11": { "top": ["10"], "bottom": ["11"] },
+        "12": { "top": ["11"], "bottom": ["root", "1", "10", "11", "12"] }
+      }
+    }
+  ]
+}

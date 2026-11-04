@@ -1,0 +1,15 @@
+{
+  "namespace": "tento-buckets",
+  "title": "tento-buckets",
+  "sections": [
+    {
+      "title": "Overview",
+      "children": [
+        {
+          "label": "Node Logging",
+          "slug": "node-logging"
+        }
+      ]
+    }
+  ]
+}

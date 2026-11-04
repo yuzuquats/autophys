@@ -1,0 +1,13 @@
+[package]
+name = "tento-tui-core"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+description = "Terminal-sheets core: shape-tagged, filesystem-backed pane data sources (LJSON) and readers. Pure — no terminal, no crossterm."
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+futures.workspace = true

@@ -1,0 +1,68 @@
+{
+  "type": "tento-term-render",
+  "name": "table_basic",
+  "description": "A small four-column table at two widths: one where everything fits at natural width, and one too narrow to fit — the lowest-priority column ('Detail', priority 3) is demoted out of the grid and rendered as a per-row sub-line ('   └── Detail: …'), i.e. the hybrid tree/table fallback. Column separator is a single space; a '─' rule is drawn under the header spanning the table's content width.",
+  "cases": [
+    {
+      "name": "width 60 — fits at natural width, no shrinking",
+      "input": {
+        "kind": "table",
+        "term_width": 60,
+        "table": {
+          "title": "Hosts",
+          "columns": [
+            { "header": "Name", "min_width": 6, "priority": 0 },
+            { "header": "Status", "min_width": 8, "priority": 1 },
+            { "header": "Count", "align": "right", "min_width": 5, "priority": 2 },
+            { "header": "Detail", "min_width": 18, "priority": 3 }
+          ],
+          "rows": [
+            ["alpha", "running", "12", "primary edge node, us-west"],
+            ["beta", "stopped", "3", "awaiting manual restart"],
+            ["gamma-svc", "degraded", "0", "ok"]
+          ]
+        }
+      },
+      "expected": [
+        "Hosts",
+        "Name      Status   Count Detail",
+        "───────────────────────────────────────────────────",
+        "alpha     running     12 primary edge node, us-west",
+        "beta      stopped      3 awaiting manual restart",
+        "gamma-svc degraded     0 ok"
+      ]
+    },
+    {
+      "name": "width 30 — too narrow; 'Detail' demoted to a per-row sub-line (hybrid tree/table)",
+      "input": {
+        "kind": "table",
+        "term_width": 30,
+        "table": {
+          "title": "Hosts",
+          "columns": [
+            { "header": "Name", "min_width": 6, "priority": 0 },
+            { "header": "Status", "min_width": 8, "priority": 1 },
+            { "header": "Count", "align": "right", "min_width": 5, "priority": 2 },
+            { "header": "Detail", "min_width": 18, "priority": 3 }
+          ],
+          "rows": [
+            ["alpha", "running", "12", "primary edge node, us-west"],
+            ["beta", "stopped", "3", "awaiting manual restart"],
+            ["gamma-svc", "degraded", "0", "ok"]
+          ]
+        }
+      },
+      "expected": [
+        "Hosts",
+        "Name      Status   Count",
+        "────────────────────────",
+        "alpha     running     12",
+        "   └── Detail: primary edge n…",
+        "beta      stopped      3",
+        "   └── Detail: awaiting manua…",
+        "gamma-svc degraded     0",
+        "   └── Detail: ok"
+      ]
+    }
+  ]
+}

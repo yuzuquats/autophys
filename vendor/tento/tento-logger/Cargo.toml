@@ -1,0 +1,91 @@
+[package]
+name = "tento-logger"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# Only the `logs.*` command group (`scripts` feature) needs the shell runtime.
+tento-sh = { workspace = true, optional = true }
+tento-env.workspace = true
+tento-exception.workspace = true
+
+tento-dev = { workspace = true, optional = true }
+tento-term = { path = "../tento-term" }
+
+tento-tui-core = { path = "../tento-tui/tento-tui-core" }
+
+actix = { workspace = true, optional = true }
+actix-web = { workspace = true, optional = true }
+actix-http = { workspace = true, optional = true }
+actix-identity = { workspace = true, optional = true }
+
+tracing.workspace = true
+tracing-core.workspace = true
+tracing-actix-web = { workspace = true, optional = true }
+tracing-bunyan-formatter.workspace = true
+tracing-subscriber.workspace = true
+tokio.workspace = true
+
+serde_json.workspace = true
+serde.workspace = true
+anyhow.workspace = true
+
+chrono.workspace = true
+
+pin-project = "1.1.7"
+futures-util = { version = "0.3.30", optional = true }
+
+uuid = { workspace = true, features = ["fast-rng", "serde"] }
+
+[dependencies.arrow]
+workspace = true
+optional = true
+
+[dependencies.parquet]
+workspace = true
+optional = true
+
+# The span→bucket producer (`buckets` feature, default-off). Gated so the
+# `span_bucket` config + sink — and the arrow/serde deps they pull — only exist
+# for apps that opt in; apps that don't never see the field (no blast radius on
+# their LoggerConfig literals).
+[dependencies.tento-buckets]
+workspace = true
+optional = true
+
+[dependencies.tento-logger-spans]
+workspace = true
+optional = true
+
+[dependencies.tento-timeseries]
+workspace = true
+optional = true
+
+[features]
+default = ["web"]
+web = [
+  "dep:tento-dev",
+  "dep:actix",
+  "dep:actix-web",
+  "dep:actix-http",
+  "dep:actix-identity",
+  "dep:tracing-actix-web",
+  "dep:futures-util",
+]
+parquet = ["dep:arrow", "dep:parquet"]
+# The span-bucket → renderer projection (`render::project`): SpanTree →
+# LjsonEntry at a zoom level. Consumers that only read/render bucket rows
+# (the TUI span-log pane, the fleet-console logs CLI) want this without the
+# full bucket-writing stack.
+spans = ["dep:tento-logger-spans"]
+buckets = ["dep:tento-buckets", "spans", "dep:tento-timeseries"]
+# The `logs.*` tento-sh command group over the bucket store. Split from
+# `buckets` so bucket producers do not link the shell/Lisp stack.
+scripts = ["buckets", "dep:tento-sh"]
+
+[[example]]
+name = "logs_to_parquet"
+required-features = ["parquet"]
+
+[dev-dependencies]
+tempfile = "3"

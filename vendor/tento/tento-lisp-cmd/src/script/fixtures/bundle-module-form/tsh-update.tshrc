@@ -1,0 +1,12 @@
+;; tsh-update: check for a newer tsh when an operator opens a session.
+;;
+;; tsh loads this layer from the plugin bundled in its own .app (a manifest
+;; `startup` key); `--cfg skip=tsh-update` or the prelude's
+;; `(startup.skip "tsh-update")` leaves it out. All it does is
+;; register the hook — the policy is hooks/on-start.tsh, run on its own host
+;; after the startup batch, so an open never waits on the network.
+;;
+;; `session` scope: a hook belongs to an engine, and `(on …)` exists only on a
+;; session's control host.
+(startup.scope :session)
+(on "session.start" :script "../hooks/on-start.tsh" :entry "tsh-update.on-start")

@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "declaration": false,
+    "noEmit": true,
+    "noImplicitAny": false,
+    "removeComments": false,
+    "strict": true,
+    "noLib": false,
+    "lib": [
+      "DOM",
+      "DOM.Iterable",
+      "ESNext"
+    ],
+    "types": [],
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": false
+  }
+}

@@ -1,0 +1,14 @@
+(bundle (m)
+  (define version "0.7.9")
+  ;; The JSON head "\"" identifies a string; comments can contain ) | < > &&.
+  (define (kind v) (str.slice (json-stringify v) 0 1))
+  (define (string? v) (= (kind v) "\""))
+  (define (positive? v) (> v 0))
+  (define (small? v) (< v 10))
+  (define retired true) ;; a single comment after a complete inner form
+  ;; A partial form must not close on this comment's unmatched ).
+  ;; Nor on this unmatched ) or its operators | < > &&.
+  (define script "printf '%s' \"a|b\"; cat <in >out")
+  (define quoted '("nested > |" ("\"" "a;b")))
+  (m.export 'kind)
+  (m.export 'string?))

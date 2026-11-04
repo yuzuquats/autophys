@@ -1,0 +1,1039 @@
+{
+  "document": {
+    "openapi": "3.1.0",
+    "info": {
+      "title": "tento-openapi",
+      "description": "The OpenAPI schema layer tento owns: schema model, ToSchema trait and derive",
+      "license": {
+        "name": ""
+      },
+      "version": "0.1.0"
+    },
+    "paths": {
+      "/child/{id}": {
+        "get": {
+          "tags": [
+            "new_route"
+          ],
+          "summary": "Find a child.\nWrapped summary.",
+          "description": "More detail on two lines.\nThe second line.",
+          "operationId": "route",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "description": "identifier",
+              "required": true,
+              "schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "page",
+              "in": "query",
+              "required": false,
+              "schema": {
+                "type": "integer",
+                "format": "int32",
+                "minimum": 0
+              }
+            },
+            {
+              "name": "someValue",
+              "in": "query",
+              "description": "A query value.",
+              "required": true,
+              "schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "optional",
+              "in": "query",
+              "required": false,
+              "schema": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              }
+            },
+            {
+              "name": "nullable",
+              "in": "query",
+              "required": false,
+              "schema": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            {
+              "name": "defaulted",
+              "in": "query",
+              "required": false,
+              "schema": {
+                "type": "integer",
+                "format": "int32",
+                "minimum": 0
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Child"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/Child"
+                  }
+                }
+              }
+            },
+            "404": {
+              "description": "Missing"
+            }
+          }
+        }
+      },
+      "/text": {
+        "post": {
+          "tags": [
+            "new_route"
+          ],
+          "operationId": "text",
+          "responses": {
+            "200": {
+              "description": "",
+              "content": {
+                "text/plain": {
+                  "schema": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "default": {
+              "description": ""
+            }
+          }
+        }
+      }
+    },
+    "components": {
+      "schemas": {
+        "Child": {
+          "type": "object",
+          "required": [
+            "value"
+          ],
+          "properties": {
+            "value": {
+              "type": "string"
+            }
+          }
+        },
+        "Pair": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Homogeneous pair."
+          },
+          "description": "Homogeneous pair.",
+          "maxItems": 2,
+          "minItems": 2
+        }
+      }
+    }
+  },
+  "operation-route": {
+    "summary": "Find a child.\nWrapped summary.",
+    "description": "More detail on two lines.\nThe second line.",
+    "operationId": "route",
+    "parameters": [
+      {
+        "name": "id",
+        "in": "path",
+        "description": "identifier",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "page",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "format": "int32",
+          "minimum": 0
+        }
+      },
+      {
+        "name": "someValue",
+        "in": "query",
+        "description": "A query value.",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "optional",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "format": "int64",
+          "minimum": 0
+        }
+      },
+      {
+        "name": "nullable",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      {
+        "name": "defaulted",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "format": "int32",
+          "minimum": 0
+        }
+      }
+    ],
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Child"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "responses": {
+      "200": {
+        "description": "",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Child"
+            }
+          }
+        }
+      },
+      "404": {
+        "description": "Missing"
+      }
+    }
+  },
+  "operation-text": {
+    "operationId": "text",
+    "responses": {
+      "200": {
+        "description": "",
+        "content": {
+          "text/plain": {
+            "schema": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "default": {
+        "description": ""
+      }
+    }
+  },
+  "inference-__path_path": {
+    "operationId": "path",
+    "parameters": [
+      {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "revision",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "integer",
+          "format": "int32",
+          "minimum": 0
+        }
+      }
+    ],
+    "responses": {
+      "200": {
+        "description": ""
+      }
+    }
+  },
+  "operation-components": {
+    "Child": {
+      "type": "object",
+      "required": [
+        "value"
+      ],
+      "properties": {
+        "value": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "schema-phase2::Tuples": {
+    "Tuples": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "Pair"
+          ],
+          "properties": {
+            "Pair": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "maxItems": 2,
+              "minItems": 2
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "Mixed"
+          ],
+          "properties": {
+            "Mixed": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              },
+              "maxItems": 2,
+              "minItems": 2
+            }
+          }
+        },
+        {
+          "type": "string",
+          "enum": [
+            "Unit"
+          ]
+        }
+      ]
+    }
+  },
+  "params-phase2::Query-Query": [
+    {
+      "name": "someValue",
+      "in": "query",
+      "description": "A query value.",
+      "required": true,
+      "schema": {
+        "type": "string"
+      }
+    },
+    {
+      "name": "optional",
+      "in": "query",
+      "required": false,
+      "schema": {
+        "type": "integer",
+        "format": "int64",
+        "minimum": 0
+      }
+    },
+    {
+      "name": "nullable",
+      "in": "query",
+      "required": false,
+      "schema": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    {
+      "name": "defaulted",
+      "in": "query",
+      "required": false,
+      "schema": {
+        "type": "integer",
+        "format": "int32",
+        "minimum": 0
+      }
+    }
+  ],
+  "params-phase2::Inferred-Path": [
+    {
+      "name": "optional",
+      "in": "path",
+      "required": true,
+      "schema": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    {
+      "name": "required",
+      "in": "path",
+      "required": true,
+      "schema": {
+        "type": "integer",
+        "format": "int32"
+      }
+    }
+  ],
+  "inference-__path_form": {
+    "operationId": "form",
+    "requestBody": {
+      "content": {
+        "application/x-www-form-urlencoded": {
+          "schema": {
+            "$ref": "#/components/schemas/Child"
+          }
+        }
+      },
+      "required": true
+    },
+    "responses": {
+      "200": {
+        "description": ""
+      }
+    }
+  },
+  "schema-phase2::Mixed": {
+    "Mixed": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Heterogeneous pair.",
+      "maxItems": 2,
+      "minItems": 2
+    }
+  },
+  "schema-phase2::Clock": {
+    "Clock": {
+      "type": "object",
+      "required": [
+        "timestamp"
+      ],
+      "properties": {
+        "optional": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  },
+  "params-phase2::TupleParams-Query": [
+    {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+        "type": "string"
+      }
+    },
+    {
+      "name": "revision",
+      "in": "path",
+      "required": true,
+      "schema": {
+        "type": [
+          "integer",
+          "null"
+        ],
+        "format": "int32",
+        "minimum": 0
+      }
+    }
+  ],
+  "schema-phase2::GenericRoot": {
+    "GenericRoot": {
+      "type": "object",
+      "required": [
+        "marker",
+        "named",
+        "number",
+        "nested"
+      ],
+      "properties": {
+        "marker": {
+          "$ref": "#/components/schemas/Marker_Unit"
+        },
+        "named": {
+          "$ref": "#/components/schemas/Generic_Child"
+        },
+        "nested": {
+          "$ref": "#/components/schemas/Generic_Vec_Child"
+        },
+        "number": {
+          "$ref": "#/components/schemas/Generic_i32"
+        }
+      }
+    },
+    "Generic_Child": {
+      "type": "object",
+      "required": [
+        "value"
+      ],
+      "properties": {
+        "value": {
+          "type": "object",
+          "required": [
+            "value"
+          ],
+          "properties": {
+            "value": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "Generic_Vec_Child": {
+      "type": "object",
+      "required": [
+        "value"
+      ],
+      "properties": {
+        "value": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "value"
+            ],
+            "properties": {
+              "value": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "Generic_i32": {
+      "type": "object",
+      "required": [
+        "value"
+      ],
+      "properties": {
+        "value": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "Marker_Unit": {
+      "type": "object",
+      "required": [
+        "value"
+      ],
+      "properties": {
+        "value": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "params-phase2::Query-Path": [
+    {
+      "name": "someValue",
+      "in": "query",
+      "description": "A query value.",
+      "required": true,
+      "schema": {
+        "type": "string"
+      }
+    },
+    {
+      "name": "optional",
+      "in": "query",
+      "required": false,
+      "schema": {
+        "type": "integer",
+        "format": "int64",
+        "minimum": 0
+      }
+    },
+    {
+      "name": "nullable",
+      "in": "query",
+      "required": false,
+      "schema": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    {
+      "name": "defaulted",
+      "in": "query",
+      "required": false,
+      "schema": {
+        "type": "integer",
+        "format": "int32",
+        "minimum": 0
+      }
+    }
+  ],
+  "schema-phase2::Untagged": {
+    "Untagged": {
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": 2,
+          "minItems": 2
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "maxItems": 2,
+          "minItems": 2
+        }
+      ]
+    }
+  },
+  "merge": {
+    "openapi": "3.1.0",
+    "info": {
+      "title": "A",
+      "version": "1"
+    },
+    "servers": [
+      {
+        "url": "http://one"
+      },
+      {
+        "url": "http://two"
+      }
+    ],
+    "paths": {
+      "/same": {
+        "summary": "first",
+        "get": {
+          "operationId": "first",
+          "responses": {}
+        },
+        "post": {
+          "responses": {}
+        }
+      }
+    },
+    "components": {
+      "schemas": {
+        "Name": {
+          "type": "string"
+        },
+        "Other": {
+          "type": "boolean"
+        }
+      },
+      "securitySchemes": {
+        "auth": {
+          "type": "http",
+          "scheme": "bearer"
+        }
+      }
+    },
+    "tags": [
+      {
+        "name": "a"
+      },
+      {
+        "name": "b"
+      }
+    ]
+  },
+  "schema-phase2::VirtualDefaults": {
+    "VirtualDefaults": {
+      "type": "object",
+      "properties": {
+        "any": {},
+        "optional": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "value": {
+          "type": "object"
+        }
+      }
+    }
+  },
+  "schema-phase2::Pair": {
+    "Pair": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "int32",
+        "description": "Homogeneous pair."
+      },
+      "description": "Homogeneous pair.",
+      "maxItems": 2,
+      "minItems": 2
+    }
+  },
+  "inference-__path_query": {
+    "operationId": "query",
+    "parameters": [
+      {
+        "name": "optional",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      {
+        "name": "required",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    ],
+    "responses": {
+      "200": {
+        "description": ""
+      }
+    }
+  },
+  "inference-__path_json": {
+    "operationId": "json",
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/Child"
+          }
+        }
+      },
+      "required": true
+    },
+    "responses": {
+      "200": {
+        "description": ""
+      }
+    }
+  },
+  "schema-phase2::Unit": {
+    "Unit": {
+      "description": "Validation marker.",
+      "default": null
+    }
+  },
+  "schema-phase2::Generic<phase2::Child>": {
+    "Generic": {
+      "type": "object",
+      "required": [
+        "value"
+      ],
+      "properties": {
+        "value": {
+          "$ref": "#/components/schemas/Child"
+        }
+      }
+    }
+  },
+  "params-phase2::Inferred-Query": [
+    {
+      "name": "optional",
+      "in": "query",
+      "required": false,
+      "schema": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    {
+      "name": "required",
+      "in": "query",
+      "required": true,
+      "schema": {
+        "type": "integer",
+        "format": "int32"
+      }
+    }
+  ],
+  "params-phase2::TupleParams-Path": [
+    {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+        "type": "string"
+      }
+    },
+    {
+      "name": "revision",
+      "in": "path",
+      "required": true,
+      "schema": {
+        "type": [
+          "integer",
+          "null"
+        ],
+        "format": "int32",
+        "minimum": 0
+      }
+    }
+  ],
+  "marker-operation-components": {
+    "Marker_Unit": {
+      "type": "object",
+      "required": [
+        "value"
+      ],
+      "properties": {
+        "value": {
+          "type": "string"
+        }
+      }
+    },
+    "Unit": {
+      "description": "Validation marker.",
+      "default": null
+    }
+  },
+  "inference-__path_optional": {
+    "operationId": "optional",
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/Child"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "required": true
+    },
+    "responses": {
+      "200": {
+        "description": ""
+      }
+    }
+  },
+  "schema-phase2::Marker<phase2::Unit>": {
+    "Marker": {
+      "type": "object",
+      "required": [
+        "value"
+      ],
+      "properties": {
+        "value": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "schema-phase2::Adjacent": {
+    "Adjacent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "data",
+            "kind"
+          ],
+          "properties": {
+            "data": {
+              "$ref": "#/components/schemas/Pair"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "Pair"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "data",
+            "kind"
+          ],
+          "properties": {
+            "data": {
+              "$ref": "#/components/schemas/Mixed"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "Mixed"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "Unit"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "Mixed": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Heterogeneous pair.",
+      "maxItems": 2,
+      "minItems": 2
+    },
+    "Pair": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "int32",
+        "description": "Homogeneous pair."
+      },
+      "description": "Homogeneous pair.",
+      "maxItems": 2,
+      "minItems": 2
+    }
+  },
+  "nest": {
+    "openapi": "3.1.0",
+    "info": {
+      "title": "A",
+      "version": "1"
+    },
+    "servers": [
+      {
+        "url": "http://one"
+      },
+      {
+        "url": "http://two"
+      }
+    ],
+    "paths": {
+      "/same": {
+        "summary": "second",
+        "get": {
+          "operationId": "second",
+          "responses": {}
+        },
+        "post": {
+          "responses": {}
+        }
+      }
+    },
+    "components": {
+      "schemas": {
+        "Name": {
+          "type": "string"
+        },
+        "Other": {
+          "type": "boolean"
+        }
+      },
+      "securitySchemes": {
+        "auth": {
+          "type": "http",
+          "scheme": "bearer"
+        }
+      }
+    },
+    "tags": [
+      {
+        "name": "a"
+      },
+      {
+        "name": "b"
+      }
+    ]
+  }
+}

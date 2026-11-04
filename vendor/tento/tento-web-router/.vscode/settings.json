@@ -1,0 +1,25 @@
+{
+  "rust-analyzer.linkedProjects": [
+    "./Cargo.toml",
+    "./examples/simple/Cargo.toml"
+  ],
+  "rust-analyzer.runnables.extraEnv": {
+    "RUST_BACKTRACE": 0
+  },
+  "rust-analyzer.procMacro.enable": true,
+  "files.exclude": {
+    "**/.git": true,
+    "**/target": true,
+    "**/.DS_Store": true
+  },
+  "search.exclude": {
+    "target": true,
+    "**/target": true,
+    "Cargo.lock": true
+  },
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/target": true
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "schema": "tsh.app/v1",
+  "name": "tento-fleet-sdk",
+  "version": "0.1.0",
+  "mount": "sdk",
+  "entrypoint": "rc/sdk.tshrc",
+  "transport": "oneshot",
+  "commands": {}
+}

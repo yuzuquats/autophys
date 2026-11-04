@@ -1,0 +1,77 @@
+{
+  "type": "canvas-hit-map",
+  "name": "basic",
+  "description": "Basic point-in-rect hit testing",
+  "cases": [
+    {
+      "name": "hit center of single cell",
+      "input": {
+        "entries": [
+          { "id": "a", "rect": { "x": 0, "y": 0, "width": 100, "height": 48 }, "zIndex": 0 }
+        ],
+        "point": { "x": 50, "y": 24 }
+      },
+      "expected": { "id": "a", "region": "body" }
+    },
+    {
+      "name": "miss above cell",
+      "input": {
+        "entries": [
+          { "id": "a", "rect": { "x": 0, "y": 10, "width": 100, "height": 48 }, "zIndex": 0 }
+        ],
+        "point": { "x": 50, "y": 5 }
+      },
+      "expected": null
+    },
+    {
+      "name": "miss below cell",
+      "input": {
+        "entries": [
+          { "id": "a", "rect": { "x": 0, "y": 0, "width": 100, "height": 48 }, "zIndex": 0 }
+        ],
+        "point": { "x": 50, "y": 50 }
+      },
+      "expected": null
+    },
+    {
+      "name": "miss to the right of cell",
+      "input": {
+        "entries": [
+          { "id": "a", "rect": { "x": 0, "y": 0, "width": 100, "height": 48 }, "zIndex": 0 }
+        ],
+        "point": { "x": 105, "y": 24 }
+      },
+      "expected": null
+    },
+    {
+      "name": "hit second of two non-overlapping cells",
+      "input": {
+        "entries": [
+          { "id": "a", "rect": { "x": 0, "y": 0, "width": 100, "height": 48 }, "zIndex": 0 },
+          { "id": "b", "rect": { "x": 0, "y": 52, "width": 100, "height": 48 }, "zIndex": 0 }
+        ],
+        "point": { "x": 50, "y": 70 }
+      },
+      "expected": { "id": "b", "region": "body" }
+    },
+    {
+      "name": "miss gap between two cells",
+      "input": {
+        "entries": [
+          { "id": "a", "rect": { "x": 0, "y": 0, "width": 100, "height": 48 }, "zIndex": 0 },
+          { "id": "b", "rect": { "x": 0, "y": 52, "width": 100, "height": 48 }, "zIndex": 0 }
+        ],
+        "point": { "x": 50, "y": 50 }
+      },
+      "expected": null
+    },
+    {
+      "name": "empty hit map returns null",
+      "input": {
+        "entries": [],
+        "point": { "x": 50, "y": 50 }
+      },
+      "expected": null
+    }
+  ]
+}

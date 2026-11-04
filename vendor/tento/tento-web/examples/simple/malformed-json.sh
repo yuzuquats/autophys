@@ -1,0 +1,1 @@
+curl --header 'Content-Type: application/json' --data $'{"naasdfme": "b"}' 'http://0.0.0.0:8081/malformed-json'

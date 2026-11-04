@@ -1,0 +1,185 @@
+{
+  "type": "sidebar-container-state",
+  "name": "normalize",
+  "cases": [
+    {
+      "name": "docked view model produces pushed layout snapshot",
+      "input": {
+        "fn": "normalize",
+        "viewModel": {
+          "presentation": "docked",
+          "width": "320px",
+          "animate": true,
+          "modal": {
+            "open": false,
+            "backdrop": "none",
+            "dismissOnBackdrop": false,
+            "dismissOnEscape": false
+          },
+          "resize": {
+            "enabled": true
+          }
+        }
+      },
+      "expected": {
+        "presentation": "docked",
+        "widthCss": "320px",
+        "widthPx": 320,
+        "animate": true,
+        "active": true,
+        "stickied": true,
+        "hoverStripVisible": false,
+        "resizeStripVisible": true,
+        "mainContentTransform": "translateX(calc(320px + var(--extra-sticky-margin, 0px)))",
+        "sidebarTransform": "translateX(0px)",
+        "backdropVisible": false,
+        "dismissOnBackdrop": false,
+        "dismissOnEscape": false
+      }
+    },
+    {
+      "name": "peek view model stays hidden when no transient reveal state exists",
+      "input": {
+        "fn": "normalize",
+        "viewModel": {
+          "presentation": "peek",
+          "width": "280px",
+          "animate": true,
+          "modal": {
+            "open": false,
+            "backdrop": "none",
+            "dismissOnBackdrop": false,
+            "dismissOnEscape": false
+          },
+          "resize": {
+            "enabled": true
+          }
+        }
+      },
+      "expected": {
+        "presentation": "peek",
+        "widthCss": "280px",
+        "widthPx": 280,
+        "animate": true,
+        "active": false,
+        "stickied": false,
+        "hoverStripVisible": true,
+        "resizeStripVisible": true,
+        "mainContentTransform": "translateX(0px)",
+        "sidebarTransform": "translateX(calc(-1 * 280px - var(--extra-sticky-margin, 0px)))",
+        "backdropVisible": false,
+        "dismissOnBackdrop": false,
+        "dismissOnEscape": false
+      }
+    },
+    {
+      "name": "peek view model becomes active when focus reasons are present",
+      "input": {
+        "fn": "normalize",
+        "viewModel": {
+          "presentation": "peek",
+          "width": "280px",
+          "animate": false,
+          "modal": {
+            "open": false,
+            "backdrop": "none",
+            "dismissOnBackdrop": false,
+            "dismissOnEscape": false
+          },
+          "resize": {
+            "enabled": false
+          }
+        },
+        "transientState": {
+          "forceRevealReasons": ["docs-mobile-nav"]
+        }
+      },
+      "expected": {
+        "presentation": "peek",
+        "widthCss": "280px",
+        "widthPx": 280,
+        "animate": false,
+        "active": true,
+        "stickied": false,
+        "hoverStripVisible": true,
+        "resizeStripVisible": false,
+        "mainContentTransform": "translateX(0px)",
+        "sidebarTransform": "translateX(0px)",
+        "backdropVisible": false,
+        "dismissOnBackdrop": false,
+        "dismissOnEscape": false
+      }
+    },
+    {
+      "name": "modal view model owns backdrop and dismissal state",
+      "input": {
+        "fn": "normalize",
+        "viewModel": {
+          "presentation": "modal",
+          "width": "340px",
+          "animate": true,
+          "modal": {
+            "open": true,
+            "backdrop": "dim",
+            "dismissOnBackdrop": true,
+            "dismissOnEscape": true
+          },
+          "resize": {
+            "enabled": true
+          }
+        }
+      },
+      "expected": {
+        "presentation": "modal",
+        "widthCss": "340px",
+        "widthPx": 340,
+        "animate": true,
+        "active": true,
+        "stickied": false,
+        "hoverStripVisible": false,
+        "resizeStripVisible": false,
+        "mainContentTransform": "translateX(0px)",
+        "sidebarTransform": "translateX(0px)",
+        "backdropVisible": true,
+        "dismissOnBackdrop": true,
+        "dismissOnEscape": true
+      }
+    },
+    {
+      "name": "normalize resolves percent and viewport widths against explicit reference width",
+      "input": {
+        "fn": "normalize",
+        "viewModel": {
+          "presentation": "docked",
+          "width": "50%",
+          "animate": true,
+          "modal": {
+            "open": false,
+            "backdrop": "none",
+            "dismissOnBackdrop": false,
+            "dismissOnEscape": false
+          },
+          "resize": {
+            "enabled": true
+          }
+        },
+        "referenceWidthPx": 800
+      },
+      "expected": {
+        "presentation": "docked",
+        "widthCss": "50%",
+        "widthPx": 400,
+        "animate": true,
+        "active": true,
+        "stickied": true,
+        "hoverStripVisible": false,
+        "resizeStripVisible": true,
+        "mainContentTransform": "translateX(calc(50% + var(--extra-sticky-margin, 0px)))",
+        "sidebarTransform": "translateX(0px)",
+        "backdropVisible": false,
+        "dismissOnBackdrop": false,
+        "dismissOnEscape": false
+      }
+    }
+  ]
+}

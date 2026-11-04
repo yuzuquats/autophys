@@ -1,0 +1,14 @@
+[34m [0m│  250ms │ [38;5;238m02:15:59.750[0m │                       │        │ [38;5;238mS[0m │ background_task Calendar sync started [38;5;239mtasks/sync.rs:30[0m
+[35m [0m│[38;5;238m  180ms[0m │              │                       │        │ [38;5;238mS[0m │ [38;5;238m├ [0mfetch_events [38;5;239mtasks/sync.rs:45[0m
+[34m [0m│[38;5;238m       [0m │              │                       │        │ [38;5;238mS[0m │ [38;5;238m└ [0mSync completed [38;5;239mtasks/sync.rs:95[0m
+[34m [0m│[33m 1.500s[0m │ [38;5;238m02:15:59.500[0m │                       │        │ [38;5;238mS[0m │ cron_job Cleaning up stale sessions [38;5;239mcron/cleanup.rs:10[0m
+[34m [0m│[31m 5.000s[0m │ [38;5;238m02:15:57.000[0m │                       │        │ [38;5;238mS[0m │ pipeline [38;5;239mpipeline/main.rs:5[0m
+[34m [0m│[38;5;238m 2.000s[0m │              │                       │        │ [38;5;238mS[0m │ [38;5;238m├ [0mstage_1 [38;5;239mpipeline/stage1.rs:10[0m
+[35m [0m│[38;5;238m 1.000s[0m │              │                       │        │ [38;5;238mS[0m │ [38;5;238m│ └ [0mstage_2 [38;5;239mpipeline/stage2.rs:20[0m
+[35m [0m│[38;5;238m  500ms[0m │              │                       │        │ [38;5;238mS[0m │ [38;5;238m│   └ [0mstage_3 [38;5;239mpipeline/stage3.rs:30[0m
+[34m [0m│[38;5;238m       [0m │              │                       │        │ [38;5;238mS[0m │ [38;5;238m│     └ [0mDeep event [38;5;239mpipeline/stage3.rs:35[0m
+[34m [0m│[38;5;238m       [0m │              │                       │        │ [38;5;238mS[0m │ [38;5;238m└ [0mPipeline complete [38;5;239mpipeline/main.rs:50[0m
+[34m [0m│[31m 1.250m[0m │ [38;5;238m02:14:48.000[0m │                       │        │ [38;5;238mS[0m │ long_task [38;5;239mtasks/long.rs:1[0m
+[34m [0m│[38;5;238m 2.500s[0m │              │                       │        │ [38;5;238mS[0m │ [38;5;238m└ [0msub_task [38;5;239mtasks/long.rs:10[0m
+[34m [0m│  100ms │ [38;5;238m02:16:03.900[0m │                       │        │ [38;5;238mS[0m │ perf_test [38;5;239mperf/test.rs:1[0m
+[34m [0m│[38;5;238m   42ms[0m │              │                       │        │ [38;5;238mS[0m │ [38;5;238m└ [0mCheckpoint reached [38;5;239mperf/test.rs:20[0m

@@ -1,0 +1,66 @@
+{
+  "type": "tento-term-render",
+  "name": "tree_health",
+  "description": "The `acme-console` health check tree (the shape rendered by acme-console's health.rs) at a comfortable width. Status icons '✓ / ! / ✗' are baked into each check's label (colour is forced off for fixtures — see colored.json for the styled path). The companies sub-tree nests one more level: 'acme-co · ACM · ok' (not last) carries a '    │   ' continuation prefix for its children; 'globex · GLX · paused' (last) carries '        '. At narrower widths the tree wraps long labels/details — see tree_basic.json for that behaviour.",
+  "cases": [
+    {
+      "name": "width 80 — full tree, nothing wraps",
+      "input": {
+        "kind": "tree",
+        "term_width": 80,
+        "tree": {
+          "root": {
+            "label": "acme-control-pane health (acme-staging)",
+            "children": [
+              { "label": "edge bypass", "children": [
+                { "label": "✓ agent-validation token", "detail": "present" }
+              ] },
+              { "label": "admin.acme.so", "children": [
+                { "label": "✓ local origin", "detail": "200 ok" },
+                { "label": "✓ public route", "detail": "200 ok" }
+              ] },
+              { "label": "paperclip.acme.so", "children": [
+                { "label": "✓ local api", "detail": "200 ok" },
+                { "label": "✓ public route", "detail": "200 ok" },
+                { "label": "✓ server container", "detail": "running (up 3h)" },
+                { "label": "✓ runner container", "detail": "running (up 3h)" },
+                { "label": "✓ bridge container", "detail": "running (up 3h)" },
+                { "label": "! bridge health", "detail": "degraded: 1/2 probes failed" }
+              ] },
+              { "label": "paperclip companies", "children": [
+                { "label": "✓ api", "detail": "200 ok" },
+                { "label": "acme-co · ACM · ok", "children": [
+                  { "label": "✓ agents", "detail": "3 running" }
+                ] },
+                { "label": "globex · GLX · paused", "children": [
+                  { "label": "✗ agents", "detail": "0 running" }
+                ] }
+              ] }
+            ]
+          }
+        }
+      },
+      "expected": [
+        "acme-control-pane health (acme-staging)",
+        "├── edge bypass",
+        "│   └── ✓ agent-validation token  present",
+        "├── admin.acme.so",
+        "│   ├── ✓ local origin  200 ok",
+        "│   └── ✓ public route  200 ok",
+        "├── paperclip.acme.so",
+        "│   ├── ✓ local api  200 ok",
+        "│   ├── ✓ public route  200 ok",
+        "│   ├── ✓ server container  running (up 3h)",
+        "│   ├── ✓ runner container  running (up 3h)",
+        "│   ├── ✓ bridge container  running (up 3h)",
+        "│   └── ! bridge health  degraded: 1/2 probes failed",
+        "└── paperclip companies",
+        "    ├── ✓ api  200 ok",
+        "    ├── acme-co · ACM · ok",
+        "    │   └── ✓ agents  3 running",
+        "    └── globex · GLX · paused",
+        "        └── ✗ agents  0 running"
+      ]
+    }
+  ]
+}

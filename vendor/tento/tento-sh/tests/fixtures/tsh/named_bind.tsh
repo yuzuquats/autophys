@@ -1,0 +1,5 @@
+;; Named binds outlive `prev`. The link below uses sheet's id from line 3,
+;; even though `prev` after line 4 was a different create.
+(let sheet (create :name "first"))
+(create :name "second")
+(link :parent (get sheet "id") :label "x")

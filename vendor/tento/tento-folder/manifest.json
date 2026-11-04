@@ -1,0 +1,61 @@
+{
+  "schema": "tsh.app/v1",
+  "name": "tento-folder",
+  "version": "0.1.0",
+  "description": "Folder layouts as data: check a directory against a folder.* tsh spec, or render the spec as a tree",
+  "mount": "folder",
+  "entrypoint": "bin/tento-folder",
+  "transport": "oneshot",
+  "commands": {
+    "check": {
+      "description": "Validate a directory (default .) against a folder.* tsh spec. Fails listing every violation; --report returns them as data instead",
+      "name": "check",
+      "options": [
+        {
+          "help": "The tsh spec file.",
+          "kind": "positional",
+          "name": "spec",
+          "schema": {
+            "kind": "string"
+          },
+          "type": "String"
+        },
+        {
+          "default": ".",
+          "help": "The directory to check (default: the current directory).",
+          "kind": "positional",
+          "name": "dir",
+          "schema": {
+            "kind": "string"
+          },
+          "type": "String"
+        },
+        {
+          "help": "Return the violations as data instead of failing on them.",
+          "kind": "flag",
+          "name": "report",
+          "schema": {
+            "kind": "bool"
+          }
+        }
+      ],
+      "type": "command.doc/v1"
+    },
+    "show": {
+      "description": "Render a folder.* tsh spec as a tree",
+      "name": "show",
+      "options": [
+        {
+          "help": "The tsh spec file.",
+          "kind": "positional",
+          "name": "spec",
+          "schema": {
+            "kind": "string"
+          },
+          "type": "String"
+        }
+      ],
+      "type": "command.doc/v1"
+    }
+  }
+}

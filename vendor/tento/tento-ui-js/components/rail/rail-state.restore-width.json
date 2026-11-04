@@ -1,0 +1,56 @@
+{
+  "type": "rail-state",
+  "name": "restore-width",
+  "cases": [
+    {
+      "name": "nothing stored restores nothing",
+      "input": { "fn": "restoreWidth", "raw": null, "bounds": { "minPx": 220, "maxPx": 600 } },
+      "expected": null
+    },
+    {
+      "name": "an empty string restores nothing",
+      "input": { "fn": "restoreWidth", "raw": "", "bounds": { "minPx": 220, "maxPx": 600 } },
+      "expected": null
+    },
+    {
+      "name": "a width inside the bounds is restored",
+      "input": { "fn": "restoreWidth", "raw": "300", "bounds": { "minPx": 220, "maxPx": 600 } },
+      "expected": 300
+    },
+    {
+      "name": "both bounds are inclusive",
+      "input": { "fn": "restoreWidth", "raw": "220", "bounds": { "minPx": 220, "maxPx": 600 } },
+      "expected": 220
+    },
+    {
+      "name": "the upper bound is inclusive too",
+      "input": { "fn": "restoreWidth", "raw": "600", "bounds": { "minPx": 220, "maxPx": 600 } },
+      "expected": 600
+    },
+    {
+      "name": "below the floor is discarded, not clamped",
+      "input": { "fn": "restoreWidth", "raw": "219", "bounds": { "minPx": 220, "maxPx": 600 } },
+      "expected": null
+    },
+    {
+      "name": "above the ceiling is discarded, not clamped",
+      "input": { "fn": "restoreWidth", "raw": "601", "bounds": { "minPx": 220, "maxPx": 600 } },
+      "expected": null
+    },
+    {
+      "name": "a hand-edited non-number is discarded",
+      "input": { "fn": "restoreWidth", "raw": "wide", "bounds": { "minPx": 220, "maxPx": 600 } },
+      "expected": null
+    },
+    {
+      "name": "a fraction rounds to the pixel",
+      "input": { "fn": "restoreWidth", "raw": "250.7", "bounds": { "minPx": 220, "maxPx": 600 } },
+      "expected": 251
+    },
+    {
+      "name": "surrounding whitespace is tolerated",
+      "input": { "fn": "restoreWidth", "raw": " 280 ", "bounds": { "minPx": 220, "maxPx": 600 } },
+      "expected": 280
+    }
+  ]
+}

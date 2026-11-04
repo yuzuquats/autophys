@@ -1,0 +1,20 @@
+[package]
+name = "tento-logger-spans"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+description = "The span-tree bucket shape (span-tree/v1): the SpanRow schema (structural columns + a json content column) and the recompose-by-trace_id tree builder, shared by the tracing producer and the watcher/TUI consumers."
+
+[dependencies]
+tento-buckets.workspace = true
+tento-timeseries.workspace = true
+anyhow.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+chrono = { workspace = true }
+arrow = { workspace = true }
+uuid = { workspace = true, features = ["v4"] }
+
+[dev-dependencies]
+tempfile = "3"

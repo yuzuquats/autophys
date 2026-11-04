@@ -1,0 +1,25 @@
+;; folder.* — the tento-folder spec DSL.
+;;
+;; A spec is a nested map: each key is an on-disk name or a glob (`*`, `?`),
+;; each value a node built from the forms below. Evaluates to the JSON shape
+;; `tento_folder::Spec::from_json` reads.
+;;
+;;   (folder.closed {"Cargo.toml" folder.file
+;;                   "README.md"  (folder.opt folder.file)
+;;                   "src"        (folder.dir {"*.rs" (folder.some folder.file)})})
+
+;; A file.
+(let folder.file {:kind "file"})
+;; Anything — existence only (`Folder::Dynamic`).
+(let folder.any {:kind "any"})
+;; Forbidden — anything the entry matches is a violation. Carves an exception
+;; out of a broader glob: {"tento-*" (folder.dir {}) "tento-*.docs" folder.none}.
+(let folder.none {:kind "none"})
+;; A folder that may hold undeclared children.
+(let folder.dir (lambda (entries) {:kind "folder" :entries entries :closed false}))
+;; A folder whose every child must be declared.
+(let folder.closed (lambda (entries) {:kind "folder" :entries entries :closed true}))
+;; A literal entry that may be absent (`"name"?:`). Present means it must match.
+(let folder.opt (lambda (node) (assoc node :optional true)))
+;; A glob entry that must match at least one child.
+(let folder.some (lambda (node) (assoc node :required true)))

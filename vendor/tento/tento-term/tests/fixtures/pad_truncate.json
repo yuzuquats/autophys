@@ -1,0 +1,62 @@
+{
+  "type": "tento-term-render",
+  "name": "pad_truncate",
+  "description": "Composable width primitives: pad_left/right/center and truncate_ellipsis/middle. These are visual-width aware (count display columns, not bytes) and ANSI-safe (never cut a colour code; re-emit RESET after a truncation that opened a style).",
+  "cases": [
+    {
+      "name": "pad_right pads with trailing spaces to the target width",
+      "input": { "kind": "primitive", "op": "pad_right", "text": "ab", "width": 5 },
+      "expected": "ab   "
+    },
+    {
+      "name": "pad_left right-aligns by padding on the left",
+      "input": { "kind": "primitive", "op": "pad_left", "text": "ab", "width": 5 },
+      "expected": "   ab"
+    },
+    {
+      "name": "pad_center splits the slack (extra column biases right)",
+      "input": { "kind": "primitive", "op": "pad_center", "text": "x", "width": 5 },
+      "expected": "  x  "
+    },
+    {
+      "name": "pad_* never truncates — already wide enough is returned unchanged",
+      "input": { "kind": "primitive", "op": "pad_right", "text": "already wide", "width": 5 },
+      "expected": "already wide"
+    },
+    {
+      "name": "truncate_ellipsis drops the tail and appends the default ellipsis",
+      "input": { "kind": "primitive", "op": "truncate_ellipsis", "text": "abcdef", "width": 4 },
+      "expected": "abc…"
+    },
+    {
+      "name": "truncate_ellipsis with a custom multi-char ellipsis",
+      "input": { "kind": "primitive", "op": "truncate_ellipsis", "text": "abcdef", "width": 4, "ellipsis": "..." },
+      "expected": "a..."
+    },
+    {
+      "name": "truncate_ellipsis at width == ellipsis width yields just the ellipsis",
+      "input": { "kind": "primitive", "op": "truncate_ellipsis", "text": "hi", "width": 1 },
+      "expected": "…"
+    },
+    {
+      "name": "truncate_ellipsis at width 0 yields the empty string (no ellipsis, no panic)",
+      "input": { "kind": "primitive", "op": "truncate_ellipsis", "text": "hi", "width": 0 },
+      "expected": ""
+    },
+    {
+      "name": "truncate_ellipsis preserves an open ANSI style and closes it after the ellipsis",
+      "input": { "kind": "primitive", "op": "truncate_ellipsis", "text": "\u001b[32mgreen text\u001b[0m", "width": 5 },
+      "expected": "\u001b[32mgree…\u001b[0m"
+    },
+    {
+      "name": "truncate_middle keeps both ends, ellipsis in the middle (left-biased on odd)",
+      "input": { "kind": "primitive", "op": "truncate_middle", "text": "abcdefgh", "width": 5 },
+      "expected": "ab…gh"
+    },
+    {
+      "name": "truncate_middle on a path keeps the head and the basename",
+      "input": { "kind": "primitive", "op": "truncate_middle", "text": "/very/long/path/to/file.rs", "width": 12 },
+      "expected": "/very/…le.rs"
+    }
+  ]
+}

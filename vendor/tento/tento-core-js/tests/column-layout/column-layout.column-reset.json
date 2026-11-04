@@ -1,0 +1,39 @@
+{
+  "type": "column-layout",
+  "name": "column-reset",
+  "description": "Column groups reset when a non-overlapping event takes column 0",
+  "cases": [
+    {
+      "name": "event after gap reuses column 0",
+      "input": {
+        "events": [
+          { "id": "a", "startHrs": 9, "endHrs": 10 },
+          { "id": "b", "startHrs": 9.5, "endHrs": 10.5 },
+          { "id": "c", "startHrs": 11, "endHrs": 12 }
+        ]
+      },
+      "expected": [
+        { "id": "a", "columnIndex": 0, "numColumns": 2 },
+        { "id": "b", "columnIndex": 1, "numColumns": 2 },
+        { "id": "c", "columnIndex": 0, "numColumns": 1 }
+      ]
+    },
+    {
+      "name": "independent groups get independent column counts",
+      "input": {
+        "events": [
+          { "id": "a", "startHrs": 9, "endHrs": 10 },
+          { "id": "b", "startHrs": 9.25, "endHrs": 10 },
+          { "id": "c", "startHrs": 10, "endHrs": 11 },
+          { "id": "d", "startHrs": 10.25, "endHrs": 11 }
+        ]
+      },
+      "expected": [
+        { "id": "a", "columnIndex": 0, "numColumns": 2 },
+        { "id": "b", "columnIndex": 1, "numColumns": 2 },
+        { "id": "c", "columnIndex": 0, "numColumns": 2 },
+        { "id": "d", "columnIndex": 1, "numColumns": 2 }
+      ]
+    }
+  ]
+}

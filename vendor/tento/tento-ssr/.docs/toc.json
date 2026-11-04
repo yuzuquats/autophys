@@ -1,0 +1,19 @@
+{
+  "namespace": "tento-ssr",
+  "title": "tento-ssr",
+  "sections": [
+    {
+      "title": "Getting Started",
+      "children": [
+        {
+          "label": "Overview",
+          "slug": "overview"
+        },
+        {
+          "label": "Docs API",
+          "slug": "docs-api"
+        }
+      ]
+    }
+  ]
+}

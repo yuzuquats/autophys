@@ -1,0 +1,15 @@
+{
+  "namespace": "tento-lisp",
+  "title": "tento-lisp",
+  "sections": [
+    {
+      "title": "Overview",
+      "children": [
+        {
+          "label": "Crate overview",
+          "slug": "overview"
+        }
+      ]
+    }
+  ]
+}

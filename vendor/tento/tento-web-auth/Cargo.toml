@@ -1,0 +1,30 @@
+[package]
+name = "tento-web-auth"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+
+tento-web-router.workspace = true
+tento-web-error.workspace = true
+tento-web-files.workspace = true
+
+tento-openapi.workspace = true
+
+actix.workspace = true
+actix-web.workspace = true
+actix-session.workspace = true
+actix-identity.workspace = true
+actix-service.workspace = true
+actix-http.workspace = true
+
+serde.workspace = true
+serde_json.workspace = true
+serde_with.workspace = true
+
+anyhow.workspace = true
+thiserror.workspace = true
+futures.workspace = true
+tracing.workspace = true
+
+async-trait.workspace = true

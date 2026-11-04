@@ -1,0 +1,37 @@
+# The authored tsh plugin contract (tsh: crates/tsh-package/src/tsh_toml.rs).
+# tsh-package lays [plugin] over the command descriptors, which it asks the
+# binary for (`tento-folder --help --json`); manifest.json keeps the
+# descriptors and repeats the owned fields with the same values (checked by
+# tests/plugin.rs and by `tsh-tools plugins-check`). Commands run from the
+# tsh repository root, where `tento/` is this repository; `<new dir>` is an
+# output directory that must not exist yet.
+[plugin]
+name = "tento-folder"
+version = "0.1.0"
+mount = "folder"
+entrypoint = "bin/tento-folder"
+# Both commands return a value (tsh runs a oneshot command as
+# `<cmd> --json ...`); `check` without --report fails on any violation.
+transport = "oneshot"
+languages = ["rust", "tsh"]
+readme = "README.md"
+description = "Folder layouts as data: check a directory against a folder.* tsh spec, or render the spec as a tree"
+
+[build]
+# tsh builds the binary from its own side workspace, crates/tento-folder-tsh:
+# these sources with tsh's pinned toolchain and a lock of its own (this
+# repository pins no toolchain, and its lock needs a newer rustc than tsh's).
+# That build is the plugin, with the `cli` feature on.
+packager = "tsh-package"
+run = [
+  "CARGO_TARGET_DIR=\"${CARGO_TARGET_DIR:-target}\" cargo build --release --locked --manifest-path crates/tento-folder-tsh/Cargo.toml",
+  "cargo run -p tsh-package -- plugin --dir tento/tento-folder --binary \"${CARGO_TARGET_DIR:-target}/release/tento-folder\" --out-dir <new dir>",
+]
+paths = ["tsh.toml", "Cargo.toml", "manifest.json", "src", "tsh", "macros"]
+
+[test]
+# tests/plugin.rs also runs the bundle through tsh when one is available
+# (TENTO_FOLDER_TEST_TSH, else ~/.local/bin/tsh); with
+# TENTO_FOLDER_REQUIRE_TSH=1 a missing tsh fails instead of skipping.
+run = ["CARGO_TARGET_DIR=\"${CARGO_TARGET_DIR:-target}\" cargo test --locked --manifest-path crates/tento-folder-tsh/Cargo.toml"]
+paths = ["tests", "manifest.json", "tsh.toml"]

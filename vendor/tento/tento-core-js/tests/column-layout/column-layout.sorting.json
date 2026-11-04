@@ -1,0 +1,33 @@
+{
+  "type": "column-layout",
+  "name": "sorting",
+  "description": "Sort order: start ascending, end ascending, then id",
+  "cases": [
+    {
+      "name": "sorts by start time then end ascending",
+      "input": {
+        "events": [
+          { "id": "long", "startHrs": 9, "endHrs": 12 },
+          { "id": "short", "startHrs": 9, "endHrs": 10 }
+        ]
+      },
+      "expected": [
+        { "id": "short", "columnIndex": 0 },
+        { "id": "long", "columnIndex": 1 }
+      ]
+    },
+    {
+      "name": "sorts by id when start and end match",
+      "input": {
+        "events": [
+          { "id": "b", "startHrs": 9, "endHrs": 10 },
+          { "id": "a", "startHrs": 9, "endHrs": 10 }
+        ]
+      },
+      "expected": [
+        { "id": "a", "columnIndex": 0 },
+        { "id": "b", "columnIndex": 1 }
+      ]
+    }
+  ]
+}

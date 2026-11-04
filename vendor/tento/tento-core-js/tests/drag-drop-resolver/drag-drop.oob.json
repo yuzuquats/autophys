@@ -1,0 +1,48 @@
+{
+  "type": "drag-drop",
+  "name": "oob",
+  "tree": {
+    "0": {},
+    "1": {},
+    "2": {}
+  },
+  "cases": [
+    {
+      "name": "Dropped at (x=0, y=-0",
+      "input": { "start": 0, "movedTo": { "x": 0, "y": -0.5 } },
+      "expected": { "validActions": [] }
+    },
+    {
+      "name": "Dropped at (x=0, y=-0",
+      "input": { "start": 1, "movedTo": { "x": 0, "y": -0.5 } },
+      "expected": {
+        "validActions": [
+          { "type": "top", "idx": 0 }
+        ]
+      }
+    },
+    {
+      "name": "Dropped at (x=0, y=3",
+      "input": { "start": 1, "movedTo": { "x": 0, "y": 3.1 } },
+      "expected": {
+        "validActions": [
+          { "type": "bottom", "idx": 2 }
+        ]
+      }
+    },
+    {
+      "name": "Dropped at (x=0, y=3",
+      "input": { "start": 2, "movedTo": { "x": 0, "y": 3.1 } },
+      "expected": { "validActions": [] }
+    },
+    {
+      "name": "valid parents",
+      "input": {},
+      "expected": {
+        "0": { "top": ["root"], "bottom": ["root"] },
+        "1": { "top": ["root"], "bottom": ["root"] },
+        "2": { "top": ["root"], "bottom": ["root"] }
+      }
+    }
+  ]
+}

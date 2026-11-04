@@ -1,0 +1,13 @@
+[package]
+name = "tento-buckets"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+license = "MIT"
+description = "Pure bucket-directory model for fleet data buckets: meta.json (shape_tag + retention + visibility), a per-bucket maintenance lock, coverage-gated retention, nested node-path addressing, recursive discovery, and the canonical on-disk layout shared by producers, the host agent, and the control-pane cache. No async / no TLS."
+
+[dependencies]
+anyhow.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+chrono = { workspace = true }

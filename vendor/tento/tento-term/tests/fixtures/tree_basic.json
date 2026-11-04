@@ -1,0 +1,79 @@
+{
+  "type": "tento-term-render",
+  "name": "tree_basic",
+  "description": "Box-drawing tree rendering. The root node is printed flat (no glyph/prefix); descendants get '├──' (not last) / '└──' (last) with a '│   ' or '    ' continuation prefix carried down per level. Optional per-node `detail` is rendered after the label, two spaces apart. When a line is too wide for the terminal the tree WRAPS: the post-glyph text is word-wrapped (whitespace runs collapse to a single space) onto continuation lines that carry the node's continuation prefix; a single token wider than the available space is hard-broken (no ellipsis).",
+  "cases": [
+    {
+      "name": "width 80 — a nested file tree, nothing wraps",
+      "input": {
+        "kind": "tree",
+        "term_width": 80,
+        "tree": {
+          "root": {
+            "label": "project",
+            "children": [
+              {
+                "label": "src",
+                "children": [
+                  "main.rs",
+                  "lib.rs"
+                ]
+              },
+              {
+                "label": "tests",
+                "children": [
+                  "integration.rs"
+                ]
+              },
+              "README.md"
+            ]
+          }
+        }
+      },
+      "expected": [
+        "project",
+        "├── src",
+        "│   ├── main.rs",
+        "│   └── lib.rs",
+        "├── tests",
+        "│   └── integration.rs",
+        "└── README.md"
+      ]
+    },
+    {
+      "name": "width 24 — leaves carry details; lines past the width wrap onto continuation lines",
+      "input": {
+        "kind": "tree",
+        "term_width": 24,
+        "tree": {
+          "root": {
+            "label": "service health",
+            "children": [
+              {
+                "label": "api",
+                "detail": "responding in 12ms"
+              },
+              {
+                "label": "database",
+                "detail": "connected, 4 pools"
+              },
+              {
+                "label": "cache",
+                "detail": "miss rate 2.3%"
+              }
+            ]
+          }
+        }
+      },
+      "expected": [
+        "service health",
+        "├── api  responding in",
+        "│   12ms",
+        "├── database  connected,",
+        "│   4 pools",
+        "└── cache  miss rate",
+        "    2.3%"
+      ]
+    }
+  ]
+}

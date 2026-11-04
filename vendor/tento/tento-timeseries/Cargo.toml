@@ -1,0 +1,16 @@
+[package]
+name = "tento-timeseries"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+license = "MIT"
+description = "Generic time-series store: a SeriesRow trait + an ljson-hot → daily/weekly parquet rollup engine, shared by node buckets and the fleet edge cache."
+
+[dependencies]
+anyhow.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+chrono = { workspace = true }
+arrow = { workspace = true }
+parquet = { workspace = true }
+tento-buckets.workspace = true

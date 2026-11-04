@@ -1,0 +1,13 @@
+[package]
+name = "tento-openapi-macros"
+version = "0.1.0"
+edition = "2024"
+description = "#[derive(ToSchema)] for tento-openapi"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2.workspace = true
+quote.workspace = true
+syn.workspace = true

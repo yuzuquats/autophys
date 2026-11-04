@@ -1,0 +1,4 @@
+;; Three commands, the second uses the first's id through `prev`.
+(create :name "foo")
+(link :parent (get prev "id") :label "first")
+(create :name "bar")

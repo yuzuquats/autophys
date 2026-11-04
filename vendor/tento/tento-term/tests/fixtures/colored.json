@@ -1,0 +1,35 @@
+{
+  "type": "tento-term-render",
+  "name": "colored",
+  "description": "Demonstrates that terminal colours flow through the data model. Cases here render with ANSI colour forced ON (`input.color: true`); all other fixtures render with colour OFF for diffability. A cell carries a colour via {\"text\": \"...\", \"style\": \"green\"}; a whole column gets a default colour via the column's `style`; the header row + rule pick up the table's `header_style`. An explicit cell `style` overrides the column `style`. SGR codes: 1=bold, 2=dimmed, 31=red, 32=green, 33=yellow, 36=cyan, 0=reset.",
+  "cases": [
+    {
+      "name": "per-cell colours (running=green, stopped=red, degraded=yellow), a dimmed column, dimmed header + rule",
+      "input": {
+        "kind": "table",
+        "term_width": 30,
+        "color": true,
+        "table": {
+          "header_style": "dimmed",
+          "columns": [
+            { "header": "Service", "priority": 0 },
+            { "header": "State", "priority": 1 },
+            { "header": "Pid", "align": "right", "style": "dimmed", "priority": 2 }
+          ],
+          "rows": [
+            ["api", { "text": "running", "style": "green" }, "4821"],
+            ["worker", { "text": "stopped", "style": "red" }, "—"],
+            ["cache", { "text": "degraded", "style": "yellow" }, "991"]
+          ]
+        }
+      },
+      "expected": [
+        "\u001b[2mService\u001b[0m \u001b[2mState\u001b[0m     \u001b[2mPid\u001b[0m",
+        "\u001b[2m─────────────────────\u001b[0m",
+        "api     \u001b[32mrunning\u001b[0m  \u001b[2m4821\u001b[0m",
+        "worker  \u001b[31mstopped\u001b[0m     \u001b[2m—\u001b[0m",
+        "cache   \u001b[33mdegraded\u001b[0m  \u001b[2m991\u001b[0m"
+      ]
+    }
+  ]
+}

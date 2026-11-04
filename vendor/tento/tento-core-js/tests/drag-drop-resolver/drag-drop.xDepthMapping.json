@@ -1,0 +1,79 @@
+{
+  "type": "drag-drop",
+  "name": "xDepthMapping",
+  "tree": {
+    "0/nestable": {
+      "1/nestable": {
+        "2/nestable": {
+          "3/nestable": {}
+        },
+        "4/nestable": {}
+      },
+      "5/nestable": {}
+    },
+    "6/nestable": {}
+  },
+  "cases": [
+    {
+      "name": "Dropped at (x=0, y=3",
+      "input": { "start": 6, "movedTo": { "x": 0, "y": 3.7 } },
+      "expected": {
+        "validActions": [
+          { "type": "bottom", "idx": 2 },
+          { "type": "top", "idx": 4 }
+        ]
+      }
+    },
+    {
+      "name": "Dropped at (x=1, y=3",
+      "input": { "start": 6, "movedTo": { "x": 1, "y": 3.7 } },
+      "expected": {
+        "validActions": [
+          { "type": "bottom", "idx": 2 },
+          { "type": "top", "idx": 4 }
+        ]
+      }
+    },
+    {
+      "name": "Dropped at (x=2, y=3",
+      "input": { "start": 6, "movedTo": { "x": 2, "y": 3.7 } },
+      "expected": {
+        "validActions": [
+          { "type": "bottom", "idx": 2 },
+          { "type": "top", "idx": 4 }
+        ]
+      }
+    },
+    {
+      "name": "Dropped at (x=3, y=3",
+      "input": { "start": 6, "movedTo": { "x": 3, "y": 3.7 } },
+      "expected": {
+        "validActions": [
+          { "type": "bottom", "idx": 3 }
+        ]
+      }
+    },
+    {
+      "name": "Dropped at (x=4, y=3",
+      "input": { "start": 6, "movedTo": { "x": 4, "y": 3.7 } },
+      "expected": {
+        "validActions": [
+          { "type": "bottom", "idx": 3 }
+        ]
+      }
+    },
+    {
+      "name": "valid parents",
+      "input": {},
+      "expected": {
+        "0": { "top": ["root"], "bottom": ["0"] },
+        "1": { "top": ["0"], "bottom": ["1"] },
+        "2": { "top": ["1"], "bottom": ["2"] },
+        "3": { "top": ["2"], "bottom": ["1", "2", "3"] },
+        "4": { "top": ["1"], "bottom": ["0", "4", "1"] },
+        "5": { "top": ["0"], "bottom": ["root", "5", "0"] },
+        "6": { "top": ["root"], "bottom": ["6", "root"] }
+      }
+    }
+  ]
+}

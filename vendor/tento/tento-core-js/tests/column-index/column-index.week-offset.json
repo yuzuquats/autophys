@@ -1,0 +1,142 @@
+{
+  "type": "column-index",
+  "name": "week-offset",
+  "description": "resolveKeyToDefault correctly computes column offset for weekly view, respecting the weekStart preference (Sunday vs Monday)",
+  "cases": [
+    {
+      "name": "monday-start: previous week gets offset -1",
+      "input": {
+        "anchorDate": "2026-03-30",
+        "weekStart": "mon",
+        "dates": ["2026-03-29", "2026-03-23"]
+      },
+      "expected": [-1, -1]
+    },
+    {
+      "name": "monday-start: dates within anchor week get offset 0",
+      "input": {
+        "anchorDate": "2026-03-30",
+        "weekStart": "mon",
+        "dates": ["2026-03-30", "2026-03-31", "2026-04-04", "2026-04-05"]
+      },
+      "expected": [0, 0, 0, 0]
+    },
+    {
+      "name": "monday-start: next week gets offset 1",
+      "input": {
+        "anchorDate": "2026-03-30",
+        "weekStart": "mon",
+        "dates": ["2026-04-06", "2026-04-12"]
+      },
+      "expected": [1, 1]
+    },
+    {
+      "name": "monday-start: multi-week offsets",
+      "input": {
+        "anchorDate": "2026-03-30",
+        "weekStart": "mon",
+        "dates": ["2026-04-13", "2026-04-19", "2026-03-16", "2026-03-09"]
+      },
+      "expected": [2, 2, -2, -3]
+    },
+    {
+      "name": "sunday-start: dates in same displayed week get offset 0",
+      "input": {
+        "anchorDate": "2026-03-29",
+        "weekStart": "sun",
+        "dates": ["2026-03-29", "2026-03-30", "2026-03-31", "2026-04-04"]
+      },
+      "expected": [0, 0, 0, 0]
+    },
+    {
+      "name": "sunday-start: midweek anchor starts at the first displayed week, not the next Sunday",
+      "input": {
+        "anchorDate": "2026-06-30",
+        "weekStart": "sun",
+        "dates": ["2026-06-28", "2026-06-30", "2026-07-04", "2026-07-05"]
+      },
+      "expected": [0, 0, 0, 1]
+    },
+    {
+      "name": "sunday-start: next displayed week gets offset 1",
+      "input": {
+        "anchorDate": "2026-03-29",
+        "weekStart": "sun",
+        "dates": ["2026-04-05", "2026-04-06", "2026-04-11"]
+      },
+      "expected": [1, 1, 1]
+    },
+    {
+      "name": "sunday-start: previous displayed week gets offset -1",
+      "input": {
+        "anchorDate": "2026-03-29",
+        "weekStart": "sun",
+        "dates": ["2026-03-28", "2026-03-22"]
+      },
+      "expected": [-1, -1]
+    },
+    {
+      "name": "sunday-start: multi-week offsets",
+      "input": {
+        "anchorDate": "2026-03-29",
+        "weekStart": "sun",
+        "dates": ["2026-04-12", "2026-04-19", "2026-03-15", "2026-03-08"]
+      },
+      "expected": [2, 3, -2, -3]
+    },
+    {
+      "name": "sunday-start: ISO year boundary — Mon Dec 30 is ISO week 1/2025 but same displayed week as Sun Dec 29/2024",
+      "input": {
+        "anchorDate": "2024-12-29",
+        "weekStart": "sun",
+        "dates": ["2024-12-29", "2024-12-30", "2025-01-01", "2025-01-04"]
+      },
+      "expected": [0, 0, 0, 0]
+    },
+    {
+      "name": "sunday-start: ISO year boundary — next displayed week starts Sun Jan 5 2025",
+      "input": {
+        "anchorDate": "2024-12-29",
+        "weekStart": "sun",
+        "dates": ["2025-01-05", "2025-01-06", "2025-01-11"]
+      },
+      "expected": [1, 1, 1]
+    },
+    {
+      "name": "sunday-start: ISO year boundary — previous week is Dec 22–28 2024",
+      "input": {
+        "anchorDate": "2024-12-29",
+        "weekStart": "sun",
+        "dates": ["2024-12-28", "2024-12-22"]
+      },
+      "expected": [-1, -1]
+    },
+    {
+      "name": "monday-start: ISO week 53 — anchor spans Dec 28 2020 through Jan 3 2021",
+      "input": {
+        "anchorDate": "2020-12-28",
+        "weekStart": "mon",
+        "dates": ["2020-12-28", "2021-01-01", "2021-01-03"]
+      },
+      "expected": [0, 0, 0]
+    },
+    {
+      "name": "monday-start: ISO week 53 — next week starts Jan 4 2021",
+      "input": {
+        "anchorDate": "2020-12-28",
+        "weekStart": "mon",
+        "dates": ["2021-01-04", "2021-01-10"]
+      },
+      "expected": [1, 1]
+    },
+    {
+      "name": "monday-start: ISO week 53 — previous week ends Dec 27 2020",
+      "input": {
+        "anchorDate": "2020-12-28",
+        "weekStart": "mon",
+        "dates": ["2020-12-27", "2020-12-21"]
+      },
+      "expected": [-1, -1]
+    }
+  ]
+}

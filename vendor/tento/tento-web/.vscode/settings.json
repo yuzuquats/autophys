@@ -1,0 +1,24 @@
+{
+  "rust-analyzer.procMacro.enable": true,
+  "files.exclude": {
+    "**/.git": true,
+    "**/target": true,
+    "**/.DS_Store": true
+  },
+  "search.exclude": {
+    "target": true,
+    "**/target": true,
+    "Cargo.lock": true,
+    "**/Cargo.lock": true
+  },
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/target": true
+  },
+  "deno.enable": true,
+  "deno.lint": true,
+  "deno.enablePaths": [
+    "./src/client/build.deno.ts"
+  ]
+}

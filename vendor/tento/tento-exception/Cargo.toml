@@ -1,0 +1,11 @@
+[package]
+name = "tento-exception"
+version = "0.1.0"
+edition = "2024"
+description = "ExceptionWithTrace: a serializable panic/error trace with symbolized frames"
+
+[dependencies]
+anyhow.workspace = true
+once_cell.workspace = true
+regex.workspace = true
+serde.workspace = true

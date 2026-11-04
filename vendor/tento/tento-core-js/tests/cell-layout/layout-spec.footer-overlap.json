@@ -1,0 +1,78 @@
+{
+  "type": "layout-spec",
+  "name": "layout-spec-footer",
+  "description": "SheetLayoutSpec.make must not allow frozen rows to overlap footer rows, even when numFrozenSource exceeds the non-footer row count",
+  "cases": [
+    {
+      "name": "user froze more rows than exist — frozen capped before footer",
+      "input": {
+        "rows": [
+          { "id": "header", "height": 40, "isFooterRow": false, "isSystem": true },
+          { "id": "user1",  "height": 40, "isFooterRow": false, "isSystem": false },
+          { "id": "footer", "height": 48, "isFooterRow": true,  "isSystem": true }
+        ],
+        "maxHeaderHeight": 800,
+        "numUserFrozenRows": 5,
+        "numSystemRows": 1
+      },
+      "expected": {
+        "numFrozenFlattened": 2,
+        "numFooterFlattened": 1,
+        "noOverlap": true
+      }
+    },
+    {
+      "name": "user froze exactly the non-footer user count",
+      "input": {
+        "rows": [
+          { "id": "header", "height": 40, "isFooterRow": false, "isSystem": true },
+          { "id": "user1",  "height": 40, "isFooterRow": false, "isSystem": false },
+          { "id": "user2",  "height": 40, "isFooterRow": false, "isSystem": false },
+          { "id": "footer", "height": 48, "isFooterRow": true,  "isSystem": true }
+        ],
+        "maxHeaderHeight": 800,
+        "numUserFrozenRows": 2,
+        "numSystemRows": 1
+      },
+      "expected": {
+        "numFrozenFlattened": 3,
+        "numFooterFlattened": 1,
+        "noOverlap": true
+      }
+    },
+    {
+      "name": "zero user frozen — only system rows frozen",
+      "input": {
+        "rows": [
+          { "id": "header", "height": 40, "isFooterRow": false, "isSystem": true },
+          { "id": "user1",  "height": 40, "isFooterRow": false, "isSystem": false },
+          { "id": "footer", "height": 48, "isFooterRow": true,  "isSystem": true }
+        ],
+        "maxHeaderHeight": 800,
+        "numUserFrozenRows": 0,
+        "numSystemRows": 1
+      },
+      "expected": {
+        "numFrozenFlattened": 1,
+        "numFooterFlattened": 1,
+        "noOverlap": true
+      }
+    },
+    {
+      "name": "only footer rows — nothing frozen",
+      "input": {
+        "rows": [
+          { "id": "footer", "height": 48, "isFooterRow": true, "isSystem": true }
+        ],
+        "maxHeaderHeight": 800,
+        "numUserFrozenRows": 0,
+        "numSystemRows": 0
+      },
+      "expected": {
+        "numFrozenFlattened": 0,
+        "numFooterFlattened": 1,
+        "noOverlap": true
+      }
+    }
+  ]
+}

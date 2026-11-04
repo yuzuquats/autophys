@@ -1,0 +1,14 @@
+;; `(if COND BODY)` runs BODY only when COND is truthy. The condition and
+;; the body are ordinary lisp; a command is a lisp call.
+
+(let sheet (create-sheet :name "guarded"))
+(add-row :sheet (get sheet "id") :label "accumulator")
+(set-cell :row (get prev "id") :col "A" :value 7)
+
+;; Truthy: prev.count is 1 after the first set-cell, so this runs.
+(if (> (get prev "count") 0) (set-cell :row (get prev "row") :col "B" :value 99))
+
+;; Falsy guard never executes its body.
+(if (< (get prev "count") 0) (set-cell :row (get prev "row") :col "C" :value 999))
+
+(show)

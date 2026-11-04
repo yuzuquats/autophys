@@ -1,0 +1,61 @@
+{
+  "nodeModulesDir": "auto",
+  "imports": {
+    "@std/assert": "jsr:@std/assert@^1.0.7",
+    "@tento-core/": "./tento-core-js/",
+    "@tento-trace": "./tento-trace-js/src/lib.ts",
+    "@tento-trace/": "./tento-trace-js/src/",
+    "@tento-headless": "./tento-headless-js/mod.ts",
+    "@tento-cookbook": "./tento-cookbook-js/lib.ts",
+    "@tento-cookbook/": "./tento-cookbook-js/",
+    "@tento-ui/": "./tento-ui-js/",
+    "@tento-ui/ui/icons": "./tento-ui-js/ui/icons.deno.ts",
+    "@tento-ui/icon-exports": "./tento-ui-js/icon-exports.deno.ts",
+    "@tento-ui/llm-logger": "./tento-ui-js/llm-logger.deno.ts",
+    "@tento-ui/icons/": "./tento-ui-js/icons/mock-svg-dir/",
+    "@tento-web/": "./tento-web-js/",
+    "@tento-chrono": "./tento-chrono/chrono/mod.ts",
+    "@tento-chrono/": "./tento-chrono/",
+    "@tento/chrono": "./tento-chrono/chrono/mod.ts",
+    "@tento/core/rational": "./tento-core-js/rational.ts"
+  },
+  "test": {
+    "exclude": [
+      "**/*.browser.test.ts"
+    ]
+  },
+  "unstable": [
+    "sloppy-imports"
+  ],
+  "compilerOptions": {
+    "types": [
+      "./tento-ui-js/types/option.d.ts",
+      "./tento-core-js/types/untyped-json.d.ts",
+      "./tento-core-js/types/uuid.d.ts",
+      "./tento-core-js/types/identifiable.d.ts",
+      "./tento-core-js/types/rfc3339.d.ts",
+      "./tento-core-js/types/timeout.d.ts",
+      "./tento-ui-js/types/dev.d.ts",
+      "./tento-ui-js/types/empty-function.d.ts",
+      "./tento-ui-js/types/factory.d.ts",
+      "./tento-ui-js/types/globals.d.ts",
+      "./tento-ui-js/types/html-element.d.ts",
+      "./tento-ui-js/types/inset.d.ts",
+      "./tento-ui-js/types/json.d.ts",
+      "./tento-ui-js/types/naive-date-serialized.d.ts",
+      "./tento-ui-js/types/size.d.ts",
+      "./tento-ui-js/types/svg.d.ts"
+    ],
+    "lib": [
+      "deno.ns",
+      "deno.window",
+      "dom",
+      "dom.iterable"
+    ],
+    "noImplicitAny": false,
+    "noImplicitOverride": false,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": false
+  },
+  "lock": false
+}

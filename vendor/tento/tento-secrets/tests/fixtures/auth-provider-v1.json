@@ -1,0 +1,161 @@
+{
+  "contract": "auth.provider/v1",
+  "note": "Golden provider messages. A byte-identical copy lives in the app-side auth crate; change both files together. `requests` and `responses` are canonical: each side parses them with its own types and must serialize them back to the same JSON. `accepted` holds older shapes that must still parse.",
+  "requests": [
+    {
+      "version": 1,
+      "operation": "discover",
+      "app": "fixture",
+      "alias": null,
+      "profile": null,
+      "conversation": null,
+      "cwd": null,
+      "source_env": {},
+      "arguments": [],
+      "credential_dir": null
+    },
+    {
+      "version": 1,
+      "operation": "register",
+      "app": "fixture",
+      "alias": "work",
+      "profile": null,
+      "conversation": null,
+      "cwd": null,
+      "source_env": {},
+      "arguments": [],
+      "credential_dir": null
+    },
+    {
+      "version": 1,
+      "operation": "login",
+      "app": "fixture",
+      "alias": null,
+      "profile": {
+        "app": "fixture",
+        "id": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "alias": "work",
+        "credential": { "backend": "local", "key": "session" },
+        "identity": null,
+        "state": "unverified"
+      },
+      "conversation": null,
+      "cwd": null,
+      "source_env": {},
+      "arguments": [],
+      "credential_dir": "/store/profiles/fixture/0f1e2d3c4b5a69788796a5b4c3d2e1f0"
+    },
+    {
+      "version": 1,
+      "operation": "prepare",
+      "app": "fixture",
+      "alias": null,
+      "profile": {
+        "app": "fixture",
+        "id": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "alias": "work",
+        "credential": { "backend": "local", "key": "session" },
+        "identity": { "id": "account-1", "label": "fixture@example.com" },
+        "state": "ready"
+      },
+      "conversation": null,
+      "cwd": "/work",
+      "source_env": { "FIXTURE_SOURCE": "1" },
+      "arguments": ["fixture-command", "--flag"],
+      "credential_dir": "/store/profiles/fixture/0f1e2d3c4b5a69788796a5b4c3d2e1f0"
+    },
+    {
+      "version": 1,
+      "operation": "status",
+      "app": "fixture",
+      "alias": null,
+      "profile": {
+        "app": "fixture",
+        "id": "native01",
+        "alias": "native",
+        "credential": { "backend": "native", "locator": "/native/store" },
+        "identity": null,
+        "state": "login_required"
+      },
+      "conversation": "conversation-1",
+      "cwd": "/work",
+      "source_env": {},
+      "arguments": [],
+      "credential_dir": null
+    }
+  ],
+  "responses": [
+    {
+      "profiles": [
+        { "alias": "default", "credential": { "backend": "local", "key": "session" } }
+      ],
+      "identity": null,
+      "launch": null,
+      "error": null
+    },
+    {
+      "profiles": [
+        {
+          "app": "fixture",
+          "id": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+          "alias": "work",
+          "credential": { "backend": "local", "key": "session" }
+        },
+        { "alias": "vaulted", "credential": { "backend": "vault", "address": "vault/fixture" } },
+        { "alias": "server", "credential": { "backend": "delegated", "owner": "server" } }
+      ],
+      "identity": null,
+      "launch": null,
+      "error": null
+    },
+    {
+      "profiles": [],
+      "identity": null,
+      "launch": {
+        "env": { "TSH_AUTH_APP": "fixture", "TSH_AUTH_PROFILE_ID": "0f1e2d3c4b5a69788796a5b4c3d2e1f0" },
+        "remove_env": [],
+        "argv": ["/apps/fixture/bin/fixture", "auth-profile-login"],
+        "resume": false,
+        "exclusive_conversation": null,
+        "rebind_between_calls": true
+      },
+      "error": null
+    },
+    {
+      "profiles": [],
+      "identity": { "id": "account-1", "label": "fixture@example.com" },
+      "launch": {
+        "env": { "TSH_AUTH_APP": "fixture", "TSH_AUTH_PROFILE_ID": "0f1e2d3c4b5a69788796a5b4c3d2e1f0" },
+        "remove_env": ["FIXTURE_TOKEN"],
+        "argv": ["/apps/fixture/bin/fixture"],
+        "resume": true,
+        "exclusive_conversation": "conversation-1",
+        "rebind_between_calls": false
+      },
+      "error": null
+    },
+    {
+      "profiles": [],
+      "identity": null,
+      "launch": null,
+      "error": "login_required"
+    }
+  ],
+  "accepted": [
+    {
+      "profiles": [
+        {
+          "app": "fixture",
+          "id": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+          "alias": "work",
+          "credential": { "backend": "local", "key": "session" },
+          "identity": { "id": "account-1", "label": "fixture@example.com" },
+          "state": "ready"
+        }
+      ]
+    },
+    {
+      "error": "unsupported"
+    }
+  ]
+}

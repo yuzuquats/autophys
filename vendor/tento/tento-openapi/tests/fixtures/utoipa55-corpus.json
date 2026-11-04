@@ -1,0 +1,6658 @@
+{
+  "brand::Cta": {
+    "Cta": {
+      "type": "object",
+      "required": [
+        "label",
+        "href"
+      ],
+      "properties": {
+        "href": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "brand::PricePeriod": {
+    "PricePeriod": {
+      "type": "string",
+      "enum": [
+        "month",
+        "year"
+      ]
+    }
+  },
+  "brand::SiteNavItem": {
+    "NavDropdown": {
+      "type": "object",
+      "required": [
+        "columns"
+      ],
+      "properties": {
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/NavDropdownColumn"
+          }
+        },
+        "footer": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/NavLink"
+            }
+          ]
+        },
+        "header": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "image": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/NavDropdownImage"
+            }
+          ]
+        }
+      }
+    },
+    "NavDropdownColumn": {
+      "type": "object",
+      "required": [
+        "title",
+        "items"
+      ],
+      "properties": {
+        "bold": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/NavDropdownItem"
+          }
+        },
+        "title": {
+          "type": "string"
+        }
+      }
+    },
+    "NavDropdownImage": {
+      "type": "object",
+      "required": [
+        "src"
+      ],
+      "properties": {
+        "alt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "src": {
+          "type": "string"
+        }
+      }
+    },
+    "NavDropdownItem": {
+      "type": "object",
+      "required": [
+        "label",
+        "href"
+      ],
+      "properties": {
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "href": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      }
+    },
+    "NavLink": {
+      "type": "object",
+      "required": [
+        "label",
+        "href"
+      ],
+      "properties": {
+        "href": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      }
+    },
+    "SiteNavItem": {
+      "type": "object",
+      "required": [
+        "label",
+        "href"
+      ],
+      "properties": {
+        "details": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/NavDropdown"
+            }
+          ]
+        },
+        "href": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "lona_models::TimezoneCell": {
+    "TimezoneCell": {
+      "type": "object",
+      "description": "Canonical timezone object stored in `timezone.v1` cells.\n\nMinimal today \u2014 timezone rendering is driven by the row's `tz`\nattribute. The cell payload is reserved for future per-period data\nsuch as UTC-offset / DST transitions.",
+      "required": [
+        "tz"
+      ],
+      "properties": {
+        "transitions": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {},
+          "description": "Reserved for future UTC-offset transitions within the cell period."
+        },
+        "tz": {
+          "type": "string",
+          "description": "IANA timezone name (e.g. `\"America/New_York\"`)."
+        }
+      }
+    }
+  },
+  "brand::NavLink": {
+    "NavLink": {
+      "type": "object",
+      "required": [
+        "label",
+        "href"
+      ],
+      "properties": {
+        "href": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "edge::PlainTagged": {
+    "PlainTagged": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "A"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "B"
+              ]
+            }
+          }
+        }
+      ],
+      "description": "A plain enum tagged internally."
+    }
+  },
+  "brand::NavDropdown": {
+    "NavDropdown": {
+      "type": "object",
+      "required": [
+        "columns"
+      ],
+      "properties": {
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/NavDropdownColumn"
+          }
+        },
+        "footer": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/NavLink"
+            }
+          ]
+        },
+        "header": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "image": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/NavDropdownImage"
+            }
+          ]
+        }
+      }
+    },
+    "NavDropdownColumn": {
+      "type": "object",
+      "required": [
+        "title",
+        "items"
+      ],
+      "properties": {
+        "bold": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/NavDropdownItem"
+          }
+        },
+        "title": {
+          "type": "string"
+        }
+      }
+    },
+    "NavDropdownImage": {
+      "type": "object",
+      "required": [
+        "src"
+      ],
+      "properties": {
+        "alt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "src": {
+          "type": "string"
+        }
+      }
+    },
+    "NavDropdownItem": {
+      "type": "object",
+      "required": [
+        "label",
+        "href"
+      ],
+      "properties": {
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "href": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      }
+    },
+    "NavLink": {
+      "type": "object",
+      "required": [
+        "label",
+        "href"
+      ],
+      "properties": {
+        "href": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "brand::PricingSection": {
+    "Cta": {
+      "type": "object",
+      "required": [
+        "label",
+        "href"
+      ],
+      "properties": {
+        "href": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      }
+    },
+    "Price": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "free"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "amount",
+            "currency",
+            "period",
+            "type"
+          ],
+          "properties": {
+            "amount": {
+              "type": "number",
+              "format": "double"
+            },
+            "currency": {
+              "type": "string"
+            },
+            "note": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "period": {
+              "$ref": "#/components/schemas/PricePeriod"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "fixed"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "label",
+            "type"
+          ],
+          "properties": {
+            "label": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "custom"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "PricePeriod": {
+      "type": "string",
+      "enum": [
+        "month",
+        "year"
+      ]
+    },
+    "PricingSection": {
+      "type": "object",
+      "required": [
+        "tiers"
+      ],
+      "properties": {
+        "billingNote": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "heading": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subtext": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tiers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/PricingTier"
+          }
+        }
+      }
+    },
+    "PricingTier": {
+      "type": "object",
+      "required": [
+        "name",
+        "price",
+        "features",
+        "cta"
+      ],
+      "properties": {
+        "cta": {
+          "$ref": "#/components/schemas/Cta"
+        },
+        "features": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "highlighted": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "price": {
+          "$ref": "#/components/schemas/Price"
+        },
+        "tagline": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  },
+  "edge::SchemaRenamedVariants": {
+    "SchemaRenamedVariants": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "renamedNamed"
+          ],
+          "properties": {
+            "renamedNamed": {
+              "type": "object",
+              "required": [
+                "a"
+              ],
+              "properties": {
+                "a": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "string",
+          "enum": [
+            "renamedUnit"
+          ]
+        }
+      ],
+      "description": "`#[schema(rename)]` on variants of each shape."
+    }
+  },
+  "edge::Defaults": {
+    "Defaults": {
+      "type": "object",
+      "description": "A container `#[serde(default)]` writes every field's default value.",
+      "properties": {
+        "count": {
+          "type": "integer",
+          "format": "int32",
+          "default": 0,
+          "minimum": 0
+        },
+        "leaf": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/Leaf"
+            }
+          ],
+          "default": null
+        },
+        "leafList": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/Leaf"
+          },
+          "default": []
+        },
+        "maybe": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "name": {
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
+    "Leaf": {
+      "type": "object",
+      "description": "A referenced struct.",
+      "required": [
+        "labelText"
+      ],
+      "properties": {
+        "labelText": {
+          "type": "string",
+          "description": "The leaf's label."
+        }
+      }
+    }
+  },
+  "brand::Feature": {
+    "Feature": {
+      "type": "object",
+      "required": [
+        "name",
+        "description"
+      ],
+      "properties": {
+        "badge": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "hero": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/FeatureHero"
+            }
+          ]
+        },
+        "icon": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "media": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/FeatureMedia"
+            }
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "span": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "minimum": 0
+        }
+      }
+    },
+    "FeatureHero": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string"
+        }
+      }
+    },
+    "FeatureMedia": {
+      "type": "object",
+      "required": [
+        "type",
+        "src"
+      ],
+      "properties": {
+        "alt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "src": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/components/schemas/FeatureMediaType"
+        }
+      }
+    },
+    "FeatureMediaType": {
+      "type": "string",
+      "enum": [
+        "screenshot",
+        "illustration",
+        "video"
+      ]
+    }
+  },
+  "lona_models::TemplateRowDef": {
+    "RowDef": {
+      "type": "object",
+      "description": "Common row definition fields shared across API and template types",
+      "properties": {
+        "attributes": {},
+        "formula": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "heightPx": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "TemplateRowDef": {
+      "allOf": [
+        {
+          "$ref": "#/components/schemas/RowDef"
+        },
+        {
+          "type": "object",
+          "required": [
+            "id",
+            "data",
+            "timeScale"
+          ],
+          "properties": {
+            "data": {
+              "type": "array",
+              "items": {}
+            },
+            "id": {
+              "type": "string"
+            },
+            "isSystemRow": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "lookupKey": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "timeScale": {
+              "$ref": "#/components/schemas/TimeScaleCustom"
+            },
+            "type": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      ],
+      "description": "Template row definition (embedded in static JSON templates)"
+    },
+    "TimeScaleCustom": {
+      "type": "string",
+      "enum": [
+        "year",
+        "month",
+        "week",
+        "day",
+        "custom"
+      ]
+    }
+  },
+  "edge::Containers": {
+    "Containers": {
+      "type": "object",
+      "description": "Containers around a reference and around primitives.",
+      "required": [
+        "leaf",
+        "leaves",
+        "sparse",
+        "sparseLeaves",
+        "byName",
+        "series",
+        "tags",
+        "boxed",
+        "nested"
+      ],
+      "properties": {
+        "boxed": {
+          "$ref": "#/components/schemas/Leaf"
+        },
+        "byName": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/components/schemas/Leaf"
+          },
+          "propertyNames": {
+            "type": "string"
+          }
+        },
+        "leaf": {
+          "$ref": "#/components/schemas/Leaf",
+          "description": "A documented reference."
+        },
+        "leaves": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/Leaf"
+          }
+        },
+        "maybeLeaf": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/Leaf",
+              "description": "A documented optional reference."
+            }
+          ]
+        },
+        "maybeLeaves": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/components/schemas/Leaf"
+          },
+          "description": "Documented optional list of references."
+        },
+        "maybeMap": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": "string"
+          },
+          "propertyNames": {
+            "type": "string"
+          }
+        },
+        "nested": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        },
+        "series": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "propertyNames": {
+            "type": "string"
+          }
+        },
+        "sparse": {
+          "type": "array",
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "sparseLeaves": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Leaf"
+              }
+            ]
+          }
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "Leaf": {
+      "type": "object",
+      "description": "A referenced struct.",
+      "required": [
+        "labelText"
+      ],
+      "properties": {
+        "labelText": {
+          "type": "string",
+          "description": "The leaf's label."
+        }
+      }
+    }
+  },
+  "brand::NavDropdownColumn": {
+    "NavDropdownColumn": {
+      "type": "object",
+      "required": [
+        "title",
+        "items"
+      ],
+      "properties": {
+        "bold": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/NavDropdownItem"
+          }
+        },
+        "title": {
+          "type": "string"
+        }
+      }
+    },
+    "NavDropdownItem": {
+      "type": "object",
+      "required": [
+        "label",
+        "href"
+      ],
+      "properties": {
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "href": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "brand::FeatureMedia": {
+    "FeatureMedia": {
+      "type": "object",
+      "required": [
+        "type",
+        "src"
+      ],
+      "properties": {
+        "alt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "src": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/components/schemas/FeatureMediaType"
+        }
+      }
+    },
+    "FeatureMediaType": {
+      "type": "string",
+      "enum": [
+        "screenshot",
+        "illustration",
+        "video"
+      ]
+    }
+  },
+  "brand::Logo": {
+    "Logo": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "logoUrl": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "brand::CaseStudy": {
+    "CaseStudy": {
+      "type": "object",
+      "required": [
+        "company",
+        "metric"
+      ],
+      "properties": {
+        "company": {
+          "type": "string"
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "logoUrl": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "metric": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "brand::SocialPlatform": {
+    "SocialPlatform": {
+      "type": "string",
+      "enum": [
+        "twitter",
+        "linkedin",
+        "github",
+        "youtube",
+        "instagram",
+        "facebook",
+        "discord",
+        "bluesky"
+      ]
+    }
+  },
+  "brand::Stat": {
+    "Stat": {
+      "type": "object",
+      "required": [
+        "value",
+        "label"
+      ],
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "edge::Kebab": {
+    "Kebab": {
+      "type": "string",
+      "enum": [
+        "a-long-name",
+        "b"
+      ]
+    }
+  },
+  "brand::Integration": {
+    "Integration": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "category": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "logoUrl": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "edge::Leaf": {
+    "Leaf": {
+      "type": "object",
+      "description": "A referenced struct.",
+      "required": [
+        "labelText"
+      ],
+      "properties": {
+        "labelText": {
+          "type": "string",
+          "description": "The leaf's label."
+        }
+      }
+    }
+  },
+  "brand::FeatureSectionTheme": {
+    "FeatureSectionTheme": {
+      "type": "string",
+      "enum": [
+        "light",
+        "dark",
+        "accent"
+      ]
+    }
+  },
+  "edge::Mixed": {
+    "Leaf": {
+      "type": "object",
+      "description": "A referenced struct.",
+      "required": [
+        "labelText"
+      ],
+      "properties": {
+        "labelText": {
+          "type": "string",
+          "description": "The leaf's label."
+        }
+      }
+    },
+    "Mixed": {
+      "oneOf": [
+        {
+          "type": "string",
+          "description": "A unit variant.",
+          "enum": [
+            "unit"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "A named variant.",
+          "required": [
+            "named"
+          ],
+          "properties": {
+            "named": {
+              "type": "object",
+              "description": "A named variant.",
+              "required": [
+                "leaf"
+              ],
+              "properties": {
+                "leaf": {
+                  "$ref": "#/components/schemas/Leaf"
+                },
+                "someField": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int32",
+                  "description": "Its field."
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "A newtype variant.",
+          "required": [
+            "newtype"
+          ],
+          "properties": {
+            "newtype": {
+              "$ref": "#/components/schemas/Leaf",
+              "description": "A newtype variant."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "primitive"
+          ],
+          "properties": {
+            "primitive": {
+              "type": "string"
+            }
+          }
+        }
+      ],
+      "description": "Externally tagged, every variant shape."
+    }
+  },
+  "brand::ComparisonRow": {
+    "ComparisonRow": {
+      "type": "object",
+      "required": [
+        "feature",
+        "ours"
+      ],
+      "properties": {
+        "competitor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "feature": {
+          "type": "string"
+        },
+        "ours": {
+          "type": "string"
+        },
+        "theirs": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  },
+  "brand::PageMeta": {
+    "PageMeta": {
+      "type": "object",
+      "required": [
+        "title",
+        "description",
+        "primaryKeyword",
+        "secondaryKeywords"
+      ],
+      "properties": {
+        "canonicalUrl": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "longTailKeywords": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "ogDescription": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ogImage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ogTitle": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "primaryKeyword": {
+          "type": "string"
+        },
+        "schemaTypes": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/components/schemas/SchemaType"
+          }
+        },
+        "secondaryKeywords": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "title": {
+          "type": "string"
+        }
+      }
+    },
+    "SchemaType": {
+      "type": "string",
+      "enum": [
+        "FAQ",
+        "Product",
+        "Organization",
+        "SoftwareApplication",
+        "WebSite",
+        "BreadcrumbList"
+      ]
+    }
+  },
+  "edge::SchemaKeys": {
+    "Leaf": {
+      "type": "object",
+      "description": "A referenced struct.",
+      "required": [
+        "labelText"
+      ],
+      "properties": {
+        "labelText": {
+          "type": "string",
+          "description": "The leaf's label."
+        }
+      }
+    },
+    "SchemaKeys": {
+      "type": "object",
+      "description": "`#[schema(...)]` keys the corpus uses.",
+      "required": [
+        "forced",
+        "as_string",
+        "free_form",
+        "inlined",
+        "inlined_described",
+        "inlined_list",
+        "renamedBySchema"
+      ],
+      "properties": {
+        "as_string": {
+          "type": "string"
+        },
+        "forced": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "free_form": {
+          "type": "object"
+        },
+        "inlined": {
+          "type": "object",
+          "description": "A referenced struct.",
+          "required": [
+            "labelText"
+          ],
+          "properties": {
+            "labelText": {
+              "type": "string",
+              "description": "The leaf's label."
+            }
+          }
+        },
+        "inlined_described": {
+          "oneOf": [
+            {
+              "type": "object",
+              "description": "A referenced struct.",
+              "required": [
+                "labelText"
+              ],
+              "properties": {
+                "labelText": {
+                  "type": "string",
+                  "description": "The leaf's label."
+                }
+              }
+            }
+          ],
+          "description": "Inline with a description."
+        },
+        "inlined_list": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "description": "A referenced struct.",
+            "required": [
+              "labelText"
+            ],
+            "properties": {
+              "labelText": {
+                "type": "string",
+                "description": "The leaf's label."
+              }
+            }
+          }
+        },
+        "maybe_inlined": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "description": "A referenced struct.",
+              "required": [
+                "labelText"
+              ],
+              "properties": {
+                "labelText": {
+                  "type": "string",
+                  "description": "The leaf's label."
+                }
+              }
+            }
+          ]
+        },
+        "not_null": {
+          "type": "string"
+        },
+        "overridden": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Leaf"
+              }
+            ]
+          }
+        },
+        "relaxed": {
+          "type": "string"
+        },
+        "renamedBySchema": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "lona_models::LogsCell": {
+    "LogsCell": {
+      "type": "object",
+      "description": "Canonical sync-log entry stored in `logs.v1` cells. Appended to\nprovider rows (e.g. weather) to surface sync activity on the row.",
+      "required": [
+        "at",
+        "level",
+        "message"
+      ],
+      "properties": {
+        "at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the logged event occurred."
+        },
+        "level": {
+          "type": "string",
+          "description": "Severity / outcome (e.g. `\"info\"`, `\"warn\"`, `\"error\"`, `\"ok\"`)."
+        },
+        "message": {
+          "type": "string",
+          "description": "Human-readable log message."
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Originating subsystem (e.g. `\"weather\"`)."
+        }
+      }
+    }
+  },
+  "brand::Testimonial": {
+    "Testimonial": {
+      "type": "object",
+      "required": [
+        "quote",
+        "authorName"
+      ],
+      "properties": {
+        "authorName": {
+          "type": "string"
+        },
+        "authorTitle": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "avatarUrl": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "company": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "quote": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "edge::Strict": {
+    "Strict": {
+      "type": "object",
+      "description": "Rejects unknown fields.",
+      "required": [
+        "only"
+      ],
+      "properties": {
+        "only": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "brand::SocialLink": {
+    "SocialLink": {
+      "type": "object",
+      "required": [
+        "platform",
+        "href"
+      ],
+      "properties": {
+        "href": {
+          "type": "string"
+        },
+        "platform": {
+          "$ref": "#/components/schemas/SocialPlatform"
+        }
+      }
+    },
+    "SocialPlatform": {
+      "type": "string",
+      "enum": [
+        "twitter",
+        "linkedin",
+        "github",
+        "youtube",
+        "instagram",
+        "facebook",
+        "discord",
+        "bluesky"
+      ]
+    }
+  },
+  "lona_models::SlotCell": {
+    "SlotCell": {
+      "type": "object",
+      "description": "Canonical availability slot object stored in `slot.v1` cells.",
+      "required": [
+        "id",
+        "start",
+        "end"
+      ],
+      "properties": {
+        "bookedBy": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "end": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "id": {
+          "type": "string"
+        },
+        "start": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  },
+  "lona_models::NewRowWithAttributes": {
+    "NewRowWithAttributes": {
+      "allOf": [
+        {
+          "$ref": "#/components/schemas/RowDef"
+        },
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "clientId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "icon": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "lookupKey": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Optional reserved/lookup key (e.g. `:~lona:tasks`, `:~weather`).\nWhen present, the server:\n\n1. Pre-flights `(owner_id, lookup_key)` against\n   `spreadsheet_rows` \u2014 if a row already exists under this\n   owner with this lookup key, the whole POST fails.\n2. Persists the new row with `spreadsheet_rows.lookup_key`\n   set so subsequent reads resolve it correctly.\n\nUsed by the client's ephemeral-sheet promote flow (reserved\nsheets like `:~lona:home` whose row templates carry lookup keys\nnaming server-side row types)."
+            },
+            "position": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/Rational"
+                }
+              ]
+            },
+            "timeScale": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/TimeScaleCustom"
+                }
+              ]
+            },
+            "type": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "Rational": {
+      "type": "object",
+      "required": [
+        "n",
+        "d"
+      ],
+      "properties": {
+        "d": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "n": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "RowDef": {
+      "type": "object",
+      "description": "Common row definition fields shared across API and template types",
+      "properties": {
+        "attributes": {},
+        "formula": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "heightPx": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "TimeScaleCustom": {
+      "type": "string",
+      "enum": [
+        "year",
+        "month",
+        "week",
+        "day",
+        "custom"
+      ]
+    }
+  },
+  "edge::Adjacent": {
+    "Adjacent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "t"
+          ],
+          "properties": {
+            "t": {
+              "type": "string",
+              "enum": [
+                "Unit"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "c",
+            "t"
+          ],
+          "properties": {
+            "c": {
+              "type": "object",
+              "required": [
+                "a"
+              ],
+              "properties": {
+                "a": {
+                  "type": "string"
+                }
+              }
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "Named"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "c",
+            "t"
+          ],
+          "properties": {
+            "c": {
+              "$ref": "#/components/schemas/Leaf"
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "Newtype"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "Leaf": {
+      "type": "object",
+      "description": "A referenced struct.",
+      "required": [
+        "labelText"
+      ],
+      "properties": {
+        "labelText": {
+          "type": "string",
+          "description": "The leaf's label."
+        }
+      }
+    }
+  },
+  "edge::Flattened": {
+    "Flattened": {
+      "allOf": [
+        {
+          "$ref": "#/components/schemas/Leaf"
+        },
+        {
+          "type": "object",
+          "required": [
+            "own"
+          ],
+          "properties": {
+            "own": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": {}
+        }
+      ],
+      "description": "Flattens a struct and a map."
+    },
+    "Leaf": {
+      "type": "object",
+      "description": "A referenced struct.",
+      "required": [
+        "labelText"
+      ],
+      "properties": {
+        "labelText": {
+          "type": "string",
+          "description": "The leaf's label."
+        }
+      }
+    }
+  },
+  "app_command::AppCommand": {
+    "AppCommand": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "changeTheme"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "toggleDarkMode"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "toggleSpotlight"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "revealSettings"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "autoSubmit": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "date": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "description": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "endTime": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "isAllDay": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "location": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "startTime": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "title": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "showCreateEventFormModal"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "showPomodoroApp"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "key",
+            "type"
+          ],
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "navigateTo"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "sheetKey": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "navigateToSheet"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "taskId",
+            "type"
+          ],
+          "properties": {
+            "taskId": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "showTaskDetails"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "showAllRows"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "path",
+            "type"
+          ],
+          "properties": {
+            "kind": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "showDocumentation"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "showSchedulingLink"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "toggleDrawer"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "showChatSidebar"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "showPresentation"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "revealPlanOptions"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "toggleSettings"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "templateId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "showSheetNullstate"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "sectionId",
+            "type"
+          ],
+          "properties": {
+            "sectionId": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "focusSidebarSection"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "sheet",
+            "type"
+          ],
+          "properties": {
+            "anchorDate": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "sheet": {},
+            "type": {
+              "type": "string",
+              "enum": [
+                "showEphemeralSheet"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "cells",
+            "type"
+          ],
+          "properties": {
+            "cells": {},
+            "type": {
+              "type": "string",
+              "enum": [
+                "setEphemeralCells"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "invalidateTasks"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "proposals",
+            "type"
+          ],
+          "properties": {
+            "anchorDate": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "proposals": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/Proposal"
+              }
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "showAutoschedulePreview"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "proposalIndex",
+            "type"
+          ],
+          "properties": {
+            "proposalIndex": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "setAutoschedulePreviewProposal"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "Assignment": {
+      "type": "object",
+      "required": [
+        "taskId",
+        "scheduledStart",
+        "scheduledEnd"
+      ],
+      "properties": {
+        "displayId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rationale": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scheduledEnd": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "scheduledStart": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "taskId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "Proposal": {
+      "type": "object",
+      "required": [
+        "id",
+        "label",
+        "rationale",
+        "assignments"
+      ],
+      "properties": {
+        "assignments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/Assignment"
+          }
+        },
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "rationale": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "brand::FeatureSection": {
+    "Feature": {
+      "type": "object",
+      "required": [
+        "name",
+        "description"
+      ],
+      "properties": {
+        "badge": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "hero": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/FeatureHero"
+            }
+          ]
+        },
+        "icon": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "media": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/FeatureMedia"
+            }
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "span": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "minimum": 0
+        }
+      }
+    },
+    "FeatureHero": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string"
+        }
+      }
+    },
+    "FeatureMedia": {
+      "type": "object",
+      "required": [
+        "type",
+        "src"
+      ],
+      "properties": {
+        "alt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "src": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/components/schemas/FeatureMediaType"
+        }
+      }
+    },
+    "FeatureMediaType": {
+      "type": "string",
+      "enum": [
+        "screenshot",
+        "illustration",
+        "video"
+      ]
+    },
+    "FeatureSection": {
+      "type": "object",
+      "required": [
+        "heading",
+        "features"
+      ],
+      "properties": {
+        "features": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/Feature"
+          }
+        },
+        "heading": {
+          "type": "string"
+        },
+        "subtext": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "theme": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/FeatureSectionTheme"
+            }
+          ]
+        }
+      }
+    },
+    "FeatureSectionTheme": {
+      "type": "string",
+      "enum": [
+        "light",
+        "dark",
+        "accent"
+      ]
+    }
+  },
+  "lona_models::Task": {
+    "Rational": {
+      "type": "object",
+      "required": [
+        "n",
+        "d"
+      ],
+      "properties": {
+        "d": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "n": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "Task": {
+      "allOf": [
+        {
+          "$ref": "#/components/schemas/TaskAttributes"
+        },
+        {
+          "type": "object",
+          "required": [
+            "id",
+            "userId"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "userId": {
+              "type": "string"
+            }
+          }
+        }
+      ],
+      "description": "Canonical task object \u2014 id + attributes. Decoded from a `task.v1` cell."
+    },
+    "TaskAttributes": {
+      "type": "object",
+      "properties": {
+        "completedAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "createdAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "displayId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "displayNumber": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "dueDate": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "eventId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "importance": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/TaskPriority"
+            }
+          ]
+        },
+        "position": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/Rational"
+            }
+          ]
+        },
+        "scheduledEnd": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "scheduledStart": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "status": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/TaskStatus"
+            }
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "TaskPriority": {
+      "type": "string",
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "TaskStatus": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "inProgress",
+        "planned",
+        "autoScheduled"
+      ]
+    }
+  },
+  "edge::Untagged": {
+    "Leaf": {
+      "type": "object",
+      "description": "A referenced struct.",
+      "required": [
+        "labelText"
+      ],
+      "properties": {
+        "labelText": {
+          "type": "string",
+          "description": "The leaf's label."
+        }
+      }
+    },
+    "Untagged": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/components/schemas/Leaf"
+        },
+        {
+          "type": "object",
+          "required": [
+            "a"
+          ],
+          "properties": {
+            "a": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "null",
+          "default": null
+        }
+      ]
+    }
+  },
+  "edge::Plain": {
+    "Plain": {
+      "type": "string",
+      "enum": [
+        "FIRST_ONE",
+        "SECOND_TWO",
+        "third"
+      ]
+    }
+  },
+  "edge::UsesShadowedName": {
+    "UsesShadowedName": {
+      "type": "object",
+      "description": "utoipa reads a field's type by the spelling of its last path segment, so\n`shadow::Value` becomes the untyped `{}`; tento reads the type's own\n`ToSchema`, so it is a `$ref` to the `Value` component.",
+      "required": [
+        "value"
+      ],
+      "properties": {
+        "value": {}
+      }
+    }
+  },
+  "brand::FaqItem": {
+    "FaqItem": {
+      "type": "object",
+      "required": [
+        "question",
+        "answer"
+      ],
+      "properties": {
+        "answer": {
+          "type": "string"
+        },
+        "question": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "edge::Tree": {
+    "Tree": {
+      "type": "object",
+      "description": "A recursive tree. utoipa needs `no_recursion` to stop collecting its\nreferences; tento accepts and ignores it.",
+      "required": [
+        "children"
+      ],
+      "properties": {
+        "children": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/Tree"
+          }
+        },
+        "parent": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/Tree"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "brand::HeroSection": {
+    "Cta": {
+      "type": "object",
+      "required": [
+        "label",
+        "href"
+      ],
+      "properties": {
+        "href": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      }
+    },
+    "HeroMedia": {
+      "type": "object",
+      "required": [
+        "type",
+        "src"
+      ],
+      "properties": {
+        "alt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "src": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/components/schemas/HeroMediaType"
+        }
+      }
+    },
+    "HeroMediaType": {
+      "type": "string",
+      "enum": [
+        "screenshot",
+        "video",
+        "animation"
+      ]
+    },
+    "HeroSection": {
+      "type": "object",
+      "required": [
+        "headline",
+        "subheadline",
+        "primaryCta"
+      ],
+      "properties": {
+        "badge": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "headline": {
+          "type": "string"
+        },
+        "media": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/HeroMedia"
+            }
+          ]
+        },
+        "primaryCta": {
+          "$ref": "#/components/schemas/Cta"
+        },
+        "secondaryCta": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/Cta"
+            }
+          ]
+        },
+        "subheadline": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "lona_models::NewUserSheetWithRows": {
+    "NewRowWithAttributes": {
+      "allOf": [
+        {
+          "$ref": "#/components/schemas/RowDef"
+        },
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "clientId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "icon": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "lookupKey": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Optional reserved/lookup key (e.g. `:~lona:tasks`, `:~weather`).\nWhen present, the server:\n\n1. Pre-flights `(owner_id, lookup_key)` against\n   `spreadsheet_rows` \u2014 if a row already exists under this\n   owner with this lookup key, the whole POST fails.\n2. Persists the new row with `spreadsheet_rows.lookup_key`\n   set so subsequent reads resolve it correctly.\n\nUsed by the client's ephemeral-sheet promote flow (reserved\nsheets like `:~lona:home` whose row templates carry lookup keys\nnaming server-side row types)."
+            },
+            "position": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/Rational"
+                }
+              ]
+            },
+            "timeScale": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/TimeScaleCustom"
+                }
+              ]
+            },
+            "type": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "NewSheet": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "lookup_key": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Canonical lookup key (e.g. `:~lona:home`). Sole address for\nreserved sheets."
+        },
+        "time_scale": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/TimeScale"
+            }
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "width": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        }
+      }
+    },
+    "NewUserSheet": {
+      "allOf": [
+        {
+          "$ref": "#/components/schemas/NewSheet"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid",
+              "description": "Optional client-supplied UUID. When present, the server uses\nthis id verbatim instead of generating one \u2014 enables the\nephemeral\u2192server promote flow to preserve handle identity\n(`handle.id` doesn't flip across promotion). Conflicts on the\n`spreadsheets.id` PRIMARY KEY surface as a DB-level error.\nWhen absent, server generates a v4 UUID as before."
+            },
+            "position": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/Rational"
+                }
+              ]
+            },
+            "rows": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "$ref": "#/components/schemas/NewRowWithAttributes"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "NewUserSheetWithRows": {
+      "allOf": [
+        {
+          "$ref": "#/components/schemas/NewUserSheet"
+        },
+        {
+          "type": "object",
+          "required": [
+            "rows"
+          ],
+          "properties": {
+            "rows": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/NewRowWithAttributes"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "Rational": {
+      "type": "object",
+      "required": [
+        "n",
+        "d"
+      ],
+      "properties": {
+        "d": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "n": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "RowDef": {
+      "type": "object",
+      "description": "Common row definition fields shared across API and template types",
+      "properties": {
+        "attributes": {},
+        "formula": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "heightPx": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "TimeScale": {
+      "type": "string",
+      "enum": [
+        "year",
+        "month",
+        "week",
+        "day"
+      ]
+    },
+    "TimeScaleCustom": {
+      "type": "string",
+      "enum": [
+        "year",
+        "month",
+        "week",
+        "day",
+        "custom"
+      ]
+    }
+  },
+  "edge::UsesRenamed": {
+    "HealthCell": {
+      "type": "object",
+      "description": "`#[schema(as = \u2026)]` renames the component.",
+      "required": [
+        "value"
+      ],
+      "properties": {
+        "value": {
+          "type": "number",
+          "format": "double"
+        }
+      }
+    },
+    "UsesRenamed": {
+      "type": "object",
+      "required": [
+        "cell"
+      ],
+      "properties": {
+        "cell": {
+          "$ref": "#/components/schemas/HealthCell"
+        }
+      }
+    }
+  },
+  "brand::NavDropdownImage": {
+    "NavDropdownImage": {
+      "type": "object",
+      "required": [
+        "src"
+      ],
+      "properties": {
+        "alt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "src": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "brand::FeatureHero": {
+    "FeatureHero": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "brand::SchemaType": {
+    "SchemaType": {
+      "type": "string",
+      "enum": [
+        "FAQ",
+        "Product",
+        "Organization",
+        "SoftwareApplication",
+        "WebSite",
+        "BreadcrumbList"
+      ]
+    }
+  },
+  "brand::NavDropdownItem": {
+    "NavDropdownItem": {
+      "type": "object",
+      "required": [
+        "label",
+        "href"
+      ],
+      "properties": {
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "href": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "edge::Boxed": {
+    "Boxed": {
+      "type": "object",
+      "description": "`Box<Option<T>>` is nullable and, as in utoipa, still required.",
+      "required": [
+        "boxed_option"
+      ],
+      "properties": {
+        "boxed_option": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "option_box": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/Leaf"
+            }
+          ]
+        }
+      }
+    },
+    "Leaf": {
+      "type": "object",
+      "description": "A referenced struct.",
+      "required": [
+        "labelText"
+      ],
+      "properties": {
+        "labelText": {
+          "type": "string",
+          "description": "The leaf's label."
+        }
+      }
+    }
+  },
+  "lona_models::TaskInsert": {
+    "Rational": {
+      "type": "object",
+      "required": [
+        "n",
+        "d"
+      ],
+      "properties": {
+        "d": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "n": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "TaskAttributes": {
+      "type": "object",
+      "properties": {
+        "completedAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "createdAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "displayId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "displayNumber": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "dueDate": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "eventId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "importance": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/TaskPriority"
+            }
+          ]
+        },
+        "position": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/Rational"
+            }
+          ]
+        },
+        "scheduledEnd": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "scheduledStart": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "status": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/TaskStatus"
+            }
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "TaskInsert": {
+      "allOf": [
+        {
+          "$ref": "#/components/schemas/TaskAttributes"
+        },
+        {
+          "type": "object",
+          "required": [
+            "id"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        }
+      ],
+      "description": "Full task with a caller-supplied id (the `POST /api/tasks` body, importers)."
+    },
+    "TaskPriority": {
+      "type": "string",
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "TaskStatus": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "inProgress",
+        "planned",
+        "autoScheduled"
+      ]
+    }
+  },
+  "brand::Price": {
+    "Price": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "free"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "amount",
+            "currency",
+            "period",
+            "type"
+          ],
+          "properties": {
+            "amount": {
+              "type": "number",
+              "format": "double"
+            },
+            "currency": {
+              "type": "string"
+            },
+            "note": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "period": {
+              "$ref": "#/components/schemas/PricePeriod"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "fixed"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "label",
+            "type"
+          ],
+          "properties": {
+            "label": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "custom"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "PricePeriod": {
+      "type": "string",
+      "enum": [
+        "month",
+        "year"
+      ]
+    }
+  },
+  "brand::SocialProofSection": {
+    "Award": {
+      "type": "object",
+      "required": [
+        "label",
+        "source"
+      ],
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "year": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "minimum": 0
+        }
+      }
+    },
+    "CaseStudy": {
+      "type": "object",
+      "required": [
+        "company",
+        "metric"
+      ],
+      "properties": {
+        "company": {
+          "type": "string"
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "logoUrl": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "metric": {
+          "type": "string"
+        }
+      }
+    },
+    "Logo": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "logoUrl": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "SocialProofSection": {
+      "type": "object",
+      "properties": {
+        "awards": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/components/schemas/Award"
+          }
+        },
+        "caseStudies": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/components/schemas/CaseStudy"
+          }
+        },
+        "logos": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/components/schemas/Logo"
+          }
+        },
+        "stats": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/components/schemas/Stat"
+          }
+        },
+        "testimonials": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/components/schemas/Testimonial"
+          }
+        }
+      }
+    },
+    "Stat": {
+      "type": "object",
+      "required": [
+        "value",
+        "label"
+      ],
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      }
+    },
+    "Testimonial": {
+      "type": "object",
+      "required": [
+        "quote",
+        "authorName"
+      ],
+      "properties": {
+        "authorName": {
+          "type": "string"
+        },
+        "authorTitle": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "avatarUrl": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "company": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "quote": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "brand::IntegrationsSection": {
+    "Integration": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "category": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "logoUrl": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "IntegrationsSection": {
+      "type": "object",
+      "required": [
+        "integrations"
+      ],
+      "properties": {
+        "heading": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "integrations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/Integration"
+          }
+        },
+        "subtext": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "viewAllHref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  },
+  "lona_models::TaskAttributes": {
+    "Rational": {
+      "type": "object",
+      "required": [
+        "n",
+        "d"
+      ],
+      "properties": {
+        "d": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "n": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "TaskAttributes": {
+      "type": "object",
+      "properties": {
+        "completedAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "createdAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "displayId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "displayNumber": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "dueDate": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "eventId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "importance": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/TaskPriority"
+            }
+          ]
+        },
+        "position": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/Rational"
+            }
+          ]
+        },
+        "scheduledEnd": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "scheduledStart": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "status": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/TaskStatus"
+            }
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "TaskPriority": {
+      "type": "string",
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "TaskStatus": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "inProgress",
+        "planned",
+        "autoScheduled"
+      ]
+    }
+  },
+  "lona_models::NewUserSheet": {
+    "NewRowWithAttributes": {
+      "allOf": [
+        {
+          "$ref": "#/components/schemas/RowDef"
+        },
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "clientId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "icon": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "lookupKey": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Optional reserved/lookup key (e.g. `:~lona:tasks`, `:~weather`).\nWhen present, the server:\n\n1. Pre-flights `(owner_id, lookup_key)` against\n   `spreadsheet_rows` \u2014 if a row already exists under this\n   owner with this lookup key, the whole POST fails.\n2. Persists the new row with `spreadsheet_rows.lookup_key`\n   set so subsequent reads resolve it correctly.\n\nUsed by the client's ephemeral-sheet promote flow (reserved\nsheets like `:~lona:home` whose row templates carry lookup keys\nnaming server-side row types)."
+            },
+            "position": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/Rational"
+                }
+              ]
+            },
+            "timeScale": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/TimeScaleCustom"
+                }
+              ]
+            },
+            "type": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "NewSheet": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "lookup_key": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Canonical lookup key (e.g. `:~lona:home`). Sole address for\nreserved sheets."
+        },
+        "time_scale": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/TimeScale"
+            }
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "width": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        }
+      }
+    },
+    "NewUserSheet": {
+      "allOf": [
+        {
+          "$ref": "#/components/schemas/NewSheet"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid",
+              "description": "Optional client-supplied UUID. When present, the server uses\nthis id verbatim instead of generating one \u2014 enables the\nephemeral\u2192server promote flow to preserve handle identity\n(`handle.id` doesn't flip across promotion). Conflicts on the\n`spreadsheets.id` PRIMARY KEY surface as a DB-level error.\nWhen absent, server generates a v4 UUID as before."
+            },
+            "position": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/Rational"
+                }
+              ]
+            },
+            "rows": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "$ref": "#/components/schemas/NewRowWithAttributes"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "Rational": {
+      "type": "object",
+      "required": [
+        "n",
+        "d"
+      ],
+      "properties": {
+        "d": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "n": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "RowDef": {
+      "type": "object",
+      "description": "Common row definition fields shared across API and template types",
+      "properties": {
+        "attributes": {},
+        "formula": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "heightPx": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "TimeScale": {
+      "type": "string",
+      "enum": [
+        "year",
+        "month",
+        "week",
+        "day"
+      ]
+    },
+    "TimeScaleCustom": {
+      "type": "string",
+      "enum": [
+        "year",
+        "month",
+        "week",
+        "day",
+        "custom"
+      ]
+    }
+  },
+  "brand::PricingTier": {
+    "Cta": {
+      "type": "object",
+      "required": [
+        "label",
+        "href"
+      ],
+      "properties": {
+        "href": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      }
+    },
+    "Price": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "free"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "amount",
+            "currency",
+            "period",
+            "type"
+          ],
+          "properties": {
+            "amount": {
+              "type": "number",
+              "format": "double"
+            },
+            "currency": {
+              "type": "string"
+            },
+            "note": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "period": {
+              "$ref": "#/components/schemas/PricePeriod"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "fixed"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "label",
+            "type"
+          ],
+          "properties": {
+            "label": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "custom"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "PricePeriod": {
+      "type": "string",
+      "enum": [
+        "month",
+        "year"
+      ]
+    },
+    "PricingTier": {
+      "type": "object",
+      "required": [
+        "name",
+        "price",
+        "features",
+        "cta"
+      ],
+      "properties": {
+        "cta": {
+          "$ref": "#/components/schemas/Cta"
+        },
+        "features": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "highlighted": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "price": {
+          "$ref": "#/components/schemas/Price"
+        },
+        "tagline": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  },
+  "brand::Award": {
+    "Award": {
+      "type": "object",
+      "required": [
+        "label",
+        "source"
+      ],
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "year": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "minimum": 0
+        }
+      }
+    }
+  },
+  "lona_models::RowDef": {
+    "RowDef": {
+      "type": "object",
+      "description": "Common row definition fields shared across API and template types",
+      "properties": {
+        "attributes": {},
+        "formula": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "heightPx": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  },
+  "edge::Internal": {
+    "Internal": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "unit"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "Named.",
+          "required": [
+            "value",
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "named"
+              ]
+            },
+            "value": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          }
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/Leaf",
+              "description": "Newtype of a reference."
+            },
+            {
+              "type": "object",
+              "required": [
+                "type"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "wraps"
+                  ]
+                }
+              }
+            }
+          ],
+          "description": "Newtype of a reference."
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/Leaf"
+            },
+            {
+              "type": "object",
+              "required": [
+                "own"
+              ],
+              "properties": {
+                "own": {
+                  "type": "boolean"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "type"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "with_flatten"
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Internally tagged, as tento-lona's change events are."
+    },
+    "Leaf": {
+      "type": "object",
+      "description": "A referenced struct.",
+      "required": [
+        "labelText"
+      ],
+      "properties": {
+        "labelText": {
+          "type": "string",
+          "description": "The leaf's label."
+        }
+      }
+    }
+  },
+  "edge::OnlyMap": {
+    "OnlyMap": {
+      "type": "object",
+      "description": "Only a flattened map.",
+      "additionalProperties": {
+        "type": "string"
+      }
+    }
+  },
+  "lona_models::TaskStatus": {
+    "TaskStatus": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "inProgress",
+        "planned",
+        "autoScheduled"
+      ]
+    }
+  },
+  "brand::LandingPage": {
+    "Award": {
+      "type": "object",
+      "required": [
+        "label",
+        "source"
+      ],
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "year": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "minimum": 0
+        }
+      }
+    },
+    "CaseStudy": {
+      "type": "object",
+      "required": [
+        "company",
+        "metric"
+      ],
+      "properties": {
+        "company": {
+          "type": "string"
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "logoUrl": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "metric": {
+          "type": "string"
+        }
+      }
+    },
+    "ComparisonRow": {
+      "type": "object",
+      "required": [
+        "feature",
+        "ours"
+      ],
+      "properties": {
+        "competitor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "feature": {
+          "type": "string"
+        },
+        "ours": {
+          "type": "string"
+        },
+        "theirs": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "ComparisonSection": {
+      "type": "object",
+      "properties": {
+        "comparisons": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/components/schemas/ComparisonRow"
+          }
+        },
+        "heading": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subtext": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "table": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/ComparisonTable"
+            }
+          ]
+        }
+      }
+    },
+    "ComparisonTable": {
+      "type": "object",
+      "required": [
+        "columns",
+        "rows"
+      ],
+      "properties": {
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/ComparisonRow"
+          }
+        }
+      }
+    },
+    "Cta": {
+      "type": "object",
+      "required": [
+        "label",
+        "href"
+      ],
+      "properties": {
+        "href": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      }
+    },
+    "CtaSection": {
+      "type": "object",
+      "required": [
+        "heading",
+        "primaryCta"
+      ],
+      "properties": {
+        "heading": {
+          "type": "string"
+        },
+        "primaryCta": {
+          "$ref": "#/components/schemas/Cta"
+        },
+        "secondaryCta": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/Cta"
+            }
+          ]
+        },
+        "subtext": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "FaqItem": {
+      "type": "object",
+      "required": [
+        "question",
+        "answer"
+      ],
+      "properties": {
+        "answer": {
+          "type": "string"
+        },
+        "question": {
+          "type": "string"
+        }
+      }
+    },
+    "FaqSection": {
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "heading": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/FaqItem"
+          }
+        }
+      }
+    },
+    "Feature": {
+      "type": "object",
+      "required": [
+        "name",
+        "description"
+      ],
+      "properties": {
+        "badge": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "hero": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/FeatureHero"
+            }
+          ]
+        },
+        "icon": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "media": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/FeatureMedia"
+            }
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "span": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "minimum": 0
+        }
+      }
+    },
+    "FeatureHero": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string"
+        }
+      }
+    },
+    "FeatureMedia": {
+      "type": "object",
+      "required": [
+        "type",
+        "src"
+      ],
+      "properties": {
+        "alt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "src": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/components/schemas/FeatureMediaType"
+        }
+      }
+    },
+    "FeatureMediaType": {
+      "type": "string",
+      "enum": [
+        "screenshot",
+        "illustration",
+        "video"
+      ]
+    },
+    "FeatureSection": {
+      "type": "object",
+      "required": [
+        "heading",
+        "features"
+      ],
+      "properties": {
+        "features": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/Feature"
+          }
+        },
+        "heading": {
+          "type": "string"
+        },
+        "subtext": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "theme": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/FeatureSectionTheme"
+            }
+          ]
+        }
+      }
+    },
+    "FeatureSectionTheme": {
+      "type": "string",
+      "enum": [
+        "light",
+        "dark",
+        "accent"
+      ]
+    },
+    "FooterGroup": {
+      "type": "object",
+      "required": [
+        "label",
+        "links"
+      ],
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/NavLink"
+          }
+        }
+      }
+    },
+    "FooterSection": {
+      "type": "object",
+      "required": [
+        "groups",
+        "legal"
+      ],
+      "properties": {
+        "groups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/FooterGroup"
+          }
+        },
+        "legal": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/NavLink"
+          }
+        },
+        "social": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/components/schemas/SocialLink"
+          }
+        }
+      }
+    },
+    "HeroMedia": {
+      "type": "object",
+      "required": [
+        "type",
+        "src"
+      ],
+      "properties": {
+        "alt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "src": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/components/schemas/HeroMediaType"
+        }
+      }
+    },
+    "HeroMediaType": {
+      "type": "string",
+      "enum": [
+        "screenshot",
+        "video",
+        "animation"
+      ]
+    },
+    "HeroSection": {
+      "type": "object",
+      "required": [
+        "headline",
+        "subheadline",
+        "primaryCta"
+      ],
+      "properties": {
+        "badge": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "headline": {
+          "type": "string"
+        },
+        "media": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/HeroMedia"
+            }
+          ]
+        },
+        "primaryCta": {
+          "$ref": "#/components/schemas/Cta"
+        },
+        "secondaryCta": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/Cta"
+            }
+          ]
+        },
+        "subheadline": {
+          "type": "string"
+        }
+      }
+    },
+    "Integration": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "category": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "logoUrl": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "IntegrationsSection": {
+      "type": "object",
+      "required": [
+        "integrations"
+      ],
+      "properties": {
+        "heading": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "integrations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/Integration"
+          }
+        },
+        "subtext": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "viewAllHref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "LandingPage": {
+      "type": "object",
+      "required": [
+        "meta",
+        "hero",
+        "socialProof",
+        "features",
+        "footer"
+      ],
+      "properties": {
+        "comparison": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/ComparisonSection"
+            }
+          ]
+        },
+        "cta": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/CtaSection"
+            }
+          ]
+        },
+        "faq": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/FaqSection"
+            }
+          ]
+        },
+        "features": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/FeatureSection"
+          }
+        },
+        "footer": {
+          "$ref": "#/components/schemas/FooterSection"
+        },
+        "hero": {
+          "$ref": "#/components/schemas/HeroSection"
+        },
+        "integrations": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/IntegrationsSection"
+            }
+          ]
+        },
+        "meta": {
+          "$ref": "#/components/schemas/PageMeta"
+        },
+        "pricing": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/PricingSection"
+            }
+          ]
+        },
+        "socialProof": {
+          "$ref": "#/components/schemas/SocialProofSection"
+        }
+      }
+    },
+    "Logo": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "logoUrl": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "NavLink": {
+      "type": "object",
+      "required": [
+        "label",
+        "href"
+      ],
+      "properties": {
+        "href": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      }
+    },
+    "PageMeta": {
+      "type": "object",
+      "required": [
+        "title",
+        "description",
+        "primaryKeyword",
+        "secondaryKeywords"
+      ],
+      "properties": {
+        "canonicalUrl": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "longTailKeywords": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "ogDescription": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ogImage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ogTitle": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "primaryKeyword": {
+          "type": "string"
+        },
+        "schemaTypes": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/components/schemas/SchemaType"
+          }
+        },
+        "secondaryKeywords": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "title": {
+          "type": "string"
+        }
+      }
+    },
+    "Price": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "free"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "amount",
+            "currency",
+            "period",
+            "type"
+          ],
+          "properties": {
+            "amount": {
+              "type": "number",
+              "format": "double"
+            },
+            "currency": {
+              "type": "string"
+            },
+            "note": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "period": {
+              "$ref": "#/components/schemas/PricePeriod"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "fixed"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "label",
+            "type"
+          ],
+          "properties": {
+            "label": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "custom"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "PricePeriod": {
+      "type": "string",
+      "enum": [
+        "month",
+        "year"
+      ]
+    },
+    "PricingSection": {
+      "type": "object",
+      "required": [
+        "tiers"
+      ],
+      "properties": {
+        "billingNote": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "heading": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subtext": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tiers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/PricingTier"
+          }
+        }
+      }
+    },
+    "PricingTier": {
+      "type": "object",
+      "required": [
+        "name",
+        "price",
+        "features",
+        "cta"
+      ],
+      "properties": {
+        "cta": {
+          "$ref": "#/components/schemas/Cta"
+        },
+        "features": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "highlighted": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "price": {
+          "$ref": "#/components/schemas/Price"
+        },
+        "tagline": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "SchemaType": {
+      "type": "string",
+      "enum": [
+        "FAQ",
+        "Product",
+        "Organization",
+        "SoftwareApplication",
+        "WebSite",
+        "BreadcrumbList"
+      ]
+    },
+    "SocialLink": {
+      "type": "object",
+      "required": [
+        "platform",
+        "href"
+      ],
+      "properties": {
+        "href": {
+          "type": "string"
+        },
+        "platform": {
+          "$ref": "#/components/schemas/SocialPlatform"
+        }
+      }
+    },
+    "SocialPlatform": {
+      "type": "string",
+      "enum": [
+        "twitter",
+        "linkedin",
+        "github",
+        "youtube",
+        "instagram",
+        "facebook",
+        "discord",
+        "bluesky"
+      ]
+    },
+    "SocialProofSection": {
+      "type": "object",
+      "properties": {
+        "awards": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/components/schemas/Award"
+          }
+        },
+        "caseStudies": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/components/schemas/CaseStudy"
+          }
+        },
+        "logos": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/components/schemas/Logo"
+          }
+        },
+        "stats": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/components/schemas/Stat"
+          }
+        },
+        "testimonials": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/components/schemas/Testimonial"
+          }
+        }
+      }
+    },
+    "Stat": {
+      "type": "object",
+      "required": [
+        "value",
+        "label"
+      ],
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      }
+    },
+    "Testimonial": {
+      "type": "object",
+      "required": [
+        "quote",
+        "authorName"
+      ],
+      "properties": {
+        "authorName": {
+          "type": "string"
+        },
+        "authorTitle": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "avatarUrl": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "company": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "quote": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "lona_models::TimeScale": {
+    "TimeScale": {
+      "type": "string",
+      "enum": [
+        "year",
+        "month",
+        "week",
+        "day"
+      ]
+    }
+  },
+  "edge::Underscores": {
+    "Underscores": {
+      "type": "object",
+      "description": "utoipa's `camelCase` keeps a leading underscore's effect: `_type` is\n`Type` (serde writes `type`).",
+      "required": [
+        "Lead",
+        "Type",
+        "trailing",
+        "plainName"
+      ],
+      "properties": {
+        "Lead": {
+          "type": "string"
+        },
+        "Type": {
+          "type": "string"
+        },
+        "plainName": {
+          "type": "string"
+        },
+        "trailing": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "lona_models::NewSheet": {
+    "NewSheet": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "lookup_key": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Canonical lookup key (e.g. `:~lona:home`). Sole address for\nreserved sheets."
+        },
+        "time_scale": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/TimeScale"
+            }
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "width": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        }
+      }
+    },
+    "TimeScale": {
+      "type": "string",
+      "enum": [
+        "year",
+        "month",
+        "week",
+        "day"
+      ]
+    }
+  },
+  "brand::FooterGroup": {
+    "FooterGroup": {
+      "type": "object",
+      "required": [
+        "label",
+        "links"
+      ],
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/NavLink"
+          }
+        }
+      }
+    },
+    "NavLink": {
+      "type": "object",
+      "required": [
+        "label",
+        "href"
+      ],
+      "properties": {
+        "href": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "brand::ComparisonTable": {
+    "ComparisonRow": {
+      "type": "object",
+      "required": [
+        "feature",
+        "ours"
+      ],
+      "properties": {
+        "competitor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "feature": {
+          "type": "string"
+        },
+        "ours": {
+          "type": "string"
+        },
+        "theirs": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "ComparisonTable": {
+      "type": "object",
+      "required": [
+        "columns",
+        "rows"
+      ],
+      "properties": {
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/ComparisonRow"
+          }
+        }
+      }
+    }
+  },
+  "edge::ValueTypes": {
+    "Leaf": {
+      "type": "object",
+      "description": "A referenced struct.",
+      "required": [
+        "labelText"
+      ],
+      "properties": {
+        "labelText": {
+          "type": "string",
+          "description": "The leaf's label."
+        }
+      }
+    },
+    "LeafCell": {
+      "$ref": "#/components/schemas/Leaf",
+      "description": "A type-level `value_type`: the wrapper's schema is `Leaf`'s."
+    },
+    "ValueTypes": {
+      "type": "object",
+      "description": "`value_type` with utoipa's special names nested (tento-agent-queue\n`model.rs`), and `required` following the `value_type`.",
+      "required": [
+        "objects",
+        "declared_optional",
+        "cell"
+      ],
+      "properties": {
+        "cell": {
+          "$ref": "#/components/schemas/LeafCell"
+        },
+        "declared_optional": {
+          "type": "string",
+          "description": "Declared optional, `value_type` required: required."
+        },
+        "declared_required": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Declared required, `value_type` optional: not required."
+        },
+        "maybe_any": {},
+        "maybe_object": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "objects": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  },
+  "lona_models::TaskUpdateAttributes": {
+    "Rational": {
+      "type": "object",
+      "required": [
+        "n",
+        "d"
+      ],
+      "properties": {
+        "d": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "n": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "TaskPriority": {
+      "type": "string",
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "TaskStatus": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "inProgress",
+        "planned",
+        "autoScheduled"
+      ]
+    },
+    "TaskUpdateAttributes": {
+      "type": "object",
+      "description": "Partial task update (`PATCH /api/tasks/{id}` body). `Some(inner)` sets the\nfield (`Some(None)` clears nullable fields); `None` leaves it unchanged.",
+      "properties": {
+        "completedAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time",
+          "default": null
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "dueDate": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time",
+          "default": null
+        },
+        "eventId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid",
+          "default": null
+        },
+        "importance": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/TaskPriority"
+            }
+          ],
+          "default": null
+        },
+        "position": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/Rational"
+            }
+          ],
+          "default": null
+        },
+        "scheduledEnd": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time",
+          "default": null
+        },
+        "scheduledStart": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time",
+          "default": null
+        },
+        "status": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/TaskStatus"
+            }
+          ],
+          "default": null
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      }
+    }
+  },
+  "lona_models::Rational": {
+    "Rational": {
+      "type": "object",
+      "required": [
+        "n",
+        "d"
+      ],
+      "properties": {
+        "d": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "n": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    }
+  },
+  "lona_models::WeatherCell": {
+    "WeatherCell": {
+      "type": "object",
+      "description": "Canonical day-level weather object stored in `weather.v1` cells.",
+      "required": [
+        "date",
+        "day",
+        "hours",
+        "source",
+        "storedAt"
+      ],
+      "properties": {
+        "astro": {},
+        "date": {
+          "type": "string",
+          "format": "date"
+        },
+        "day": {},
+        "hours": {
+          "type": "array",
+          "items": {}
+        },
+        "source": {
+          "type": "string"
+        },
+        "storedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  },
+  "brand::CtaSection": {
+    "Cta": {
+      "type": "object",
+      "required": [
+        "label",
+        "href"
+      ],
+      "properties": {
+        "href": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      }
+    },
+    "CtaSection": {
+      "type": "object",
+      "required": [
+        "heading",
+        "primaryCta"
+      ],
+      "properties": {
+        "heading": {
+          "type": "string"
+        },
+        "primaryCta": {
+          "$ref": "#/components/schemas/Cta"
+        },
+        "secondaryCta": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/Cta"
+            }
+          ]
+        },
+        "subtext": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  },
+  "edge::SerdeRules": {
+    "SerdeRules": {
+      "type": "object",
+      "description": "serde attributes that change `required` and the property set (the\ntento-lona `wire.rs` shapes use all of them).",
+      "required": [
+        "type",
+        "newName",
+        "splitRename",
+        "ref"
+      ],
+      "properties": {
+        "defaulted": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "newName": {
+          "type": "string"
+        },
+        "old": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "deprecated": true
+        },
+        "ref": {
+          "type": "string"
+        },
+        "sparse": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sparseList": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        },
+        "splitRename": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "brand::ComparisonSection": {
+    "ComparisonRow": {
+      "type": "object",
+      "required": [
+        "feature",
+        "ours"
+      ],
+      "properties": {
+        "competitor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "feature": {
+          "type": "string"
+        },
+        "ours": {
+          "type": "string"
+        },
+        "theirs": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "ComparisonSection": {
+      "type": "object",
+      "properties": {
+        "comparisons": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/components/schemas/ComparisonRow"
+          }
+        },
+        "heading": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subtext": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "table": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/ComparisonTable"
+            }
+          ]
+        }
+      }
+    },
+    "ComparisonTable": {
+      "type": "object",
+      "required": [
+        "columns",
+        "rows"
+      ],
+      "properties": {
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/ComparisonRow"
+          }
+        }
+      }
+    }
+  },
+  "edge::LeafCell": {
+    "Leaf": {
+      "type": "object",
+      "description": "A referenced struct.",
+      "required": [
+        "labelText"
+      ],
+      "properties": {
+        "labelText": {
+          "type": "string",
+          "description": "The leaf's label."
+        }
+      }
+    },
+    "LeafCell": {
+      "$ref": "#/components/schemas/Leaf",
+      "description": "A type-level `value_type`: the wrapper's schema is `Leaf`'s."
+    }
+  },
+  "brand::HeroMedia": {
+    "HeroMedia": {
+      "type": "object",
+      "required": [
+        "type",
+        "src"
+      ],
+      "properties": {
+        "alt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "src": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/components/schemas/HeroMediaType"
+        }
+      }
+    },
+    "HeroMediaType": {
+      "type": "string",
+      "enum": [
+        "screenshot",
+        "video",
+        "animation"
+      ]
+    }
+  },
+  "edge::Primitives": {
+    "Primitives": {
+      "type": "object",
+      "description": "Every primitive a wire struct uses.\n\n  Indented second paragraph, kept relative to the first.",
+      "required": [
+        "text",
+        "letter",
+        "flag",
+        "i8_",
+        "i16_",
+        "i32_",
+        "i64_",
+        "i128_",
+        "isize_",
+        "u8_",
+        "u16_",
+        "u32_",
+        "u64_",
+        "u128_",
+        "usize_",
+        "f32_",
+        "f64_",
+        "at",
+        "naive_at",
+        "day",
+        "time",
+        "id",
+        "any"
+      ],
+      "properties": {
+        "any": {},
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "day": {
+          "type": "string",
+          "format": "date"
+        },
+        "f32_": {
+          "type": "number",
+          "format": "float"
+        },
+        "f64_": {
+          "type": "number",
+          "format": "double"
+        },
+        "flag": {
+          "type": "boolean"
+        },
+        "i128_": {
+          "type": "integer"
+        },
+        "i16_": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "i32_": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "i64_": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "i8_": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "isize_": {
+          "type": "integer"
+        },
+        "letter": {
+          "type": "string"
+        },
+        "maybe_any": {},
+        "naive_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "text": {
+          "type": "string"
+        },
+        "time": {
+          "type": "string"
+        },
+        "u128_": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "u16_": {
+          "type": "integer",
+          "format": "int32",
+          "minimum": 0
+        },
+        "u32_": {
+          "type": "integer",
+          "format": "int32",
+          "minimum": 0
+        },
+        "u64_": {
+          "type": "integer",
+          "format": "int64",
+          "minimum": 0
+        },
+        "u8_": {
+          "type": "integer",
+          "format": "int32",
+          "minimum": 0
+        },
+        "usize_": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  },
+  "edge::PlainUntagged": {
+    "PlainUntagged": {
+      "type": "null",
+      "default": null
+    }
+  },
+  "brand::FaqSection": {
+    "FaqItem": {
+      "type": "object",
+      "required": [
+        "question",
+        "answer"
+      ],
+      "properties": {
+        "answer": {
+          "type": "string"
+        },
+        "question": {
+          "type": "string"
+        }
+      }
+    },
+    "FaqSection": {
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "heading": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/FaqItem"
+          }
+        }
+      }
+    }
+  },
+  "lona_models::TaskCell": {
+    "Rational": {
+      "type": "object",
+      "required": [
+        "n",
+        "d"
+      ],
+      "properties": {
+        "d": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "n": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "TaskAttributes": {
+      "type": "object",
+      "properties": {
+        "completedAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "createdAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "displayId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "displayNumber": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "dueDate": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "eventId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "importance": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/TaskPriority"
+            }
+          ]
+        },
+        "position": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/Rational"
+            }
+          ]
+        },
+        "scheduledEnd": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "scheduledStart": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "status": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/TaskStatus"
+            }
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "TaskCell": {
+      "allOf": [
+        {
+          "$ref": "#/components/schemas/TaskAttributes"
+        },
+        {
+          "type": "object",
+          "required": [
+            "id"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        }
+      ],
+      "description": "Canonical task object stored in `task.v1` cells."
+    },
+    "TaskPriority": {
+      "type": "string",
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "TaskStatus": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "inProgress",
+        "planned",
+        "autoScheduled"
+      ]
+    }
+  },
+  "edge::Old": {
+    "Old": {
+      "type": "object",
+      "description": "A deprecated type.",
+      "required": [
+        "a"
+      ],
+      "properties": {
+        "a": {
+          "type": "string"
+        }
+      },
+      "deprecated": true
+    }
+  },
+  "lona_models::TaskPriority": {
+    "TaskPriority": {
+      "type": "string",
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ]
+    }
+  },
+  "edge::UsesNewtypes": {
+    "Leaf": {
+      "type": "object",
+      "description": "A referenced struct.",
+      "required": [
+        "labelText"
+      ],
+      "properties": {
+        "labelText": {
+          "type": "string",
+          "description": "The leaf's label."
+        }
+      }
+    },
+    "LeafWrapper": {
+      "$ref": "#/components/schemas/Leaf",
+      "description": "A documented wrapper around a reference."
+    },
+    "UserId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "A documented id."
+    },
+    "UsesNewtypes": {
+      "type": "object",
+      "required": [
+        "user"
+      ],
+      "properties": {
+        "user": {
+          "$ref": "#/components/schemas/UserId"
+        },
+        "wrapper": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/LeafWrapper"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "brand::FooterSection": {
+    "FooterGroup": {
+      "type": "object",
+      "required": [
+        "label",
+        "links"
+      ],
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/NavLink"
+          }
+        }
+      }
+    },
+    "FooterSection": {
+      "type": "object",
+      "required": [
+        "groups",
+        "legal"
+      ],
+      "properties": {
+        "groups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/FooterGroup"
+          }
+        },
+        "legal": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/NavLink"
+          }
+        },
+        "social": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/components/schemas/SocialLink"
+          }
+        }
+      }
+    },
+    "NavLink": {
+      "type": "object",
+      "required": [
+        "label",
+        "href"
+      ],
+      "properties": {
+        "href": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      }
+    },
+    "SocialLink": {
+      "type": "object",
+      "required": [
+        "platform",
+        "href"
+      ],
+      "properties": {
+        "href": {
+          "type": "string"
+        },
+        "platform": {
+          "$ref": "#/components/schemas/SocialPlatform"
+        }
+      }
+    },
+    "SocialPlatform": {
+      "type": "string",
+      "enum": [
+        "twitter",
+        "linkedin",
+        "github",
+        "youtube",
+        "instagram",
+        "facebook",
+        "discord",
+        "bluesky"
+      ]
+    }
+  },
+  "brand::HeroMediaType": {
+    "HeroMediaType": {
+      "type": "string",
+      "enum": [
+        "screenshot",
+        "video",
+        "animation"
+      ]
+    }
+  },
+  "brand::FeatureMediaType": {
+    "FeatureMediaType": {
+      "type": "string",
+      "enum": [
+        "screenshot",
+        "illustration",
+        "video"
+      ]
+    }
+  },
+  "brand::SiteNav": {
+    "NavDropdown": {
+      "type": "object",
+      "required": [
+        "columns"
+      ],
+      "properties": {
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/NavDropdownColumn"
+          }
+        },
+        "footer": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/NavLink"
+            }
+          ]
+        },
+        "header": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "image": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/NavDropdownImage"
+            }
+          ]
+        }
+      }
+    },
+    "NavDropdownColumn": {
+      "type": "object",
+      "required": [
+        "title",
+        "items"
+      ],
+      "properties": {
+        "bold": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/NavDropdownItem"
+          }
+        },
+        "title": {
+          "type": "string"
+        }
+      }
+    },
+    "NavDropdownImage": {
+      "type": "object",
+      "required": [
+        "src"
+      ],
+      "properties": {
+        "alt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "src": {
+          "type": "string"
+        }
+      }
+    },
+    "NavDropdownItem": {
+      "type": "object",
+      "required": [
+        "label",
+        "href"
+      ],
+      "properties": {
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "href": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      }
+    },
+    "NavLink": {
+      "type": "object",
+      "required": [
+        "label",
+        "href"
+      ],
+      "properties": {
+        "href": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      }
+    },
+    "SiteNav": {
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "cta": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/NavLink"
+            }
+          ]
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/SiteNavItem"
+          }
+        }
+      }
+    },
+    "SiteNavItem": {
+      "type": "object",
+      "required": [
+        "label",
+        "href"
+      ],
+      "properties": {
+        "details": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/components/schemas/NavDropdown"
+            }
+          ]
+        },
+        "href": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "lona_models::TimeScaleCustom": {
+    "TimeScaleCustom": {
+      "type": "string",
+      "enum": [
+        "year",
+        "month",
+        "week",
+        "day",
+        "custom"
+      ]
+    }
+  }
+}

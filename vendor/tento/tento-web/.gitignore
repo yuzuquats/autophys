@@ -1,0 +1,8 @@
+build/
+target/
+
+# Added by cargo
+/target
+
+# bundler_tests.rs fixture sources: TempDirs, left behind when a test run aborts
+/.emitter-test-*/

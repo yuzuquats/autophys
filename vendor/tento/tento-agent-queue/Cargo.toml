@@ -1,0 +1,46 @@
+[package]
+name = "tento-agent-queue"
+version = "0.1.1"
+edition = "2024"
+
+# The product-facing client of a durable agent job queue. A product enqueues
+# work, lists it, watches it change and cancels it; the BACKEND runs the jobs.
+# The tsh backend hands them to `tsh-agent-queue` (one saved tsh session per
+# attempt, retries, timeouts, result decode) through `tsh serve`; the fixture
+# backend runs a closure in-process, which is what dev modes and tests want.
+[lib]
+name = "tento_agent_queue"
+path = "src/lib.rs"
+
+# The same client as a shell face, so an operator or an agent can queue work
+# without a product in the middle. Behind a feature: a product that links the
+# library must not also link a command framework.
+[[bin]]
+name = "tento-agent-queue"
+path = "src/main.rs"
+required-features = ["cli"]
+
+[dependencies]
+hmac = "0.12"
+sha2 = "0.10"
+getrandom = "0.2"
+libc = "0.2"
+anyhow.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tento-env.workspace = true
+tento-sh = { workspace = true, optional = true }
+thiserror.workspace = true
+tokio = { workspace = true, features = ["io-util", "macros", "net", "rt", "sync", "time"] }
+# `schema` only: the job model describes itself (tento-openapi), so a product that
+# serves these types can generate its page's TypeScript from its routes.
+tento-openapi = { workspace = true, optional = true }
+
+[features]
+schema = ["dep:tento-openapi"]
+cli = ["dep:tento-sh"]
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }

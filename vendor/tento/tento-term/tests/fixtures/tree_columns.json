@@ -1,0 +1,490 @@
+{
+  "type": "tento-term-render",
+  "name": "tree_columns",
+  "description": "Tree with keyed per-row `fields` and a declared column layout. Each `TreeColumn` says where its field renders: Left (column-aligned, before tree edges), Right (column-aligned, rightmost), or Inline (packed after the label with two-space gap — the legacy `detail` semantics). Lowest-priority side columns demote to indented sub-lines under each row when the terminal is too narrow (mirroring the Table responsive algorithm). A `column_divider` glyph (default `▏` dimmed) draws between the side blocks and the tree on the top line AND on continuation lines so columns stay aligned through wrapped inline text. Sub-line rows have no divider. When no columns are declared the renderer reproduces the legacy detail-only output exactly (covered by `tree_basic.json` / `tree_health.json`).",
+  "cases": [
+    {
+      "name": "left column — checked_at only at width 80",
+      "input": {
+        "kind": "tree",
+        "term_width": 80,
+        "tree": {
+          "root": {
+            "label": "fleet",
+            "children": [
+              {
+                "label": "yuzuquats",
+                "children": [
+                  {
+                    "label": "✓ online",
+                    "fields": {
+                      "checked_at": "1s ago",
+                      "detail": "reachable"
+                    }
+                  }
+                ]
+              },
+              {
+                "label": "rwc-01",
+                "children": [
+                  {
+                    "label": "✗ snapshot",
+                    "fields": {
+                      "checked_at": "11s ago",
+                      "detail": "unreadable"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "columns": [
+            {
+              "key": "checked_at",
+              "position": "left",
+              "min_width": 8,
+              "align": "right",
+              "priority": 0
+            },
+            {
+              "key": "detail",
+              "position": "inline"
+            }
+          ]
+        }
+      },
+      "expected": [
+        "         ▏ fleet",
+        "         ▏ ├── yuzuquats",
+        "  1s ago ▏ │   └── ✓ online  reachable",
+        "         ▏ └── rwc-01",
+        " 11s ago ▏     └── ✗ snapshot  unreadable"
+      ]
+    },
+    {
+      "name": "left + right columns at width 80",
+      "input": {
+        "kind": "tree",
+        "term_width": 80,
+        "tree": {
+          "root": {
+            "label": "fleet",
+            "children": [
+              {
+                "label": "yuzuquats",
+                "children": [
+                  {
+                    "label": "✓ online",
+                    "fields": {
+                      "checked_at": "1s ago",
+                      "detail": "reachable",
+                      "cadence": "30s"
+                    }
+                  }
+                ]
+              },
+              {
+                "label": "rwc-01",
+                "children": [
+                  {
+                    "label": "✗ snapshot",
+                    "fields": {
+                      "checked_at": "11s ago",
+                      "detail": "unreadable",
+                      "cadence": "15s"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "columns": [
+            {
+              "key": "checked_at",
+              "position": "left",
+              "min_width": 8,
+              "align": "right",
+              "priority": 0
+            },
+            {
+              "key": "detail",
+              "position": "inline"
+            },
+            {
+              "key": "cadence",
+              "position": "right",
+              "min_width": 4,
+              "align": "right",
+              "priority": 2
+            }
+          ]
+        }
+      },
+      "expected": [
+        "         ▏ fleet                                                          ▏",
+        "         ▏ ├── yuzuquats                                                  ▏",
+        "  1s ago ▏ │   └── ✓ online  reachable                                    ▏  30s",
+        "         ▏ └── rwc-01                                                     ▏",
+        " 11s ago ▏     └── ✗ snapshot  unreadable                                 ▏  15s"
+      ]
+    },
+    {
+      "name": "detail inline only (no columns declared) — BC parity with tree_basic",
+      "input": {
+        "kind": "tree",
+        "term_width": 80,
+        "tree": {
+          "root": {
+            "label": "service health",
+            "children": [
+              {
+                "label": "api",
+                "fields": {
+                  "detail": "responding in 12ms"
+                }
+              },
+              {
+                "label": "database",
+                "fields": {
+                  "detail": "connected, 4 pools"
+                }
+              },
+              {
+                "label": "cache",
+                "fields": {
+                  "detail": "miss rate 2.3%"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "expected": [
+        "service health",
+        "├── api  responding in 12ms",
+        "├── database  connected, 4 pools",
+        "└── cache  miss rate 2.3%"
+      ]
+    },
+    {
+      "name": "omitted field — Node carries cadence but no column declared for it",
+      "input": {
+        "kind": "tree",
+        "term_width": 80,
+        "tree": {
+          "root": {
+            "label": "fleet",
+            "children": [
+              {
+                "label": "✓ online",
+                "fields": {
+                  "detail": "reachable",
+                  "cadence": "30s"
+                }
+              }
+            ]
+          },
+          "columns": [
+            {
+              "key": "detail",
+              "position": "inline"
+            }
+          ]
+        }
+      },
+      "expected": [
+        "fleet",
+        "└── ✓ online  reachable"
+      ]
+    },
+    {
+      "name": "narrow width 24 — cadence (priority 2) demotes to sub-line; checked_at stays",
+      "input": {
+        "kind": "tree",
+        "term_width": 24,
+        "tree": {
+          "root": {
+            "label": "fleet",
+            "children": [
+              {
+                "label": "✓ online",
+                "fields": {
+                  "checked_at": "1s ago",
+                  "detail": "reachable",
+                  "cadence": "30s"
+                }
+              },
+              {
+                "label": "✗ snapshot",
+                "fields": {
+                  "checked_at": "11s ago",
+                  "detail": "unreadable",
+                  "cadence": "15s"
+                }
+              }
+            ]
+          },
+          "columns": [
+            {
+              "key": "checked_at",
+              "position": "left",
+              "min_width": 8,
+              "align": "right",
+              "priority": 0
+            },
+            {
+              "key": "detail",
+              "position": "inline"
+            },
+            {
+              "key": "cadence",
+              "position": "right",
+              "min_width": 4,
+              "align": "right",
+              "priority": 2
+            }
+          ]
+        }
+      },
+      "expected": [
+        "         ▏ fleet",
+        "  1s ago ▏ ├── ✓ online",
+        "         ▏ │   reachable",
+        "│      └── cadence: 30s",
+        " 11s ago ▏ └── ✗",
+        "         ▏     snapshot",
+        "         ▏     unreadabl",
+        "         ▏     e",
+        "       └── cadence: 15s"
+      ]
+    },
+    {
+      "name": "very narrow width 18 — both side columns demote to sub-lines",
+      "input": {
+        "kind": "tree",
+        "term_width": 18,
+        "tree": {
+          "root": {
+            "label": "fleet",
+            "children": [
+              {
+                "label": "✓ online",
+                "fields": {
+                  "checked_at": "1s ago",
+                  "detail": "reachable",
+                  "cadence": "30s"
+                }
+              }
+            ]
+          },
+          "columns": [
+            {
+              "key": "checked_at",
+              "position": "left",
+              "min_width": 8,
+              "align": "right",
+              "priority": 0
+            },
+            {
+              "key": "detail",
+              "position": "inline"
+            },
+            {
+              "key": "cadence",
+              "position": "right",
+              "min_width": 4,
+              "align": "right",
+              "priority": 2
+            }
+          ]
+        }
+      },
+      "expected": [
+        "fleet",
+        "└── ✓ online",
+        "    reachable",
+        "       ├── checke…",
+        "       └── cadenc…"
+      ]
+    },
+    {
+      "name": "branches carry their own column cell (caller-decides)",
+      "input": {
+        "kind": "tree",
+        "term_width": 80,
+        "tree": {
+          "root": {
+            "label": "fleet",
+            "fields": {
+              "checked_at": "—"
+            },
+            "children": [
+              {
+                "label": "yuzuquats",
+                "fields": {
+                  "checked_at": "2s ago"
+                },
+                "children": [
+                  {
+                    "label": "✓ online",
+                    "fields": {
+                      "checked_at": "1s ago",
+                      "detail": "reachable"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "columns": [
+            {
+              "key": "checked_at",
+              "position": "left",
+              "min_width": 8,
+              "align": "right",
+              "priority": 0
+            },
+            {
+              "key": "detail",
+              "position": "inline"
+            }
+          ]
+        }
+      },
+      "expected": [
+        "       — ▏ fleet",
+        "  2s ago ▏ └── yuzuquats",
+        "  1s ago ▏     └── ✓ online  reachable"
+      ]
+    },
+    {
+      "name": "divider drawn on wrapped continuation lines at width 36",
+      "input": {
+        "kind": "tree",
+        "term_width": 36,
+        "tree": {
+          "root": {
+            "label": "fleet",
+            "children": [
+              {
+                "label": "✓ probe",
+                "fields": {
+                  "checked_at": "1s ago",
+                  "detail": "responded in 12ms with payload size 2048 bytes"
+                }
+              }
+            ]
+          },
+          "columns": [
+            {
+              "key": "checked_at",
+              "position": "left",
+              "min_width": 8,
+              "align": "right",
+              "priority": 0
+            },
+            {
+              "key": "detail",
+              "position": "inline"
+            }
+          ]
+        }
+      },
+      "expected": [
+        "         ▏ fleet",
+        "  1s ago ▏ └── ✓ probe  responded in",
+        "         ▏     12ms with payload",
+        "         ▏     size 2048 bytes"
+      ]
+    },
+    {
+      "name": "ASCII fallback divider — glyph='|' at width 80",
+      "input": {
+        "kind": "tree",
+        "term_width": 80,
+        "tree": {
+          "root": {
+            "label": "fleet",
+            "children": [
+              {
+                "label": "✓ online",
+                "fields": {
+                  "checked_at": "1s ago",
+                  "detail": "reachable"
+                }
+              }
+            ]
+          },
+          "columns": [
+            {
+              "key": "checked_at",
+              "position": "left",
+              "min_width": 8,
+              "align": "right",
+              "priority": 0
+            },
+            {
+              "key": "detail",
+              "position": "inline"
+            }
+          ],
+          "column_divider": {
+            "glyph": "|",
+            "gap": 1
+          }
+        }
+      },
+      "expected": [
+        "         | fleet",
+        "  1s ago | └── ✓ online  reachable"
+      ]
+    },
+    {
+      "name": "without_column_divider — left+right cols with no divider glyph",
+      "input": {
+        "kind": "tree",
+        "term_width": 80,
+        "tree": {
+          "root": {
+            "label": "fleet",
+            "children": [
+              {
+                "label": "✓ online",
+                "fields": {
+                  "checked_at": "1s ago",
+                  "detail": "reachable",
+                  "cadence": "30s"
+                }
+              }
+            ]
+          },
+          "columns": [
+            {
+              "key": "checked_at",
+              "position": "left",
+              "min_width": 8,
+              "align": "right",
+              "priority": 0
+            },
+            {
+              "key": "detail",
+              "position": "inline"
+            },
+            {
+              "key": "cadence",
+              "position": "right",
+              "min_width": 4,
+              "align": "right",
+              "priority": 2
+            }
+          ],
+          "column_divider": null
+        }
+      },
+      "expected": [
+        "         fleet",
+        "  1s ago └── ✓ online  reachable                                             30s"
+      ]
+    }
+  ]
+}

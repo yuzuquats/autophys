@@ -1,0 +1,145 @@
+{
+  "type": "tento-term-render",
+  "name": "table_fe_releases",
+  "description": "The `./run releases.list` 'Fe Releases' table modelled with the responsive table API, at four terminal widths. 120: everything fits at natural width (Bundles is capped at max_width 20 and truncated). 56: too wide, columns shrink toward their min_width (Stages/Built At/Bundles lose width, '…' marks the cut). 24: too narrow even at minimums, so the three lowest-priority columns (Built At=2, Hash=3, Bundles=4) are demoted out of the grid and rendered as per-row sub-lines '├──/└── ColName: value' under each row — the hybrid tree/table. 14: degenerate — even the sub-line headers don't fit; whole lines are truncated to the terminal width and nothing panics.",
+  "cases": [
+    {
+      "name": "width 120 — fits at natural width; Bundles capped + truncated",
+      "input": {
+        "kind": "table",
+        "term_width": 120,
+        "table": {
+          "title": "Fe Releases",
+          "columns": [
+            { "header": "Version", "align": "right", "min_width": 7, "priority": 0 },
+            { "header": "Stages", "min_width": 6, "priority": 1 },
+            { "header": "Hash", "min_width": 8, "max_width": 8, "priority": 3 },
+            { "header": "Built At", "min_width": 12, "priority": 2 },
+            { "header": "Bundles", "min_width": 8, "max_width": 20, "priority": 4, "overflow": "truncate_end" }
+          ],
+          "rows": [
+            ["1.4.2", "prod,rc,beta", "a1b2c3d4", "05-10 14:22 -21h", "ui, sheets-ui, admin-ui, brand"],
+            ["1.4.1", "beta", "ffee0011", "05-09 09:01 -1d", "ui, sheets-ui"],
+            ["1.4.3*", "", "deadbeef", "05-11 08:30 -2h", "ui"]
+          ]
+        }
+      },
+      "expected": [
+        "Fe Releases",
+        "Version Stages       Hash     Built At         Bundles",
+        "───────────────────────────────────────────────────────────────────",
+        "  1.4.2 prod,rc,beta a1b2c3d4 05-10 14:22 -21h ui, sheets-ui, admi…",
+        "  1.4.1 beta         ffee0011 05-09 09:01 -1d  ui, sheets-ui",
+        " 1.4.3*              deadbeef 05-11 08:30 -2h  ui"
+      ]
+    },
+    {
+      "name": "width 56 — columns shrink toward min_width, no demotion",
+      "input": {
+        "kind": "table",
+        "term_width": 56,
+        "table": {
+          "title": "Fe Releases",
+          "columns": [
+            { "header": "Version", "align": "right", "min_width": 7, "priority": 0 },
+            { "header": "Stages", "min_width": 6, "priority": 1 },
+            { "header": "Hash", "min_width": 8, "max_width": 8, "priority": 3 },
+            { "header": "Built At", "min_width": 12, "priority": 2 },
+            { "header": "Bundles", "min_width": 8, "max_width": 20, "priority": 4, "overflow": "truncate_end" }
+          ],
+          "rows": [
+            ["1.4.2", "prod,rc,beta", "a1b2c3d4", "05-10 14:22 -21h", "ui, sheets-ui, admin-ui, brand"],
+            ["1.4.1", "beta", "ffee0011", "05-09 09:01 -1d", "ui, sheets-ui"],
+            ["1.4.3*", "", "deadbeef", "05-11 08:30 -2h", "ui"]
+          ]
+        }
+      },
+      "expected": [
+        "Fe Releases",
+        "Version Stages    Hash     Built At       Bundles",
+        "────────────────────────────────────────────────────────",
+        "  1.4.2 prod,rc,… a1b2c3d4 05-10 14:22 -… ui, sheets-ui…",
+        "  1.4.1 beta      ffee0011 05-09 09:01 -… ui, sheets-ui",
+        " 1.4.3*           deadbeef 05-11 08:30 -… ui"
+      ]
+    },
+    {
+      "name": "width 24 — three columns demoted to per-row sub-lines (hybrid tree/table)",
+      "input": {
+        "kind": "table",
+        "term_width": 24,
+        "table": {
+          "title": "Fe Releases",
+          "columns": [
+            { "header": "Version", "align": "right", "min_width": 7, "priority": 0 },
+            { "header": "Stages", "min_width": 6, "priority": 1 },
+            { "header": "Hash", "min_width": 8, "max_width": 8, "priority": 3 },
+            { "header": "Built At", "min_width": 12, "priority": 2 },
+            { "header": "Bundles", "min_width": 8, "max_width": 20, "priority": 4, "overflow": "truncate_end" }
+          ],
+          "rows": [
+            ["1.4.2", "prod,rc,beta", "a1b2c3d4", "05-10 14:22 -21h", "ui, sheets-ui, admin-ui, brand"],
+            ["1.4.1", "beta", "ffee0011", "05-09 09:01 -1d", "ui, sheets-ui"],
+            ["1.4.3*", "", "deadbeef", "05-11 08:30 -2h", "ui"]
+          ]
+        }
+      },
+      "expected": [
+        "Fe Releases",
+        "Version Stages",
+        "────────────────────",
+        "  1.4.2 prod,rc,beta",
+        "   ├── Built At: 05-10 …",
+        "   ├── Hash: a1b2c3d4",
+        "   └── Bundles: ui, she…",
+        "  1.4.1 beta",
+        "   ├── Built At: 05-09 …",
+        "   ├── Hash: ffee0011",
+        "   └── Bundles: ui, she…",
+        " 1.4.3*",
+        "   ├── Built At: 05-11 …",
+        "   ├── Hash: deadbeef",
+        "   └── Bundles: ui"
+      ]
+    },
+    {
+      "name": "width 14 — degenerate; whole lines truncated, no panic",
+      "input": {
+        "kind": "table",
+        "term_width": 14,
+        "table": {
+          "title": "Fe Releases",
+          "columns": [
+            { "header": "Version", "align": "right", "min_width": 7, "priority": 0 },
+            { "header": "Stages", "min_width": 6, "priority": 1 },
+            { "header": "Hash", "min_width": 8, "max_width": 8, "priority": 3 },
+            { "header": "Built At", "min_width": 12, "priority": 2 },
+            { "header": "Bundles", "min_width": 8, "max_width": 20, "priority": 4, "overflow": "truncate_end" }
+          ],
+          "rows": [
+            ["1.4.2", "prod,rc,beta", "a1b2c3d4", "05-10 14:22 -21h", "ui, sheets-ui, admin-ui, brand"],
+            ["1.4.1", "beta", "ffee0011", "05-09 09:01 -1d", "ui, sheets-ui"],
+            ["1.4.3*", "", "deadbeef", "05-11 08:30 -2h", "ui"]
+          ]
+        }
+      },
+      "expected": [
+        "Fe Releases",
+        "Version Stages",
+        "──────────────",
+        "  1.4.2 prod,…",
+        "   ├── Built …",
+        "   ├── Hash: …",
+        "   └── Bundle…",
+        "  1.4.1 beta",
+        "   ├── Built …",
+        "   ├── Hash: …",
+        "   └── Bundle…",
+        " 1.4.3*",
+        "   ├── Built …",
+        "   ├── Hash: …",
+        "   └── Bundle…"
+      ]
+    }
+  ]
+}

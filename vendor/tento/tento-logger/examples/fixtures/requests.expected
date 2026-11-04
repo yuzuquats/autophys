@@ -1,0 +1,15 @@
+[34m [0m│  142ms │ [38;5;238m02:15:32.000[0m │ ↗        203.0.113.42 │  alice │ [38;5;238mS[0m │ [34m200[0m POST [35mB[0m example.com    /api/sheets                         
+[35m [0m│[38;5;238m    8ms[0m │              │                       │        │ [38;5;238mS[0m │           [38;5;238m├ [0mauth_check [38;5;239mmiddleware/auth.rs:23[0m
+[35m [0m│[38;5;238m   45ms[0m │              │                       │        │ [38;5;238mS[0m │           [38;5;238m├ [0mdb_query [38;5;239mdb/sheets.rs:112[0m
+[34m [0m│[38;5;238m       [0m │              │                       │        │ [38;5;238mS[0m │           [38;5;238m│ └ [0mAcquired connection from pool [38;5;239mdb/pool.rs:67[0m
+[34m [0m│[38;5;238m       [0m │              │                       │        │ [38;5;238mS[0m │           [38;5;238m└ [0mSheet created successfully [38;5;239mroutes/api.rs:78[0m
+[34m [0m│    5ms │ [38;5;238m02:15:32.995[0m │              10.0.0.1 │    bob │ [38;5;238mS[0m │ [32m301[0m GET  [32mR[0m example.com    /old-path                           
+[33mw[0m│    3ms │ [38;5;238m02:15:33.997[0m │                       │        │ [38;5;238mS[0m │ [31m404[0m DELE   example.com    /api/sheets/nonexistent             
+[31me[0m│   89ms │ [38;5;238m02:15:34.911[0m │                       │ charli │ [38;5;238mS[0m │ [31m500[0m PUT  [33mP[0m example.com    /api/sheets/abc                     
+[31me[0m│        │ [38;5;238m02:15:36.000[0m │                       │   dave │ [38;5;238mS[0m │ [31mErr[0m GET    example.com    /api/health                         
+[34m [0m│  500ms │ [38;5;238m02:15:36.500[0m │ ↗         192.168.1.1 │    eve │ [38;5;238mS[0m │ [34m200[0m GET  [35mB[0m example.com    /api/deep                           
+[34m [0m│[38;5;238m  200ms[0m │              │                       │        │ [38;5;238mS[0m │           [38;5;238m├ [0mlevel_1a [38;5;239mtasks/a.rs:10[0m
+[34m [0m│[38;5;238m  100ms[0m │              │                       │        │ [38;5;238mS[0m │           [38;5;238m│ └ [0mlevel_2a [38;5;239mtasks/b.rs:20[0m
+[33mw[0m│[38;5;238m   50ms[0m │              │                       │        │ [38;5;238mS[0m │           [38;5;238m│   └ [0m[33mlevel_3a[0m [38;5;239mtasks/c.rs:30[0m
+[35m [0m│[38;5;238m   10ms[0m │              │                       │        │ [38;5;238mS[0m │           [38;5;238m├ [0m<None> [38;5;239mtasks/d.rs:40[0m
+[33mw[0m│[38;5;238m       [0m │              │                       │        │ [38;5;238mS[0m │           [38;5;238m└ [0m[33mSlow request detected[0m [38;5;239mroutes/api.rs:15[0m

@@ -1,0 +1,42 @@
+[package]
+name = "tento-app"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+authors = ["James Kao <james.l.kao@gmail.com>"]
+description = "tento-shell .tsh.app bundle/transport layer: discover + dispatch command-group bundles out-of-process"
+license = "MIT"
+
+[dependencies]
+tento-lisp-cmd = { version = "0.1.9", path = "../tento-lisp-cmd" }
+tento-lisp.workspace = true
+anyhow.workspace = true
+colored = "2.1.0"
+tracing = "0.1.41"
+tento-env.workspace = true
+# `app_env` binds import environments from the secrets vault, so the app crate
+# names the envelope feature itself (dependency doctrine rule 2).
+tento-secrets = { workspace = true, features = ["vault"] }
+futures.workspace = true
+serde = { version = "1.0.218", features = ["derive"] }
+serde_json = { version = "1.0.111", features = ["raw_value"] }
+tento-bundle-contract = { path = "../tento-bundle-contract" }
+thiserror = "1.0.56"
+tokio = { version = "1.42.0", features = ["full"] }
+
+# The account-kind probes run in their own process group, which is killed as
+# one when a probe misses its deadline.
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+tento-env.workspace = true
+sha2.workspace = true
+hex.workspace = true
+
+# The account-kind executor's tests play the fake app CLI and keychain tool
+# themselves (run through a symlink), so `main` is theirs.
+[[test]]
+name = "account_kind"
+harness = false

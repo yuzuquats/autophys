@@ -1,0 +1,8 @@
+(struct ItemPlan shape: (enum "item.plan/v1") item: string params: any)
+(struct ReconcileCheck shape: (enum "reconcile.check/v1") state: (enum "ok" "drift") detail: string)
+(struct ReconcileResult shape: (enum "reconcile.result/v1") state: (enum "unchanged" "changed" "would-change" "failed") detail: string error: (option string))
+
+(trait Item
+  (fn privileged (self) -> (list string))
+  (fn check (self) -> ReconcileCheck)
+  (fn reconcile (self apply: bool = false) -> ReconcileResult))

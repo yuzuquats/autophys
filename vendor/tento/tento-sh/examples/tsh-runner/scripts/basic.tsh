@@ -1,0 +1,5 @@
+;; Basic sequence: each command's JSON result flows forward via `prev`.
+(create-sheet :name "basic-demo")
+(add-row :sheet (get prev "id") :label "first row")
+(set-cell :row (get prev "id") :col "A" :value 42)
+(show)

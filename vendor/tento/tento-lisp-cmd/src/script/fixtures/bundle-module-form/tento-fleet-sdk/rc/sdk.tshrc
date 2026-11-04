@@ -1,0 +1,4 @@
+(fn run (argv: (list string)) -> any
+  {"ok" false "status" 1 "stdout" "" "stderr" "stub run"})
+(fn sudo (argv: (list string)) -> any
+  {"ok" false "status" 1 "stdout" "" "stderr" "stub sudo"})

@@ -1,0 +1,31 @@
+{
+  "type": "rail-state",
+  "name": "drag-width",
+  "cases": [
+    {
+      "name": "the pointer's travel is added to the start width",
+      "input": { "fn": "dragWidth", "startPx": 300, "deltaPx": 50, "bounds": { "minPx": 220, "maxPx": 600 } },
+      "expected": 350
+    },
+    {
+      "name": "dragging left past the floor stops at the floor",
+      "input": { "fn": "dragWidth", "startPx": 300, "deltaPx": -100, "bounds": { "minPx": 220, "maxPx": 600 } },
+      "expected": 220
+    },
+    {
+      "name": "dragging right past the ceiling stops at the ceiling",
+      "input": { "fn": "dragWidth", "startPx": 300, "deltaPx": 400, "bounds": { "minPx": 220, "maxPx": 600 } },
+      "expected": 600
+    },
+    {
+      "name": "a sub-pixel travel rounds",
+      "input": { "fn": "dragWidth", "startPx": 300, "deltaPx": 0.4, "bounds": { "minPx": 220, "maxPx": 600 } },
+      "expected": 300
+    },
+    {
+      "name": "a start width outside the bounds is pulled in on the first move",
+      "input": { "fn": "dragWidth", "startPx": 800, "deltaPx": 0, "bounds": { "minPx": 220, "maxPx": 600 } },
+      "expected": 600
+    }
+  ]
+}

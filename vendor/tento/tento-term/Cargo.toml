@@ -1,0 +1,34 @@
+[package]
+name = "tento-term"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+description = "Terminal rendering primitives: ANSI-aware width/pad/truncate, box-drawing trees, and a responsive table model"
+
+[features]
+# `watch`: resize-aware live rendering (`live` module, `Table::watch`, …).
+# Off by default so the base crate stays dep-light.
+watch = ["dep:crossterm"]
+
+[dependencies]
+colored.workspace = true
+unicode-segmentation.workspace = true
+unicode-width.workspace = true
+terminal_size.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# Cross-platform terminal events + raw mode for the `watch` feature.
+crossterm = { workspace = true, optional = true }
+
+[dev-dependencies]
+# preserve_order so the fixture-bless writeback keeps the JSON key order intact.
+serde_json = { workspace = true, features = ["preserve_order"] }
+
+[[example]]
+name = "watch_table"
+required-features = ["watch"]
+
+[[example]]
+name = "watch_tree"
+required-features = ["watch"]

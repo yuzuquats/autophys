@@ -1,0 +1,5 @@
+<svg id="timeline-row" fill="currentColor" viewBox="0 0 16 16">
+  <rect x="2.75" y="2" width="2.5" height="10" rx="1.25"/>
+  <rect x="6.75" y="4" width="2.5" height="10" rx="1.25"/>
+  <rect x="10.75" y="2" width="2.5" height="6" rx="1.25"/>
+</svg>

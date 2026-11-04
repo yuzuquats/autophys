@@ -1,0 +1,12 @@
+[plugin]
+name = "tsh-item-spotlight"
+version = "0.1.0"
+mount = "item.spotlight"
+rc = "rc/spotlight.tshrc"
+transport = "oneshot"
+languages = ["tsh"]
+requires_tsh = ">=0.1.57"
+[dependencies]
+sdk = { package = "tento-fleet-sdk", version = ">=0.1, <0.2" }
+[traits]
+provides = ["Item"]

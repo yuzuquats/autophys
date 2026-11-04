@@ -1,0 +1,8 @@
+[rebar]
+name = "tento-ui-js"
+
+[rules]
+charter = { path = ".rebars/charter.rebar" }
+
+[kinds]
+ui-charter = { path = "scripts/charter-rebar.deno.ts" }

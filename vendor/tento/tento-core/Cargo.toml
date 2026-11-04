@@ -1,0 +1,29 @@
+[package]
+name = "tento-core"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow.workspace = true
+chrono.workspace = true
+dashmap.workspace = true
+futures.workspace = true
+phf.workspace = true
+rand.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tento-env.workspace = true
+tento-bundle-fs.workspace = true
+serde_path_to_error.workspace = true
+serde_with.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tento-openapi.workspace = true
+validator.workspace = true
+tento-logger = { workspace = true, features = ["buckets"] }
+tento-buckets.workspace = true
+tento-term.workspace = true
+
+[dev-dependencies]
+tempfile = "3.10.1"
+tracing-subscriber.workspace = true

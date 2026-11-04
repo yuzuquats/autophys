@@ -1,0 +1,9 @@
+{
+  "schema": "tsh.app/v1",
+  "name": "tento-fleet-item",
+  "version": "0.1.0",
+  "mount": "std.fleet.item",
+  "entrypoint": "rc/item.tshrc",
+  "transport": "oneshot",
+  "commands": {}
+}

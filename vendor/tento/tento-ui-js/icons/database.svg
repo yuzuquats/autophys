@@ -1,0 +1,5 @@
+<svg id="database" viewBox="0 0 16 16" fill="none">
+  <path d="M13.5 3.5c0 1.1-2.46 2-5.5 2s-5.5-.9-5.5-2 2.46-2 5.5-2 5.5.9 5.5 2Z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M2.5 3.5v8c0 1.1 2.46 2 5.5 2s5.5-.9 5.5-2v-8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M13.5 7.5c0 1.1-2.46 2-5.5 2s-5.5-.9-5.5-2M13.5 11.5c0 1.1-2.46 2-5.5 2s-5.5-.9-5.5-2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

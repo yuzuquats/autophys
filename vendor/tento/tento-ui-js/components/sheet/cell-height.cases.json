@@ -1,0 +1,799 @@
+{
+  "type": "cell-height",
+  "name": "cell-height",
+  "description": "The three predicates of `cell-height.ts` as one probe language. Each case is a list of PROBES and the ANSWER each must give, in order. `ask: \"honorsPlan\"` is the SKIP axis (planned vs cached; `null` means absent, the string \"NaN\" means NaN — JSON carries neither); `ask: \"isDeadOnScreen\"` is the sub-pixel threshold, and also the judgement of whether a reading is a height at all — the string sentinels \"NaN\" / \"Infinity\" / \"-Infinity\" carry the values JSON has no literal for, and every one of them is DEAD (a reading that is not a height is not evidence of paint; `NaN < 1` is `false`, so the bare threshold scored it alive); `ask: \"deadColumns\"` is the REVEAL axis, one call per probe, whose `invalid` counter is orthogonal to the dead ones — it counts unusable samples in EVERY column, so one inside an otherwise-alive column is reported without that column being called dead; `ask: \"cell\"` builds one `CellHeight.of(planned, cached, measured)` triple and asks BOTH consumers about it, which is the shape that splits them (finding C2). The compile-time brand-distinctness assertions cannot be data and stay in `cell-height.deno.test.ts`.",
+  "cases": [
+    {
+      "name": "honorsPlan is planned-vs-cached, verbatim the === it replaced",
+      "input": {
+        "probes": [
+          {
+            "ask": "honorsPlan",
+            "planned": 45,
+            "cached": 45
+          },
+          {
+            "ask": "honorsPlan",
+            "planned": 45,
+            "cached": 44
+          },
+          {
+            "ask": "honorsPlan",
+            "planned": 45,
+            "cached": 0
+          },
+          {
+            "ask": "honorsPlan",
+            "planned": null,
+            "cached": 45
+          },
+          {
+            "ask": "honorsPlan",
+            "planned": 45,
+            "cached": null
+          },
+          {
+            "ask": "honorsPlan",
+            "planned": null,
+            "cached": null
+          },
+          {
+            "ask": "honorsPlan",
+            "planned": "NaN",
+            "cached": 45
+          },
+          {
+            "ask": "honorsPlan",
+            "planned": 45,
+            "cached": "NaN"
+          }
+        ]
+      },
+      "expected": {
+        "answers": [
+          {
+            "honorsPlan": true
+          },
+          {
+            "honorsPlan": false
+          },
+          {
+            "honorsPlan": false
+          },
+          {
+            "honorsPlan": false
+          },
+          {
+            "honorsPlan": false
+          },
+          {
+            "honorsPlan": false
+          },
+          {
+            "honorsPlan": false
+          },
+          {
+            "honorsPlan": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "isDeadOnScreen is sub-pixel, matching the sweep's >= 1, and a reading that is not a height is dead",
+      "input": {
+        "probes": [
+          {
+            "ask": "isDeadOnScreen",
+            "measured": 0
+          },
+          {
+            "ask": "isDeadOnScreen",
+            "measured": 0.5
+          },
+          {
+            "ask": "isDeadOnScreen",
+            "measured": 1
+          },
+          {
+            "ask": "isDeadOnScreen",
+            "measured": 45
+          },
+          {
+            "ask": "isDeadOnScreen",
+            "measured": "NaN"
+          },
+          {
+            "ask": "isDeadOnScreen",
+            "measured": -1
+          },
+          {
+            "ask": "isDeadOnScreen",
+            "measured": "Infinity"
+          },
+          {
+            "ask": "isDeadOnScreen",
+            "measured": "-Infinity"
+          }
+        ]
+      },
+      "expected": {
+        "answers": [
+          {
+            "dead": true
+          },
+          {
+            "dead": true
+          },
+          {
+            "dead": false
+          },
+          {
+            "dead": false
+          },
+          {
+            "dead": true
+          },
+          {
+            "dead": true
+          },
+          {
+            "dead": true
+          },
+          {
+            "dead": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "C2 — planned 45, cached 45, measured 0 splits the two consumers",
+      "input": {
+        "probes": [
+          {
+            "ask": "cell",
+            "planned": 45,
+            "cached": 45,
+            "measured": 0,
+            "index": 7
+          }
+        ]
+      },
+      "expected": {
+        "answers": [
+          {
+            "honorsPlan": true,
+            "report": {
+              "deadColumns": 1,
+              "deadCells": 1,
+              "deadIndices": [
+                7
+              ],
+              "invalid": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "the inverse — planned 45, cached 0, measured 45 flips both",
+      "input": {
+        "probes": [
+          {
+            "ask": "cell",
+            "planned": 45,
+            "cached": 0,
+            "measured": 45,
+            "index": 7
+          }
+        ]
+      },
+      "expected": {
+        "answers": [
+          {
+            "honorsPlan": false,
+            "report": {
+              "deadColumns": 0,
+              "deadCells": 0,
+              "deadIndices": [],
+              "invalid": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "deadColumns counts columns whose every countable cell is dead, and counts unusable samples wherever they land",
+      "input": {
+        "probes": [
+          {
+            "ask": "deadColumns",
+            "columns": [
+              {
+                "index": 3,
+                "cells": [
+                  {
+                    "hidden": false,
+                    "measured": 0
+                  },
+                  {
+                    "hidden": false,
+                    "measured": 0
+                  },
+                  {
+                    "hidden": false,
+                    "measured": 0
+                  },
+                  {
+                    "hidden": false,
+                    "measured": 0
+                  }
+                ]
+              },
+              {
+                "index": 4,
+                "cells": [
+                  {
+                    "hidden": false,
+                    "measured": 45
+                  },
+                  {
+                    "hidden": false,
+                    "measured": 45
+                  },
+                  {
+                    "hidden": false,
+                    "measured": 45
+                  },
+                  {
+                    "hidden": false,
+                    "measured": 45
+                  }
+                ]
+              },
+              {
+                "index": 5,
+                "cells": [
+                  {
+                    "hidden": false,
+                    "measured": 0
+                  },
+                  {
+                    "hidden": false,
+                    "measured": 0
+                  }
+                ]
+              },
+              {
+                "index": 6,
+                "cells": [
+                  {
+                    "hidden": false,
+                    "measured": 45
+                  },
+                  {
+                    "hidden": false,
+                    "measured": "NaN"
+                  },
+                  {
+                    "hidden": false,
+                    "measured": 45
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "answers": [
+          {
+            "report": {
+              "deadColumns": 2,
+              "deadCells": 6,
+              "deadIndices": [
+                3,
+                5
+              ],
+              "invalid": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a partially dead column is mid-pipeline, not a breach",
+      "input": {
+        "probes": [
+          {
+            "ask": "deadColumns",
+            "columns": [
+              {
+                "index": 1,
+                "cells": [
+                  {
+                    "hidden": false,
+                    "measured": 0
+                  },
+                  {
+                    "hidden": false,
+                    "measured": 45
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "answers": [
+          {
+            "report": {
+              "deadColumns": 0,
+              "deadCells": 0,
+              "deadIndices": [],
+              "invalid": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "hidden cells are excluded, and an all-hidden column is not a violation",
+      "input": {
+        "probes": [
+          {
+            "ask": "deadColumns",
+            "columns": [
+              {
+                "index": 1,
+                "cells": [
+                  {
+                    "hidden": true,
+                    "measured": 0
+                  },
+                  {
+                    "hidden": true,
+                    "measured": 0
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "ask": "deadColumns",
+            "columns": [
+              {
+                "index": 2,
+                "cells": [
+                  {
+                    "hidden": true,
+                    "measured": 0
+                  },
+                  {
+                    "hidden": false,
+                    "measured": 0
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "ask": "deadColumns",
+            "columns": [
+              {
+                "index": 3,
+                "cells": [
+                  {
+                    "hidden": true,
+                    "measured": 45
+                  },
+                  {
+                    "hidden": false,
+                    "measured": 0
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "answers": [
+          {
+            "report": {
+              "deadColumns": 0,
+              "deadCells": 0,
+              "deadIndices": [],
+              "invalid": 0
+            }
+          },
+          {
+            "report": {
+              "deadColumns": 1,
+              "deadCells": 1,
+              "deadIndices": [
+                2
+              ],
+              "invalid": 0
+            }
+          },
+          {
+            "report": {
+              "deadColumns": 1,
+              "deadCells": 1,
+              "deadIndices": [
+                3
+              ],
+              "invalid": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "an empty column is not a violation, and a null index survives",
+      "input": {
+        "probes": [
+          {
+            "ask": "deadColumns",
+            "columns": [
+              {
+                "index": 9,
+                "cells": []
+              }
+            ]
+          },
+          {
+            "ask": "deadColumns",
+            "columns": [
+              {
+                "index": null,
+                "cells": [
+                  {
+                    "hidden": false,
+                    "measured": 0
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "answers": [
+          {
+            "report": {
+              "deadColumns": 0,
+              "deadCells": 0,
+              "deadIndices": [],
+              "invalid": 0
+            }
+          },
+          {
+            "report": {
+              "deadColumns": 1,
+              "deadCells": 1,
+              "deadIndices": [
+                null
+              ],
+              "invalid": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "partitionDead: a dead column inside the visible strip is the breach, a flank column is cosmetic, and a column without an index is judged inside",
+      "input": {
+        "probes": [
+          {
+            "ask": "partitionDead",
+            "deadIndices": [
+              -13,
+              -12,
+              null,
+              0,
+              2,
+              3
+            ],
+            "strip": {
+              "start": 0,
+              "end": 2
+            }
+          },
+          {
+            "ask": "partitionDead",
+            "deadIndices": [
+              -13,
+              -13,
+              -13,
+              -12,
+              -12,
+              -12,
+              -11,
+              -11,
+              -11
+            ],
+            "strip": {
+              "start": -3,
+              "end": 6
+            }
+          },
+          {
+            "ask": "partitionDead",
+            "deadIndices": [],
+            "strip": {
+              "start": 0,
+              "end": 2
+            }
+          }
+        ]
+      },
+      "expected": {
+        "answers": [
+          {
+            "partition": {
+              "inside": [
+                null,
+                0,
+                2
+              ],
+              "flank": [
+                -13,
+                -12,
+                3
+              ]
+            }
+          },
+          {
+            "partition": {
+              "inside": [],
+              "flank": [
+                -13,
+                -13,
+                -13,
+                -12,
+                -12,
+                -12,
+                -11,
+                -11,
+                -11
+              ]
+            }
+          },
+          {
+            "partition": {
+              "inside": [],
+              "flank": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "decideRestrip: the strip that did not move is the strip that was judged",
+      "input": {
+        "probes": [
+          {
+            "ask": "decideRestrip",
+            "armed": {
+              "start": 10,
+              "end": 20
+            },
+            "live": {
+              "start": 10,
+              "end": 20
+            }
+          },
+          {
+            "ask": "decideRestrip",
+            "armed": {
+              "start": 0,
+              "end": 0
+            },
+            "live": {
+              "start": 0,
+              "end": 0
+            }
+          },
+          {
+            "ask": "decideRestrip",
+            "armed": {
+              "start": -3,
+              "end": 4
+            },
+            "live": {
+              "start": -3,
+              "end": 4
+            }
+          }
+        ]
+      },
+      "expected": {
+        "answers": [
+          {
+            "restrip": {
+              "kind": "sample"
+            }
+          },
+          {
+            "restrip": {
+              "kind": "sample"
+            }
+          },
+          {
+            "restrip": {
+              "kind": "sample"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "decideRestrip: one column either way re-arms, and carries both strips",
+      "input": {
+        "probes": [
+          {
+            "ask": "decideRestrip",
+            "armed": {
+              "start": 10,
+              "end": 20
+            },
+            "live": {
+              "start": 11,
+              "end": 21
+            }
+          },
+          {
+            "ask": "decideRestrip",
+            "armed": {
+              "start": 10,
+              "end": 20
+            },
+            "live": {
+              "start": 9,
+              "end": 19
+            }
+          },
+          {
+            "ask": "decideRestrip",
+            "armed": {
+              "start": 10,
+              "end": 20
+            },
+            "live": {
+              "start": 10,
+              "end": 21
+            }
+          },
+          {
+            "ask": "decideRestrip",
+            "armed": {
+              "start": 10,
+              "end": 20
+            },
+            "live": {
+              "start": 11,
+              "end": 20
+            }
+          }
+        ]
+      },
+      "expected": {
+        "answers": [
+          {
+            "restrip": {
+              "kind": "rearm",
+              "from": {
+                "start": 10,
+                "end": 20
+              },
+              "to": {
+                "start": 11,
+                "end": 21
+              }
+            }
+          },
+          {
+            "restrip": {
+              "kind": "rearm",
+              "from": {
+                "start": 10,
+                "end": 20
+              },
+              "to": {
+                "start": 9,
+                "end": 19
+              }
+            }
+          },
+          {
+            "restrip": {
+              "kind": "rearm",
+              "from": {
+                "start": 10,
+                "end": 20
+              },
+              "to": {
+                "start": 10,
+                "end": 21
+              }
+            }
+          },
+          {
+            "restrip": {
+              "kind": "rearm",
+              "from": {
+                "start": 10,
+                "end": 20
+              },
+              "to": {
+                "start": 11,
+                "end": 20
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "decideRestrip: a disjoint strip re-arms on the same rule, not a louder one",
+      "input": {
+        "probes": [
+          {
+            "ask": "decideRestrip",
+            "armed": {
+              "start": 10,
+              "end": 20
+            },
+            "live": {
+              "start": 400,
+              "end": 410
+            }
+          },
+          {
+            "ask": "decideRestrip",
+            "armed": {
+              "start": 10,
+              "end": 20
+            },
+            "live": {
+              "start": -40330,
+              "end": -40320
+            }
+          }
+        ]
+      },
+      "expected": {
+        "answers": [
+          {
+            "restrip": {
+              "kind": "rearm",
+              "from": {
+                "start": 10,
+                "end": 20
+              },
+              "to": {
+                "start": 400,
+                "end": 410
+              }
+            }
+          },
+          {
+            "restrip": {
+              "kind": "rearm",
+              "from": {
+                "start": 10,
+                "end": 20
+              },
+              "to": {
+                "start": -40330,
+                "end": -40320
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

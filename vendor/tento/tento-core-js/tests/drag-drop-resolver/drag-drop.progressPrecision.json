@@ -1,0 +1,158 @@
+{
+  "type": "drag-drop",
+  "name": "progressPrecision",
+  "tree": {
+    "0/nestable": {
+      "1/nestable": {}
+    },
+    "2/nestable": {},
+    "3": {}
+  },
+  "cases": [
+    {
+      "name": "Dropped at (x=0, y=1",
+      "input": { "start": 3, "movedTo": { "x": 0, "y": 1.0 } },
+      "expected": {
+        "validActions": [
+          { "type": "top", "idx": 1 }
+        ]
+      }
+    },
+    {
+      "name": "Dropped at (x=0, y=2",
+      "input": { "start": 3, "movedTo": { "x": 0, "y": 2.0 } },
+      "expected": {
+        "validActions": [
+          { "type": "top", "idx": 2 },
+          { "type": "bottom", "idx": 0 }
+        ]
+      }
+    },
+    {
+      "name": "Dropped at (x=0, y=1",
+      "input": { "start": 3, "movedTo": { "x": 0, "y": 1.33 } },
+      "expected": {
+        "validActions": [
+          { "type": "nest", "idx": 1 }
+        ]
+      }
+    },
+    {
+      "name": "Dropped at (x=0, y=1",
+      "input": { "start": 3, "movedTo": { "x": 0, "y": 1.3299999 } },
+      "expected": {
+        "validActions": [
+          { "type": "top", "idx": 1 }
+        ]
+      }
+    },
+    {
+      "name": "Dropped at (x=0, y=1",
+      "input": { "start": 3, "movedTo": { "x": 0, "y": 1.3300001 } },
+      "expected": {
+        "validActions": [
+          { "type": "nest", "idx": 1 }
+        ]
+      }
+    },
+    {
+      "name": "Dropped at (x=0, y=1",
+      "input": { "start": 3, "movedTo": { "x": 0, "y": 1.66 } },
+      "expected": {
+        "validActions": [
+          { "type": "nest", "idx": 1 }
+        ]
+      }
+    },
+    {
+      "name": "Dropped at (x=0, y=1",
+      "input": { "start": 3, "movedTo": { "x": 0, "y": 1.6599999 } },
+      "expected": {
+        "validActions": [
+          { "type": "nest", "idx": 1 }
+        ]
+      }
+    },
+    {
+      "name": "Dropped at (x=0, y=1",
+      "input": { "start": 3, "movedTo": { "x": 0, "y": 1.6600001 } },
+      "expected": {
+        "validActions": [
+          { "type": "top", "idx": 2 },
+          { "type": "bottom", "idx": 0 }
+        ]
+      }
+    },
+    {
+      "name": "Dropped at (x=0, y=3",
+      "input": { "start": 1, "movedTo": { "x": 0, "y": 3.5 } },
+      "expected": {
+        "validActions": [
+          { "type": "bottom", "idx": 3 }
+        ]
+      }
+    },
+    {
+      "name": "Dropped at (x=0, y=3",
+      "input": { "start": 1, "movedTo": { "x": 0, "y": 3.4999999 } },
+      "expected": {
+        "validActions": [
+          { "type": "bottom", "idx": 2 },
+          { "type": "top", "idx": 3 }
+        ]
+      }
+    },
+    {
+      "name": "Dropped at (x=0, y=3",
+      "input": { "start": 1, "movedTo": { "x": 0, "y": 3.5000001 } },
+      "expected": {
+        "validActions": [
+          { "type": "bottom", "idx": 3 }
+        ]
+      }
+    },
+    {
+      "name": "Dropped at (x=0, y=0",
+      "input": { "start": 1, "movedTo": { "x": 0, "y": 0.5 } },
+      "expected": {
+        "validActions": [
+          { "type": "top", "idx": 2 },
+          { "type": "bottom", "idx": 0 }
+        ]
+      }
+    },
+    {
+      "name": "Dropped at (x=0, y=1",
+      "input": { "start": 2, "movedTo": { "x": 0, "y": 1.333333333333333 } },
+      "expected": {
+        "validActions": [
+          { "type": "nest", "idx": 1 }
+        ]
+      }
+    },
+    {
+      "name": "Dropped at (x=0, y=1",
+      "input": { "start": 2, "movedTo": { "x": 0, "y": 1.65 } },
+      "expected": {
+        "validActions": [
+          { "type": "nest", "idx": 1 }
+        ]
+      }
+    },
+    {
+      "name": "Dropped at (x=0, y=1",
+      "input": { "start": 2, "movedTo": { "x": 0, "y": 1.666666666666667 } },
+      "expected": { "validActions": null }
+    },
+    {
+      "name": "valid parents",
+      "input": {},
+      "expected": {
+        "0": { "top": ["root"], "bottom": ["0"] },
+        "1": { "top": ["0"], "bottom": ["root", "0", "1"] },
+        "2": { "top": ["root"], "bottom": ["root", "2"] },
+        "3": { "top": ["root"], "bottom": ["root"] }
+      }
+    }
+  ]
+}

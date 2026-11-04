@@ -1,0 +1,194 @@
+{
+  "type": "sidebar-container-state",
+  "name": "diff",
+  "cases": [
+    {
+      "name": "first snapshot emits full initialization ops",
+      "input": {
+        "fn": "diffSnapshots",
+        "next": {
+          "presentation": "docked",
+          "widthCss": "320px",
+          "widthPx": 320,
+          "animate": true,
+          "active": true,
+          "stickied": true,
+          "hoverStripVisible": false,
+          "resizeStripVisible": true,
+          "mainContentTransform": "translateX(calc(320px + var(--extra-sticky-margin, 0px)))",
+          "sidebarTransform": "translateX(0px)",
+          "backdropVisible": false,
+          "dismissOnBackdrop": false,
+          "dismissOnEscape": false
+        }
+      },
+      "expected": [
+        {
+          "type": "animation",
+          "animate": true
+        },
+        {
+          "type": "width",
+          "widthCss": "320px",
+          "expanding": true
+        },
+        {
+          "type": "affordances",
+          "hoverStripVisible": false,
+          "resizeStripVisible": true
+        },
+        {
+          "type": "layout",
+          "active": true,
+          "stickied": true,
+          "mainContentTransform": "translateX(calc(320px + var(--extra-sticky-margin, 0px)))",
+          "sidebarTransform": "translateX(0px)"
+        },
+        {
+          "type": "backdrop",
+          "visible": false,
+          "dismissOnBackdrop": false,
+          "dismissOnEscape": false
+        }
+      ]
+    },
+    {
+      "name": "unchanged snapshots emit no ops",
+      "input": {
+        "fn": "diffSnapshots",
+        "prev": {
+          "presentation": "modal",
+          "widthCss": "340px",
+          "widthPx": 340,
+          "animate": true,
+          "active": true,
+          "stickied": false,
+          "hoverStripVisible": false,
+          "resizeStripVisible": false,
+          "mainContentTransform": "translateX(0px)",
+          "sidebarTransform": "translateX(0px)",
+          "backdropVisible": true,
+          "dismissOnBackdrop": true,
+          "dismissOnEscape": true
+        },
+        "next": {
+          "presentation": "modal",
+          "widthCss": "340px",
+          "widthPx": 340,
+          "animate": true,
+          "active": true,
+          "stickied": false,
+          "hoverStripVisible": false,
+          "resizeStripVisible": false,
+          "mainContentTransform": "translateX(0px)",
+          "sidebarTransform": "translateX(0px)",
+          "backdropVisible": true,
+          "dismissOnBackdrop": true,
+          "dismissOnEscape": true
+        }
+      },
+      "expected": []
+    },
+    {
+      "name": "modal open transition only updates layout and backdrop",
+      "input": {
+        "fn": "diffSnapshots",
+        "prev": {
+          "presentation": "modal",
+          "widthCss": "340px",
+          "widthPx": 340,
+          "animate": true,
+          "active": false,
+          "stickied": false,
+          "hoverStripVisible": false,
+          "resizeStripVisible": false,
+          "mainContentTransform": "translateX(0px)",
+          "sidebarTransform": "translateX(calc(-1 * 340px - var(--extra-sticky-margin, 0px)))",
+          "backdropVisible": false,
+          "dismissOnBackdrop": false,
+          "dismissOnEscape": false
+        },
+        "next": {
+          "presentation": "modal",
+          "widthCss": "340px",
+          "widthPx": 340,
+          "animate": true,
+          "active": true,
+          "stickied": false,
+          "hoverStripVisible": false,
+          "resizeStripVisible": false,
+          "mainContentTransform": "translateX(0px)",
+          "sidebarTransform": "translateX(0px)",
+          "backdropVisible": true,
+          "dismissOnBackdrop": true,
+          "dismissOnEscape": true
+        }
+      },
+      "expected": [
+        {
+          "type": "layout",
+          "active": true,
+          "stickied": false,
+          "mainContentTransform": "translateX(0px)",
+          "sidebarTransform": "translateX(0px)"
+        },
+        {
+          "type": "backdrop",
+          "visible": true,
+          "dismissOnBackdrop": true,
+          "dismissOnEscape": true
+        }
+      ]
+    },
+    {
+      "name": "width changes update width and layout together",
+      "input": {
+        "fn": "diffSnapshots",
+        "prev": {
+          "presentation": "docked",
+          "widthCss": "280px",
+          "widthPx": 280,
+          "animate": true,
+          "active": true,
+          "stickied": true,
+          "hoverStripVisible": false,
+          "resizeStripVisible": true,
+          "mainContentTransform": "translateX(calc(280px + var(--extra-sticky-margin, 0px)))",
+          "sidebarTransform": "translateX(0px)",
+          "backdropVisible": false,
+          "dismissOnBackdrop": false,
+          "dismissOnEscape": false
+        },
+        "next": {
+          "presentation": "docked",
+          "widthCss": "320px",
+          "widthPx": 320,
+          "animate": true,
+          "active": true,
+          "stickied": true,
+          "hoverStripVisible": false,
+          "resizeStripVisible": true,
+          "mainContentTransform": "translateX(calc(320px + var(--extra-sticky-margin, 0px)))",
+          "sidebarTransform": "translateX(0px)",
+          "backdropVisible": false,
+          "dismissOnBackdrop": false,
+          "dismissOnEscape": false
+        }
+      },
+      "expected": [
+        {
+          "type": "width",
+          "widthCss": "320px",
+          "expanding": true
+        },
+        {
+          "type": "layout",
+          "active": true,
+          "stickied": true,
+          "mainContentTransform": "translateX(calc(320px + var(--extra-sticky-margin, 0px)))",
+          "sidebarTransform": "translateX(0px)"
+        }
+      ]
+    }
+  ]
+}

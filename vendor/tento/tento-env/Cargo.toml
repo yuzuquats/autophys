@@ -1,0 +1,14 @@
+[package]
+name = "tento-env"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+colored.workspace = true
+# HOME-from-the-user-database (`getpwuid_r`) for `EnvMap::seed_home` — the one
+# mechanism seed of the declared session environment (never `$HOME`).
+libc = "0.2"
+tento-env-macros = { path = "tento-env-macros" }

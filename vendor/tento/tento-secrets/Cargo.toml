@@ -1,0 +1,38 @@
+[package]
+name = "tento-secrets"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+# The envelope generation (address / secret / envelope / identity / manifest /
+# vault) and its crypto. Package tooling needs only the plaintext `store` and
+# `template` modules; it takes `default-features = false`.
+vault = [
+  "dep:x25519-dalek",
+  "dep:chacha20poly1305",
+  "dep:ed25519-dalek",
+  "dep:hkdf",
+]
+terminal = ["vault", "dep:crossterm"]
+
+[dependencies]
+anyhow.workspace = true
+tento-env.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+toml.workspace = true
+hex.workspace = true
+sha2.workspace = true
+x25519-dalek = { workspace = true, optional = true }
+chacha20poly1305 = { workspace = true, optional = true }
+ed25519-dalek = { workspace = true, optional = true }
+hkdf = { workspace = true, optional = true }
+# `accounts`: private atomic writes, advisory locks, random profile IDs.
+fs2.workspace = true
+zeroize.workspace = true
+getrandom.workspace = true
+crossterm = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile = "3"

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>body { margin: 0; font-family: Helvetica, sans-serif; overflow: hidden; }</style>
+
+<script>
+  // Detect static subdomain from current hostname
+  // dev--admin.lona.so -> dev--static.lona.so
+  // admin.lona.so -> static.lona.so
+  // aws-04--admin.lona.so -> aws-04--static.lona.so
+  window.getStaticSubdomain = () => {
+    const hostname = window.location.hostname;
+    const parts = hostname.split(".");
+    if (parts.length < 3) {
+      return "static";
+    }
+    const subdomain = parts[0];
+    if (subdomain.includes("--")) {
+      const prefix = subdomain.split("--")[0];
+      return prefix + "--static";
+    }
+    const serviceSubdomains = ["calendar", "static", "ui", "tasks", "blog", "admin", "booking"];
+    if (!serviceSubdomains.includes(subdomain)) {
+      return subdomain + "--static";
+    }
+    return "static";
+  };
+
+  function loadCss(path) {
+    const $link = document.createElement("link");
+    $link.rel = "stylesheet";
+    $link.type = "text/css";
+    $link.href = `https://${window.getStaticSubdomain()}.lona.so${path}`;
+    document.head.appendChild($link);
+  }
+
+  loadCss("/css/reset.css");
+  loadCss("/css/theme-base.css");
+  loadCss("/css/colors.css");
+
+  // Favicon
+  const $fav = document.createElement("link");
+  $fav.rel = "icon";
+  $fav.type = "image/svg+xml";
+  $fav.href = `https://${window.getStaticSubdomain()}.lona.so/icons/admin/favicon.svg`;
+  document.head.appendChild($fav);
+</script>

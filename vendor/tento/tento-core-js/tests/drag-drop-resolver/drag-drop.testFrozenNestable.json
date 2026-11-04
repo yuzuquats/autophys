@@ -1,0 +1,55 @@
+{
+  "type": "drag-drop",
+  "name": "testFrozenNestable",
+  "tree": {
+    "0/nestable": {
+      "1/nestable": {}
+    },
+    "2": {},
+    "3/nestable": {
+      "4/nestable": {}
+    },
+    "5": {}
+  },
+  "cases": [
+    {
+      "name": "case 0",
+      "input": { "start": 5, "movedTo": { "x": 0, "y": 0.6 } },
+      "expected": {
+        "validActions": [
+          { "type": "top", "idx": 1 }
+        ]
+      }
+    },
+    {
+      "name": "case 1",
+      "input": { "start": 5, "movedTo": { "x": 0, "y": 2.2 } },
+      "expected": {
+        "validActions": [
+          { "type": "bottom", "idx": 0 }
+        ]
+      }
+    },
+    {
+      "name": "case 2",
+      "input": { "start": 5, "movedTo": { "x": 1.4, "y": 1.85 } },
+      "expected": {
+        "validActions": [
+          { "type": "bottom", "idx": 1 }
+        ]
+      }
+    },
+    {
+      "name": "valid parents",
+      "input": {},
+      "expected": {
+        "0": { "top": ["root"], "bottom": ["0"] },
+        "1": { "top": ["0"], "bottom": ["root", "0", "1"] },
+        "2": { "top": ["root"], "bottom": ["root"] },
+        "3": { "top": ["root"], "bottom": ["3"] },
+        "4": { "top": ["3"], "bottom": ["root", "3", "4"] },
+        "5": { "top": ["root"], "bottom": ["root"] }
+      }
+    }
+  ]
+}

@@ -1,0 +1,560 @@
+{
+  "type": "instance-url",
+  "name": "basic",
+  "description": "instance-aware URL helpers resolve production, dev, fleet, root, and invalid fleet-like hostnames from explicit inputs",
+  "cases": [
+    {
+      "name": "parseHostname: production calendar host has no prefix",
+      "input": {
+        "fn": "parseHostname",
+        "hostname": "calendar.lona.so"
+      },
+      "expected": {
+        "prefix": null,
+        "rootDomain": "lona.so"
+      }
+    },
+    {
+      "name": "parseHostname: production root host has no prefix",
+      "input": {
+        "fn": "parseHostname",
+        "hostname": "lona.so"
+      },
+      "expected": {
+        "prefix": null,
+        "rootDomain": "lona.so"
+      }
+    },
+    {
+      "name": "parseHostname: dev service host resolves dev prefix",
+      "input": {
+        "fn": "parseHostname",
+        "hostname": "dev--calendar.lona.so"
+      },
+      "expected": {
+        "prefix": "dev",
+        "rootDomain": "lona.so"
+      }
+    },
+    {
+      "name": "parseHostname: rc service host resolves rc prefix",
+      "input": {
+        "fn": "parseHostname",
+        "hostname": "rc--calendar.lona.so"
+      },
+      "expected": {
+        "prefix": "rc",
+        "rootDomain": "lona.so"
+      }
+    },
+    {
+      "name": "parseHostname: rc root host resolves rc prefix",
+      "input": {
+        "fn": "parseHostname",
+        "hostname": "rc.lona.so"
+      },
+      "expected": {
+        "prefix": "rc",
+        "rootDomain": "lona.so"
+      }
+    },
+    {
+      "name": "parseHostname: fleet root host resolves provider prefix",
+      "input": {
+        "fn": "parseHostname",
+        "hostname": "aws-04.lona.so"
+      },
+      "expected": {
+        "prefix": "aws-04",
+        "rootDomain": "lona.so"
+      }
+    },
+    {
+      "name": "parseHostname: generic provider-number prefixes are accepted",
+      "input": {
+        "fn": "parseHostname",
+        "hostname": "oracle-12.lona.so"
+      },
+      "expected": {
+        "prefix": "oracle-12",
+        "rootDomain": "lona.so"
+      }
+    },
+    {
+      "name": "parseHostname: uppercase provider is rejected as fleet prefix",
+      "input": {
+        "fn": "parseHostname",
+        "hostname": "AWS-04.lona.so"
+      },
+      "expected": {
+        "prefix": null,
+        "rootDomain": "lona.so"
+      }
+    },
+    {
+      "name": "parseHostname: provider names with digits are rejected as fleet prefix",
+      "input": {
+        "fn": "parseHostname",
+        "hostname": "aws2-04.lona.so"
+      },
+      "expected": {
+        "prefix": null,
+        "rootDomain": "lona.so"
+      }
+    },
+    {
+      "name": "parseHostname: provider without numeric suffix is rejected as fleet prefix",
+      "input": {
+        "fn": "parseHostname",
+        "hostname": "aws.lona.so"
+      },
+      "expected": {
+        "prefix": null,
+        "rootDomain": "lona.so"
+      }
+    },
+    {
+      "name": "parseHostname: numeric suffix with letters is rejected as fleet prefix",
+      "input": {
+        "fn": "parseHostname",
+        "hostname": "aws-04a.lona.so"
+      },
+      "expected": {
+        "prefix": null,
+        "rootDomain": "lona.so"
+      }
+    },
+    {
+      "name": "subdomainForHostname: production host defaults to static",
+      "input": {
+        "fn": "subdomainForHostname",
+        "hostname": "calendar.lona.so"
+      },
+      "expected": "static"
+    },
+    {
+      "name": "subdomainForHostname: dev root prefixes explicit service",
+      "input": {
+        "fn": "subdomainForHostname",
+        "hostname": "dev.lona.so",
+        "service": "blog"
+      },
+      "expected": "dev--blog"
+    },
+    {
+      "name": "subdomainForHostname: short host falls back to requested service label",
+      "input": {
+        "fn": "subdomainForHostname",
+        "hostname": "localhost",
+        "service": "ui"
+      },
+      "expected": "ui"
+    },
+    {
+      "name": "hostForHostname: root service maps to root domain",
+      "input": {
+        "fn": "hostForHostname",
+        "hostname": "calendar.lona.so",
+        "service": null
+      },
+      "expected": "lona.so"
+    },
+    {
+      "name": "hostForHostname: fleet root service keeps fleet prefix",
+      "input": {
+        "fn": "hostForHostname",
+        "hostname": "aws-04--calendar.lona.so",
+        "service": null
+      },
+      "expected": "aws-04.lona.so"
+    },
+    {
+      "name": "hostForHostname: rc root service keeps rc prefix",
+      "input": {
+        "fn": "hostForHostname",
+        "hostname": "rc--calendar.lona.so",
+        "service": null
+      },
+      "expected": "rc.lona.so"
+    },
+    {
+      "name": "hostForHostname: static service uses prefixed service host",
+      "input": {
+        "fn": "hostForHostname",
+        "hostname": "dev.lona.so",
+        "service": "static"
+      },
+      "expected": "dev--static.lona.so"
+    },
+    {
+      "name": "hostForHostname: production calendar host stays on calendar service",
+      "input": {
+        "fn": "hostForHostname",
+        "hostname": "calendar.lona.so",
+        "service": "calendar"
+      },
+      "expected": "calendar.lona.so"
+    },
+    {
+      "name": "hostForHostname: production blog host stays on blog service",
+      "input": {
+        "fn": "hostForHostname",
+        "hostname": "blog.lona.so",
+        "service": "blog"
+      },
+      "expected": "blog.lona.so"
+    },
+    {
+      "name": "hostForHostname: dev blog host stays on blog service",
+      "input": {
+        "fn": "hostForHostname",
+        "hostname": "dev--blog.lona.so",
+        "service": "blog"
+      },
+      "expected": "dev--blog.lona.so"
+    },
+    {
+      "name": "hostForHostname: fleet root resolves blog service host",
+      "input": {
+        "fn": "hostForHostname",
+        "hostname": "aws-04.lona.so",
+        "service": "blog"
+      },
+      "expected": "aws-04--blog.lona.so"
+    },
+    {
+      "name": "urlForHostname: production calendar URL resolves from root host",
+      "input": {
+        "fn": "urlForHostname",
+        "hostname": "lona.so",
+        "path": "/signin",
+        "service": "calendar"
+      },
+      "expected": "https://calendar.lona.so/signin"
+    },
+    {
+      "name": "urlForHostname: fleet root URL resolves from service host",
+      "input": {
+        "fn": "urlForHostname",
+        "hostname": "aws-04--calendar.lona.so",
+        "path": "/api/auth",
+        "service": null
+      },
+      "expected": "https://aws-04.lona.so/api/auth"
+    },
+    {
+      "name": "urlForHostname: production calendar host stays on calendar URL",
+      "input": {
+        "fn": "urlForHostname",
+        "hostname": "calendar.lona.so",
+        "service": "calendar"
+      },
+      "expected": "https://calendar.lona.so"
+    },
+    {
+      "name": "urlForHostname: dev calendar host preserves prefixed calendar URL with query",
+      "input": {
+        "fn": "urlForHostname",
+        "hostname": "dev--calendar.lona.so",
+        "path": "?query=1",
+        "service": "calendar"
+      },
+      "expected": "https://dev--calendar.lona.so?query=1"
+    },
+    {
+      "name": "urlForHostname: dev root host resolves calendar URL",
+      "input": {
+        "fn": "urlForHostname",
+        "hostname": "dev.lona.so",
+        "path": "/path",
+        "service": "calendar"
+      },
+      "expected": "https://dev--calendar.lona.so/path"
+    },
+    {
+      "name": "urlForHostname: rc root host resolves calendar URL",
+      "input": {
+        "fn": "urlForHostname",
+        "hostname": "rc.lona.so",
+        "path": "/path",
+        "service": "calendar"
+      },
+      "expected": "https://rc--calendar.lona.so/path"
+    },
+    {
+      "name": "urlForHostname: fleet service host resolves calendar URL",
+      "input": {
+        "fn": "urlForHostname",
+        "hostname": "aws-04--calendar.lona.so",
+        "path": "/path",
+        "service": "calendar"
+      },
+      "expected": "https://aws-04--calendar.lona.so/path"
+    },
+    {
+      "name": "urlForHostname: production calendar host resolves root URL",
+      "input": {
+        "fn": "urlForHostname",
+        "hostname": "calendar.lona.so",
+        "path": "/signin",
+        "service": null
+      },
+      "expected": "https://lona.so/signin"
+    },
+    {
+      "name": "urlForHostname: dev calendar host resolves root URL",
+      "input": {
+        "fn": "urlForHostname",
+        "hostname": "dev--calendar.lona.so",
+        "path": "/signin",
+        "service": null
+      },
+      "expected": "https://dev.lona.so/signin"
+    },
+    {
+      "name": "urlForHostname: fleet root host resolves root URL",
+      "input": {
+        "fn": "urlForHostname",
+        "hostname": "aws-04.lona.so",
+        "path": "/signin",
+        "service": null
+      },
+      "expected": "https://aws-04.lona.so/signin"
+    },
+    {
+      "name": "urlForHostname: production root resolves blog URL",
+      "input": {
+        "fn": "urlForHostname",
+        "hostname": "lona.so",
+        "path": "/post",
+        "service": "blog"
+      },
+      "expected": "https://blog.lona.so/post"
+    },
+    {
+      "name": "urlForHostname: dev root resolves blog URL",
+      "input": {
+        "fn": "urlForHostname",
+        "hostname": "dev.lona.so",
+        "path": "/post",
+        "service": "blog"
+      },
+      "expected": "https://dev--blog.lona.so/post"
+    },
+    {
+      "name": "urlForHostname: fleet root resolves static URL",
+      "input": {
+        "fn": "urlForHostname",
+        "hostname": "aws-10--calendar.lona.so",
+        "path": "/js/app.js",
+        "service": "static"
+      },
+      "expected": "https://aws-10--static.lona.so/js/app.js"
+    },
+    {
+      "name": "urlForHostname: protocol is preserved when provided explicitly",
+      "input": {
+        "fn": "urlForHostname",
+        "hostname": "calendar.lona.so",
+        "path": "/css/reset.css",
+        "service": "static",
+        "protocol": "http:"
+      },
+      "expected": "http://static.lona.so/css/reset.css"
+    },
+    {
+      "name": "allowedOriginsForHostname: production instance includes root and calendar",
+      "input": {
+        "fn": "allowedOriginsForHostname",
+        "hostname": "calendar.lona.so"
+      },
+      "expected": [
+        "https://lona.so",
+        "https://calendar.lona.so"
+      ]
+    },
+    {
+      "name": "allowedOriginsForHostname: dev instance includes prefixed root and calendar",
+      "input": {
+        "fn": "allowedOriginsForHostname",
+        "hostname": "dev--calendar.lona.so"
+      },
+      "expected": [
+        "https://dev.lona.so",
+        "https://dev--calendar.lona.so"
+      ]
+    },
+    {
+      "name": "allowedOriginsForHostname: rc instance includes prefixed root and calendar",
+      "input": {
+        "fn": "allowedOriginsForHostname",
+        "hostname": "rc--calendar.lona.so"
+      },
+      "expected": [
+        "https://rc.lona.so",
+        "https://rc--calendar.lona.so"
+      ]
+    },
+    {
+      "name": "allowedOriginsForHostname: fleet instance includes prefixed root and calendar",
+      "input": {
+        "fn": "allowedOriginsForHostname",
+        "hostname": "aws-04--calendar.lona.so"
+      },
+      "expected": [
+        "https://aws-04.lona.so",
+        "https://aws-04--calendar.lona.so"
+      ]
+    },
+    {
+      "name": "isRootDomainForHostname: production apex is the root domain",
+      "input": { "fn": "isRootDomainForHostname", "hostname": "lona.so" },
+      "expected": true
+    },
+    {
+      "name": "isRootDomainForHostname: dev prefix is still the root domain",
+      "input": { "fn": "isRootDomainForHostname", "hostname": "dev.lona.so" },
+      "expected": true
+    },
+    {
+      "name": "isRootDomainForHostname: rc prefix is still the root domain",
+      "input": { "fn": "isRootDomainForHostname", "hostname": "rc.lona.so" },
+      "expected": true
+    },
+    {
+      "name": "isRootDomainForHostname: rwc-01 fleet prefix is still the root domain",
+      "input": { "fn": "isRootDomainForHostname", "hostname": "rwc-01.lona.so" },
+      "expected": true
+    },
+    {
+      "name": "isRootDomainForHostname: aws-04 fleet prefix is still the root domain",
+      "input": { "fn": "isRootDomainForHostname", "hostname": "aws-04.lona.so" },
+      "expected": true
+    },
+    {
+      "name": "isRootDomainForHostname: www is treated as the root domain",
+      "input": { "fn": "isRootDomainForHostname", "hostname": "www.lona.so" },
+      "expected": true
+    },
+    {
+      "name": "isRootDomainForHostname: blog subdomain is not the root domain",
+      "input": { "fn": "isRootDomainForHostname", "hostname": "blog.lona.so" },
+      "expected": false
+    },
+    {
+      "name": "isRootDomainForHostname: dev blog subdomain is not the root domain",
+      "input": { "fn": "isRootDomainForHostname", "hostname": "dev--blog.lona.so" },
+      "expected": false
+    },
+    {
+      "name": "isRootDomainForHostname: rc blog subdomain is not the root domain",
+      "input": { "fn": "isRootDomainForHostname", "hostname": "rc--blog.lona.so" },
+      "expected": false
+    },
+    {
+      "name": "isRootDomainForHostname: static subdomain is not the root domain",
+      "input": { "fn": "isRootDomainForHostname", "hostname": "static.lona.so" },
+      "expected": false
+    },
+    {
+      "name": "isRootDomainForHostname: admin subdomain is not the root domain",
+      "input": { "fn": "isRootDomainForHostname", "hostname": "admin.lona.so" },
+      "expected": false
+    },
+    {
+      "name": "isRootDomainForHostname: calendar subdomain is not the root domain",
+      "input": { "fn": "isRootDomainForHostname", "hostname": "calendar.lona.so" },
+      "expected": false
+    },
+    {
+      "name": "parseHostname: hyphenated fleet provider keeps the complete prefix",
+      "input": {
+        "fn": "parseHostname",
+        "hostname": "rwc-dev-01.lona.so"
+      },
+      "expected": {
+        "prefix": "rwc-dev-01",
+        "rootDomain": "lona.so"
+      }
+    },
+    {
+      "name": "hyphenated fleet root is the root domain",
+      "input": {
+        "fn": "isRootDomainForHostname",
+        "hostname": "rwc-dev-01.lona.so"
+      },
+      "expected": true
+    },
+    {
+      "name": "hyphenated fleet calendar remains a service domain",
+      "input": {
+        "fn": "isRootDomainForHostname",
+        "hostname": "rwc-dev-01--calendar.lona.so"
+      },
+      "expected": false
+    },
+    {
+      "name": "calendar navigation stays on the hyphenated fleet instance",
+      "input": {
+        "fn": "urlForHostname",
+        "hostname": "rwc-dev-01.lona.so",
+        "service": "calendar",
+        "path": "/onboarding"
+      },
+      "expected": "https://rwc-dev-01--calendar.lona.so/onboarding"
+    },
+    {
+      "name": "hyphenated fleet service navigates back to its own root",
+      "input": {
+        "fn": "urlForHostname",
+        "hostname": "rwc-dev-01--calendar.lona.so",
+        "service": null,
+        "path": "/signin"
+      },
+      "expected": "https://rwc-dev-01.lona.so/signin"
+    },
+    {
+      "name": "hyphenated fleet allowed origins are instance scoped",
+      "input": {
+        "fn": "allowedOriginsForHostname",
+        "hostname": "rwc-dev-01.lona.so"
+      },
+      "expected": [
+        "https://rwc-dev-01.lona.so",
+        "https://rwc-dev-01--calendar.lona.so"
+      ]
+    },
+    {
+      "name": "malformed hyphenated provider is not a fleet root: rwc--dev-01",
+      "input": {
+        "fn": "isRootDomainForHostname",
+        "hostname": "rwc--dev-01.lona.so"
+      },
+      "expected": false
+    },
+    {
+      "name": "malformed hyphenated provider is not a fleet root: rwc-Dev-01",
+      "input": {
+        "fn": "isRootDomainForHostname",
+        "hostname": "rwc-Dev-01.lona.so"
+      },
+      "expected": false
+    },
+    {
+      "name": "malformed hyphenated provider is not a fleet root: rwc-dev-a",
+      "input": {
+        "fn": "isRootDomainForHostname",
+        "hostname": "rwc-dev-a.lona.so"
+      },
+      "expected": false
+    },
+    {
+      "name": "malformed hyphenated provider is not a fleet root: rwc2-dev-01",
+      "input": {
+        "fn": "isRootDomainForHostname",
+        "hostname": "rwc2-dev-01.lona.so"
+      },
+      "expected": false
+    }
+  ]
+}

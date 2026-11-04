@@ -1,0 +1,67 @@
+{
+  "route": "/blog",
+  "meta": {
+    "title": "Lona Blog",
+    "description": "Product notes and ideas for planning work across time.",
+    "primaryKeyword": "calendar planning",
+    "secondaryKeywords": ["time blocking", "weekly planning"],
+    "canonicalUrl": "https://www.lona.so/blog",
+    "ogTitle": "Lona Blog",
+    "ogDescription": "Product notes and ideas for planning work across time.",
+    "ogImage": "/img/og/blog.png",
+    "longTailKeywords": ["calendar spreadsheet", "formula calendar"],
+    "schemaTypes": ["Blog", "WebSite"]
+  },
+  "theme": {
+    "tokens": "lona",
+    "variant": "simple"
+  },
+  "nav": "site-default",
+  "nodes": [
+    {
+      "kind": "hero",
+      "id": "blog.hero",
+      "props": {
+        "eyebrow": "Journal",
+        "heading": "Planning notes from the Lona team",
+        "body": "A running collection of product ideas, release notes, and practical patterns for working across time.",
+        "primaryCta": {
+          "label": "Read latest",
+          "href": "/blog/introducing-lona-2"
+        }
+      },
+      "children": null
+    },
+    {
+      "kind": "post-list",
+      "id": "blog.posts",
+      "props": {
+        "source": "blog-posts",
+        "limit": 3,
+        "featuredOnly": false
+      },
+      "children": [
+        {
+          "kind": "card",
+          "id": "blog.posts.introducing-lona-2",
+          "props": {
+            "title": "Introducing Lona 2",
+            "slug": "introducing-lona-2",
+            "summary": "A product update for teams that plan across days, projects, and routines.",
+            "tags": ["product", "planning"]
+          },
+          "children": null
+        }
+      ]
+    },
+    {
+      "kind": "footer",
+      "id": "site.footer",
+      "props": {
+        "variant": "default"
+      },
+      "children": null
+    }
+  ],
+  "decorators": null
+}

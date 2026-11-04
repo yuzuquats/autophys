@@ -1,0 +1,16 @@
+{
+  "type": "rail-state",
+  "name": "keys",
+  "cases": [
+    {
+      "name": "the review rail's existing keys are its prefix",
+      "input": { "fn": "keys", "prefix": "tento-stack-rail" },
+      "expected": { "width": "tento-stack-rail-width", "collapsed": "tento-stack-rail-collapsed" }
+    },
+    {
+      "name": "ux-rail's existing keys are its prefix",
+      "input": { "fn": "keys", "prefix": "ux-tests-rail" },
+      "expected": { "width": "ux-tests-rail-width", "collapsed": "ux-tests-rail-collapsed" }
+    }
+  ]
+}

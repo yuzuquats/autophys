@@ -1,0 +1,7 @@
+(define fleet-mini
+  [(item.power.plan) (item.identity.plan) (item.time.plan) (item.homebrew.plan) (item.sudoers.plan)
+   (item.tailnet.plan) (item.iroh-bridge.plan) (item.headless.plan) (item.spotlight.plan)
+   (item.mosh.plan) (item.gate.plan)])
+(define wan       (concat fleet-mini [(item.perimeter.plan ports: [22]) (item.sshd.plan) (item.checkouts.plan)]))
+(define reachable [(item.power.plan) (item.sudoers.plan) (item.tailnet.plan) (item.gate.plan)])
+(define console   (concat fleet-mini [(item.screen-sharing.plan) (item.checkouts.plan)]))

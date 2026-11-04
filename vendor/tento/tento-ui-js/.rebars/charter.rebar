@@ -1,0 +1,4 @@
+(rebar {:kind "ui-charter"
+        :description "Shared UI registrations, categories, stories and generated manifest agree"
+        :severity "error"
+        :rule {:check "components" :strict false}})

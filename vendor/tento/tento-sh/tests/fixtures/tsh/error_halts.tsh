@@ -1,0 +1,4 @@
+;; Unknown command on line 3 halts the script. Line 4 must NOT run.
+(create :name "first")
+(nonexistent_command :foo "bar")
+(create :name "third")

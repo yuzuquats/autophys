@@ -1,0 +1,48 @@
+[package]
+name = "tento-ux-test"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yml.workspace = true
+serde_with.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+tracing.workspace = true
+tento-openapi.workspace = true
+# Bucket-backed server trace grafting (`loaf/spans` -> LjsonEntry projection).
+tento-buckets.workspace = true
+# Typed `.ux-tests/` folder schema (one folder per test, runs nested inside).
+tento-folder.workspace = true
+tento-logger = { workspace = true, features = ["spans"] }
+tento-logger-spans.workspace = true
+tento-timeseries.workspace = true
+
+# Orchestration + the `ux-test` subcommand group.
+regex.workspace = true
+rand.workspace = true
+async-trait.workspace = true
+tokio.workspace = true
+tento-sh.workspace = true
+# `ux-test ls` returns an inline `table/v1` (the responsive table model).
+tento-term.workspace = true
+# Agent-driven `--auto` runs: a spec's `manual: true` steps are handed to an
+# agent job on the host's durable queue (tsh runs it), see `src/agent.rs`.
+tento-agent-queue.workspace = true
+# SIGTERM for the run's browser, so its profile is written back before exit.
+libc.workspace = true
+
+# Optional — only for the `http` feature (the mountable `/_/ux-test/*` data
+# handlers). CLI-only consumers (so.lona's CLI) don't pull actix/router.
+actix-web = { workspace = true, optional = true }
+tento-web-router = { workspace = true, optional = true }
+tento-web-error = { workspace = true, optional = true }
+
+[features]
+# Mountable actix handlers + DTOs for the `/_/ux-test/*` data routes, so the
+# crate owns the HTTP wire contract end-to-end. `tento-web` enables this and
+# mounts the handlers (keeping auth + route-guarding on its side).
+http = ["dep:actix-web", "dep:tento-web-router", "dep:tento-web-error"]

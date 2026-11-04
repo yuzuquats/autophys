@@ -1,0 +1,51 @@
+{
+  "type": "rail-state",
+  "name": "resolved-width",
+  "cases": [
+    {
+      "name": "an owned rail with no remembered width lays out at its default",
+      "input": {
+        "fn": "resolvedWidthPx",
+        "state": { "collapsed": false, "widthPx": null },
+        "width": { "kind": "owned", "defaultPx": 300, "minPx": 220, "maxPx": 600, "storagePrefix": "ux-tests-rail", "collapsedWidthPx": 0 }
+      },
+      "expected": 300
+    },
+    {
+      "name": "a remembered width beats the default",
+      "input": {
+        "fn": "resolvedWidthPx",
+        "state": { "collapsed": false, "widthPx": 420 },
+        "width": { "kind": "owned", "defaultPx": 300, "minPx": 220, "maxPx": 600, "storagePrefix": "ux-tests-rail", "collapsedWidthPx": 0 }
+      },
+      "expected": 420
+    },
+    {
+      "name": "collapsed to zero ignores the remembered width",
+      "input": {
+        "fn": "resolvedWidthPx",
+        "state": { "collapsed": true, "widthPx": 420 },
+        "width": { "kind": "owned", "defaultPx": 300, "minPx": 220, "maxPx": 600, "storagePrefix": "ux-tests-rail", "collapsedWidthPx": 0 }
+      },
+      "expected": 0
+    },
+    {
+      "name": "the review rail collapses to its 52px lane",
+      "input": {
+        "fn": "resolvedWidthPx",
+        "state": { "collapsed": true, "widthPx": null },
+        "width": { "kind": "owned", "defaultPx": 300, "minPx": 220, "maxPx": 600, "storagePrefix": "tento-stack-rail", "collapsedWidthPx": 52 }
+      },
+      "expected": 52
+    },
+    {
+      "name": "a frame-hosted rail has no width of its own",
+      "input": {
+        "fn": "resolvedWidthPx",
+        "state": { "collapsed": false, "widthPx": 420 },
+        "width": { "kind": "frame" }
+      },
+      "expected": null
+    }
+  ]
+}

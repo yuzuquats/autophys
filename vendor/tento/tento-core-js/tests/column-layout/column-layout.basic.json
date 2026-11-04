@@ -1,0 +1,64 @@
+{
+  "type": "column-layout",
+  "name": "basic",
+  "description": "Basic column assignment for non-overlapping and simple overlapping events",
+  "cases": [
+    {
+      "name": "single event gets column 0 full width",
+      "input": {
+        "events": [
+          { "id": "a", "startHrs": 9, "endHrs": 10 }
+        ]
+      },
+      "expected": [
+        { "columnIndex": 0, "numColumns": 1, "canExpand": false }
+      ]
+    },
+    {
+      "name": "two non-overlapping events share column 0",
+      "input": {
+        "events": [
+          { "id": "a", "startHrs": 9, "endHrs": 10 },
+          { "id": "b", "startHrs": 10, "endHrs": 11 }
+        ]
+      },
+      "expected": [
+        { "columnIndex": 0, "numColumns": 1, "canExpand": false },
+        { "columnIndex": 0, "numColumns": 1, "canExpand": false }
+      ]
+    },
+    {
+      "name": "two overlapping events get columns 0 and 1",
+      "input": {
+        "events": [
+          { "id": "a", "startHrs": 9, "endHrs": 11 },
+          { "id": "b", "startHrs": 10, "endHrs": 12 }
+        ]
+      },
+      "expected": [
+        { "columnIndex": 0, "numColumns": 2, "canExpand": false },
+        { "columnIndex": 1, "numColumns": 2 }
+      ]
+    },
+    {
+      "name": "three overlapping events get columns 0, 1, and 2",
+      "input": {
+        "events": [
+          { "id": "a", "startHrs": 9, "endHrs": 12 },
+          { "id": "b", "startHrs": 10, "endHrs": 12 },
+          { "id": "c", "startHrs": 11, "endHrs": 12 }
+        ]
+      },
+      "expected": [
+        { "columnIndex": 0, "numColumns": 3, "canExpand": false },
+        { "columnIndex": 1, "numColumns": 3 },
+        { "columnIndex": 2, "numColumns": 3 }
+      ]
+    },
+    {
+      "name": "empty input returns empty",
+      "input": { "events": [] },
+      "expected": []
+    }
+  ]
+}

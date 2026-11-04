@@ -1,0 +1,14 @@
+[package]
+name = "tento-lisp"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+indexmap = "2"
+line-col.workspace = true
+logos.workspace = true
+parse_int.workspace = true
+peg.workspace = true
+regex.workspace = true
+serde_json.workspace = true
+string-interner.workspace = true

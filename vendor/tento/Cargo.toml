@@ -1,0 +1,162 @@
+[workspace]
+members = [
+  "tento-folder",
+  "tento-folder/macros",
+  "tento-secrets",
+  "tento-agent-queue",
+  "tento-dev",
+  "tento-dirs",
+  "tento-logger",
+  "tento-web-rate-limit",
+  "tento-web-router",
+  "tento-web-router/macros",
+  "tento-web-auth",
+  "tento-web",
+  "tento-core",
+  "tento-ssr",
+  "tento-web-error",
+  "tento-web-files",
+  "tento-env",
+  "tento-env/tento-env-macros",
+  "tento-ux-test",
+  "tento-sh",
+  "tento-lisp-macros",
+  "tento-openapi",
+  "tento-openapi/macros",
+  "tento-lisp",
+  "tento-lisp-cmd",
+  "tento-exception",
+  "tento-bundle-contract",
+  "tento-bundle-fs",
+  "tento-app",
+  "tento-term",
+  "tento-shapes",
+  "tento-tui/tento-tui-core",
+  "tento-tui/tento-tui-complete",
+  "tento-timeseries",
+  "tento-logger/spans",
+  "tento-buckets",
+]
+resolver = "2"
+
+[workspace.dependencies]
+indexmap = { version = "2", features = ["serde"] }
+libc = "0.2"
+colored = "2.2.0"
+tento-ssr.path = "tento-ssr"
+tento-core.path = "tento-core"
+tento-folder.path = "tento-folder"
+tento-folder-macros.path = "tento-folder/macros"
+tento-secrets.path = "tento-secrets"
+tento-agent-queue.path = "tento-agent-queue"
+tento-env.path = "tento-env"
+tento-sh.path = "tento-sh"
+tento-lisp.path = "tento-lisp"
+tento-lisp-cmd.path = "tento-lisp-cmd"
+tento-exception.path = "tento-exception"
+tento-bundle-fs.path = "tento-bundle-fs"
+tento-ux-test.path = "tento-ux-test"
+tento-web-auth.path = "tento-web-auth"
+tento-web-router.path = "tento-web-router"
+tento-openapi.path = "tento-openapi"
+tento-openapi-macros.path = "tento-openapi/macros"
+tento-logger.path = "tento-logger"
+tento-web-rate-limit.path = "tento-web-rate-limit"
+tento-dev.path = "tento-dev"
+tento-web-error.path = "tento-web-error"
+tento-web-files.path = "tento-web-files"
+tento-term.path = "tento-term"
+tento-shapes.path = "tento-shapes"
+tento-tui-complete.path = "tento-tui/tento-tui-complete"
+tento-timeseries.path = "tento-timeseries"
+tento-logger-spans.path = "tento-logger/spans"
+tento-buckets.path = "tento-buckets"
+tokio = { version = "1.44.2", features = ["full"] }
+futures = "0.3.30"
+async-trait = "0.1.86"
+rustls = "0.23.26"
+actix = "0.13.5"
+actix-web = { version = "4.9.0", features = ["rustls-0_23"] }
+actix-rt = "2.9.0"
+actix-cors = "0.7.0"
+actix-identity = "0.8.0"
+actix-http = "3.7.0"
+actix-session = "0.10.1"
+actix-service = "2.0.2"
+actix-files = "0.6.5"
+validator = { version = "0.18.1", features = ["derive"] }
+serde = { version = "1.0.216", features = ["derive"] }
+serde_json = "1.0.133"
+serde_with = "3.8.1"
+serde_yml = "0.0.12"
+serde_path_to_error = "0.1.16"
+toml = "0.8"
+thiserror = "1.0.61"
+anyhow = "1.0.94"
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "2.0", features = ["full", "parsing", "extra-traits"] }
+tracing = "0.1.41"
+tracing-core = "0.1.33"
+tracing-actix-web = "0.7.2"
+tracing-bunyan-formatter = "0.3.6"
+tracing-subscriber = { version = "0.3.16", features = [
+  "registry",
+  "env-filter",
+] }
+chrono = { version = "0.4.40", features = ["serde"] }
+uuid = { version = "1.11.0", features = ["v4"] }
+fs2 = "0.4.3"
+rand = "0.9.0"
+phf = { version = "0.11.3", features = ["macros"] }
+base64.version = "0.22.1"
+hmac = "0.12.1"
+unicode-segmentation = "1.10.1"
+unicode-width = "0.1.13"
+terminal_size = "0.4"
+crossterm = "0.28"
+dashmap = "6.1.0"
+derive_more = "1.0.0"
+once_cell = "1.20.2"
+regex = "1.11.1"
+peg = "0.8.4"
+line-col = "0.2.1"
+logos = "0.14.2"
+parse_int = "0.6.0"
+string-interner = "0.17.0"
+hex = "0.4.3"
+pulldown-cmark = "0.12"
+sha2 = "0.10.8"
+x25519-dalek = { version = "2.0", features = ["static_secrets"] }
+chacha20poly1305 = "0.10"
+ed25519-dalek = "2.1"
+hkdf = "0.12"
+zeroize = { version = "1.8", features = ["derive"] }
+getrandom = "0.2"
+arrow = { version = "55", default-features = false, features = ["ipc"] }
+parquet = { version = "55", default-features = false, features = [
+  "arrow",
+  "zstd",
+] }
+
+[profile.dev]
+incremental = true
+debug = "line-tables-only"
+split-debuginfo = "unpacked"
+
+[profile.dev.package.syn]
+opt-level = 2
+
+[profile.dev.package.quote]
+opt-level = 2
+
+[profile.dev.package.proc-macro2]
+opt-level = 2
+
+[profile.dev.package.serde_derive]
+opt-level = 2
+
+[patch.crates-io]
+fsevent-sys = { path = "vendor/fsevent-sys" }
+notify = { path = "vendor/notify" }
+iana-time-zone = { path = "vendor/iana-time-zone" }

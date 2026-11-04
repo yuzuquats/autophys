@@ -1,0 +1,32 @@
+{
+  "type": "drag-drop",
+  "name": "circular",
+  "tree": {
+    "0/nestable": {
+      "1/nestable": {
+        "2/nestable": {}
+      }
+    }
+  },
+  "cases": [
+    {
+      "name": "Dropped at (x=0, y=2",
+      "input": { "start": 0, "movedTo": { "x": 0, "y": 2.2 } },
+      "expected": { "validActions": [] }
+    },
+    {
+      "name": "Dropped at (x=0, y=1",
+      "input": { "start": 1, "movedTo": { "x": 0, "y": 1.2 } },
+      "expected": { "validActions": [] }
+    },
+    {
+      "name": "valid parents",
+      "input": {},
+      "expected": {
+        "0": { "top": ["root"], "bottom": ["0"] },
+        "1": { "top": ["0"], "bottom": ["1"] },
+        "2": { "top": ["1"], "bottom": ["2", "1", "0", "root"] }
+      }
+    }
+  ]
+}

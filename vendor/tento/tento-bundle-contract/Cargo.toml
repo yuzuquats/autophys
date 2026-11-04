@@ -1,0 +1,10 @@
+[package]
+name = "tento-bundle-contract"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+publish = false
+description = "Dependency-light bundle contracts shared by packagers, installers and importers"
+
+[dependencies]
+anyhow = "1"

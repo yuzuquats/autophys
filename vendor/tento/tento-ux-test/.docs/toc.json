@@ -1,0 +1,19 @@
+{
+  "namespace": "tento-ux-test",
+  "title": "tento-ux-test",
+  "sections": [
+    {
+      "title": "Overview",
+      "children": [
+        {
+          "label": "Crate overview",
+          "slug": "overview"
+        },
+        {
+          "label": "Harness protocol",
+          "slug": "protocol"
+        }
+      ]
+    }
+  ]
+}

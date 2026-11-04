@@ -1,0 +1,11 @@
+[package]
+name = "tento-web-rate-limit"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+actix-web.workspace = true
+futures.workspace = true
+dashmap.workspace = true
+thiserror.workspace = true
+tracing.workspace = true

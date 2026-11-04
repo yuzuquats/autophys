@@ -1,0 +1,37 @@
+[package]
+name = "tento-folder"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+thiserror.workspace = true
+tento-folder-macros.workspace = true
+# Format crates back the bundled `formats::{Json,Toml,Yaml}` markers
+# and nothing else. The crate itself is format-neutral: with
+# `default-features = false` it knows no serialization format at all,
+# and every `File<C>` slot goes through the consumer's `FileContent`
+# impl.
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+toml = { workspace = true, optional = true }
+serde_yml = { workspace = true, optional = true }
+# `tsh`: the `folder.*` spec DSL, evaluated in-process on the tsh engine.
+# `cli`: the `tento-folder` binary / tsh plugin. Both stay off by default so
+# the crates that only use `folder!` never pull the shell in.
+tento-lisp-cmd = { workspace = true, optional = true }
+tento-shapes = { workspace = true, optional = true }
+anyhow = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true, features = ["macros", "rt"] }
+
+[features]
+default = ["json", "toml", "yaml"]
+json = ["dep:serde_json", "dep:serde"]
+toml = ["dep:toml", "dep:serde"]
+yaml = ["dep:serde_yml", "dep:serde"]
+tsh = ["json", "dep:tento-lisp-cmd"]
+cli = ["tsh", "dep:anyhow", "dep:tokio", "dep:tento-shapes"]
+
+[[bin]]
+name = "tento-folder"
+path = "src/main.rs"
+required-features = ["cli"]

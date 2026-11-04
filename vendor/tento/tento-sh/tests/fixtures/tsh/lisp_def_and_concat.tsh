@@ -1,0 +1,3 @@
+;; Lisp top-level let + concat string fn.
+(let label (concat "row-" "x"))
+(create :name label)

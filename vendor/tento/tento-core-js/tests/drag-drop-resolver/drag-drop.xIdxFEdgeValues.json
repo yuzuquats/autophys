@@ -1,0 +1,121 @@
+{
+  "type": "drag-drop",
+  "name": "xIdxFEdgeValues",
+  "tree": {
+    "0/nestable": {
+      "1/nestable": {
+        "2/nestable": {
+          "3/nestable": {}
+        },
+        "4": {}
+      },
+      "5/nestable": {}
+    },
+    "6/nestable": {}
+  },
+  "cases": [
+    {
+      "name": "Dropped at (x=-1, y=5",
+      "input": { "start": 3, "movedTo": { "x": -1, "y": 5.7 } },
+      "expected": {
+        "validActions": [
+          { "type": "top", "idx": 6 }
+        ]
+      }
+    },
+    {
+      "name": "Dropped at (x=-5, y=5",
+      "input": { "start": 3, "movedTo": { "x": -5, "y": 5.7 } },
+      "expected": {
+        "validActions": [
+          { "type": "top", "idx": 6 }
+        ]
+      }
+    },
+    {
+      "name": "Dropped at (x=0",
+      "input": { "start": 3, "movedTo": { "x": 0.99, "y": 5.7 } },
+      "expected": {
+        "validActions": [
+          { "type": "top", "idx": 6 }
+        ]
+      }
+    },
+    {
+      "name": "Dropped at (x=1",
+      "input": { "start": 3, "movedTo": { "x": 1.01, "y": 5.7 } },
+      "expected": {
+        "validActions": [
+          { "type": "bottom", "idx": 5 }
+        ]
+      }
+    },
+    {
+      "name": "Dropped at (x=2",
+      "input": { "start": 3, "movedTo": { "x": 2.99, "y": 5.7 } },
+      "expected": {
+        "validActions": [
+          { "type": "bottom", "idx": 5 }
+        ]
+      }
+    },
+    {
+      "name": "Dropped at (x=3",
+      "input": { "start": 3, "movedTo": { "x": 3.01, "y": 5.7 } },
+      "expected": {
+        "validActions": [
+          { "type": "bottom", "idx": 5 }
+        ]
+      }
+    },
+    {
+      "name": "Dropped at (x=999, y=5",
+      "input": { "start": 3, "movedTo": { "x": 999, "y": 5.7 } },
+      "expected": {
+        "validActions": [
+          { "type": "bottom", "idx": 5 }
+        ]
+      }
+    },
+    {
+      "name": "Dropped at (x=10, y=3",
+      "input": { "start": 6, "movedTo": { "x": 10, "y": 3.7 } },
+      "expected": {
+        "validActions": [
+          { "type": "bottom", "idx": 3 }
+        ]
+      }
+    },
+    {
+      "name": "Dropped at (x=0",
+      "input": { "start": 6, "movedTo": { "x": 0.5, "y": 1.7 } },
+      "expected": {
+        "validActions": [
+          { "type": "top", "idx": 2 }
+        ]
+      }
+    },
+    {
+      "name": "Dropped at (x=3",
+      "input": { "start": 4, "movedTo": { "x": 3.9999, "y": 0.7 } },
+      "expected": {
+        "validActions": [
+          { "type": "top", "idx": 1 }
+        ]
+      }
+    },
+    {
+      "name": "valid parents",
+      "input": {},
+      "expected": {
+        "0": { "top": ["root"], "bottom": ["0"] },
+        "1": { "top": ["0"], "bottom": ["1"] },
+        "2": { "top": ["1"], "bottom": ["2"] },
+        "3": { "top": ["2"], "bottom": ["1", "2", "3"] },
+        "4": { "top": ["1"], "bottom": ["1"] },
+        "5": { "top": ["0"], "bottom": ["root", "0", "5"] },
+        "6": { "top": ["root"], "bottom": ["root", "6"] }
+      }
+    }
+  ]
+}

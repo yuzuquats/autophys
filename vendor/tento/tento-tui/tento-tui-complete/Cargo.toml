@@ -1,0 +1,11 @@
+[package]
+name = "tento-tui-complete"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+description = "Completion engine + provider seam: the input vocabulary of the pane engine (mirror of tento-shapes' output vocabulary). Pure producer — ranks candidates and writes a view model; no shell, no terminal."
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true

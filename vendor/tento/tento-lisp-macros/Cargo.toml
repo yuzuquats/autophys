@@ -1,0 +1,24 @@
+[package]
+name = "tento_lisp_macros"
+version = "0.1.7"
+edition = "2024"
+rust-version = "1.85"
+authors = ["James Kao <james.l.kao@gmail.com>"]
+description = "Scaffolding to build interactive shells"
+readme = "README.md"
+keywords = ["shell", "cli", "interactive", "terminal"]
+categories = ["command-line-interface"]
+license = "MIT"
+
+[dependencies]
+anyhow.workspace = true
+serde = "1.0.195"
+serde-reflection = "0.3.6"
+serde_json = "1.0.111"
+syn = { version = "2.0.48", features = ["full"] }
+quote = "1.0.35"
+proc-macro2 = "1.0.78"
+proc-macro-crate = "3"
+
+[lib]
+proc-macro = true

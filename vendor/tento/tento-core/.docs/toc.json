@@ -1,0 +1,15 @@
+{
+  "namespace": "tento-core",
+  "title": "tento-core",
+  "sections": [
+    {
+      "title": "Overview",
+      "children": [
+        {
+          "label": "Crate overview",
+          "slug": "overview"
+        }
+      ]
+    }
+  ]
+}

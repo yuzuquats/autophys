@@ -1,0 +1,103 @@
+{
+  "type": "column-layout",
+  "name": "cell-rect",
+  "description": "Pixel rect computation matching CalendarColumnLayoutGroup CSS",
+  "cases": [
+    {
+      "name": "column 0, single event: x=3.5, full width, height-2",
+      "input": {
+        "layout": { "columnIndex": 0, "numColumns": 1, "canExpand": false },
+        "startTimeHrs": 9,
+        "durationMins": 60,
+        "containerWidthPx": 200
+      },
+      "expected": {
+        "x": 3.5,
+        "y": 432,
+        "width": 196.5,
+        "height": 46,
+        "border": false
+      }
+    },
+    {
+      "name": "column 0, multi-column: still flush right",
+      "input": {
+        "layout": { "columnIndex": 0, "numColumns": 2, "canExpand": false },
+        "startTimeHrs": 9,
+        "durationMins": 60,
+        "containerWidthPx": 200
+      },
+      "expected": {
+        "x": 3.5,
+        "y": 432,
+        "width": 196.5,
+        "height": 46,
+        "border": false
+      }
+    },
+    {
+      "name": "column 1 expandable: x=7.5, border",
+      "input": {
+        "layout": { "columnIndex": 1, "numColumns": 2, "canExpand": true },
+        "startTimeHrs": 9,
+        "durationMins": 60,
+        "containerWidthPx": 200
+      },
+      "expected": {
+        "x": 7.5,
+        "y": 432,
+        "width": 192.5,
+        "height": 47,
+        "border": true
+      }
+    },
+    {
+      "name": "column 2 expandable: x=12.5",
+      "input": {
+        "layout": { "columnIndex": 2, "numColumns": 3, "canExpand": true },
+        "startTimeHrs": 10,
+        "durationMins": 30,
+        "containerWidthPx": 200
+      },
+      "expected": {
+        "x": 12.5,
+        "y": 480,
+        "width": 187.5,
+        "height": 23,
+        "border": true
+      }
+    },
+    {
+      "name": "column 1 non-expandable: equal slot width, margin-right, margin-top",
+      "input": {
+        "layout": { "columnIndex": 1, "numColumns": 2, "canExpand": false },
+        "startTimeHrs": 9,
+        "durationMins": 60,
+        "containerWidthPx": 200
+      },
+      "expected": {
+        "x": 90,
+        "y": 431,
+        "width": 109,
+        "height": 48,
+        "border": true
+      }
+    },
+    {
+      "name": "15min event: height = 48*15/60 + additionalHeight",
+      "input": {
+        "layout": { "columnIndex": 0, "numColumns": 1, "canExpand": false },
+        "startTimeHrs": 12,
+        "durationMins": 15,
+        "containerWidthPx": 200
+      },
+      "expected": {
+        "x": 3.5,
+        "y": 576,
+        "width": 196.5,
+        "height": 10,
+        "border": false
+      }
+    }
+  ]
+}

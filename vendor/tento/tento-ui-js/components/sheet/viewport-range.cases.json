@@ -1,0 +1,281 @@
+{
+ "type": "viewport-range",
+ "name": "viewport-range",
+ "description": "`ViewportRange.onAxis` as one probe language: a case fixes `today` and the `tolerance` being judged against, and each probe is the [start, end] YEAR pair of a rendered range plus the verdict it must get. The three years JSON has no literal for ride the string sentinels \"NaN\" / \"Infinity\" / \"-Infinity\", decoded at the boundary by `yearOf` in `viewport-range.deno.test.ts` \u2014 every one of them is OFF the axis, because a year that is not a number is not evidence of a viewport. The shipped constant `YEARS_TOLERANCE` is asserted inline in the test file; the tolerance here is a parameter so the boundary can be pinned at 0 and at 1 without depending on it.",
+ "cases": [
+  {
+   "name": "a viewport around today is on the axis at every ordinary width",
+   "input": {
+    "today": 2026,
+    "tolerance": 200,
+    "probes": [
+     {
+      "start": 2026,
+      "end": 2026
+     },
+     {
+      "start": 2026,
+      "end": 2027
+     },
+     {
+      "start": 2025,
+      "end": 2026
+     },
+     {
+      "start": 2024,
+      "end": 2028
+     }
+    ]
+   },
+   "expected": {
+    "answers": [
+     true,
+     true,
+     true,
+     true
+    ]
+   }
+  },
+  {
+   "name": "a deep but legitimate scroll stays on the axis \u2014 the guard must not blank a real viewport",
+   "input": {
+    "today": 2026,
+    "tolerance": 200,
+    "probes": [
+     {
+      "start": 1900,
+      "end": 1900
+     },
+     {
+      "start": 1826,
+      "end": 1827
+     },
+     {
+      "start": 2226,
+      "end": 2226
+     },
+     {
+      "start": 1826,
+      "end": 1826
+     }
+    ]
+   },
+   "expected": {
+    "answers": [
+     true,
+     true,
+     true,
+     true
+    ]
+   }
+  },
+  {
+   "name": "the tolerance is inclusive and symmetric; one year past it is off",
+   "input": {
+    "today": 2026,
+    "tolerance": 200,
+    "probes": [
+     {
+      "start": 1826,
+      "end": 2226
+     },
+     {
+      "start": 1825,
+      "end": 2226
+     },
+     {
+      "start": 1826,
+      "end": 2227
+     },
+     {
+      "start": 1825,
+      "end": 2227
+     }
+    ]
+   },
+   "expected": {
+    "answers": [
+     true,
+     false,
+     false,
+     false
+    ]
+   }
+  },
+  {
+   "name": "R19: a day-space strip read through a year anchor is centuries out and refused",
+   "input": {
+    "today": 2026,
+    "tolerance": 200,
+    "probes": [
+     {
+      "start": -396,
+      "end": -396
+     },
+     {
+      "start": -395,
+      "end": -395
+     },
+     {
+      "start": -30853,
+      "end": -30853
+     },
+     {
+      "start": 1900,
+      "end": 1900
+     }
+    ]
+   },
+   "expected": {
+    "answers": [
+     false,
+     false,
+     false,
+     true
+    ]
+   }
+  },
+  {
+   "name": "a range that runs backwards is not a viewport, however near today it is",
+   "input": {
+    "today": 2026,
+    "tolerance": 200,
+    "probes": [
+     {
+      "start": 2027,
+      "end": 2026
+     },
+     {
+      "start": 2026,
+      "end": 2025
+     },
+     {
+      "start": 2026,
+      "end": 2026
+     }
+    ]
+   },
+   "expected": {
+    "answers": [
+     false,
+     false,
+     true
+    ]
+   }
+  },
+  {
+   "name": "a year that is not a finite whole number is not evidence of a viewport",
+   "input": {
+    "today": 2026,
+    "tolerance": 200,
+    "probes": [
+     {
+      "start": "NaN",
+      "end": 2026
+     },
+     {
+      "start": 2026,
+      "end": "NaN"
+     },
+     {
+      "start": "NaN",
+      "end": "NaN"
+     },
+     {
+      "start": "Infinity",
+      "end": 2026
+     },
+     {
+      "start": "-Infinity",
+      "end": 2026
+     },
+     {
+      "start": 2026,
+      "end": "Infinity"
+     },
+     {
+      "start": 2026.5,
+      "end": 2027
+     },
+     {
+      "start": 2026,
+      "end": 2027.25
+     }
+    ]
+   },
+   "expected": {
+    "answers": [
+     false,
+     false,
+     false,
+     false,
+     false,
+     false,
+     false,
+     false
+    ]
+   }
+  },
+  {
+   "name": "tolerance 0 admits exactly today's year",
+   "input": {
+    "today": 2026,
+    "tolerance": 0,
+    "probes": [
+     {
+      "start": 2026,
+      "end": 2026
+     },
+     {
+      "start": 2025,
+      "end": 2026
+     },
+     {
+      "start": 2026,
+      "end": 2027
+     }
+    ]
+   },
+   "expected": {
+    "answers": [
+     true,
+     false,
+     false
+    ]
+   }
+  },
+  {
+   "name": "the tolerance is judged against the today it is given, not against 2026",
+   "input": {
+    "today": 1900,
+    "tolerance": 50,
+    "probes": [
+     {
+      "start": 1900,
+      "end": 1900
+     },
+     {
+      "start": 1850,
+      "end": 1950
+     },
+     {
+      "start": 1849,
+      "end": 1900
+     },
+     {
+      "start": 2026,
+      "end": 2026
+     }
+    ]
+   },
+   "expected": {
+    "answers": [
+     true,
+     true,
+     false,
+     false
+    ]
+   }
+  }
+ ]
+}

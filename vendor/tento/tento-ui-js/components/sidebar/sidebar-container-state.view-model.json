@@ -1,0 +1,79 @@
+{
+  "type": "sidebar-container-state",
+  "name": "view-model",
+  "cases": [
+    {
+      "name": "view-model: docked helper produces a docked view model",
+      "input": {
+        "fn": "docked",
+        "width": "320px",
+        "animate": true,
+        "resizeEnabled": true
+      },
+      "expected": {
+        "presentation": "docked",
+        "width": "320px",
+        "animate": true,
+        "modal": {
+          "open": false,
+          "backdrop": "none",
+          "dismissOnBackdrop": false,
+          "dismissOnEscape": false
+        },
+        "resize": {
+          "enabled": true
+        }
+      }
+    },
+    {
+      "name": "view-model: peek helper produces a peek view model",
+      "input": {
+        "fn": "peek",
+        "width": "240px",
+        "animate": false,
+        "resizeEnabled": false
+      },
+      "expected": {
+        "presentation": "peek",
+        "width": "240px",
+        "animate": false,
+        "modal": {
+          "open": false,
+          "backdrop": "none",
+          "dismissOnBackdrop": false,
+          "dismissOnEscape": false
+        },
+        "resize": {
+          "enabled": false
+        }
+      }
+    },
+    {
+      "name": "view-model: modal helper produces a modal view model",
+      "input": {
+        "fn": "modal",
+        "width": "340px",
+        "animate": true,
+        "open": true,
+        "backdrop": "dim",
+        "dismissOnBackdrop": true,
+        "dismissOnEscape": true,
+        "resizeEnabled": false
+      },
+      "expected": {
+        "presentation": "modal",
+        "width": "340px",
+        "animate": true,
+        "modal": {
+          "open": true,
+          "backdrop": "dim",
+          "dismissOnBackdrop": true,
+          "dismissOnEscape": true
+        },
+        "resize": {
+          "enabled": false
+        }
+      }
+    }
+  ]
+}

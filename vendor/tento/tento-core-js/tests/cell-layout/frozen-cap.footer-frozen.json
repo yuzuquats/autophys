@@ -1,0 +1,81 @@
+{
+  "type": "frozen-cap",
+  "name": "footer-frozen",
+  "description": "maxNumFrozen must never count footer rows — footer rows belong to the footer section regardless of available header height",
+  "cases": [
+    {
+      "name": "footer row excluded from maxNumFrozen even when it fits",
+      "input": {
+        "rows": [
+          { "id": "header", "height": 40, "isFooterRow": false, "isSystem": true },
+          { "id": "user1",  "height": 40, "isFooterRow": false, "isSystem": false },
+          { "id": "footer", "height": 40, "isFooterRow": true,  "isSystem": true }
+        ],
+        "maxHeaderHeight": 800
+      },
+      "expected": {
+        "maxNumFrozen": 2,
+        "ids": ["header", "user1", "footer"]
+      }
+    },
+    {
+      "name": "all rows fit but footer still excluded",
+      "input": {
+        "rows": [
+          { "id": "header", "height": 32, "isFooterRow": false, "isSystem": true },
+          { "id": "footer", "height": 48, "isFooterRow": true,  "isSystem": true }
+        ],
+        "maxHeaderHeight": 800
+      },
+      "expected": {
+        "maxNumFrozen": 1,
+        "ids": ["header", "footer"]
+      }
+    },
+    {
+      "name": "multiple footer rows all excluded",
+      "input": {
+        "rows": [
+          { "id": "header",   "height": 40, "isFooterRow": false, "isSystem": true },
+          { "id": "user1",    "height": 40, "isFooterRow": false, "isSystem": false },
+          { "id": "user2",    "height": 40, "isFooterRow": false, "isSystem": false },
+          { "id": "tl-legend","height": 24, "isFooterRow": true,  "isSystem": true },
+          { "id": "footer",   "height": 48, "isFooterRow": true,  "isSystem": true }
+        ],
+        "maxHeaderHeight": 800
+      },
+      "expected": {
+        "maxNumFrozen": 3,
+        "ids": ["header", "user1", "user2", "tl-legend", "footer"]
+      }
+    },
+    {
+      "name": "height cap stops before footer anyway",
+      "input": {
+        "rows": [
+          { "id": "header", "height": 40, "isFooterRow": false, "isSystem": true },
+          { "id": "user1",  "height": 80, "isFooterRow": false, "isSystem": false },
+          { "id": "footer", "height": 48, "isFooterRow": true,  "isSystem": true }
+        ],
+        "maxHeaderHeight": 100
+      },
+      "expected": {
+        "maxNumFrozen": 1,
+        "ids": ["header", "user1", "footer"]
+      }
+    },
+    {
+      "name": "no non-footer rows means maxNumFrozen is zero",
+      "input": {
+        "rows": [
+          { "id": "footer", "height": 48, "isFooterRow": true, "isSystem": true }
+        ],
+        "maxHeaderHeight": 800
+      },
+      "expected": {
+        "maxNumFrozen": 0,
+        "ids": ["footer"]
+      }
+    }
+  ]
+}

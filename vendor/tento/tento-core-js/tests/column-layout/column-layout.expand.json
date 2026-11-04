@@ -1,0 +1,47 @@
+{
+  "type": "column-layout",
+  "name": "expand",
+  "description": "canExpand behavior based on gap from previous column's start time",
+  "cases": [
+    {
+      "name": "canExpand true when >15min gap from previous column start",
+      "input": {
+        "events": [
+          { "id": "a", "startHrs": 9, "endHrs": 11 },
+          { "id": "b", "startHrs": 9.5, "endHrs": 11 }
+        ]
+      },
+      "expected": [
+        { "columnIndex": 0, "numColumns": 2, "canExpand": false },
+        { "columnIndex": 1, "numColumns": 2, "canExpand": true }
+      ]
+    },
+    {
+      "name": "canExpand false when <=15min gap",
+      "input": {
+        "events": [
+          { "id": "a", "startHrs": 9, "endHrs": 11 },
+          { "id": "b", "startMins": 550, "endHrs": 11 }
+        ]
+      },
+      "expected": [
+        { "columnIndex": 0, "numColumns": 2, "canExpand": false },
+        { "columnIndex": 1, "numColumns": 2, "canExpand": false }
+      ]
+    },
+    {
+      "name": "custom expand threshold (30min)",
+      "input": {
+        "events": [
+          { "id": "a", "startHrs": 9, "endHrs": 11 },
+          { "id": "b", "startMins": 560, "endHrs": 11 }
+        ],
+        "expandThresholdMins": 30
+      },
+      "expected": [
+        { "columnIndex": 0, "numColumns": 2, "canExpand": false },
+        { "columnIndex": 1, "numColumns": 2, "canExpand": false }
+      ]
+    }
+  ]
+}

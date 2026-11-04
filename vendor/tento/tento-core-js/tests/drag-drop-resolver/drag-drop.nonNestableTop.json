@@ -1,0 +1,28 @@
+{
+  "type": "drag-drop",
+  "name": "nonNestableTop",
+  "tree": {
+    "0/nestable": {
+      "1": {},
+      "2": {}
+    },
+    "3/nestable": {
+      "4": {},
+      "5": {}
+    }
+  },
+  "cases": [
+    {
+      "name": "valid parents",
+      "input": {},
+      "expected": {
+        "0": { "top": ["root"], "bottom": ["0"] },
+        "1": { "top": ["0"], "bottom": ["0"] },
+        "2": { "top": ["0"], "bottom": ["0", "root"] },
+        "3": { "top": ["root"], "bottom": ["3"] },
+        "4": { "top": ["3"], "bottom": ["3"] },
+        "5": { "top": ["3"], "bottom": ["3", "root"] }
+      }
+    }
+  ]
+}

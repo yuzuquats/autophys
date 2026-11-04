@@ -1,0 +1,819 @@
+{
+  "_doc": "Alignment battery: each case asserts that its `posix`, `shell`, and/or `lisp` source reads into the canonical `sexpr` (a built, tagged-union JSON — never a parsed render). `posix` covers a simple statement through the compatibility reader; `shell` covers an operator-aware shell plan. When multiple forms are present they converge on the same s-expression; cases with only one form document an intentional asymmetry.",
+  "cases": [
+    {
+      "desc": "bare command",
+      "posix": "pwd",
+      "lisp": "(std.sh.cmd \"pwd\")",
+      "sexpr": {
+        "list": [
+          {
+            "sym": "std.sh.cmd"
+          },
+          {
+            "str": "pwd"
+          }
+        ]
+      }
+    },
+    {
+      "desc": "head symbol, flag + path args are string literals",
+      "posix": "ls -la /tmp",
+      "lisp": "(std.sh.cmd \"ls\" \"-la\" \"/tmp\")",
+      "sexpr": {
+        "list": [
+          {
+            "sym": "std.sh.cmd"
+          },
+          {
+            "str": "ls"
+          },
+          {
+            "str": "-la"
+          },
+          {
+            "str": "/tmp"
+          }
+        ]
+      }
+    },
+    {
+      "desc": "bare unquoted $name uses runtime lookup and splitting",
+      "posix": "cat $f",
+      "lisp": "(std.sh.cmd \"cat\" (std.sh.split (list (list true (std.sh.var \"f\")))))",
+      "sexpr": {
+        "list": [
+          {
+            "sym": "std.sh.cmd"
+          },
+          {
+            "str": "cat"
+          },
+          {
+            "list": [
+              {
+                "sym": "std.sh.split"
+              },
+              {
+                "list": [
+                  {
+                    "sym": "list"
+                  },
+                  {
+                    "list": [
+                      {
+                        "sym": "list"
+                      },
+                      {
+                        "bool": true
+                      },
+                      {
+                        "list": [
+                          {
+                            "sym": "std.sh.var"
+                          },
+                          {
+                            "str": "f"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "desc": "double-quoted $f expands without splitting",
+      "posix": "echo \"$f\"",
+      "lisp": "(std.sh.cmd \"echo\" (str.concat (std.sh.var \"f\")))",
+      "sexpr": {
+        "list": [
+          {
+            "sym": "std.sh.cmd"
+          },
+          {
+            "str": "echo"
+          },
+          {
+            "list": [
+              {
+                "sym": "str.concat"
+              },
+              {
+                "list": [
+                  {
+                    "sym": "std.sh.var"
+                  },
+                  {
+                    "str": "f"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "desc": "single-quoted $f stays a literal",
+      "posix": "echo '$f'",
+      "lisp": "(std.sh.cmd \"echo\" \"$f\")",
+      "sexpr": {
+        "list": [
+          {
+            "sym": "std.sh.cmd"
+          },
+          {
+            "str": "echo"
+          },
+          {
+            "str": "$f"
+          }
+        ]
+      }
+    },
+    {
+      "desc": "command substitution is a nested call",
+      "posix": "cat $(ls \"/tmp\")",
+      "lisp": "(std.sh.cmd \"cat\" (std.sh.split (list (list true (std.sh.sub (std.sh.cmd \"ls\" \"/tmp\"))))))",
+      "sexpr": {
+        "list": [
+          {
+            "sym": "std.sh.cmd"
+          },
+          {
+            "str": "cat"
+          },
+          {
+            "list": [
+              {
+                "sym": "std.sh.split"
+              },
+              {
+                "list": [
+                  {
+                    "sym": "list"
+                  },
+                  {
+                    "list": [
+                      {
+                        "sym": "list"
+                      },
+                      {
+                        "bool": true
+                      },
+                      {
+                        "list": [
+                          {
+                            "sym": "std.sh.sub"
+                          },
+                          {
+                            "list": [
+                              {
+                                "sym": "std.sh.cmd"
+                              },
+                              {
+                                "str": "ls"
+                              },
+                              {
+                                "str": "/tmp"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "desc": "nested substitution nests further",
+      "posix": "echo $(cat $(pwd))",
+      "lisp": "(std.sh.cmd \"echo\" (std.sh.split (list (list true (std.sh.sub (std.sh.cmd \"cat\" (std.sh.split (list (list true (std.sh.sub (std.sh.cmd \"pwd\")))))))))))",
+      "sexpr": {
+        "list": [
+          {
+            "sym": "std.sh.cmd"
+          },
+          {
+            "str": "echo"
+          },
+          {
+            "list": [
+              {
+                "sym": "std.sh.split"
+              },
+              {
+                "list": [
+                  {
+                    "sym": "list"
+                  },
+                  {
+                    "list": [
+                      {
+                        "sym": "list"
+                      },
+                      {
+                        "bool": true
+                      },
+                      {
+                        "list": [
+                          {
+                            "sym": "std.sh.sub"
+                          },
+                          {
+                            "list": [
+                              {
+                                "sym": "std.sh.cmd"
+                              },
+                              {
+                                "str": "cat"
+                              },
+                              {
+                                "list": [
+                                  {
+                                    "sym": "std.sh.split"
+                                  },
+                                  {
+                                    "list": [
+                                      {
+                                        "sym": "list"
+                                      },
+                                      {
+                                        "list": [
+                                          {
+                                            "sym": "list"
+                                          },
+                                          {
+                                            "bool": true
+                                          },
+                                          {
+                                            "list": [
+                                              {
+                                                "sym": "std.sh.sub"
+                                              },
+                                              {
+                                                "list": [
+                                                  {
+                                                    "sym": "std.sh.cmd"
+                                                  },
+                                                  {
+                                                    "str": "pwd"
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "desc": "double quotes group spaces, stripped",
+      "posix": "echo \"a b\" c",
+      "lisp": "(std.sh.cmd \"echo\" \"a b\" \"c\")",
+      "sexpr": {
+        "list": [
+          {
+            "sym": "std.sh.cmd"
+          },
+          {
+            "str": "echo"
+          },
+          {
+            "str": "a b"
+          },
+          {
+            "str": "c"
+          }
+        ]
+      }
+    },
+    {
+      "desc": "single quotes group spaces, stripped",
+      "posix": "echo 'a b'",
+      "lisp": "(std.sh.cmd \"echo\" \"a b\")",
+      "sexpr": {
+        "list": [
+          {
+            "sym": "std.sh.cmd"
+          },
+          {
+            "str": "echo"
+          },
+          {
+            "str": "a b"
+          }
+        ]
+      }
+    },
+    {
+      "desc": "backslash escapes a space into one literal arg",
+      "posix": "echo a\\ b",
+      "lisp": "(std.sh.cmd \"echo\" \"a b\")",
+      "sexpr": {
+        "list": [
+          {
+            "sym": "std.sh.cmd"
+          },
+          {
+            "str": "echo"
+          },
+          {
+            "str": "a b"
+          }
+        ]
+      }
+    },
+    {
+      "desc": "literal arg next to a reference",
+      "posix": "cat a $b",
+      "lisp": "(std.sh.cmd \"cat\" \"a\" (std.sh.split (list (list true (std.sh.var \"b\")))))",
+      "sexpr": {
+        "list": [
+          {
+            "sym": "std.sh.cmd"
+          },
+          {
+            "str": "cat"
+          },
+          {
+            "str": "a"
+          },
+          {
+            "list": [
+              {
+                "sym": "std.sh.split"
+              },
+              {
+                "list": [
+                  {
+                    "sym": "list"
+                  },
+                  {
+                    "list": [
+                      {
+                        "sym": "list"
+                      },
+                      {
+                        "bool": true
+                      },
+                      {
+                        "list": [
+                          {
+                            "sym": "std.sh.var"
+                          },
+                          {
+                            "str": "b"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "desc": "two references",
+      "posix": "mv $src $dst",
+      "lisp": "(std.sh.cmd \"mv\" (std.sh.split (list (list true (std.sh.var \"src\")))) (std.sh.split (list (list true (std.sh.var \"dst\")))))",
+      "sexpr": {
+        "list": [
+          {
+            "sym": "std.sh.cmd"
+          },
+          {
+            "str": "mv"
+          },
+          {
+            "list": [
+              {
+                "sym": "std.sh.split"
+              },
+              {
+                "list": [
+                  {
+                    "sym": "list"
+                  },
+                  {
+                    "list": [
+                      {
+                        "sym": "list"
+                      },
+                      {
+                        "bool": true
+                      },
+                      {
+                        "list": [
+                          {
+                            "sym": "std.sh.var"
+                          },
+                          {
+                            "str": "src"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "list": [
+              {
+                "sym": "std.sh.split"
+              },
+              {
+                "list": [
+                  {
+                    "sym": "list"
+                  },
+                  {
+                    "list": [
+                      {
+                        "sym": "list"
+                      },
+                      {
+                        "bool": true
+                      },
+                      {
+                        "list": [
+                          {
+                            "sym": "std.sh.var"
+                          },
+                          {
+                            "str": "dst"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "desc": "ASYMMETRY: a posix arg is always a string, even when numeric",
+      "posix": "echo 5",
+      "sexpr": {
+        "list": [
+          {
+            "sym": "std.sh.cmd"
+          },
+          {
+            "str": "echo"
+          },
+          {
+            "str": "5"
+          }
+        ]
+      }
+    },
+    {
+      "desc": "ASYMMETRY: a lisp numeric literal is an integer",
+      "lisp": "(std.sh.cmd \"echo\" 5)",
+      "sexpr": {
+        "list": [
+          {
+            "sym": "std.sh.cmd"
+          },
+          {
+            "str": "echo"
+          },
+          {
+            "int": 5
+          }
+        ]
+      }
+    },
+    {
+      "desc": "conditional is a plain lisp if form (the `when` shell construct is retired)",
+      "lisp": "(if true (std.sh.cmd \"echo\" \"go\"))",
+      "sexpr": {
+        "list": [
+          {
+            "sym": "if"
+          },
+          {
+            "bool": true
+          },
+          {
+            "list": [
+              {
+                "sym": "std.sh.cmd"
+              },
+              {
+                "str": "echo"
+              },
+              {
+                "str": "go"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "desc": "posix capture: whole unquoted substitution preserves its value and strips string newlines",
+      "posix": "files=$(ls \"/tmp\")",
+      "lisp": "(let files (std.sh.sub (std.sh.cmd \"ls\" \"/tmp\")))",
+      "sexpr": {
+        "list": [
+          {
+            "sym": "let"
+          },
+          {
+            "sym": "files"
+          },
+          {
+            "list": [
+              {
+                "sym": "std.sh.sub"
+              },
+              {
+                "list": [
+                  {
+                    "sym": "std.sh.cmd"
+                  },
+                  {
+                    "str": "ls"
+                  },
+                  {
+                    "str": "/tmp"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "desc": "posix assignment of a bare word is a string",
+      "posix": "name=hello",
+      "lisp": "(let name \"hello\")",
+      "sexpr": {
+        "list": [
+          {
+            "sym": "let"
+          },
+          {
+            "sym": "name"
+          },
+          {
+            "str": "hello"
+          }
+        ]
+      }
+    },
+    {
+      "desc": "posix assignment from a reference",
+      "posix": "dst=$src",
+      "lisp": "(let dst (std.sh.var \"src\"))",
+      "sexpr": {
+        "list": [
+          {
+            "sym": "let"
+          },
+          {
+            "sym": "dst"
+          },
+          {
+            "list": [
+              {
+                "sym": "std.sh.var"
+              },
+              {
+                "str": "src"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "desc": "posix capture composes nested substitution",
+      "posix": "out=$(cat $(pwd))",
+      "lisp": "(let out (std.sh.sub (std.sh.cmd \"cat\" (std.sh.split (list (list true (std.sh.sub (std.sh.cmd \"pwd\"))))))))",
+      "sexpr": {
+        "list": [
+          {
+            "sym": "let"
+          },
+          {
+            "sym": "out"
+          },
+          {
+            "list": [
+              {
+                "sym": "std.sh.sub"
+              },
+              {
+                "list": [
+                  {
+                    "sym": "std.sh.cmd"
+                  },
+                  {
+                    "str": "cat"
+                  },
+                  {
+                    "list": [
+                      {
+                        "sym": "std.sh.split"
+                      },
+                      {
+                        "list": [
+                          {
+                            "sym": "list"
+                          },
+                          {
+                            "list": [
+                              {
+                                "sym": "list"
+                              },
+                              {
+                                "bool": true
+                              },
+                              {
+                                "list": [
+                                  {
+                                    "sym": "std.sh.sub"
+                                  },
+                                  {
+                                    "list": [
+                                      {
+                                        "sym": "std.sh.cmd"
+                                      },
+                                      {
+                                        "str": "pwd"
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "desc": "shell pipeline lowers to the canonical flow form",
+      "shell": "list | pick --field name",
+      "lisp": "(std.sh.pipe (std.sh.cmd \"list\") (std.sh.cmd \"pick\" \"--field\" \"name\"))",
+      "sexpr": {
+        "list": [
+          {
+            "sym": "std.sh.pipe"
+          },
+          {
+            "list": [
+              {
+                "sym": "std.sh.cmd"
+              },
+              {
+                "str": "list"
+              }
+            ]
+          },
+          {
+            "list": [
+              {
+                "sym": "std.sh.cmd"
+              },
+              {
+                "str": "pick"
+              },
+              {
+                "str": "--field"
+              },
+              {
+                "str": "name"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "desc": "shell boolean chains preserve left associativity",
+      "shell": "fetch && consume || fallback",
+      "lisp": "(std.sh.or (std.sh.and (std.sh.cmd \"fetch\") (std.sh.cmd \"consume\")) (std.sh.cmd \"fallback\"))",
+      "sexpr": {
+        "list": [
+          {
+            "sym": "std.sh.or"
+          },
+          {
+            "list": [
+              {
+                "sym": "std.sh.and"
+              },
+              {
+                "list": [
+                  {
+                    "sym": "std.sh.cmd"
+                  },
+                  {
+                    "str": "fetch"
+                  }
+                ]
+              },
+              {
+                "list": [
+                  {
+                    "sym": "std.sh.cmd"
+                  },
+                  {
+                    "str": "consume"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "list": [
+              {
+                "sym": "std.sh.cmd"
+              },
+              {
+                "str": "fallback"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "desc": "shell sequencing lowers to the canonical flow form",
+      "shell": "first ; second",
+      "lisp": "(std.sh.seq (std.sh.cmd \"first\") (std.sh.cmd \"second\"))",
+      "sexpr": {
+        "list": [
+          {
+            "sym": "std.sh.seq"
+          },
+          {
+            "list": [
+              {
+                "sym": "std.sh.cmd"
+              },
+              {
+                "str": "first"
+              }
+            ]
+          },
+          {
+            "list": [
+              {
+                "sym": "std.sh.cmd"
+              },
+              {
+                "str": "second"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

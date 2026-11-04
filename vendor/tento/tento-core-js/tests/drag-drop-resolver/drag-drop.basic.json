@@ -1,0 +1,46 @@
+{
+  "type": "drag-drop",
+  "name": "basic",
+  "tree": {
+    "0/nestable": {},
+    "1/nestable": {},
+    "2/nestable": {},
+    "3/nestable": {}
+  },
+  "cases": [
+    {
+      "name": "Dropped at (x=0, y=1",
+      "input": { "start": 3, "movedTo": { "x": 0, "y": 1.8 } },
+      "expected": {
+        "validActions": [
+          { "type": "bottom", "idx": 1 },
+          { "type": "top", "idx": 2 }
+        ]
+      }
+    },
+    {
+      "name": "Dropped at (x=0, y=1",
+      "input": { "start": 3, "movedTo": { "x": 0, "y": 1.5 } },
+      "expected": {
+        "validActions": [
+          { "type": "nest", "idx": 1 }
+        ]
+      }
+    },
+    {
+      "name": "Dropped at (x=0, y=3",
+      "input": { "start": 3, "movedTo": { "x": 0, "y": 3.3 } },
+      "expected": { "validActions": [] }
+    },
+    {
+      "name": "valid parents",
+      "input": {},
+      "expected": {
+        "0": { "top": ["root"], "bottom": ["root", "0"] },
+        "1": { "top": ["root"], "bottom": ["root", "1"] },
+        "2": { "top": ["root"], "bottom": ["root", "2"] },
+        "3": { "top": ["root"], "bottom": ["root", "3"] }
+      }
+    }
+  ]
+}

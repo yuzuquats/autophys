@@ -1,0 +1,35 @@
+(use std.fleet.item (Item ItemPlan ReconcileCheck ReconcileResult))
+
+(struct SpotlightParams
+  shape: (enum "item.spotlight.params/v1")
+  volume: string)
+
+(fn plan (volume: string = "/System/Volumes/Data") -> ItemPlan
+  (ItemPlan item: (module.bundle) params: (SpotlightParams volume: volume)))
+
+(define (indexing-off? vol)
+  (std.text.matches (get (sdk.run argv: ["/usr/bin/mdutil" "-s" vol]) "stdout") "Indexing disabled"))
+(define (store-present? vol)
+  (get (sdk.run argv: ["/bin/test" "-d" (concat vol "/.Spotlight-V100")]) "ok"))
+(define (drift? vol) (if (indexing-off? vol) (store-present? vol) true))
+(define (first-nonempty a b) (if (= a "") b a))
+(define (result state detail error) (ReconcileResult state: state detail: detail error: error))
+
+(impl Item for SpotlightParams
+  (fn privileged (self) -> (list string)
+    ["/usr/bin/mdutil"])
+  (fn check (self) -> ReconcileCheck
+    (ReconcileCheck state: (if (drift? self.volume) "drift" "ok")
+                    detail: (if (indexing-off? self.volume) "indexing off" "indexing on")))
+  (fn reconcile (self apply: bool = false) -> ReconcileResult
+    (cond
+      ((not (drift? self.volume)) (result "unchanged" "indexing off, store absent" nil))
+      ((not apply)                (result "would-change" "mdutil -i off; mdutil -E" nil))
+      (else
+        (let ((off (sdk.sudo argv: ["/usr/bin/mdutil" "-i" "off" self.volume])))
+          (if (not (get off "ok"))
+            (result "failed" "mdutil -i off" (first-nonempty (get off "stderr") (get off "stdout")))
+            (let ((erase (sdk.sudo argv: ["/usr/bin/mdutil" "-E" self.volume])))
+              (if (get erase "ok")
+                (result "changed" "indexing off, store erased" nil)
+                (result "failed" "mdutil -E" (first-nonempty (get erase "stderr") (get erase "stdout")))))))))))

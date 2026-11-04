@@ -1,0 +1,91 @@
+{
+ "type": "rendered-strip",
+ "name": "rendered-strip",
+ "description": "The rendered strip (`RenderedStrip`, `tento-core-js/sheet-layout/rendered-strip.ts`) under the scroll viewport's policy (`RenderedStrip.VIEWPORT`): visible count N of equal integer-width columns, column `step` the first visible one, and the inclusive rendered indices. Pinned on the layout side through the DOM's own `ScrollViewport` (`tento-scroll-js/engine/rendered-strip.deno.test.ts`) and on the CLI side through `renderedRange` (`tento-lona-js/cli/dom-window.deno.test.ts`): an overscan change fails both.",
+ "cases": [
+  {
+   "name": "week view, three columns, at open",
+   "input": {
+    "visibleCount": 3,
+    "step": 0,
+    "columnWidthPx": 240
+   },
+   "expected": {
+    "first": -3,
+    "last": 6
+   }
+  },
+  {
+   "name": "day view, seven columns, at open",
+   "input": {
+    "visibleCount": 7,
+    "step": 0,
+    "columnWidthPx": 40
+   },
+   "expected": {
+    "first": -7,
+    "last": 14
+   }
+  },
+  {
+   "name": "one column (a year view)",
+   "input": {
+    "visibleCount": 1,
+    "step": 0,
+    "columnWidthPx": 240
+   },
+   "expected": {
+    "first": -1,
+    "last": 2
+   }
+  },
+  {
+   "name": "scrolled two columns forward",
+   "input": {
+    "visibleCount": 3,
+    "step": 2,
+    "columnWidthPx": 240
+   },
+   "expected": {
+    "first": -1,
+    "last": 8
+   }
+  },
+  {
+   "name": "scrolled four columns back",
+   "input": {
+    "visibleCount": 3,
+    "step": -4,
+    "columnWidthPx": 240
+   },
+   "expected": {
+    "first": -7,
+    "last": 2
+   }
+  },
+  {
+   "name": "day view scrolled a week forward",
+   "input": {
+    "visibleCount": 7,
+    "step": 7,
+    "columnWidthPx": 40
+   },
+   "expected": {
+    "first": 0,
+    "last": 21
+   }
+  },
+  {
+   "name": "a wide viewport",
+   "input": {
+    "visibleCount": 12,
+    "step": -1,
+    "columnWidthPx": 120
+   },
+   "expected": {
+    "first": -13,
+    "last": 23
+   }
+  }
+ ]
+}

@@ -1,0 +1,162 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "",
+    "version": ""
+  },
+  "paths": {
+    "/api/bookings/confirm": {
+      "get": {
+        "operationId": "get_booking",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Child"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Nested"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "submit_booking",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Child"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/events": {
+      "get": {
+        "operationId": "route",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/test": {
+      "get": {
+        "operationId": "get",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/test/nested": {
+      "get": {
+        "operationId": "blah",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Booking"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Booking": {
+        "type": "object",
+        "required": [
+          "title",
+          "duration_mins"
+        ],
+        "properties": {
+          "duration_mins": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "Child": {
+        "type": "object",
+        "required": [
+          "duration_mins"
+        ],
+        "properties": {
+          "duration_mins": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "Nested": {
+        "type": "object",
+        "required": [
+          "child",
+          "skip"
+        ],
+        "properties": {
+          "child": {
+            "$ref": "#/components/schemas/Child"
+          },
+          "skip": {
+            "$ref": "#/components/schemas/SkipSerChild"
+          }
+        }
+      },
+      "SkipSerChild": {
+        "type": "object",
+        "properties": {
+          "skipped": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          }
+        }
+      }
+    }
+  }
+}

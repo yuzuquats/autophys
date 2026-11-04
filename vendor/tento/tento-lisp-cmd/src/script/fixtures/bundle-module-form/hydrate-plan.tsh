@@ -1,0 +1,3 @@
+;; The driver constrains params to the item whose reporting/privilege policy it uses.
+;; Hydration is shallow: hydrate ItemPlan.params separately from the plan frame.
+(define restored (std.record.hydrate (json-parse (json-stringify plan.params)) for: plan.item))

@@ -1,0 +1,26 @@
+[package]
+name = "tento-shapes"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+description = "Render-shape registry: dispatches shape-tagged command results (table/v1, sections/v1, …) to widgets shared by the CLI and the TUI trace pane"
+
+[features]
+# Runtime owners enable this only after native hierarchy qualification.
+# Dependency updates alone retain the compatible table/v1 projection.
+native-tree-table = []
+
+[dependencies]
+colored.workspace = true
+pulldown-cmark.workspace = true
+tento-term.workspace = true
+tento-tui-core = { path = "../tento-tui/tento-tui-core" }
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+unicode-segmentation.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+tento-term.workspace = true

@@ -1,0 +1,13 @@
+;; Top-level lisp `let` forms store values in the persistent lisp env;
+;; later command calls take them as ordinary lisp arguments.
+
+(let label-prefix (concat "row-" "v2-"))
+(let base-value 100)
+
+(let sheet (create-sheet :name "lisp-demo"))
+(add-row :sheet (get sheet "id") :label (concat label-prefix "alpha"))
+(set-cell :row (get prev "id") :col "A" :value (+ base-value 23))
+
+(add-row :sheet (get sheet "id") :label (concat label-prefix "beta"))
+(set-cell :row (get prev "id") :col "A" :value (* base-value 2))
+(show)

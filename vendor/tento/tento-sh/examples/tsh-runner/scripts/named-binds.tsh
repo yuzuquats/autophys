@@ -1,0 +1,9 @@
+;; Named binds (`(let name (cmd …))`) outlive `prev`. The set-cell on the
+;; last lines still references the rows bound earlier, even though `prev`
+;; has moved on.
+(let sheet (create-sheet :name "budgets"))
+(let row1 (add-row :sheet (get sheet "id") :label "groceries"))
+(let row2 (add-row :sheet (get sheet "id") :label "rent"))
+(set-cell :row (get row1 "id") :col "A" :value 250)
+(set-cell :row (get row2 "id") :col "A" :value 1800)
+(show)

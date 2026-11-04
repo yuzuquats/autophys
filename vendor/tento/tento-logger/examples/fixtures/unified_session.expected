@@ -1,0 +1,18 @@
+[34m [0m│  450ms │ [38;5;238m02:15:32.050[0m │                       │        │ [36mC[0m │ create-sheet [38;5;239msheets/actions.ts:12[0m
+[34m [0m│  142ms │ [38;5;238m02:15:32.058[0m │ ↗        203.0.113.42 │  alice │ [38;5;238mS[0m │ [38;5;238m├ [0m[34m200[0m POST [35mB[0m example.com    /api/sheets                         
+[34m [0m│[38;5;238m    8ms[0m │              │                       │        │ [38;5;238mS[0m │ [38;5;238m│ [0m[38;5;238m├ [0mauth_check [38;5;239msrc/middleware/auth.rs:22[0m
+[34m [0m│[38;5;238m   45ms[0m │              │                       │        │ [38;5;238mS[0m │ [38;5;238m│ [0m[38;5;238m├ [0mdb_query [38;5;239msrc/db/sheets.rs:88[0m
+[34m [0m│[38;5;238m       [0m │              │                       │        │ [38;5;238mS[0m │ [38;5;238m│ [0m[38;5;238m│ └ [0mAcquired connection from pool [38;5;239msrc/db/pool.rs:15[0m
+[34m [0m│[38;5;238m       [0m │              │                       │        │ [38;5;238mS[0m │ [38;5;238m│ [0m[38;5;238m└ [0mSheet created successfully [38;5;239msrc/routes/api.rs:75[0m
+[34m [0m│[38;5;238m       [0m │              │                       │        │ [36mC[0m │ [38;5;238m│ [0mSheet created [38;5;239msheets/actions.ts:18[0m
+[34m [0m│[38;5;238m   15ms[0m │              │                       │        │ [36mC[0m │ [38;5;238m└ [0mrender-update [38;5;239msheets/render.ts:30[0m
+[34m [0m│  500ms │ [38;5;238m02:15:36.300[0m │                       │        │ [36mC[0m │ save-sheet [38;5;239msheets/actions.ts:55[0m
+[31me[0m│   89ms │ [38;5;238m02:15:36.311[0m │                       │ charli │ [38;5;238mS[0m │ [38;5;238m├ [0m[31m500[0m PUT  [33mP[0m example.com    /api/sheets/{id}                    
+[34m [0m│[38;5;238m   67ms[0m │              │                       │        │ [38;5;238mS[0m │ [38;5;238m│ [0m[38;5;238m├ [0mdb_query [38;5;239msrc/db/sheets.rs:88[0m
+[31me[0m│[38;5;238m       [0m │              │                       │        │ [38;5;238mS[0m │ [38;5;238m│ [0m[38;5;238m│ └ [0m[31mDatabase constraint violation[0m [38;5;239msrc/db/sheets.rs:102[0m
+[34m [0m│[38;5;238m       [0m │              │                       │        │ [38;5;238mS[0m │ [38;5;238m│ [0m[38;5;238m[0m┌───┄
+[34m [0m│[38;5;238m       [0m │              │                       │        │ [38;5;238mS[0m │ [38;5;238m│ [0m[38;5;238m[0m│ [1m[31mPanic[0m: duplicate key value violates unique constraint
+[34m [0m│[38;5;238m       [0m │              │                       │        │ [38;5;238mS[0m │ [38;5;238m│ [0m[38;5;238m[0m│
+[34m [0m│[38;5;238m       [0m │              │                       │        │ [38;5;238mS[0m │ [38;5;238m│ [0m[38;5;238m[0m│
+[34m [0m│[38;5;238m       [0m │              │                       │        │ [38;5;238mS[0m │ [38;5;238m│ [0m[38;5;238m[0m└───┄
+[31me[0m│[38;5;238m       [0m │              │                       │        │ [36mC[0m │ [38;5;238m└ [0m[31mSave failed, retrying...[0m [38;5;239msheets/actions.ts:62[0m

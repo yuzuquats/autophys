@@ -1,0 +1,29 @@
+[package]
+name = "tento-core-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.tento-chrono]
+path = "../../tento-chrono"
+features = ["arbitrary"]
+
+[[bin]]
+name = "fuzz_pad_and_round_range"
+path = "fuzz_targets/fuzz_pad_and_round_range.rs"
+test = false
+doc = false
+bench = false
+
+[profile.dev]
+incremental = true
+
+# A standalone fuzz workspace keeps sanitizer/nightly settings out of the SDK.
+[workspace]
+

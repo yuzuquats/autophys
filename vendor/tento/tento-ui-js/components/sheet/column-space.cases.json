@@ -1,0 +1,127 @@
+{
+ "type": "column-space",
+ "name": "column-space",
+ "description": "`ColumnSpace.of(mapper, today).reach()` as one table: a case fixes the mapper's anchor date, its granularity and the clock, and pins the band's two indices, the dates they resolve to THROUGH that same mapper, and the two facts that make the band correct rather than merely safe \u2014 the strip the band spans is on the axis `ViewportRange.onAxis` judges (`onAxis`), and neither neighbour one column further out is (`onAxisBelow` / `onAxisAbove`), so the band is the widest on-axis one. Every judgement here is made on `toDatesInclusive()`, the span shape `Sheet.rendered()` hands the witness \u2014 `[first.pd.start, last.pd.end]`, whose end is EXCLUSIVE. That is why the high end sits one column short of the low end's mirror at every granularity: the last column of `today + 200` ends on 1 January of `today + 201`. `containsAnchor` is `ScrollWindow`'s precondition for enforcing a band at all. `span` makes the granularity ratios visible: a day's axis is ~7\u00d7 a week's and ~365\u00d7 a year's, and it is derived through the mapper rather than divided out of a column width.",
+ "cases": [
+  {
+   "name": "day: every day from 1826-01-01 to the last one that ENDS inside the band",
+   "input": {
+    "anchor": "2026-09-03",
+    "type": "day",
+    "today": "2026-09-03"
+   },
+   "expected": {
+    "kind": "bounded",
+    "min": -73294,
+    "max": 73166,
+    "minDate": "1826-01-01",
+    "maxDate": "2226-12-30",
+    "onAxis": true,
+    "onAxisBelow": false,
+    "onAxisAbove": false,
+    "containsAnchor": true,
+    "span": 146460
+   }
+  },
+  {
+   "name": "week: both ends are pulled in until the column ITSELF is on the axis, not just a day it contains",
+   "input": {
+    "anchor": "2026-09-03",
+    "type": "week",
+    "today": "2026-09-03"
+   },
+   "expected": {
+    "kind": "bounded",
+    "min": -10470,
+    "max": 10451,
+    "minDate": "1826-01-02",
+    "maxDate": "2226-12-18",
+    "onAxis": true,
+    "onAxisBelow": false,
+    "onAxisAbove": false,
+    "containsAnchor": true,
+    "span": 20921
+   }
+  },
+  {
+   "name": "month: 4810 columns \u2014 401 years of months, less the anchor's offset in its year and the exclusive-end column",
+   "input": {
+    "anchor": "2026-09-03",
+    "type": "month",
+    "today": "2026-09-03"
+   },
+   "expected": {
+    "kind": "bounded",
+    "min": -2408,
+    "max": 2402,
+    "minDate": "1826-01-01",
+    "maxDate": "2226-11-01",
+    "onAxis": true,
+    "onAxisBelow": false,
+    "onAxisAbove": false,
+    "containsAnchor": true,
+    "span": 4810
+   }
+  },
+  {
+   "name": "year: \u2212YEARS_TOLERANCE to +YEARS_TOLERANCE\u22121, because the year `today + 200` ends in `today + 201`",
+   "input": {
+    "anchor": "2026-09-03",
+    "type": "year",
+    "today": "2026-09-03"
+   },
+   "expected": {
+    "kind": "bounded",
+    "min": -200,
+    "max": 199,
+    "minDate": "1826-01-01",
+    "maxDate": "2225-01-01",
+    "onAxis": true,
+    "onAxisBelow": false,
+    "onAxisAbove": false,
+    "containsAnchor": true,
+    "span": 399
+   }
+  },
+  {
+   "name": "the band moves with the anchor and its WIDTH does not: same span, shifted ends",
+   "input": {
+    "anchor": "2026-01-01",
+    "type": "day",
+    "today": "2026-09-03"
+   },
+   "expected": {
+    "kind": "bounded",
+    "min": -73049,
+    "max": 73411,
+    "minDate": "1826-01-01",
+    "maxDate": "2226-12-30",
+    "onAxis": true,
+    "onAxisBelow": false,
+    "onAxisAbove": false,
+    "containsAnchor": true,
+    "span": 146460
+   }
+  },
+  {
+   "name": "a sheet anchored fifteen years ago still reaches the same absolute band \u2014 the anchor moves the indices, not the dates",
+   "input": {
+    "anchor": "2011-03-14",
+    "type": "week",
+    "today": "2026-09-03"
+   },
+   "expected": {
+    "kind": "bounded",
+    "min": -9663,
+    "max": 11258,
+    "minDate": "1826-01-02",
+    "maxDate": "2226-12-18",
+    "onAxis": true,
+    "onAxisBelow": false,
+    "onAxisAbove": false,
+    "containsAnchor": true,
+    "span": 20921
+   }
+  }
+ ]
+}
