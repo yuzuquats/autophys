@@ -14,9 +14,16 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1.0.216", features = ["derive"] }
 # float_roundtrip: a float parsed from a stored payload must print back to
 # the same Python repr, or the canonical text and the hash would differ.
-serde_json = { version = "1.0.133", features = ["float_roundtrip"] }
+serde_json = { version = "1.0.133", features = ["float_roundtrip", "preserve_order"] }
 sha2 = "0.10.8"
 thiserror = "1.0.61"
+
+# Phase 2: ordered schemas, native linear algebra and SciPy-compatible numerics.
+indexmap = { version = "2", features = ["serde"] }
+nalgebra = "0.33"
+differential-equations = "0.7"
+trust-region-least-squares = "0.11"
+ureq = { version = "3", features = ["json"] }
 
 [dev-dependencies]
 tempfile = "3"

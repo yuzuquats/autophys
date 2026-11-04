@@ -46,3 +46,6 @@ pub use workbook::{
     Appended, ChainError, ConfigVersion, Head, Investigation, Project, Snapshot, VerifyReport,
     Workbook,
 };
+
+pub mod simulator;
+pub mod models;
