@@ -49,3 +49,5 @@ pub use workbook::{
 
 pub mod simulator;
 pub mod models;
+pub mod data;
+pub mod fit;
