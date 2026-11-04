@@ -78,8 +78,8 @@ button { font: inherit; color: inherit; }
 html[data-ck-stage="tour"] .ck-tour-peek { opacity: 1; transition-duration: 300ms; transition-delay: 180ms; }
 
 /* landing footer: real document content below the viewport-height deck */
-.ck-footer { min-height: 240px; padding: 64px var(--ck-gutter, 20px) calc(64px + var(--ck-safe-bottom));
-  display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 24px 48px;
+.ck-footer { padding: 12px var(--ck-gutter, 20px) calc(12px + var(--ck-safe-bottom));
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0 24px;
   border-top: 1px solid var(--ck-line); background: #fff; color: var(--ck-secondary); }
 @media (min-width: 640px) { .ck-footer { --ck-gutter: 24px; } }
 @media (min-width: 1024px) { .ck-footer { --ck-gutter: 32px; } }
