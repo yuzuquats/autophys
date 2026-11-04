@@ -32,4 +32,9 @@ and workbench entry and the brand's back link retain exactly two marks with no
 captured navigation errors. The build includes concurrent UI work; its ownership
 is separate from this icon integration.
 
-This is source integration only; no push or deployment.
+Live favicon verified on 2026-11-04: the concurrent owner release
+f3a4869-20261104 includes the committed branding. The public page now links
+/brand.svg and the public SVG matches the retained hash above. This thread made
+no runtime changes or additional restart. Receipt on rwc-dev-01:
+workspace/fleet/evidence/lona-family-landings/autophys/favicon_20261104/receipt.json.
+Source publication remains separate.
