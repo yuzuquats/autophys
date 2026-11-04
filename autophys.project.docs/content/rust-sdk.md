@@ -1,6 +1,6 @@
 # autophys-rs: the daemon's endpoints are a thin layer over a Rust library that matches the Python SDK
 
-Status: plan, rev 2, 2026-11-04. Rev 2: full API parity (AX-2 revised). Operator direction (autophys/rs thread): the
+Status: plan, rev 3, 2026-11-04. Rev 2: full API parity (AX-2 revised). Rev 3: the numerics case format, the `autophys-cli` layout, the conformance tree as committed. Operator direction (autophys/rs thread): the
 Rust binary produces the app and serves the endpoints, and each endpoint
 calls a Rust library crate that is the Rust counterpart of the Python SDK, so
 Rust programs can import it directly. Not implemented yet. It refines W-4
@@ -132,22 +132,95 @@ ranking and a full `ScriptedPolicy` run on each example model; Rust must
 match them within tolerance. Where a tolerance-level difference would change
 a decision (which experiment to propose, which parameters count as
 identifiable), Rust must make the same decision. A case that can't meet that
-is reported, not loosened.
+is reported, not loosened. The case format is below; autophys/api writes
+the cases from the Python SDK.
+
+### Numerics case format (draft for autophys/api)
+
+One JSON file per case, at `tests/conformance/numerics/<model>/<op>-<name>.json`,
+with `op` one of `simulate`, `fit`, `analyze`, `rank`, `outlook`, `run`. Each
+file states every input, so neither side depends on the other's random numbers,
+and every output with the comparison rule it must pass.
+
+```json
+{
+  "format": 1,
+  "op": "fit",
+  "model": "thermal",
+  "written_by": "autophys 0.1.0 (python)",
+  "inputs": {
+    "params":   {"tau": {"lo": 1.0, "hi": 100.0, "log": true}, "gain": {"lo": 0.1, "hi": 10.0}},
+    "fixed":    {"ambient": 20.0},
+    "options":  {"rtol": 1e-8, "atol": 1e-10, "method": "LSODA"},
+    "observations": [{"experiment": "step", "settings": {"power": 5.0},
+                      "t": [0.0, 1.0, 2.0], "y": {"temp": [20.0, 21.3, 22.4]},
+                      "sigma": {"temp": 0.05}}],
+    "starts":   [{"tau": 10.0, "gain": 1.0}, {"tau": 50.0, "gain": 0.5}],
+    "loss": "linear", "f_scale": 1.0
+  },
+  "expect": {
+    "params":     {"value": {"tau": 12.304, "gain": 1.9871}, "rtol": 1e-6},
+    "loss":       {"value": 0.01834, "rtol": 1e-6},
+    "chi2_per_n": {"value": 0.9171, "rtol": 1e-6},
+    "at_bounds":  {"value": [], "exact": true},
+    "success":    {"value": true, "exact": true}
+  }
+}
+```
+
+The comparison rules:
+
+```review-table
+| Rule                    | Meaning                                                                                  |
+| ----------------------- | ---------------------------------------------------------------------------------------- |
+| `rtol`, `atol`          | numeric (scalars, arrays, maps of either), element-wise: pass if within `atol + rtol·|expected|` |
+| `exact: true`           | strings, booleans, integers and ordered lists match exactly                               |
+| `set: true`             | a list compared as a set (e.g. `identified`, `non_identified`)                            |
+| `up_to_sign: true`      | a vector that may come back negated (singular directions); compare both signs, pass on either |
+| omitted field           | not compared: `nfev`, `status`, `message` and solver timings are implementation-specific  |
+```
+
+What each `op` takes as inputs, besides the model and its parameter specs:
+
+```review-table
+| op         | inputs beyond the model                                     | decision fields (`exact`/`set`)          |
+| ---------- | ----------------------------------------------------------- | ---------------------------------------- |
+| `simulate` | `theta`, `experiment`, `settings`, `t`, `options`          | none (trajectory, `rtol`)                |
+| `fit`      | `observations`, explicit `starts`, `loss`, `f_scale`        | `at_bounds`, `success`                   |
+| `analyze`  | `theta`, `observations`, `rule`                             | `identified`, `non_identified`           |
+| `rank`     | `theta`, `observations`, `candidates`, `criterion`          | the ranked `experiment` order            |
+| `outlook`  | `theta`, `experiment`, `axes` (≤3 × ≤12 values), `criterion` | none (the E-1 grid, `rtol`)            |
+| `run`      | `dataset`, a `ScriptedPolicy` script, budgets, stop rules, a deterministic runner | every `Decision` in order, the final outcome `status` |
+```
+
+A `run` case checks decisions, not numbers: Rust replays the same script
+against the same data and must produce the same sequence of actions,
+experiments and settings, ending in the same status. Its records are not
+compared byte for byte, because ids and timestamps differ.
+
+Fit cases pass `starts` explicitly. Python's Latin-hypercube start sampler
+is tested on its own `sample` op later, if at all; the fit itself must not
+depend on it.
 
 ## Layout and naming
 
 ```
 autophys/
-  Cargo.toml          [workspace] members = [".", "sdks/rust"]; package `autophys-server`, [[bin]] name = "autophys"
-  src/                binary: main, app (tento-web), server, http/ (handlers), keys/pairing DB, admin CLI
+  Cargo.toml          [workspace] members = [".", "sdks/rust"]; package `autophys-cli`, [[bin]] name = "autophys"
+  src/                autophys-cli: main, scripts (commands), app (tento-web), server, http/ (handlers), keys/pairing DB
   sdks/rust/          crate `autophys` (autophys-rs): client, workbook, records, projections, validate, canonical, remote
   sdks/python/        package `autophys` (owned by autophys/api)
   tests/conformance/  golden workbooks, chain vectors, cross tests (shared)
 ```
 
 - The crate is named `autophys`, like the pip package, so it's `use autophys::connect`.
-  "autophys-rs" is the project name. The root package becomes `autophys-server`,
-  and its binary stays `autophys` (`autophys serve`). **Agent-chosen, pending operator review.**
+  "autophys-rs" is the project name.
+- The root package is `autophys-cli` (operator, 2026-11-04), shaped like
+  tento-garmin. Its binary stays `autophys`, and its commands are a
+  `tento_sh` `Scripts` tree: `serve`, `build-web`, `pair`, `keys` and `db`
+  operate the daemon, and `projects`, `investigations`, `records`, `approve`,
+  `reject` and `verify` are the SDK through `autophys::connect`, so they work
+  on a local folder or a URL. The parser moves to `tento_sh` after phase 1.
 - `sdks/rust` depends on `rusqlite`, `serde_json`, `sha2` and, for Remote,
   a blocking HTTP client. It does not depend on tento or actix, so it builds
   without `vendor/`.
@@ -178,9 +251,11 @@ the daemon. The spec both sides implement is `workbook-format.md`.
 
 ```
 tests/conformance/
-  vectors/chain.json   hash vectors (today tests/vectors/chain.json)
-  python/              workbooks Python writes  → Rust verifies (cargo test in sdks/rust)
-  rust/                workbooks Rust writes    → Python verifies (pytest in sdks/python)
+  README.md            what every implementation must do
+  python/              <case>.ap-workbook + <case>.json, written by Python → Rust verifies (cargo test in sdks/rust)
+  rust/                the same shape, written by Rust                  → Python verifies (pytest in sdks/python)
+  numerics/            phase 2: <model>/<op>-<name>.json, written by Python → Rust matches within tolerance
+tests/vectors/chain.json   hash-chain vectors; both suites read it at this path
 ```
 
 ```review-callout
@@ -191,7 +266,7 @@ title: Not settled yet
 - `inv.records_after` and the HTTP `?after=` cursor are Rust- and server-only.
   `gseq` orders records within one workbook only (W-6), so a remote stream that
   spans projects needs a cursor per workbook.
-- Crate and package naming are agent choices awaiting operator review.
+- The crate name `autophys` is an agent choice awaiting operator review.
 - Phase 2's tolerances are not yet set. Python's solvers are adaptive, so
   results that match within 1e-6 on the example models may still drift on
   stiff user models.
