@@ -1,7 +1,10 @@
 # Show the calibrated model, its residuals and the ground truth
 
-Status: rev 2 (2026-11-04). **Agent-chosen, pending operator review**
-(FC-1 and GT-1 in [decisions.md](decisions.md)). Step 1 (Python SDK) is
+Status: rev 2 (2026-11-04). The rev 2 comparison rule is
+**operator-confirmed, 2026-11-04**: Rust fit curves are compared within
+numerical tolerance, and reveal records stay byte-for-byte identical
+(FC-1r2 in [decisions.md](decisions.md)). FC-1 and GT-1 themselves remain
+agent-chosen, pending operator review. Step 1 (Python SDK) is
 implemented (I8c41e7a95d2f03b6c1e8). The goldens for Rust are under
 `tests/conformance/python/`: `thermal-curves-reveal.ap-workbook` with its
 `.json` expectation, and `thermal-curves-fit.json` and
