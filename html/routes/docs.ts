@@ -23,6 +23,7 @@ import { shellTokenizer } from "@tento-ui/components/code/languages/shell";
 import { pythonTokenizer } from "@tento-ui/components/code/languages/python";
 import { LispExampleView } from "@tento-ui/components/lisp-example/lisp-example-view";
 import { ReviewFence } from "@tento-ui/components/review-notes/review-fence";
+import { LOOPS_FENCE, LoopsFigureView } from "./loops-figure.ts";
 import type { ProseMirrorEditor } from "@tento-ui/components/prosemirror";
 import { InstanceUrl } from "@tento-core/instance-url";
 import type { Cookbook } from "@tento-cookbook/lib.ts";
@@ -136,25 +137,12 @@ autophys has two loops. They are nested, not concurrent: the outer loop calls th
 
 Each research step waits for all of its investigations before it decides. The investigations within a step are independent and run in parallel with \`--jobs\`.
 
-\`\`\`review-flow
-flowchart TD
-  B["1. score the starting playbook on the train seeds"] --> RS["2. the researcher proposes an edit to the playbook"]
-  RS --> EV["3. run one investigation (the loop below)<br/>per case and train seed, with the edited playbook"]
-  EV --> K["4. keep the edit only if the score improves<br/>then repeat from 2, for N iterations"]
-  K --> HO["5. compare the starting and final playbooks on held-out seeds"]
+\`\`\`autophys-loops
 \`\`\`
 
 The score is lexicographic: the number of runs whose status and diagnosis are correct, then the mean log parameter error, then cost. The held-out seeds are kept apart from the start and only used at the end. An edit that fails validation is logged and skipped, and still uses up an iteration.
 
-Inside each evaluation, an investigation is not a fixed cycle. At every step the policy picks one action until it stops or a budget runs out, so the order depends on the policy. This is the scripted policy's usual order; it also compares a sensor-bias variant of the model when the fit is poor:
-
-\`\`\`review-flow
-flowchart TD
-  F["fit the model to the train data"] --> S["check identifiability (SVD)"]
-  S --> R["rank candidate experiments by Fisher information"]
-  R --> Q["request one experiment, then refit<br/>repeat until identified or out of budget"]
-  Q --> V["validate and stop: the code checks the claim"]
-\`\`\`
+Inside each evaluation, an investigation is not a fixed cycle. At every step the policy picks one action until it stops or a budget runs out, so the order depends on the policy. The figure shows the scripted policy's usual order. It also compares a sensor-bias variant of the model when the fit is poor.
 
 | Mode | What runs | Where new data comes from |
 | --- | --- | --- |
@@ -227,7 +215,10 @@ class StaticCodeBlockView {
 const NODE_VIEWS: Documentation.Props["nodeViews"] = {
   lisp_example: (node) => new LispExampleView(node),
   // review-flow (and other review-*) fences draw as diagrams; any other fence stays code.
-  code_block: (node) => ReviewFence.dispatch(node, null) ?? new StaticCodeBlockView(node),
+  code_block: (node) =>
+    node.attrs.params === LOOPS_FENCE
+      ? new LoopsFigureView(node)
+      : ReviewFence.dispatch(node, null) ?? new StaticCodeBlockView(node),
 };
 
 /** The docs section and the shell hook that keeps it out of the open app's tab order. inert,
