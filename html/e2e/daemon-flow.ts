@@ -235,7 +235,7 @@ const channel: string = config.simulator.outputs[0];
     if (await recovery.$(".ck-tour-dismiss")) await recovery.click(".ck-tour-dismiss");
     await settle(recovery);
     await recovery.deleteCookie(renewed);
-    await until(recovery, "reload guard exposes session failure", async () => (await recovery.$eval(".ap-rail-connection", el => el.title)).includes("Browser session expired"), 15_000);
+    await until(recovery, "reload guard exposes session failure", async () => (await recovery.$eval(".ap-rail-connection", el => el.getAttribute("title") ?? "")).includes("Browser session expired"), 15_000);
     check(navigations === 1, "AX-9: a second 401 inside 30 seconds shows an error instead of reloading again");
     await snap(recovery, "daemon-session-expired-guard");
     await recovery.close();
