@@ -77,6 +77,18 @@ button { font: inherit; color: inherit; }
 .ck-tour-peek { position: absolute; inset: 0 0 auto; height: 200px; opacity: 0; transition: opacity 240ms ease; }
 html[data-ck-stage="tour"] .ck-tour-peek { opacity: 1; transition-duration: 300ms; transition-delay: 180ms; }
 
+/* landing footer: real document content below the viewport-height deck */
+.ck-footer { min-height: 240px; padding: 64px var(--ck-gutter, 20px) calc(64px + var(--ck-safe-bottom));
+  display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 24px 48px;
+  border-top: 1px solid var(--ck-line); background: #fff; color: var(--ck-secondary); }
+@media (min-width: 640px) { .ck-footer { --ck-gutter: 24px; } }
+@media (min-width: 1024px) { .ck-footer { --ck-gutter: 32px; } }
+.ck-footer-name { display: flex; align-items: center; min-height: 44px; color: var(--ck-ink); font-weight: 500; letter-spacing: -.025em; }
+.ck-footer-links { display: flex; flex-wrap: wrap; gap: 8px 24px; }
+.ck-footer-link { display: inline-flex; align-items: center; min-height: 44px; padding: 0; border: 0;
+  background: transparent; color: inherit; text-decoration: none; cursor: pointer; }
+.ck-footer-link:hover { text-decoration: underline; text-underline-offset: 4px; }
+
 /* deck */
 .ck-deck { position: absolute; inset: 0; display: flex; flex-direction: column; }
 .ck-deck-viewport { position: relative; flex: 1; overflow: hidden; background: var(--ck-n100); touch-action: pan-y pinch-zoom; }

@@ -1,3 +1,4 @@
+import { h, reducedMotion } from "./dom.ts";
 import { createDeck } from "./deck.ts";
 import type { DeckSlide } from "./deck-data.ts";
 import { installDrawer } from "./drawer.ts";
@@ -148,10 +149,23 @@ export function mountHost(options: ShellOptions = {}): CookbookHost {
       let slotsNow = panels.freshSlots();
       const tutorial = createTutorial(options.tutorial ?? shellSteps);
       const deck = createDeck(options.deck?.(app) ?? placeholderDeck(app.title, appPath));
+      const backToTop = h("button", "ck-footer-link", { type: "button" }, "Back to top");
+      backToTop.addEventListener("click", () => {
+        window.scrollTo({ top: 0, behavior: reducedMotion() ? "instant" : "smooth" });
+        header.brand.focus({ preventScroll: true });
+      });
+      const footer = h("footer", "ck-footer", null,
+        h("span", "ck-footer-name", null, app.title),
+        h("nav", "ck-footer-links", { "aria-label": "Footer" },
+          h("a", "ck-footer-link", { href: appPath }, "Open app"),
+          backToTop,
+        ),
+      );
       const drawer = installDrawer({
         root,
         header,
         deck,
+        footer,
         panels,
         tutorial,
         appPath,

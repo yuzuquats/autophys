@@ -28,6 +28,7 @@ export function installDrawer(parts: {
   root: HTMLElement;
   header: Header;
   deck: Deck;
+  footer?: HTMLElement;
   panels: Panels;
   tutorial: Tutorial;
   appPath: string;
@@ -42,6 +43,7 @@ export function installDrawer(parts: {
   tour.inert = true;
   landing.append(content, tour);
   root.append(panels.el, landing, header.el);
+  if (parts.footer) root.append(parts.footer);
 
   let stage: Stage = "landing";
   let revision = 0;
@@ -71,6 +73,9 @@ export function installDrawer(parts: {
     panels.setPeek(next === "tour" ? peek() : 0);
     if (!open) panels.setReady(false);
     landing.toggleAttribute("data-lowered", open);
+    // Keep the footer out of the app's tab order and scroll range. Restore it
+    // before restoring scroll, so an offset at the page bottom is not clamped.
+    if (parts.footer) parts.footer.hidden = open;
     // The app uses viewport coordinates; the landing keeps its document offset.
     // Account for that offset in the animation so opening/closing while scrolled
     // (including a reversal in flight) starts at the displayed position.
