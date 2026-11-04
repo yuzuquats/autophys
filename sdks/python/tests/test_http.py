@@ -103,6 +103,13 @@ def test_cli_pair_saves_0600_and_never_prints_key(server, config_dir):
     assert saved["api_key"] not in out.getvalue()
 
 
+def test_cli_pair_uses_autophys_server_on_first_pair(server, config_dir, monkeypatch):
+    monkeypatch.setenv("AUTOPHYS_SERVER", server.url)
+    out = io.StringIO()
+    assert cli.main(["pair", "--name", "lab-pc"], out=out) == 0
+    assert json.loads((config_dir / "credentials").read_text())["server"] == server.url
+
+
 def test_cli_pair_denied(config_dir):
     with FakeAutophys(deny=True) as s:
         out = io.StringIO()

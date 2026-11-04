@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import platform
 import sys
 import time
@@ -24,8 +25,10 @@ def _server(args) -> str | None:
 
 
 def cmd_pair(args, out=sys.stdout, sleep=time.sleep) -> int:
+    # --server, else AUTOPHYS_SERVER, else the saved server: a first pair
+    # (no credentials file yet) must still honour AUTOPHYS_SERVER.
     creds = load_credentials(_server(args))
-    server = _server(args) or (creds.server if creds else None)
+    server = _server(args) or os.environ.get("AUTOPHYS_SERVER") or (creds.server if creds else None)
     from .http import DEFAULT_SERVER
 
     server = server or DEFAULT_SERVER
