@@ -29,6 +29,54 @@ pub enum Unlock {
   Launch,
 }
 
+/// What a record holds, which decides its default tier and which exits it
+/// may leave through (design: `secrets-architecture`). `api-key` and
+/// `token-json` are data a granted script may read; `password` and
+/// `passphrase` are capabilities for an action and leave only through a
+/// destination-checked `use`, never a script read or a lane environment.
+/// Records written before the field existed read as `api-key`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Kind {
+  #[default]
+  ApiKey,
+  TokenJson,
+  Password,
+  Passphrase,
+}
+
+impl Kind {
+  pub const ALL: [Kind; 4] = [Kind::ApiKey, Kind::TokenJson, Kind::Password, Kind::Passphrase];
+
+  /// The kebab name serde writes.
+  pub fn as_str(self) -> &'static str {
+    match self {
+      Kind::ApiKey => "api-key",
+      Kind::TokenJson => "token-json",
+      Kind::Password => "password",
+      Kind::Passphrase => "passphrase",
+    }
+  }
+
+  pub fn parse(raw: &str) -> Option<Kind> {
+    Kind::ALL.into_iter().find(|k| k.as_str() == raw)
+  }
+
+  /// Whether a script read (`std.vault.read-json`) may return this record.
+  /// A password is used, not read.
+  pub fn script_readable(self) -> bool {
+    matches!(self, Kind::ApiKey | Kind::TokenJson)
+  }
+
+  /// The tier a record of this kind gets when `set` names none.
+  pub fn default_unlock(self) -> Unlock {
+    match self {
+      Kind::ApiKey | Kind::TokenJson => Unlock::None,
+      Kind::Password | Kind::Passphrase => Unlock::Session,
+    }
+  }
+}
+
 /// The one-field health machine. Any sender may report `ok → suspect`; only
 /// the operator's `mark` or an eviction reaches `burned`; `rotate` → `ok`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -68,6 +116,8 @@ pub struct Record {
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub renewal_url: Option<String>,
   pub unlock: Unlock,
+  #[serde(default)]
+  pub kind: Kind,
   pub health: Health,
   /// The version a mint reads.
   pub current: u32,

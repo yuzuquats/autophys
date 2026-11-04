@@ -19,7 +19,13 @@ export const cookbookCss = `
   --ck-safe-top: env(safe-area-inset-top, 0px); --ck-safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; overflow: hidden; background: #fff; overscroll-behavior: none; }
+html, body { margin: 0; width: 100%; height: 100%; background: #fff; }
+/* Let the landing document follow native vertical scrolling/browser chrome,
+   like Hacks. Clip horizontal decoration without creating a Y scroll trap. */
+html { overflow-x: clip; overscroll-behavior-x: none; scrollbar-width: none; }
+html::-webkit-scrollbar { display: none; }
+html[data-ck-stage="tour"], html[data-ck-stage="app"],
+html[data-ck-stage="tour"] body, html[data-ck-stage="app"] body { overflow: hidden; overscroll-behavior: none; }
 body { font: 14px/20px var(--ck-font); color: var(--ck-ink); -webkit-font-smoothing: antialiased; }
 button { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--ck-focus); outline-offset: 2px; }
@@ -27,11 +33,11 @@ button { font: inherit; color: inherit; }
 .ck-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 /* header */
-.ck-header { position: fixed; top: 0; left: 0; right: 0; z-index: 12; height: calc(80px + var(--ck-safe-top));
+.ck-header { position: absolute; top: 0; left: 0; right: 0; z-index: 12; height: calc(80px + var(--ck-safe-top));
   padding: var(--ck-safe-top) var(--ck-gutter, 20px) 0; display: flex; align-items: center; pointer-events: none; }
 @media (min-width: 640px) { .ck-header { --ck-gutter: 24px; } }
 @media (min-width: 1024px) { .ck-header { --ck-gutter: 32px; } }
-.ck-header[data-app] { --ck-gutter: calc(var(--ck-gap) + 16px); }
+.ck-header[data-app] { position: fixed; --ck-gutter: calc(var(--ck-gap) + 16px); }
 .ck-nav { position: relative; isolation: isolate; flex: 1; height: 56px; display: flex; align-items: center; justify-content: space-between;
   gap: 16px; pointer-events: auto; font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: -0.025em; }
 .ck-menubar { position: absolute; inset: 0 -16px; z-index: -1; border-radius: 16px; background: #fff;
@@ -63,9 +69,9 @@ button { font: inherit; color: inherit; }
 .ck-header[data-app] .ck-export { opacity: 1; visibility: visible; transition-delay: 120ms, 0s, 0s; }
 
 /* landing surface: deck + tutorial peek */
-.ck-landing { position: fixed; inset: 0; z-index: 11; background: #fff; overflow: clip; border-radius: 0; will-change: transform;
+.ck-landing { position: relative; width: 100%; height: 100vh; z-index: 11; background: #fff; overflow: clip; border-radius: 0; will-change: transform;
   transition: border-radius 700ms var(--ck-ease), box-shadow 700ms var(--ck-ease); }
-.ck-landing[data-lowered] { border-radius: 32px 32px 0 0; box-shadow: 0 0 1.5px rgb(0 0 0 / 38%), 0 -8px 32px rgb(0 0 0 / 8%); }
+.ck-landing[data-lowered] { position: fixed; inset: 0; border-radius: 32px 32px 0 0; box-shadow: 0 0 1.5px rgb(0 0 0 / 38%), 0 -8px 32px rgb(0 0 0 / 8%); }
 .ck-landing-content { position: absolute; inset: 0; transition: opacity 180ms ease; }
 .ck-landing[data-lowered] .ck-landing-content { opacity: 0; }
 .ck-tour-peek { position: absolute; inset: 0 0 auto; height: 200px; opacity: 0; transition: opacity 240ms ease; }
@@ -74,13 +80,17 @@ html[data-ck-stage="tour"] .ck-tour-peek { opacity: 1; transition-duration: 300m
 /* deck */
 .ck-deck { position: absolute; inset: 0; display: flex; flex-direction: column; }
 .ck-deck-viewport { position: relative; flex: 1; overflow: hidden; background: var(--ck-n100); touch-action: pan-y pinch-zoom; }
-.ck-deck-track { display: flex; height: 100%; will-change: transform; }
+.ck-deck-texture { position: absolute; inset: 0; pointer-events: none; overflow: hidden; background: #202020; }
+.ck-deck-texture canvas { display: block; width: 100%; height: 100%; }
+.ck-deck-track { position: relative; height: 100%; }
+.ck-deck-viewport::after { content: ""; position: absolute; inset: 0; pointer-events: none; }
+.ck-deck[data-moving] .ck-deck-viewport::after { box-shadow: 0 0 6px 3px rgb(0 0 0 / 12%) inset; }
+.ck-deck[data-moving] .ck-deck-page { box-shadow: 0 4px 24px rgb(0 0 0 / 12%); }
 .ck-deck[data-dragging] .ck-deck-track { user-select: none; -webkit-user-select: none; cursor: grabbing; }
-.ck-deck-page { flex: 0 0 100%; height: 100%; overflow: auto; scrollbar-width: none; background: #fff;
-  padding: calc(80px + var(--ck-safe-top)) 0 calc(96px + var(--ck-safe-bottom));
-  transition: transform 420ms cubic-bezier(.16,1,.3,1), border-radius 420ms cubic-bezier(.16,1,.3,1), box-shadow 420ms ease; }
+.ck-deck-page { position: absolute; inset: 0; width: 100%; height: 100%; overflow: auto; scrollbar-width: none; background: #fff; touch-action: pan-y pinch-zoom;
+  transition: border-radius 800ms cubic-bezier(.16,1,.3,1);
+  padding: calc(80px + var(--ck-safe-top)) 0 calc(96px + var(--ck-safe-bottom)); }
 .ck-deck-page::-webkit-scrollbar { display: none; }
-.ck-deck[data-moving] .ck-deck-page { transform: scale(.95); border-radius: 24px; box-shadow: 0 4px 24px rgb(0 0 0 / 12%); }
 .ck-deck-controls { position: absolute; left: 0; right: 0; bottom: var(--ck-safe-bottom); min-height: 64px; display: flex; align-items: center;
   justify-content: space-between; gap: 20px; padding: 8px var(--ck-gutter, 20px); font-size: 13px; }
 @media (min-width: 640px) { .ck-deck-controls { --ck-gutter: 24px; } }

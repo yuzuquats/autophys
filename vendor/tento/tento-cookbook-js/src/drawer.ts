@@ -47,6 +47,7 @@ export function installDrawer(parts: {
   let revision = 0;
   let animation: Animation | null = null;
   let trigger: HTMLElement | null = null;
+  let landingScroll = 0;
   const peek = () => Math.max(0, Math.min(200, innerHeight - 80));
   const transformFor = (s: Stage) =>
     s === "landing" ? "translateY(0px)" : `translateY(${s === "tour" ? innerHeight - peek() : innerHeight}px)`;
@@ -56,17 +57,26 @@ export function installDrawer(parts: {
     const previous = stage;
     stage = next;
     const own = ++revision;
-    const from = getComputedStyle(landing).transform;
+    const from = new DOMMatrixReadOnly(getComputedStyle(landing).transform);
+    const previousScroll = scrollY;
+    if (previous === "landing") landingScroll = previousScroll;
     animation?.cancel();
-    document.documentElement.dataset.ckStage = next;
     const open = next !== "landing";
+    // Measure the header before locking away the landing's scroll offset.
+    if (open) header.setAppState(true);
+    document.documentElement.dataset.ckStage = next;
     if (open && previous === "landing") parts.onOpen();
-    header.setAppState(open);
     panels.setVisible(true);
     panels.setOpen(open);
     panels.setPeek(next === "tour" ? peek() : 0);
     if (!open) panels.setReady(false);
     landing.toggleAttribute("data-lowered", open);
+    // The app uses viewport coordinates; the landing keeps its document offset.
+    // Account for that offset in the animation so opening/closing while scrolled
+    // (including a reversal in flight) starts at the displayed position.
+    window.scrollTo({ top: open ? 0 : landingScroll, behavior: "instant" });
+    const fromY = from.m42 + scrollY - previousScroll;
+    if (!open) header.setAppState(false);
     // The deck and the header link are about to go inert. If focus was on
     // them (whatever opened the app), hand it to the way back; a deep link,
     // with nothing focused, moves nothing.
@@ -84,7 +94,7 @@ export function installDrawer(parts: {
     landing.style.transform = to;
     const long = previous === "landing" || next === "landing";
     const duration = reducedMotion() ? 0 : long ? 700 : 380;
-    animation = landing.animate([{ transform: from === "none" ? "translateY(0px)" : from }, { transform: to }], {
+    animation = landing.animate([{ transform: `translateY(${fromY}px)` }, { transform: to }], {
       duration,
       easing: ease,
     });

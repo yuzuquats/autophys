@@ -4,10 +4,9 @@ import {
   type DeckBody,
   type DeckSlide,
   type DeckStat,
-  dragOffset,
-  swipeTarget,
 } from "./deck-data.ts";
-import { ease, h, reducedMotion } from "./dom.ts";
+import { h } from "./dom.ts";
+import { createTexture } from "./texture.ts";
 
 export type Deck = {
   readonly el: HTMLElement;
@@ -16,16 +15,54 @@ export type Deck = {
   step(delta: number): void;
 };
 
-/**
- * The deck carousel. Slides sit side by side on one track; a move slides the
- * track while every page recedes into a rounded card over the grey well, then
- * the arriving page grows back to fill the screen. Buttons, arrow keys (wired
- * by the drawer) and horizontal swipes all go through `go`.
- */
+const lerp = (a: number, b: number, p: number) => a + (b - a) * p;
+const easeInSine = (p: number) => 1 - Math.cos(p * Math.PI / 2);
+
+/** Position and depth share the fractional page index, as in std-carousel.
+ * Edge pages approach a third of a page of overscroll, even on long pulls. */
+export function deckTransforms(
+  idx: number,
+  count: number,
+): { progress: number; translate: number; scale: number }[] {
+  if (!Number.isFinite(idx) || !Number.isInteger(count) || count < 0) {
+    throw new RangeError("Invalid deck transform bounds");
+  }
+  return Array.from({ length: count }, (_, i) => {
+    let diff = i - idx;
+    if (idx < 0 && i === 0) diff = (1 - Math.exp(-diff)) / 3;
+    else if (idx > count - 1 && i === count - 1) {
+      diff = -(1 - Math.exp(-Math.abs(diff))) / 3;
+    }
+    const progress = Math.max(0, 1 - Math.abs(i - idx));
+    return {
+      progress,
+      translate: diff,
+      scale: lerp(.95, 1, easeInSine(progress)),
+    };
+  });
+}
+
+/** The clamped pages share one bounded edge pull, matching Hacks' adapter. */
+export function deckPull(
+  position: number,
+  count: number,
+): { offset: number; scale: number } {
+  const excess = position - Math.max(0, Math.min(count - 1, position));
+  const offset = -Math.sign(excess) * .22 *
+    (1 - Math.exp(-Math.abs(excess) / .55));
+  return { offset, scale: 1 - .05 * Math.abs(offset) / .22 };
+}
+
+/** Each page translates and scales together. The stationary texture well
+ * stays beneath the pages, including the shared layer's endpoint pulls. */
 export function createDeck(slides: readonly DeckSlide[]): Deck {
   const count = slides.length;
-  const el = h("section", "ck-deck", { "aria-label": "Pitch deck", "aria-roledescription": "carousel" });
+  const el = h("section", "ck-deck", {
+    "aria-label": "Pitch deck",
+    "aria-roledescription": "carousel",
+  });
   const viewport = h("div", "ck-deck-viewport");
+  const texture = createTexture();
   const track = h("div", "ck-deck-track");
   const pages = slides.map((slide, i) =>
     h("div", "ck-deck-page", {
@@ -35,10 +72,16 @@ export function createDeck(slides: readonly DeckSlide[]): Deck {
     }, renderSlide(slide))
   );
   track.append(...pages);
-  viewport.append(track);
+  viewport.append(texture.el, track);
   const counter = h("span", "ck-deck-counter", { "aria-hidden": "true" });
-  const prev = h("button", "ck-deck-arrow", { type: "button", "aria-label": "Previous slide" }, "←");
-  const next = h("button", "ck-deck-arrow", { type: "button", "aria-label": "Next slide" }, "→");
+  const prev = h("button", "ck-deck-arrow", {
+    type: "button",
+    "aria-label": "Previous slide",
+  }, "←");
+  const next = h("button", "ck-deck-arrow", {
+    type: "button",
+    "aria-label": "Next slide",
+  }, "→");
   const status = h("span", "ck-sr-only", { role: "status" });
   el.append(
     viewport,
@@ -53,9 +96,80 @@ export function createDeck(slides: readonly DeckSlide[]): Deck {
   );
 
   let index = 0;
-  let animation: Animation | null = null;
-  const offset = (i: number, dx = 0) => `translateX(${-i * viewport.clientWidth + dx}px)`;
-  const moving = (on: boolean) => el.toggleAttribute("data-moving", on);
+  let position = 0;
+  let revision = 0;
+  let suppressClickUntil = 0;
+  const animations = new Map<HTMLElement, Animation>();
+  const media = matchMedia("(prefers-reduced-motion: reduce)");
+  const events = new AbortController();
+  const { signal } = events;
+  const moving = (on: boolean) => {
+    el.toggleAttribute("data-moving", on);
+    texture.setRunning(on);
+  };
+  const cancelAnimations = () => {
+    for (const animation of animations.values()) animation.cancel();
+    animations.clear();
+  };
+
+  function render(
+    idx: number,
+    animate: boolean,
+    duration = 500,
+    easing = "ease",
+  ): void {
+    const ownRevision = ++revision;
+    const animated = animate && !media.matches;
+    const elements = [track, ...pages];
+    // Capture every displayed transform before cancelling an interrupted move.
+    const from = elements.map((page) => getComputedStyle(page).transform);
+    const interrupted = animations.size > 0;
+    cancelAnimations();
+    position = Math.max(0, Math.min(count - 1, idx));
+    const pull = deckPull(idx, count);
+    const transforms = [
+      `translateX(${pull.offset * 100}%) scale(${pull.scale})`,
+      ...deckTransforms(position, count).map(({ translate, scale }) =>
+        `translate(${translate * 100}%, 0) scale(${scale})`
+      ),
+    ];
+    const exposed = idx !== index || pull.offset !== 0 || animated &&
+        (interrupted ||
+          elements.some((page, i) => page.style.transform !== transforms[i]));
+    moving(exposed);
+    // As in Hacks, drag rounding and corner settling have independent timing.
+    const radius =
+      !animate && (!Number.isInteger(position) || pull.offset !== 0) &&
+        !media.matches
+        ? "24px"
+        : "0px";
+    for (const page of pages) {
+      page.style.transitionDuration = `${
+        media.matches ? 0 : animate ? duration * 5 : 800
+      }ms`;
+      page.style.borderRadius = radius;
+    }
+    elements.forEach((page, i) => {
+      page.style.transform = transforms[i];
+      if (!animated || !exposed) return;
+      const own = page.animate([{ transform: from[i] }, {
+        transform: transforms[i],
+      }], {
+        duration,
+        easing: i === 0 ? "cubic-bezier(.16,1,.3,1)" : easing,
+      });
+      animations.set(page, own);
+    });
+    if (animated && exposed) {
+      Promise.allSettled(
+        [...animations.values()].map((animation) => animation.finished),
+      ).then(() => {
+        if (ownRevision !== revision) return;
+        animations.clear();
+        moving(false);
+      });
+    }
+  }
 
   function update(): void {
     pages.forEach((page, i) => {
@@ -68,90 +182,170 @@ export function createDeck(slides: readonly DeckSlide[]): Deck {
     status.textContent = `Slide ${index + 1} of ${count}`;
   }
 
-  function go(target: number): void {
-    const from = getComputedStyle(track).transform;
-    animation?.cancel();
+  function go(target: number, duration = 500): void {
+    endDrag();
     index = clampSlide(target, count);
     update();
-    const to = offset(index);
-    track.style.transform = to;
-    if (reducedMotion()) {
-      moving(false);
-      return;
-    }
-    moving(true);
-    const own = animation = track.animate([{ transform: from === "none" ? offset(0) : from }, {
-      transform: to,
-    }], {
-      duration: 560,
-      easing: ease,
-    });
-    own.finished.then(() => {
-      if (animation !== own) return;
-      animation = null;
-      moving(false);
-    }, () => {});
+    render(index, true, duration);
   }
+  prev.addEventListener("click", () => go(index - 1), { signal });
+  next.addEventListener("click", () => go(index + 1), { signal });
 
-  prev.addEventListener("click", () => go(index - 1));
-  next.addEventListener("click", () => go(index + 1));
-
-  // Horizontal swipes follow the pointer; vertical drags stay page scrolls.
-  let drag:
-    | { id: number; x0: number; y0: number; lastX: number; lastT: number; v: number; active: boolean }
-    | null = null;
+  let drag: {
+    id: number;
+    x0: number;
+    y0: number;
+    start: number;
+    width: number;
+    active: boolean;
+  } | null = null;
+  let restoreSelection: (() => void) | null = null;
+  function endDrag(): void {
+    const previous = drag;
+    drag = null;
+    el.toggleAttribute("data-dragging", false);
+    restoreSelection?.();
+    restoreSelection = null;
+    if (previous && viewport.hasPointerCapture(previous.id)) {
+      viewport.releasePointerCapture(previous.id);
+    }
+  }
+  function recover(): void {
+    const previous = drag;
+    endDrag();
+    if (previous?.active) go(Math.round(position), 200);
+  }
+  const ownsPointer = (event: Event) =>
+    event.composedPath().some((target) =>
+      target instanceof Element &&
+      target.matches(
+        "a,button,input,textarea,select,[contenteditable=true],[data-carousel-interactive]",
+      )
+    );
   viewport.addEventListener("pointerdown", (event) => {
-    if (event.button !== 0 || (event.target as Element).closest("a, button")) return;
+    if (!event.isPrimary || event.button !== 0 || ownsPointer(event)) return;
+    recover();
     drag = {
       id: event.pointerId,
       x0: event.clientX,
       y0: event.clientY,
-      lastX: event.clientX,
-      lastT: event.timeStamp,
-      v: 0,
+      start: Math.round(position),
+      width: Math.max(1, viewport.clientWidth),
       active: false,
     };
-  });
-  viewport.addEventListener("pointermove", (event) => {
+  }, { signal });
+  window.addEventListener("pointermove", (event) => {
     if (!drag || event.pointerId !== drag.id) return;
+    if (event.pointerType === "mouse" && event.buttons === 0) {
+      recover();
+      return;
+    }
     const dx = event.clientX - drag.x0, dy = event.clientY - drag.y0;
     if (!drag.active) {
-      if (Math.abs(dy) > 8 && Math.abs(dy) > Math.abs(dx)) {
-        drag = null;
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < 10) return;
+      if (Math.abs(dy) >= Math.abs(dx)) {
+        endDrag();
         return;
       }
-      if (Math.abs(dx) <= 8) return;
+      if (Math.abs(dx) < Math.abs(dy) * 1.5) return;
+      if (animations.size && pages[0]) {
+        const shown = new DOMMatrixReadOnly(
+          getComputedStyle(pages[0]).transform,
+        );
+        drag.start = Math.max(0, Math.min(count - 1, -shown.m41 / drag.width));
+      }
       drag.active = true;
-      viewport.setPointerCapture(event.pointerId);
-      // A mouse drag would otherwise select slide text as it swipes.
+      const style = document.documentElement.style;
+      const saved = ["user-select", "-webkit-user-select"].map((property) => ({
+        property,
+        value: style.getPropertyValue(property),
+        priority: style.getPropertyPriority(property),
+      }));
+      saved.forEach(({ property }) =>
+        style.setProperty(property, "none", "important")
+      );
+      restoreSelection = () =>
+        saved.forEach(({ property, value, priority }) => {
+          if (value) style.setProperty(property, value, priority);
+          else style.removeProperty(property);
+        });
       getSelection()?.removeAllRanges();
       el.toggleAttribute("data-dragging", true);
-      const shown = getComputedStyle(track).transform;
-      animation?.cancel();
-      animation = null;
-      if (shown !== "none") track.style.transform = shown;
-      moving(true);
+      try {
+        viewport.setPointerCapture(event.pointerId);
+      } catch { /* Synthetic or cancelled pointer. */ }
     }
-    const dt = event.timeStamp - drag.lastT;
-    if (dt > 0) drag.v = (event.clientX - drag.lastX) / dt;
-    drag.lastX = event.clientX;
-    drag.lastT = event.timeStamp;
-    track.style.transform = offset(index, dragOffset(index, dx, count));
-  });
-  const release = (event: PointerEvent) => {
+    render(drag.start - dx / drag.width, false);
+  }, { signal, passive: true });
+  viewport.addEventListener("touchmove", (event) => {
+    if (drag?.active && event.touches.length === 1 && event.cancelable) {
+      event.preventDefault();
+    }
+  }, { signal, passive: false, capture: true });
+  document.addEventListener("selectstart", (event) => {
+    if (drag?.active) event.preventDefault();
+  }, { signal, capture: true });
+  window.addEventListener("pointerup", (event) => {
     if (!drag || event.pointerId !== drag.id) return;
-    const { active, x0, v } = drag;
-    drag = null;
-    el.toggleAttribute("data-dragging", false);
-    if (active) go(swipeTarget(index, event.clientX - x0, viewport.clientWidth, v, count));
-  };
-  viewport.addEventListener("pointerup", release);
-  viewport.addEventListener("pointercancel", release);
-  new ResizeObserver(() => {
-    if (!animation && !drag) track.style.transform = offset(index);
-  }).observe(viewport);
-
+    const previous = drag;
+    endDrag();
+    if (!previous.active) return;
+    const progress = (previous.x0 - event.clientX) / previous.width;
+    suppressClickUntil = performance.now() + 250;
+    go(
+      Math.round(previous.start) +
+        (Math.abs(progress) >= .15 ? Math.sign(progress) : 0),
+      300,
+    );
+  }, { signal });
+  window.addEventListener("pointercancel", (event) => {
+    if (drag?.id === event.pointerId) recover();
+  }, { signal });
+  viewport.addEventListener("lostpointercapture", (event) => {
+    if (event.composedPath()[0] === viewport && event.pointerId === drag?.id) {
+      recover();
+    }
+  }, { signal });
+  viewport.addEventListener("click", (event) => {
+    if (performance.now() < suppressClickUntil) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  }, { signal, capture: true });
+  window.addEventListener("blur", recover, { signal });
+  window.addEventListener("pagehide", recover, { signal });
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) recover();
+  }, { signal });
+  el.addEventListener("keydown", (event) => {
+    if (
+      event.composedPath().some((target) =>
+        target instanceof Element &&
+        target.matches(
+          "input,textarea,select,[contenteditable=true],[data-carousel-interactive]",
+        )
+      )
+    ) {
+      event.stopPropagation();
+      return;
+    }
+    if (event.key === "Escape" && drag?.active) {
+      recover();
+      event.preventDefault();
+    }
+  }, { signal });
+  const resize = new ResizeObserver(() => {
+    if (drag && Math.abs(viewport.clientWidth - drag.width) > 1) recover();
+  });
+  resize.observe(viewport);
+  media.addEventListener("change", () => {
+    if (media.matches) {
+      recover();
+      render(index, false);
+    }
+  }, { signal });
   update();
+  render(index, false);
   return {
     el,
     get index() {

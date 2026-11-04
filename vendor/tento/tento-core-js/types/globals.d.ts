@@ -24,6 +24,8 @@ declare function fetch(input: string | URL | Request, init?: RequestInit): Promi
 declare class Response {
   readonly status: number;
   readonly ok: boolean;
+  readonly bodyUsed: boolean;
+  readonly body: Option<{ readonly locked: boolean; cancel(): Promise<void> }>;
   readonly headers: Headers;
   /** True when the fetch followed at least one redirect; `url` is then the final URL. */
   readonly redirected: boolean;

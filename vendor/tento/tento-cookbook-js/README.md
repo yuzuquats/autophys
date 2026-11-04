@@ -104,3 +104,21 @@ deno run --no-lock --allow-read --allow-write --allow-run --allow-env tento-cook
 `build.ts` type-checks the root, bundles it with `deno bundle`, and writes
 `index.html` (from `index.anon.html`, with the title filled in) beside
 `index.root.js`. The demo root is `demo/routes/index.root.ts`.
+
+The deck uses the Hacks carousel's per-page depth and bounded endpoint pulls,
+with a texture-js ASCII well visible during motion. The required dependency is
+`tento-texture-js/backgrounds/canvas.ts` and its `palettes.ts` type import;
+consumer vendor recipes must include both. No p5 runtime or network asset is
+loaded. Reduced motion paints a static texture and skips navigation animations.
+
+Evaluate `checks/check-deck.js` on a cookbook landing page at desktop and phone
+sizes to check navigation, touch policy, interruption, endpoints and texture
+pause behavior. Its pointer events are synthetic; trusted click/keyboard and
+physical Safari checks are separate qualifications.
+
+Evaluate `checks/check-page-scroll.js` to check whole-page header/control
+movement and saved document offsets across app opening, closing and interrupted
+reversal. Its taller landing probes a layout viewport exceeding the visible
+area; physical browser chrome and elastic scrolling require device checks.
+The landing allows native vertical document behavior; the app and tutorial
+stages lock the document and keep their own scrollable panels.

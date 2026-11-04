@@ -19,6 +19,8 @@ pub enum HeadlessAuth {
   #[default]
   ApiKey,
   BrowserSession,
+  /// Public entry-page tests: no credentials, using a fresh browser profile.
+  Anonymous,
 }
 
 /// Unified test specification.
@@ -99,6 +101,10 @@ pub struct TestSpec {
   pub requires_user: Option<bool>,
 
   /// Authentication required by headless actions; defaults to the existing API-key flow.
+  /// Explicit `headlessAuth: anonymous` (YAML also accepts `headless_auth`)
+  /// skips provided/minted credentials and session issuance, and uses a fresh
+  /// browser profile for public landing/signup entry pages. `requiresUser`
+  /// affects launcher listing only; it never opts out of corpus authentication.
   #[serde(default)]
   pub headless_auth: HeadlessAuth,
 
@@ -1373,6 +1379,34 @@ mod tests {
       HeadlessAuth::ApiKey
     );
     assert!(TestSpec::from_yaml("id: t\nname: t\nheadless_auth: browser_sesion\n").is_err());
+  }
+
+  #[test]
+  fn headless_auth_modes_roundtrip_and_reject_unknown_modes() {
+    for key in ["headless_auth", "headlessAuth"] {
+      for (mode, expected) in [
+        ("api_key", HeadlessAuth::ApiKey),
+        ("browser_session", HeadlessAuth::BrowserSession),
+        ("anonymous", HeadlessAuth::Anonymous),
+      ] {
+        let spec = TestSpec::from_yaml(&format!("id: t\nname: t\n{key}: {mode}\n")).unwrap();
+        assert_eq!(spec.headless_auth, expected);
+        assert_eq!(serde_json::to_value(&spec).unwrap()["headlessAuth"], mode);
+        let again = TestSpec::from_yaml(&serde_yml::to_string(&spec).unwrap()).unwrap();
+        assert_eq!(again.headless_auth, expected);
+      }
+      for mode in ["anon", "Anonymous", "anonymuos", "browser_sesion"] {
+        assert!(TestSpec::from_yaml(&format!("id: t\nname: t\n{key}: {mode}\n")).is_err());
+      }
+    }
+    for listing in ["", "requiresUser: false\n", "requiresUser: true\n"] {
+      let spec = TestSpec::from_yaml(&format!("id: t\nname: t\n{listing}")).unwrap();
+      assert_eq!(spec.headless_auth, HeadlessAuth::ApiKey);
+    }
+    assert_eq!(
+      TestSpec::ephemeral("t".into(), "t".into(), vec![]).headless_auth,
+      HeadlessAuth::ApiKey,
+    );
   }
 
   #[test]

@@ -1,7 +1,8 @@
-import { assertEquals, assertThrows } from "@std/assert";
+import { assertAlmostEquals, assertEquals, assertThrows } from "@std/assert";
 import { readRoute, routeUrl } from "./src/route.ts";
 import { arrowStage, closePanel, initialPanels, Stepper, togglePanel, visiblePanels } from "./src/model.ts";
 import { clampSlide, dragOffset, swipeTarget } from "./src/deck-data.ts";
+import { deckPull, deckTransforms } from "./src/deck.ts";
 import { describeHealth, parseHealth, readHealthz } from "./src/status.ts";
 import { invert } from "./src/flip.ts";
 import { cookbookClasses, placeholderDeck } from "./src/shell.ts";
@@ -91,6 +92,49 @@ Deno.test("deck: clamping, swipes and edge resistance", () => {
   assertEquals(dragOffset(0, 100, 6), 35);
   assertEquals(dragOffset(0, -100, 6), -100);
   assertEquals(dragOffset(5, -100, 6), -35);
+});
+
+Deno.test("deck: interrupted swipes settle relative to the displayed start", () => {
+  assertEquals(swipeTarget(.3, -500, 1000, 0, 6), 1, "a grab during 0 to 1 must not skip to slide 2");
+  assertEquals(swipeTarget(.3, -100, 1000, 0.1, 6), 0, "a short drag returns to the nearest starting slide");
+  assertEquals(swipeTarget(.7, 500, 1000, 0, 6), 0, "the reverse swipe uses the rounded start too");
+  assertEquals(swipeTarget(.7, -40, 1000, -0.9, 6), 2, "a flick advances from the rounded start");
+  assertEquals(swipeTarget(.3, -200, 1000, -0.4, 6), 0, "distance and velocity thresholds stay strict");
+});
+
+Deno.test("deck: page scale follows proximity to the fractional center", () => {
+  const centered = deckTransforms(1, 3);
+  assertEquals(centered.map((p) => p.translate), [-1, 0, 1]);
+  assertEquals(centered.map((p) => p.scale), [.95, 1, .95]);
+  const halfway = deckTransforms(.5, 3);
+  const scale = .95 + .05 * (1 - Math.cos(Math.PI / 4));
+  assertEquals(halfway.map((p) => p.translate), [-.5, .5, 1.5]);
+  for (const page of halfway.slice(0, 2)) {
+    assertEquals(page.progress, .5);
+    assertAlmostEquals(page.scale, scale);
+  }
+  assertEquals(halfway[2].scale, .95);
+  const scales = [0, .25, .5, .75, 1].map((idx) => deckTransforms(idx, 2)[1].scale);
+  assertEquals(
+    scales.every((scale, i) => i === 0 || scale > scales[i - 1]),
+    true,
+  );
+});
+
+Deno.test("deck: edge rubber-band is symmetric, monotone and bounded", () => {
+  let previous = 0;
+  for (const pull of [.1, .5, 1, 2, 10, 1000]) {
+    const first = deckTransforms(-pull, 3)[0];
+    const last = deckTransforms(2 + pull, 3)[2];
+    assertAlmostEquals(first.translate, -last.translate);
+    assertEquals(first.translate >= previous && first.translate <= 1 / 3, true);
+    assertEquals(first.scale >= .95 && first.scale <= 1, true);
+    previous = first.translate;
+  }
+  assertEquals(deckTransforms(0, 0), []);
+  assertThrows(() => deckTransforms(NaN, 2), RangeError);
+  assertThrows(() => deckTransforms(0, -1), RangeError);
+  assertThrows(() => deckTransforms(0, 1.5), RangeError);
 });
 
 Deno.test("deck: the placeholder deck is neutral, uses every body kind and fits the template", () => {
@@ -266,4 +310,16 @@ Deno.test("PlaceholderApp: neutral rows, model and export without a DOM", async 
   assertEquals([app.id, app.title], ["demo", "Demo"]);
   assertEquals(app.model(), { row: { id: "item-1", title: "Item 1" }, position: 1, count: 3, title: "Demo" });
   assertEquals((app.export() as { selected: string }).selected, "item-1");
+});
+
+Deno.test("deck: Hacks endpoint pulls are symmetric and bounded at 22 percent / 95 percent scale", () => {
+  assertEquals(deckPull(0, 6), { offset: 0, scale: 1 });
+  assertEquals(deckPull(2.5, 6), { offset: 0, scale: 1 });
+  for (const amount of [.01, .2, 1, 10, 100]) {
+    const first = deckPull(-amount, 6), last = deckPull(5 + amount, 6);
+    assertAlmostEquals(first.offset, -last.offset);
+    assertAlmostEquals(first.scale, last.scale);
+    assertEquals(first.offset > 0 && first.offset <= .22, true);
+    assertEquals(first.scale >= .95 && first.scale < 1, true);
+  }
 });

@@ -4,8 +4,8 @@ import { Result } from "./result";
 import { Tracing } from "./tracing";
 import { Uuid } from "./uuid";
 
-/** A rejection of the transport promise itself. Construction and response
- * decoding errors are deliberately outside this marker. The native Error
+/** A rejection of the transport or an unread response body stream. Construction,
+ * body ownership and response decoding errors are outside this marker. The native Error
  * cause retains the transport's untrusted rejection value without casting. */
 export class RequestTransportError extends Error {}
 
@@ -823,7 +823,7 @@ export class TypedApi<R extends RouteList> {
     }
     return Result.ok<TypedApi.Navigation<any>, ResponseError>({
       kind: "answered",
-      body: await TypedApi.jsonBody(response, reviveFn, validateFn, { ...ctx, declaresBody }),
+      body: await TypedApi.jsonBody(response, reviveFn, validateFn, { ...ctx, declaresBody, signal }),
     });
   }
 
@@ -849,7 +849,7 @@ export class TypedApi<R extends RouteList> {
     response: Response,
     reviveFn: Option<(s: UntypedJson) => any>,
     validateFn: Option<ValidateFn>,
-    ctx: Option<{ method: string; path: string; declaresBody: boolean }>,
+    ctx: Option<{ method: string; path: string; declaresBody: boolean; signal: Option<AbortSignal> }>,
   ): Promise<Option<any>> {
     let json: Option<UntypedJson>;
     if (ctx == null) {
@@ -862,7 +862,16 @@ export class TypedApi<R extends RouteList> {
     } else {
       // A 2xx body: an empty one reads as `null` on a route that declares
       // none (or declares it nullable); anything else must parse.
-      const text = await response.text();
+      // Fetch resolves at headers; navigation can still interrupt its body.
+      // An already consumed/locked body is a caller bug, not failed transport.
+      const readable = !response.bodyUsed && response.body?.locked !== true;
+      const text = await response.text().catch((cause) => {
+        if (!readable || ctx.signal?.aborted) throw cause;
+        throw new RequestTransportError(
+          cause instanceof Error ? cause.message : String(cause),
+          { cause },
+        );
+      });
       if (text.trim() === "") {
         if (!ctx.declaresBody) return null;
         throw new ResponseDecodeError(

@@ -32,14 +32,16 @@ export function clampSlide(index: number, count: number): number {
 }
 
 /** Where a released swipe lands: a drag past a fifth of the width, or a
- * flick faster than 0.4 px/ms, moves one slide; anything else springs back. */
+ * flick faster than 0.4 px/ms, moves one slide from the rounded starting
+ * position; anything else springs back to that starting slide. */
 export function swipeTarget(
-  index: number,
+  start: number,
   dx: number,
   width: number,
   velocity: number,
   count: number,
 ): number {
+  const index = Math.round(start);
   const flick = Math.abs(velocity) > 0.4 && Math.abs(dx) > 8;
   const far = width > 0 && Math.abs(dx) > width / 5;
   if (!flick && !far) return index;

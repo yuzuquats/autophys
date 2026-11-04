@@ -8,6 +8,7 @@
     "@tento-headless": "./tento-headless-js/mod.ts",
     "@tento-cookbook": "./tento-cookbook-js/lib.ts",
     "@tento-cookbook/": "./tento-cookbook-js/",
+    "@tento-texture/": "./tento-texture-js/",
     "@tento-ui/": "./tento-ui-js/",
     "@tento-ui/ui/icons": "./tento-ui-js/ui/icons.deno.ts",
     "@tento-ui/icon-exports": "./tento-ui-js/icon-exports.deno.ts",
