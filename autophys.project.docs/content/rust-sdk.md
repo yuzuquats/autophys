@@ -45,20 +45,28 @@ Three rules make the layers line up:
 | -------------------------------------- | ------------------------------------------------------- | ------------------------------------------------ |
 | `ap.connect(target=None)`              | `autophys::connect(target: Option<&str>) -> Result<Client>` | — (picks Local or Remote)                    |
 | `client.projects()`                    | `client.projects()`                                     | `GET /api/v1/projects`                           |
-| `client.project(name)`                 | `client.project(name) -> Result<Workbook>`              | `POST /api/v1/projects` (open or create)         |
+| `client.project(Project)` (simulator + config; uploads the config version) | — (no simulator in Rust)       | `POST /api/v1/projects` + `PUT …/config_versions/{v}` |
+| `client.project(name)` (review only)   | `client.project(name) -> Result<Workbook>` (review only) | `POST /api/v1/projects` (open or create)        |
 | `wb.investigations()`                  | `wb.investigations()`                                   | `GET /api/v1/investigations?project=`            |
-| `wb.investigation(id)`                 | `wb.investigation(id) -> Result<Investigation>`         | `GET /api/v1/investigations/{inv}/records`       |
-| `wb.investigate(...)` (runs the loop)  | `wb.create_investigation(NewInvestigation)` (record only) | `POST /api/v1/investigations`                  |
-| `inv.records(after=)`                  | `inv.records(after)`                                    | `GET …/records?after=`                           |
-| `inv.propose(...)`                     | `inv.propose(proposal)`                                 | `POST …/proposals`                               |
+| `wb.investigation(id, runner=None, policy=None)` (resumes from the records) | `wb.investigation(id) -> Result<Investigation>` (records only) | `GET /api/v1/investigations/{inv}/records` |
+| `wb.investigate(dataset, runner, policy=…)` (creates and records) | — (needs the numerics)          | `POST /api/v1/investigations`                    |
+| `inv.run()` (runs the loop; proposals come from `request_experiment`) | — (needs the numerics)          | `POST …/proposals`, `…/runs`, `…/steps`, `…/measurements`, `…/outcome` |
+| `store.create_investigation(meta, record_id=)` (record only) | `wb.create_investigation(meta, record_id)`  | `POST /api/v1/investigations`                    |
+| `store.append(kind, payload, id)`      | `inv.append(kind, payload, id)`                         | `POST …/runs`, `…/steps`, `…/measurements`, `…/outcome`, `…/proposals` (by kind) |
+| `inv.records(kind=None)`               | `inv.records(kind: Option<&str>)`                       | `GET …/records`                                  |
+| —                                      | `inv.records_after(gseq)` (Rust only: SSE and the daemon) | `GET …/records?after=`                         |
 | `inv.proposal(pid)`                    | `inv.proposal(pid)`                                     | `GET …/proposals/{pid}`                          |
 | `inv.approve(pid, by=, settings=)`     | `inv.approve(pid, by, settings)`                        | `POST …/proposals/{pid}/approvals` (event `approved`/`edited`) |
 | `inv.reject(pid, by=, reason=)`        | `inv.reject(pid, by, reason)`                           | `POST …/proposals/{pid}/approvals` (event `rejected`) |
 | `inv.attach_data(pid, observation)`    | `inv.attach_data(pid, observation)`                     | `POST …/proposals/{pid}/data`                    |
-| run/step/measurement/outcome writes    | `inv.run(..)`, `inv.step(..)`, `inv.measurement(..)`, `inv.outcome(..)` | `POST …/runs`, `…/steps`, `…/measurements`, `…/outcome` |
-| `client.project(p).config_versions()`  | `wb.config_versions()`, `wb.put_config_version(v, body)` | `GET/PUT /api/v1/projects/{pid}/config_versions[/{v}]` |
-| `wb.verify()`                          | `wb.verify() -> CheckReport`                            | `autophys db verify`                             |
+| `inv.wait_for_approval(timeout=)`      | `inv.wait_for_approval(timeout)`                        | `GET /api/v1/stream?investigation=` (remote) or `PRAGMA data_version` (local) |
+| `wb.config_versions()`                 | `wb.config_versions()`, `wb.put_config_version(v, body)` | `GET/PUT /api/v1/projects/{pid}/config_versions[/{v}]` |
+| `wb.verify()` → `{ok, records, investigations, chain_errors, projections_match}` | `wb.verify() -> VerifyReport` (same five fields) | `autophys db verify` |
 ```
+
+Python's names win (autophys/api, 2026-11-04). Rust leaves out every call that
+runs or needs the numerics. `inv.run` is a loop in Python, so the Rust record
+writer is `append`, after Python's `Store.append`, never `run`.
 
 `target` means the same thing in both: a directory (a local collection), a
 `.ap-workbook` path, an `http(s)` URL, or nothing (`AUTOPHYS_HOME`, default
@@ -66,7 +74,7 @@ Three rules make the layers line up:
 
 ```rust
 let client = autophys::connect(Some("~/autophys"))?;
-let wb = client.project("heated-block")?;
+let wb = client.project("heated-block")?;           // review only, like Python's plain name
 for inv in wb.investigations()? {
     println!("{} {}", inv.id, inv.status);
 }
@@ -130,17 +138,31 @@ autophys/
 | `http.rs`, `http/`          | `src/http/`                     | handlers call the library only                             |
 ```
 
-The schema itself (records, blobs, migrations) does not change in this move.
-Any change to those tables goes to autophys/api as a question first.
+The move brings the schema to `workbook-format.md` version 1, which drops
+the key and pairing tables and adds `blobs` and `application_id`. Any change
+beyond that spec to the records, blobs or migrations tables goes to
+autophys/api as a question first.
+
+## Conformance (autophys/api, 2026-11-04)
+
+The crate is tested directly with `cargo test` in `sdks/rust`, not through
+the daemon. The spec both sides implement is `workbook-format.md`.
+
+```
+tests/conformance/
+  vectors/chain.json   hash vectors (today tests/vectors/chain.json)
+  python/              workbooks Python writes  → Rust verifies (cargo test in sdks/rust)
+  rust/                workbooks Rust writes    → Python verifies (pytest in sdks/python)
+```
 
 ```review-callout
 kind: risk
 title: Not settled yet
-- autophys/api has not confirmed the Python column of the table. Its names win
-  where the Python SDK already ships them; this page follows.
-- `wb.investigate` vs `wb.create_investigation`: the Rust name differs on
-  purpose, because the Rust call doesn't run the loop. If Python also exposes
-  a record-only create, they should share that name.
 - The Remote client in Rust is new code. Until it passes the same conformance
   cases as Python's HttpStore, Rust callers should use Local.
+- `inv.records_after` and the HTTP `?after=` cursor are Rust- and server-only.
+  `gseq` orders records within one workbook only (W-6), so a remote stream that
+  spans projects needs a cursor per workbook.
+- Crate and package naming and the numerics boundary above are agent choices
+  awaiting operator review.
 ```
