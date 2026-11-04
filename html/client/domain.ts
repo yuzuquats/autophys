@@ -110,7 +110,7 @@ export type Fit = {
   sensitivity: SensitivityResult | null;
   landscape: Landscape | null;
   /** The model's output on each fitted measurement's drive, at the result and at the initial guess. */
-  curves: Record<string, { fit: number[]; initial: number[] }>;
+  curves: Record<string, { t?: number[]; fit: number[]; initial: number[] }>;
   /** Steady-state gain and phase against frequency, when the fit includes a sine measurement. */
   frequency: FrequencyResponse | null;
   seed: number;
@@ -173,6 +173,12 @@ export type Validation =
   /** The outcome's held-out check as recorded by the SDK: no predicted series, no worst parameter. */
   | { state: "summary"; passed: boolean; chi2N: number; threshold: number; measurements: string[] };
 
+/** SDK/evaluator results, revealed only after the outcome. Never re-score in the UI. */
+export type Reveal = {
+  source: string; tolerance: number; truth: Params; estimate: Params; fit_id: number;
+  quantities: { name: string; truth: number; estimate: number; ratio: number; sigma_ratio: number | null; within: boolean; identifiable: boolean }[];
+};
+
 export type Investigation = {
   id: string;
   name: string;
@@ -190,6 +196,7 @@ export type Investigation = {
   fits: Fit[];
   proposals: Proposal[];
   validation: Validation;
+  reveal?: Reveal;
 };
 
 export type Project = { id: string; name: string; configs: ProjectConfig[]; investigations: Investigation[] };

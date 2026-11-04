@@ -79,6 +79,9 @@ function selectedDetails(s: State): DetailsModel {
     case "fit": return fitDetails(project, sel.inv, sel.fit);
     case "sensitivity": return sensitivityDetails(project, sel.inv, sel.fit);
     case "proposal": return proposalDetails(s, project, sel.inv, sel.proposal);
+    case "truth": return { icon: "validate", title: "Ground truth", status: { text: "Revealed after outcome" },
+      sections: [{ heading: "Source", blocks: [{ kind: "text", text: "Synthetic: truth was hidden from the agent until the outcome." },
+        { kind: "facts", rows: [{ label: "Source", value: sel.inv.reveal!.source }, { label: "Fit", value: `#${sel.inv.reveal!.fit_id}` }] }] }] };
     case "validate": return validateDetails(project, sel.inv);
   }
 }

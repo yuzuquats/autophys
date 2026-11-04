@@ -67,6 +67,10 @@ function layerMarkup(layer: Layer, sx: (v: number) => number, sy: (v: number) =>
       }
       return `<path class="ap-line ap-s-${layer.tone}${layer.dashed ? " ap-dashed" : ""}" d="${d}"/>`;
     }
+    case "vband": {
+      const a = sx(layer.from), b = sx(layer.to);
+      return `<rect class="ap-band ap-s-${layer.tone}" x="${f(Math.min(a, b))}" y="${fr.y0}" width="${f(Math.abs(b - a))}" height="${f(fr.y1 - fr.y0)}"/>`;
+    }
     case "hband": {
       const a = sy(layer.to), b = sy(layer.from);
       return `<rect class="ap-band ap-s-${layer.tone}" x="${fr.x0}" y="${f(Math.min(a, b))}" width="${f(fr.x1 - fr.x0)}" height="${f(Math.abs(b - a))}"/>`;
@@ -95,6 +99,7 @@ function legendMarkup(items: LegendItem[], right: number, y: number): string {
 function xyMarkup(chart: XYChart, width: number, key: string): string {
   const xTicks = chart.xTicks !== false;
   const fr = frame(chart.height, width, chart.label || chart.legend?.length ? "x" : undefined, xTicks);
+  fr.x0 = Math.min(Math.max(M.left, chart.left ?? M.left), Math.max(M.left, width - 80));
   const sx = scale(chart.x, fr.x0, fr.x1), sy = scale(chart.y, fr.y1, fr.y0);
   const clip = `ap-clip-${key}`;
   const label = chart.label ? `<text class="ap-label" x="${fr.x0}" y="12">${esc(chart.label)}</text>` : "";

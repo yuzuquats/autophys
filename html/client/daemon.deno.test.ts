@@ -5,6 +5,32 @@
  * a refused POST (409) becomes the details panel's "Not saved" notice; pairings are listed
  * and decided; firstOf falls back to the fixture when the daemon does not answer.
  */
+Deno.test("wire: optional curves map record ids and preserve downsampled times; reveal preserves evaluator results", async () => {
+  const { WireModel } = await import("./wire.ts");
+  const raw = workspace(), run = raw.records.find((r) => r.kind === "run")!;
+  const ms = raw.records.filter((r) => r.kind === "measurement");
+  const before = new WireModel(raw).workspace().projects[0].investigations[0];
+  assertEquals(before.fits[0].curves, {});
+  assertEquals(before.reveal, undefined);
+  run.payload.curves = {
+    [ms[0].id]: { t: [0, 1, 2], fit: { x: [.09, .01, 0], unused: [9] }, initial: { x: [.1, .02, .01] } },
+    [ms[1].id]: { fit: { x: [.1, 0, .01] }, initial: { x: [.11, .01, .02] } },
+    unknown: { fit: { x: [9] }, initial: { x: [9] } },
+  };
+  const reveal = { source: "synthetic", tolerance: .1, truth: { m: 1, k: 10 }, estimate: { m: 1.2, k: 10 },
+    fit_id: 1, quantities: [
+      { name: "m", truth: 1, estimate: 1.2, ratio: 1.2, sigma_ratio: .04, within: false, identifiable: true },
+      { name: "k", truth: 10, estimate: 10, ratio: 1, sigma_ratio: null, within: true, identifiable: true },
+    ] };
+  raw.records.push(rec("reveal", reveal));
+  const inv = new WireModel(raw).workspace().projects[0].investigations[0];
+  assertEquals(inv.fits[0].curves, {
+    "free_response@1": { t: [0, 1, 2], fit: [.09, .01, 0], initial: [.1, .02, .01] },
+    "free_response@2": { fit: [.1, 0, .01], initial: [.11, .01, .02] },
+  });
+  assertEquals(inv.reveal, reveal);
+});
+
 import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
 import { ApiError, daemon, type Cursor, type DaemonOptions, type EventStream, firstOf } from "./api.ts";
 import { Controller } from "./controller.ts";

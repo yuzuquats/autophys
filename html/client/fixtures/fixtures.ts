@@ -186,7 +186,8 @@ function fitOf(config: ProjectConfig, inv: { measurements: Measurement[] }, plan
   for (const r of runs) if (!levels.some((c) => Math.abs(c - r.cost) <= 1e-3 * Math.max(c, 1))) levels.push(r.cost);
   const lagOf: Record<string, number> = {};
   const curves: Fit["curves"] = {};
-  for (const m of ms) {
+  // Display curves include held-out measurements, as an SDK run payload does.
+  for (const m of inv.measurements) {
     const fit = simulate(config.simulator.kind, best.params, m.experiment, m.settings, m.t);
     curves[m.id] = { fit, initial: simulate(config.simulator.kind, initial, m.experiment, m.settings, m.t) };
     lagOf[m.id] = lag1(m, fit);
@@ -410,6 +411,15 @@ export function buildWorkspace(): Workspace {
   // Proposed here; its approval arrives as a canned record (fixtures/source.ts CANNED).
   benchB.proposals.push(outlookInto(OSC_V1, benchB, sineProposal("p1", 1, "proposed", null)));
   benchB.validation = validationOf(OSC_V1, benchB, benchB.fits[1], "step@1");
+
+  // Fixture truth data: these synthetic parameters generated bench B, not an agent observation.
+  const recovered = benchB.fits[1];
+  benchB.reveal = { source: "synthetic", tolerance: .1, truth: truthB, estimate: recovered.params, fit_id: recovered.n,
+    quantities: Object.entries(truthB).map(([name, truth]) => {
+      const estimate = recovered.params[name], ratio = estimate / truth;
+      return { name, truth, estimate, ratio, sigma_ratio: recovered.sensitivity!.marginal[name] * ratio,
+        within: Math.abs(ratio - 1) <= .1, identifiable: recovered.sensitivity!.identified.includes(name) };
+    }) };
 
   // Cell pulse tests: cell A is running its second fit.
   const truthCell = { R0: 0.032, R1: 0.018, C1: 2400 };

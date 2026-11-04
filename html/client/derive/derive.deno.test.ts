@@ -1,5 +1,79 @@
 /// <reference lib="deno.ns" />
 /** Domain → view model: tree nodes and trails per state, view-hint leaves, ridge greying, panels, outlook. */
+Deno.test("derive: Fit residual strip shares time axis and uses only matching downsampled samples", async () => {
+  const { fitPanels, residualPanels } = await import("./charts.ts");
+  const { sigmaOf } = await import("../config.ts");
+  const project = structuredClone(ws.projects[0]), inv = project.investigations[0], fit = inv.fits[0], m = inv.measurements[0];
+  const config = project.configs.find((c) => c.version === inv.configVersion)!;
+  const ctx = { config, inv }, sigma = sigmaOf(config);
+  fit.curves[m.id] = { t: [m.t[0], m.t[4]], fit: [m.output[0] - sigma, m.output[4] + 2 * sigma], initial: [0, 0] };
+  const panel = fitPanels(ctx, fit)[0], strip = panel.charts.at(-1)!;
+  assert(strip.kind === "xy");
+  assertEquals(strip.height, 80);
+  assertEquals(strip.layers[0], { kind: "hband", from: -1, to: 1, tone: "muted" });
+  const output = panel.charts.find((c) => c.kind === "xy" && c.layers.some((l) => l.kind === "line" && l.tone === "fit"))!;
+  assert(output.kind === "xy");
+  assertEquals(strip.x, output.x);
+  const line = output.layers.find((l) => l.kind === "line" && l.tone === "fit")!;
+  assert(line.kind === "line");
+  assertEquals(line.points.map((p) => p[0]), [m.t[0], m.t[4]]);
+  const dots = strip.layers.at(-1)!;
+  assert(dots.kind === "dots");
+  assertEquals(dots.points.length, 2);
+  assertAlmostEquals(dots.points[0][1], 1);
+  assertAlmostEquals(dots.points[1][1], -2);
+  assertEquals(residualPanels(ctx, fit).length, 1);
+  fit.curves = {};
+  assert(fitPanels(ctx, fit)[0].charts.some((c) => c.kind === "missing"));
+  assertEquals(residualPanels(ctx, fit), []);
+});
+
+Deno.test("derive: Ground truth is conditional and formats payload ratios, tolerance and within", async () => {
+  const { investigationNode } = await import("./tree.ts");
+  const { groundTruthNode, truthPanels } = await import("./truth.ts");
+  const project = structuredClone(ws.projects[0]), inv = project.investigations[1];
+  assert(inv.reveal);
+  inv.reveal.tolerance = .2;
+  inv.reveal.quantities[0].within = false;
+  inv.reveal.quantities[0].ratio = 1.37;
+  inv.reveal.quantities[0].sigma_ratio = .06;
+  assertEquals(groundTruthNode(inv), { id: inv.id + "/truth", label: "Ground truth", icon: "validate", selectable: true, children: null });
+  const state = { ...s0, ws: { ...ws, projects: [project] }, projectId: project.id, selected: { [project.id]: inv.id + "/truth" } };
+  assertEquals(parseSel(project, inv.id + "/truth")?.kind, "truth");
+  const model = mainModel(state);
+  assert(model.body.kind === "panels");
+  assertStringIncludes(model.body.panels[0].title!, "2 of 3 within ±20%");
+  assertStringIncludes(model.credit, "truth was hidden from the agent");
+  const chart = truthPanels(inv.reveal)[0].charts[0];
+  assert(chart.kind === "xy");
+  assertEquals(chart.layers[0], { kind: "vband", from: .8, to: 1.2, tone: "muted" });
+  assert(chart.layers.some((l) => l.kind === "dots" && l.points[0][0] === 1.37));
+  const whisker = chart.layers[2];
+  assert(whisker.kind === "line");
+  assertAlmostEquals(whisker.points[0][0], 1.31);
+  assertAlmostEquals(whisker.points[1][0], 1.43);
+  delete inv.reveal;
+  assertEquals(groundTruthNode(inv), null);
+  assert(!investigationNode(project, inv).children!.some((n) => n.label === "Ground truth"));
+  assertEquals(parseSel(project, inv.id + "/truth"), null);
+});
+
+Deno.test("derive: held-out curves populate Validation without re-scoring its summary", () => {
+  const project = structuredClone(ws.projects[0]), inv = project.investigations[1], fit = inv.fits.at(-1)!;
+  const test = inv.measurements.find((m) => m.split === "test")!;
+  fit.curves[test.id] = { t: [test.t[0], test.t[4]], fit: [.1, .2], initial: [0, 0] };
+  inv.validation = { state: "summary", passed: true, chi2N: 1.23, threshold: 2, measurements: [test.id] };
+  const state = { ...s0, ws: { ...ws, projects: [project] }, projectId: project.id, selected: { [project.id]: inv.id + "/validate" } };
+  const model = mainModel(state);
+  assert(model.body.kind === "panels");
+  assertStringIncludes(model.meta, "1.23");
+  const chart = model.body.panels[0].charts.at(-1)!;
+  assert(chart.kind === "xy");
+  const line = chart.layers.find((l) => l.kind === "line")!;
+  assert(line.kind === "line");
+  assertEquals(line.points, [[test.t[0], .1], [test.t[4], .2]]);
+});
+
 import { assert, assertAlmostEquals, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
 import { initialSelection } from "../controller.ts";
 import { fixtures, replay } from "../fixtures/source.ts";
@@ -105,7 +179,7 @@ Deno.test("derive: main views: crumb, panels, credit; derive() before load shows
   assertStringIncludes(land.credit, "oscillator v0.1 · free_response@1 · seed 42");
   const fit = mainModel(at("bench-oscillators", "bench-b/fit-2/fit"));
   assert(fit.body.kind === "panels");
-  assertEquals(fit.body.panels.map((p) => [p.title, p.charts.map((c) => c.kind)]), [["free_response@1", ["xy", "xy"]], ["sine_044@1", ["xy", "xy"]]]);
+  assertEquals(fit.body.panels.map((p) => [p.title, p.charts.map((c) => c.kind)]), [["free_response@1", ["xy", "xy", "xy"]], ["sine_044@1", ["xy", "xy", "xy"]]]);
   const edges = mainModel(at("cell-pulse-tests", "cell-a/fit-1/zoom:edges"));
   assert(edges.body.kind === "panels" && edges.body.columns === 2 && edges.body.panels.length === 4);
   const freq = mainModel(at("bench-oscillators", "bench-b/fit-2/frequency"));

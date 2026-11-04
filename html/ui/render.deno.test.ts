@@ -3,6 +3,24 @@
  * Rendering only: a given view model produces the expected markup, and the components report
  * the raw intent of what was clicked or typed. No domain logic exists here to test.
  */
+Deno.test("render: Ground truth band and whiskers use chart vocabulary, with the table in Main", () => {
+  const chart: XYChart = { ...xy, label: "estimate ÷ truth · ±1σ",
+    layers: [{ kind: "vband", from: .9, to: 1.1, tone: "muted" }, { kind: "vline", x: 1, tone: "muted" },
+      { kind: "line", points: [[1.15, 0], [1.25, 0]], tone: "warn" }, { kind: "dots", points: [[1.2, 0]], tone: "warn" }] };
+  const model: MainModel = { crumb: [{ label: "Ground truth" }], meta: "", actions: [], credit: "Synthetic: truth was hidden from the agent until the outcome.",
+    body: { kind: "panels", panels: [{ title: "0 of 1 within ±10% of the truth", charts: [chart], blocks: [{ kind: "table", rows: [
+      { cells: ["quantity", "truth", "recovered", "error", "within ±10%"].map((text) => ({ text })) },
+      { cells: ["a<&", "1", "1.2", "20%", "No"].map((text) => ({ text })) },
+    ] }] }] } };
+  const html = mainMarkup(model, 640);
+  assertStringIncludes(html, "0 of 1 within ±10%");
+  assertStringIncludes(html, 'class="ap-band ap-s-muted"');
+  assertStringIncludes(html, 'class="ap-line ap-s-warn"');
+  assertStringIncludes(html, "a&lt;&amp;");
+  assertStringIncludes(html, "<table");
+  assertStringIncludes(html, "truth was hidden from the agent until the outcome.");
+});
+
 import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
 import { chartMarkup, scale } from "./charts.ts";
 import { AutophysDetails, detailsMarkup } from "./details.ts";

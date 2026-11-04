@@ -5,6 +5,7 @@ import {
   configPanels, edgePanels, envelopePanels, fitPanels, frequencyPanels, landscapeChart, measurementPanels, proposalPanels, residualPanels, sensitivityPanels,
   validationPanels, VIEW_LABEL,
 } from "./charts.ts";
+import { truthPanels } from "./truth.ts";
 import { configurationSections } from "./configuration.ts";
 import { simulatorLabel } from "../config.ts";
 import { int, shortHash, sig } from "./fmt.ts";
@@ -96,10 +97,16 @@ function selectedMain(s: State): MainModel {
       return { crumb: [invCrumb(sel.inv), { label: proposalLabel({ ...p, fields: displayedFields(s, sel.inv, p) }) }], meta: `${p.status} · ${experimentsUsed(sel.inv) + (p.status === "proposed" ? 1 : 0)} / ${c.budgets.maxExperiments} experiments`, actions: [EXPORT],
         body: { kind: "panels", panels: proposalPanels({ config: c, inv: sel.inv }, p, rankingBars(s, sel.inv, p), displayedFields(s, sel.inv, p).some((f) => f.value !== f.original)) }, credit: credit(c, sel.inv, [], ` · ranked at fit #${p.atFit}`) };
     }
+    case "truth": return { crumb: [invCrumb(sel.inv), { label: "Ground truth" }], meta: "Revealed after outcome", actions: [EXPORT],
+      body: { kind: "panels", panels: truthPanels(sel.inv.reveal!) }, credit: "Synthetic: truth was hidden from the agent until the outcome." };
     case "validate": {
       const c = configFor(project, sel.inv), v = sel.inv.validation;
       if (v.state === "needs-data") return { crumb: [invCrumb(sel.inv), { label: "Validate" }], meta: "needs data", actions: [EXPORT], body: { kind: "missing", title: "Not recorded yet", description: sel.inv.measurements.some((m) => m.split === "test") ? "Held-out measurements are present; no validation check recorded yet" : "Needs a held-out measurement" }, credit: credit(c, sel.inv, []) };
       if (v.state === "summary") {
+        const fit = latestFit(sel.inv);
+        const predicted = fit && v.measurements.filter((id) => fit.curves[id]);
+        if (fit && predicted?.length) return { crumb: [invCrumb(sel.inv), { label: "Validate" }], meta: `χ²/N ${v.chi2N.toFixed(2)} · ${v.passed ? "passed" : "failed"}`, actions: [EXPORT],
+          body: { kind: "panels", panels: predicted.flatMap((id) => validationPanels({ config: c, inv: sel.inv }, fit, id, fit.curves[id].fit, fit.curves[id].t)) }, credit: credit(c, sel.inv, predicted, ` · fit #${fit.n}`) };
         return { crumb: [invCrumb(sel.inv), { label: "Validate" }], meta: `χ²/N ${v.chi2N.toFixed(2)} · ${v.passed ? "passed" : "failed"}`, actions: [EXPORT],
           body: { kind: "missing", title: "Not recorded yet", description: `Held-out check ${v.passed ? "passed" : "failed"}: χ²/N ${v.chi2N.toFixed(2)} (≤ ${sig(v.threshold, 3)})${v.measurements.length ? ` on ${v.measurements.join(", ")}` : ""}. The predicted series is not recorded.` },
           credit: credit(c, sel.inv, v.measurements) };

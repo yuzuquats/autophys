@@ -43,7 +43,8 @@ export type Sel =
   | { kind: "fit"; inv: Investigation; fit: Fit; view: View | null }
   | { kind: "sensitivity"; inv: Investigation; fit: Fit }
   | { kind: "proposal"; inv: Investigation; proposal: Proposal }
-  | { kind: "validate"; inv: Investigation };
+  | { kind: "validate"; inv: Investigation }
+  | { kind: "truth"; inv: Investigation };
 
 // ------------------------------------------------------------------------ ids and selection
 
@@ -56,6 +57,7 @@ export const ids = {
   view: (i: Investigation, f: Fit, v: View) => `${i.id}/fit-${f.n}/${v}`,
   sens: (i: Investigation) => `${i.id}/sens`,
   proposal: (i: Investigation, p: Proposal) => `${i.id}/prop/${p.id}`,
+  truth: (i: Investigation) => `${i.id}/truth`,
   validate: (i: Investigation) => `${i.id}/validate`,
 };
 
@@ -91,6 +93,7 @@ export function parseSel(project: Project, id: string): Sel | null {
   }
   if (part === "sens") { const fit = latestFit(inv); return fit?.sensitivity || fit?.identification ? { kind: "sensitivity", inv, fit } : null; }
   if (part === "prop") { const proposal = inv.proposals.find((p) => p.id === rest[0]); return proposal ? { kind: "proposal", inv, proposal } : null; }
+  if (part === "truth" && inv.reveal) return { kind: "truth", inv };
   if (part === "validate") return { kind: "validate", inv };
   return null;
 }

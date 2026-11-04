@@ -42,7 +42,7 @@ export function mainMarkup(model: MainModel, width: number, classes: MainClasses
     const colWidth = Math.floor((inner - (cols - 1) * 12) / cols);
     const panels = model.body.panels.map((p, i) =>
       `<section class="ap-panel">${p.title ? `<h4 class="ap-panel-title">${esc(p.title)}</h4>` : ""}${p.charts.map((c, j) =>
-        `<div class="ap-chart">${chartMarkup(c, colWidth, `${i}-${j}`)}</div>`).join("")}</section>`).join("");
+        `<div class="ap-chart">${chartMarkup(c, colWidth, `${i}-${j}`)}</div>`).join("")}${(p.blocks ?? []).map(blockMarkup).join("")}</section>`).join("");
     body = `<div class="ap-viewer" style="--ap-cols:${cols}">${panels}</div>`;
   }
   const source = model.source === "demo" ? `<div class="ap-source"><span>Demo data</span><a href="?source=daemon">Back to live data</a></div>` : "";

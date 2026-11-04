@@ -61,6 +61,7 @@ export type Layer =
   | { kind: "line"; points: Point[]; tone: SeriesTone; dashed?: boolean }
   /** A horizontal band between two y values (a noise band). */
   | { kind: "hband"; from: number; to: number; tone: SeriesTone }
+  | { kind: "vband"; from: number; to: number; tone: SeriesTone }
   | { kind: "hline"; y: number; tone: SeriesTone }
   | { kind: "vline"; x: number; tone: SeriesTone };
 
@@ -69,7 +70,7 @@ export type LegendItem = { label: string; mark: "dot" | "line" | "dashed"; tone:
 /** A plot in data coordinates. `xTicks: false` hides the x labels (a strip above a chart that shares its axis). */
 export type XYChart = {
   kind: "xy"; height: number; x: Axis; y: Axis; layers: Layer[];
-  label?: string; legend?: LegendItem[]; xTicks?: boolean;
+  label?: string; legend?: LegendItem[]; xTicks?: boolean; left?: number;
 };
 
 /** A grid of cells, `values` row-major from the bottom row, each an opacity in [0, 1], plus an optional path over it. */
@@ -90,7 +91,7 @@ export type Missing = { kind: "missing"; title: string; description: string };
 export type Chart = XYChart | HeatmapChart | BarsChart | RangesChart | Missing;
 
 /** Charts stacked in one block, sharing its width (an input strip over its output). */
-export type ChartPanel = { title?: string; charts: Chart[] };
+export type ChartPanel = { title?: string; charts: Chart[]; blocks?: Block[] };
 
 // ------------------------------------------------------------------------------------ main
 

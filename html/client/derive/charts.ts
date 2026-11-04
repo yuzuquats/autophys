@@ -27,7 +27,13 @@ const decimate = <T>(xs: T[]) => { const step = Math.ceil(xs.length / MAX_DOTS);
 const zip = (t: number[], y: number[]): Point[] => t.map((x, i) => [x, y[i]]);
 const measurementOf = (inv: Investigation, id: string) => inv.measurements.find((m) => m.id === id)!;
 /** The fit's curve on a measurement it was fitted to (computed upstream), or NaNs if the source sent none. */
-const curve = (fit: Fit, m: Measurement, which: "fit" | "initial") => fit.curves[m.id]?.[which] ?? m.t.map(() => NaN);
+const curve = (fit: Fit, m: Measurement, which: "fit" | "initial") => {
+  const c = fit.curves[m.id];
+  if (!c) return m.t.map(() => NaN);
+  if (!c.t) return c[which];
+  const samples = new Map(c.t.map((t, i) => [t, c[which][i]]));
+  return m.t.map((t) => samples.get(t) ?? NaN);
+};
 
 function timeAxis(t: number[]): XYChart["x"] {
   const max = t[t.length - 1];
@@ -47,14 +53,14 @@ export function inputStrip(config: ProjectConfig, m: { experiment: Measurement["
   };
 }
 
-function outputChart(config: ProjectConfig, m: Measurement, lines: { y: number[]; tone: "fit" | "initial" | "run"; dashed?: boolean }[], legend: LegendItem[], height = 150): XYChart {
+function outputChart(config: ProjectConfig, m: Measurement, lines: { y: number[]; t?: number[]; tone: "fit" | "initial" | "run"; dashed?: boolean }[], legend: LegendItem[], height = 150): XYChart {
   const out = specOf(config, m.experiment).output;
   return {
     kind: "xy", height, x: timeAxis(m.t), y: axisAround([...m.output, ...lines.flatMap((l) => l.y)], { count: 4 }),
     label: `${out.label} · ${out.unit}`, legend,
     layers: [
       { kind: "dots", points: decimate(zip(m.t, m.output)), tone: "measured" },
-      ...lines.map((l) => ({ kind: "line" as const, points: zip(m.t, l.y), tone: l.tone, dashed: l.dashed })),
+      ...lines.map((l) => ({ kind: "line" as const, points: zip(l.t ?? m.t, l.y), tone: l.tone, dashed: l.dashed })),
     ],
   };
 }
@@ -75,11 +81,21 @@ export function fitPanels(ctx: Ctx, fit: Fit): ChartPanel[] {
     return {
       title: m.id,
       charts: [...(m.inputRecorded === false ? [] : [inputStrip(config, m)]), outputChart(config, m, [
-        { y: curve(fit, m, "initial"), tone: "initial", dashed: true },
-        { y: curve(fit, m, "fit"), tone: running ? "run" : "fit" },
-      ], running ? RUN_LEGEND : FIT_LEGEND)],
+        { y: fit.curves[m.id].initial, t: fit.curves[m.id].t, tone: "initial", dashed: true },
+        { y: fit.curves[m.id].fit, t: fit.curves[m.id].t, tone: running ? "run" : "fit" },
+      ], running ? RUN_LEGEND : FIT_LEGEND), residualStrip(config, fit, m)],
     };
   });
+}
+
+/** Normalized residuals on recorded sample times; no interpolation of downsampled curves. */
+function residualStrip(config: ProjectConfig, fit: Fit, m: Measurement): XYChart {
+  const fitted = curve(fit, m, "fit"), sigma = sigmaOf(config);
+  const points = m.t.map((t, i): Point => [t, (m.output[i] - fitted[i]) / sigma]).filter((p) => Number.isFinite(p[1]));
+  return { kind: "xy", height: 80, x: timeAxis(m.t), label: "(measured − model) / σ",
+    y: axisAround(points.map((p) => p[1]), { symmetric: true, include: [-1, 1], count: 3 }),
+    layers: [{ kind: "hband", from: -1, to: 1, tone: "muted" }, { kind: "hline", y: 0, tone: "muted" },
+      { kind: "dots", points: decimate(points), tone: "measured" }] };
 }
 
 export function residualPanels(ctx: Ctx, fit: Fit): ChartPanel[] {
@@ -97,7 +113,7 @@ export function residualPanels(ctx: Ctx, fit: Fit): ChartPanel[] {
         layers: [
           { kind: "hband", from: -sigma, to: sigma, tone: "muted" },
           { kind: "hline", y: 0, tone: "muted" },
-          { kind: "dots", points: decimate(zip(m.t, r)), tone: structured ? "warn" : "measured" },
+          { kind: "dots", points: decimate(zip(m.t, r).filter((p) => Number.isFinite(p[1]))), tone: structured ? "warn" : "measured" },
         ],
       }],
     };
@@ -212,9 +228,9 @@ export function measurementPanels(config: ProjectConfig, m: Measurement): ChartP
   return [{ title: m.id, charts: [...(m.inputRecorded === false ? [] : [inputStrip(config, m)]), outputChart(config, m, [], [])] }];
 }
 
-export function validationPanels(ctx: Ctx, fit: Fit, testId: string, predicted: number[]): ChartPanel[] {
+export function validationPanels(ctx: Ctx, fit: Fit, testId: string, predicted: number[], t?: number[]): ChartPanel[] {
   const { config, inv } = ctx, m = measurementOf(inv, testId);
-  return [{ title: `${m.id} · held out, predicted by Fit #${fit.n}`, charts: [...(m.inputRecorded === false ? [] : [inputStrip(config, m)]), outputChart(config, m, [{ y: predicted, tone: "fit" }],
+  return [{ title: `${m.id} · held out, predicted by Fit #${fit.n}`, charts: [...(m.inputRecorded === false ? [] : [inputStrip(config, m)]), outputChart(config, m, [{ y: predicted, t, tone: "fit" }],
     [{ label: "measured", mark: "dot", tone: "measured" }, { label: "predicted", mark: "line", tone: "fit" }])] }];
 }
 

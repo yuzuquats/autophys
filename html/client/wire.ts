@@ -113,6 +113,8 @@ export function mapInvestigation(records: WireRecord[], configs: { version: stri
   const host = str(meta.host) || "the SDK";
 
   const measurements: Measurement[] = [], fits: Fit[] = [], proposals = new Map<string, Raw>(), runs: Record<string, number> = {};
+  const measurementIds = new Map<string, { id: string; channel: string }>();
+  let reveal: Investigation["reveal"];
   let ranking: { criterion: string; rows: unknown[] } | null = null;
   let nonIdentified: string[] | null = null;
   let steps = 0, simulations = 0, state: Investigation["state"] = "awaiting-agent", validation: Validation = { state: "needs-data", recorded: false };
@@ -123,6 +125,7 @@ export function mapInvestigation(records: WireRecord[], configs: { version: stri
       const o = obj(p.observation), experiment = str(o.experiment) || "measurement", ys = obj(o.y), channel = Object.keys(ys)[0] ?? "";
       const t = nums(o.t), n = (runs[experiment] ?? 0) + 1;
       runs[experiment] = n;
+      measurementIds.set(r.id, { id: `${experiment}@${n}`, channel });
       measurements.push({
         id: `${experiment}@${n}`, experiment: experiment as ExperimentKind, settings: numeric(o.settings),
         split: o.split === "train" ? "train" : "test", uploadedAt: when(r.ts), source: str(o.source) || host,
@@ -136,12 +139,23 @@ export function mapInvestigation(records: WireRecord[], configs: { version: stri
       state = "awaiting-agent";
       validation = { state: "needs-data", recorded: false };
       const params = numeric(p.params);
+      const curves: Fit["curves"] = {};
+      for (const [recordId, raw] of Object.entries(obj(p.curves))) {
+        const measurement = measurementIds.get(recordId);
+        if (!measurement) continue;
+        const c = obj(raw), fitted = obj(c.fit), initial = obj(c.initial);
+        if (!Array.isArray(fitted[measurement.channel])) continue;
+        curves[measurement.id] = {
+          ...(Array.isArray(c.t) ? { t: nums(c.t) } : {}),
+          fit: nums(fitted[measurement.channel]), initial: nums(initial[measurement.channel]),
+        };
+      }
       fits.push({
         n: Number.isFinite(num(p.fit_id)) ? num(p.fit_id) : fits.length + 1, state: p.success === false ? "failed" : "converged", variant: str(p.model) || null,
         measurements: measurements.filter((m) => m.split === "train").map((m) => m.id),
         free: Object.keys(params).filter((k) => free.includes(k) || !declaredFree.length), fixed: {}, initial: {}, params,
         chi2N: num(p.chi2_per_n), evals: num(p.nfev), starts: Array.isArray(p.starts) ? p.starts.length : 0, basins: null,
-        loss: p.loss_kind === "soft_l1" ? "soft_l1" : "linear", lag1: {}, trail: [], sensitivity: null, landscape: null, curves: {}, frequency: null,
+        loss: p.loss_kind === "soft_l1" ? "soft_l1" : "linear", lag1: {}, trail: [], sensitivity: null, landscape: null, curves, frequency: null,
         seed: Number.isFinite(num(p.seed)) ? num(p.seed) : NaN, identification: null,
       });
     } else if (r.kind === "step") {
@@ -162,6 +176,15 @@ export function mapInvestigation(records: WireRecord[], configs: { version: stri
       } else if (raw) {
         decided(raw, event, p, r.ts);
       }
+    } else if (r.kind === "reveal") {
+      reveal = {
+        source: str(p.source), tolerance: num(p.tolerance), truth: numeric(p.truth), estimate: numeric(p.estimate), fit_id: num(p.fit_id),
+        quantities: (Array.isArray(p.quantities) ? p.quantities : []).map((raw) => {
+          const q = obj(raw);
+          return { name: str(q.name), truth: num(q.truth), estimate: num(q.estimate), ratio: num(q.ratio),
+            sigma_ratio: typeof q.sigma_ratio === "number" ? q.sigma_ratio : null, within: q.within === true, identifiable: q.identifiable === true };
+        }),
+      };
     } else if (r.kind === "outcome") {
       const status = str(p.status);
       state = status === "validated" ? "validated" : ["inconclusive", "failed", "budget_exhausted"].includes(status) ? "inconclusive" : "awaiting-agent";
@@ -179,7 +202,7 @@ export function mapInvestigation(records: WireRecord[], configs: { version: stri
       id: head.investigation, name: str(meta.title) || head.investigation, projectId: str(meta.project_id), configVersion: at + 1, free, host,
       seed: Number.isFinite(num(meta.seed)) ? num(meta.seed) : NaN, state, progress: null, updated: when(last.ts),
       budget: { steps, simulations, experiments: measurements.length },
-      measurements, fits, proposals: [...proposals.values()].map((x) => x.proposal), validation,
+      measurements, fits, proposals: [...proposals.values()].map((x) => x.proposal), validation, ...(reveal ? { reveal } : {}),
     },
   };
 }
