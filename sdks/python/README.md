@@ -246,13 +246,18 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src ~/.cache/autophys/venv/bin/python -m au
 ```
 
 On rwc-dev-01 (Python 3.12.3, SQLite 3.45.1, NumPy 2.5.4, SciPy 1.18.1,
-aarch64) the suite is 289 passed, 1 skipped, in about 80 s with no network.
+aarch64) the suite is 289 passed, 2 skipped, in about 80 s with no network.
 HTTP code is tested against an in-process fake of `/api/v1`
 (`tests/fake_server.py`), including the stream. Workbook tests include a
-second process approving while the SDK waits. The skips are an opt-in smoke
-that sends one decision through a running reason lane
-(`AUTOPHYS_LIVE_REASON_URL=http://127.0.0.1:4861 pytest -k live`) and the
-Rust-written conformance workbooks, until `tests/conformance/rust/` has any.
+second process approving while the SDK waits. The two skips are opt-in:
+
+- a smoke that sends one decision through a running reason lane
+  (`AUTOPHYS_LIVE_REASON_URL=http://127.0.0.1:4861 pytest -k live`);
+- `tests/test_cross_writer.py`, which starts the Rust daemon on a free port
+  over a private collection, pairs a key, and has the daemon (through
+  `HttpStore`) and a local `WorkbookStore` write one workbook at once; both
+  verifiers must agree. Point `AUTOPHYS_RUST_BIN` at a built `autophys`
+  (`AUTOPHYS_RUST_WEB_ROOT` too unless it is a deployed bundle).
 
 `tests/test_conformance.py` is the shared suite (W-4): the hash-chain vectors
 in `tests/vectors/chain.json` and the golden workbooks in
