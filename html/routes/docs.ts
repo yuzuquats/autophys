@@ -150,7 +150,7 @@ Inside each evaluation, an investigation is not a fixed cycle. At every step the
 | \`autophys bench\` | investigations across policies, cases and seeds, with no playbook search | the same synthetic truth |
 | Workbench or Muse Code | one investigation at a time, on your measurements | an experiment you approve here and run on your hardware |
 
-Live model calls are off by default: \`research\` and \`bench --policy reason\` need a recorded replay, or \`AUTOPHYS_ALLOW_LIVE_REASON=1\`. With the defaults (six cases, three train seeds, two held-out seeds), a research run evaluates 18 investigations for the baseline, 18 for each valid edit, and 24 on the held-out seeds at the end.
+Live model calls are off by default: \`research\` and \`bench --policy reason\` need a recorded replay, or \`AUTOPHYS_ALLOW_LIVE_REASON=1\`. With the defaults (every built-in case, three train seeds and two held-out seeds), a research run evaluates three investigations per case for the baseline and for each valid edit, and four per case on the held-out seeds at the end (two seeds, for the starting and the final playbook).
 
 Not built yet, and under discussion in the design notes: a research journal that feeds rejected edits back to the researcher, procedurally sampled and misspecified cases, a statistical acceptance rule, and model discovery, where the agent proposes rival model structures when validation fails.
 `;

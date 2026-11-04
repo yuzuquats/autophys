@@ -355,7 +355,7 @@ On rwc-dev-01 (Python 3.12.3, NumPy 2.5.4, SciPy 1.18.1, venv
 ## How the loops nest (research and investigation)
 
 Added 2026-11-04 at the operator's request, to show how `autophys research`
-(M-9) relates to one investigation. It describes the code as of `f364cb5`;
+(M-9) relates to one investigation. It describes the code as of 2026-11-04;
 the last diagram and table mark proposals that are not built.
 
 The two loops do not run side by side. The outer loop **calls** the inner
@@ -408,13 +408,14 @@ Where the loops run:
 | ---- | ----- | -------------------------------------- |
 | research (offline) | outer, calling many inner investigations | the policy decides; data comes from the synthetic case's hidden truth (`synthetic.CASES`), with no person in the loop. Reasoner calls are replay-only until a budget is approved (MQ-2). |
 | bench | inner investigations across the selected policies, cases and seeds; no playbook optimization | the same synthetic truth; scripted and fake-reasoner policies by default, in a `MemoryStore` unless a store or workbook is given |
-| lab (Muse Code / MCP) | an investigation workflow that Muse drives through individual MCP tools; `MCPPolicy` never decides (`mcp/session.py`) | the bundled canonical playbook, or a research result passed explicitly with `build.py --playbook`. A person approves the proposal in the browser and runs it on hardware (MQ-1), then `attach_data`. The MCP tool surface differs from the action contract (no `compare_models`); see [muse-plugin.md](muse-plugin.md). MQ-2 remains the general live-call rule; MQ-8 and MQ-9 allow one small smoke run on the Muse coding plan, with no unapproved fallback to metered tokens. |
+| lab (Muse Code / MCP) | an investigation workflow that Muse drives through individual MCP tools; `MCPPolicy` never decides (`mcp/session.py`) | the bundled canonical playbook, or a research result passed explicitly with `build.py --playbook`. A person approves the proposal in the browser and runs it on hardware (MQ-1), then `attach_data`. The MCP tool surface differs from the action contract (no `compare_models`); see [muse-plugin.md](muse-plugin.md). Live Muse runs follow MQ-2 and any later operator ruling that relaxes it for a specific run. |
 ```
 
-Cost follows from the nesting. With the defaults (six cases, train seeds
-0-2, held-out seeds 3-4), a run that completes needs 18 baseline
-investigations, 18 for each valid proposal, and 24 held-out investigations,
-even when the initial and final playbooks are the same. An invalid proposal
+Cost follows from the nesting. With the defaults (every case in
+`synthetic.CASES`, train seeds 0-2, held-out seeds 3-4), a run that
+completes needs three investigations per case for the baseline and for
+each valid proposal, and four per case on the held-out seeds (two seeds,
+initial and final playbook), even when the two playbooks are the same. An invalid proposal
 uses an iteration but no training evaluation. Under a reasoner policy, evaluation typically accounts for many more model
 calls than proposing an edit; the dollar cost depends on the models chosen
 for each role, token volumes (the researcher reads failing transcripts) and
@@ -436,12 +437,12 @@ flowchart TB
 | Id | Proposal | Loop | Why | Cost to try |
 | -- | -------- | ---- | --- | ----------- |
 | AR-1 | Extend the existing `iterations.json` sidecar with each edit's hypothesis and predicted effect, and feed that history into later proposals | outer | the researcher receives the incumbent playbook, per-run training results, the aggregate score and failing transcripts (`proposal_prompt`), but no history of rejected edits, so it can propose them again | small: sidecar fields and a prompt section |
-| AR-2 | Extend the fixed cases with sampled truths, structural mismatch (truth 2RC, model 1RC) and more demanding cost trade-offs, building on the battery costs and budgets (BT-2, BT-3) | both | the leading MQ-4 component, the correctness count, has only 19 possible values across 18 investigations. Whether greedy Fisher ranking is hard to beat on the current well-specified cases is a hypothesis to test | moderate: `synthetic.py` and goldens |
+| AR-2 | Extend the fixed cases with sampled truths, structural mismatch (truth 2RC, model 1RC) and more demanding cost trade-offs, building on the battery suite's costed experiments (MQ-5) | both | the leading MQ-4 component, the correctness count, has only 19 possible values across 18 investigations. Whether greedy Fisher ranking is hard to beat on the current well-specified cases is a hypothesis to test | moderate: `synthetic.py` and goldens |
 | AR-3 | Paired, repeated evaluation with a bootstrap acceptance rule | outer | `improves` accepts any lexicographic gain, which a single noisy reasoner run can produce | small in code, multiplies reasoner cost |
 | AR-4 | Typed strategy settings the researcher may edit alongside the prose: stop thresholds and cost weighting (criterion and fit starts are already per-action arguments) | outer | the prose strategy (M-2) already allows departures from the Fisher ranking; typed settings would make chosen behaviour explicit, reproducible and directly searchable | moderate: the contract and validators |
 | AR-5 | Model discovery: propose rival structures and rank discriminating experiments when validation fails | inner | `compare_models` today compares the base model with generated sensor-bias variants; proposing and evaluating rival physical structures would extend it, and is the part only a model can add | large: numerics in both SDKs |
 | AR-6 | `research --forever` with dollar and test-hour caps, a stop file and resumable state | outer | needed to run unattended once MQ-2 allows live calls | moderate |
 ```
 
-None of these changes the workbook format. AR-5, and live runs beyond the
-MQ-8/MQ-9 smoke run, need operator decisions before dependent work starts.
+None of these changes the workbook format. AR-5 and further live runs need
+operator decisions before dependent work starts.
