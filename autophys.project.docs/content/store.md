@@ -197,8 +197,7 @@ The shared vectors at `tests/vectors/chain.json` pin it: each is
 text of `{id, kind, payload}`. They were written by Python's json and hashlib,
 cover float repr, unicode escapes and key order, and are asserted by
 `cargo test` and, from the same file, by the SDK. A live run of the SDK's own HttpStore and investigation loop against the
-store passed `store.verify()` over 19 records of real fit payloads (evidence:
-`fleet/evidence/autophys/store-sdk-check-20261104/`). The alternative was to
+store passed `store.verify()` over 19 records of real fit payloads. The alternative was to
 let the server choose its own canonical form and have the SDK adopt it. That
 changes the SDK's hash rule and invalidates its stored logs. Known gap:
 integers outside the 64-bit range arrive as floats in serde_json, so their

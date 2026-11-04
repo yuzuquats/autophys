@@ -104,8 +104,7 @@ the bundle builds; after redeploy, `curl /api/healthz` through the unit,
 `systemctl --user is-active autophys`, a SIGKILL of the server PID with
 systemd restarting it, and a headless run through header, deck, tutorial,
 sidebar, details, return home and a phone viewport with zero console, page or
-network errors. Results go in `verification.md` with screenshots kept under
-the ignored `~/workspace/fleet/evidence/autophys/`.
+network errors. Results go in `verification.md` with screenshots kept outside the repo.
 
 ## Scope boundary
 

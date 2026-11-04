@@ -140,7 +140,7 @@ app stays the vanilla skeleton and no batch after B1 is proposed.
   the store lands (the unit still runs release 582927a); remove
   `tento-autophys-js` and the moved record pages from tento (S-3, the
   orchestrator's); fill in O-3 in decisions.md; replace deploy's tento pin
-  with `vendor/sync.sh --check`. The dev watch (tento-web `watch_dev`) was
+  with the vendored tree id. The dev watch (tento-web `watch_dev`) was
   checked once: an edit to html/routes/content.ts rebuilt the served bundle.
 - Operator direction for B2+; review of AP-3, AP-4 and AP-8.
 - Confirm `http://tento.localhost/#/rwc-dev-01/autophys` from the laptop
@@ -153,6 +153,6 @@ app stays the vanilla skeleton and no batch after B1 is proposed.
 This repository owns `server/`, `web/`, `ops/`, this record,
 `autophys.service`, `~/.local/share/tento/services/autophys/`,
 `~/.local/state/autophys/`, `~/.cache/autophys/`,
-`~/workspace/fleet/evidence/autophys/` and the `autophys` entry in
+and the `autophys` entry in
 rwc-dev-01's fleet `self.toml`. It reads `tento-cookbook-js` and writes
 nothing in tento. `tento-autophys-js` is not imported.

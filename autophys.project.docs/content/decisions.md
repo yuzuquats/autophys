@@ -29,7 +29,7 @@ its own page.
 
 Two further operator rulings arrived through hackathon/lib during the
 restructure (relayed, 2026-11-04): autophys builds against a vendored tento
-tree at `vendor/tento` (lib owns `vendor/` and `vendor.md`), and the
+tree at `vendor/tento` (`vendor/` is not edited here), and the
 restructure lands as **structure** commits (reviewed and pushed) with
 **logic** commits stacked on top (kept local).
 
@@ -49,7 +49,7 @@ cheap to reverse unless it says otherwise.
 | R-6 | tento's `README.md` would overwrite this record's cover → it is imported as `tento-plan.md`; the cover stays this repo's `README.md` | both files are named README.md; this repo's cover is the newer, current one | replace the cover with tento's page: loses B1's record and AP table | rename (minutes) |
 | R-7 | tests ran from tento's root `deno.json` → `html/deno.json` maps the same aliases into `vendor/tento` for `deno test`/`deno check`; `html/tsconfig.json` does it for esbuild | Deno does not read tsconfig paths, and tento-web's esbuild does not read deno.json | one root `deno.json` beside `Cargo.toml` | move one file (minutes) |
 | R-8 | (new) `e2e/approve.ts` serves on 127.0.0.1:4795 and drives deck → app → proposal → Approve in Playwright's arm64 Chromium through puppeteer-core with `pipe: true` | `tento-headless-js` failed on this aarch64 host; pipe mode ties Chrome to the script | the cookbook-era `ops/check-flow.ts`, which targets the placeholder app | delete the file (minutes) |
-| R-9 | B1 recorded tento HEAD as TENTO_COMMIT → deploy records `git rev-parse HEAD:vendor/tento`, the vendored tree's id, until lib's `vendor/sync.sh` records a tento commit (TODO in `ops/deploy.sh`) | the bundle is built from vendor/, not the tento checkout; the tree id names exactly those bytes | keep reading `~/workspace/tento` HEAD: names a commit the build never read | one line once sync.sh lands (minutes) |
+| R-9 | B1 recorded tento HEAD as TENTO_COMMIT → deploy records `git rev-parse HEAD:vendor/tento`, the vendored tree's id | the bundle is built from vendor/, not the tento checkout; the tree id names exactly those bytes | keep reading `~/workspace/tento` HEAD: names a commit the build never read | one line (minutes) |
 ```
 
 Change-Ids: structure I96ab4c4e17d7071c6395 (crate), Ic0facb30ce209809407a

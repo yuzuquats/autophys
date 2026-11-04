@@ -61,7 +61,7 @@ included. In deploy, `autophys build-web` writes a prebuilt tree that
 │   ├── store/                           SQLite log, projections, migrations, keys — no web types
 │   └── ingest.rs                        validate → append → project → broadcast
 ├── html/                                the file-based router's root
-│   ├── tsconfig.json                    paths: @tento-ui/*, @tento-cookbook/* → ../../tento/…
+│   ├── tsconfig.json                    paths: @tento-ui/*, @tento-cookbook/* → ../vendor/tento/…
 │   ├── routes/
 │   │   ├── index.anon.html              the page shell (loads /index.root.js)
 │   │   └── index.root.ts                Cookbook.mount(…) + the three views
@@ -125,8 +125,8 @@ name = "autophys"
 path = "src/main.rs"
 
 [dependencies]
-tento-web  = { path = "../tento/tento-web" }
-tento-dirs = { path = "../tento/tento-dirs" }
+tento-web  = { path = "vendor/tento/tento-web" }
+tento-dirs = { path = "vendor/tento/tento-dirs" }
 actix-web = "4"                      # the version tento's workspace pins
 rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
@@ -134,11 +134,11 @@ serde_json = "1"
 sha2 = "0.10"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
 
-# tento's root patches apply only inside tento's workspace; copied verbatim
+# tento's root [patch] block applies only inside tento's workspace
 [patch.crates-io]
-fsevent-sys    = { path = "../tento/vendor/fsevent-sys" }
-notify         = { path = "../tento/vendor/notify" }
-iana-time-zone = { path = "../tento/vendor/iana-time-zone" }
+fsevent-sys    = { path = "vendor/tento/vendor/fsevent-sys" }
+notify         = { path = "vendor/tento/vendor/notify" }
+iana-time-zone = { path = "vendor/tento/vendor/iana-time-zone" }
 ```
 
 Measured on rwc-dev-01 (2026-11-04): a crate outside tento with exactly that
@@ -152,8 +152,8 @@ open. Seeding `Cargo.lock` from tento's keeps versions matched.
 pub fn domain(config: &AppConfig, state: web::Data<ApiState>) -> DomainConfig {
     let compiler = Compiler::builder()
         .dep(("html", Action::RebuildRoutes))
-        .dep(("../tento/tento-cookbook-js", Action::RebuildRoutes))
-        .dep(("../tento/tento-ui-js", Action::RebuildRoutes))
+        .dep(("../vendor/tento/tento-cookbook-js", Action::RebuildRoutes))
+        .dep(("../vendor/tento/tento-ui-js", Action::RebuildRoutes))
         .build();
     DomainConfig::builder()
         .hostname("localhost")
@@ -173,13 +173,13 @@ pub fn domain(config: &AppConfig, state: web::Data<ApiState>) -> DomainConfig {
 {
   "compilerOptions": {
     "paths": {
-      "@tento-ui/*":       ["../../tento/tento-ui-js/*"],
-      "@tento-core/*":     ["../../tento/tento-core-js/*"],
-      "@tento-cookbook/*": ["../../tento/tento-cookbook-js/*"]
+      "@tento-ui/*":       ["../vendor/tento/tento-ui-js/*"],
+      "@tento-core/*":     ["../vendor/tento/tento-core-js/*"],
+      "@tento-cookbook/*": ["../vendor/tento/tento-cookbook-js/*"]
     }
   },
-  "extends": "../../tento/tento-web-js/tsconfig.base.json",
-  "include": ["**/*.ts", "../../tento/tento-ui-js/types/*.d.ts"]
+  "extends": "../vendor/tento/tento-web-js/tsconfig.base.json",
+  "include": ["**/*.ts", "../vendor/tento/tento-ui-js/types/*.d.ts"]
 }
 ```
 
@@ -256,9 +256,8 @@ autophys repo would make every other app depend on a physics product.
 ```review-callout
 kind: risk
 title: What this does not settle
-The path dependencies into `../tento` assume every host that builds
-autophys has tento checked out beside it. That is true on rwc-dev-01, but D53
-consumers are sparse. A consumer that builds `html/` without tento fails at
+The path dependencies into `vendor/tento` assume every host that builds
+autophys has `vendor/tento` present. A build of `html/` without it fails at
 build time, not at runtime, which is the safe failure. Also unmeasured: lib's
 in-flight move of B1 into tento. Its uncommitted edits in
 `experiments/autophys` have to be reconciled by lib before step 1, or they are
