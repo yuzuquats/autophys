@@ -616,3 +616,32 @@ task-board CLI remains unavailable on rwc-dev-01; this completion record
 carries the task state. No item from the phase-3b deferred list remains;
 the Muse Code CLI adapter and broader numerical prompt parity are outside
 this workstream.
+
+## Publication (2026-11-04)
+
+The first publication of autophys went to `origin/master` as
+`c12ddee..4a098cb`: 64 commits covering both SDKs, the daemon, the web app,
+the shared conformance cases and these docs, through the Rust Muse records
+(Change-Id I03bd2bd028efdd3de6d3). Before pushing, the stack was rewritten so
+every Rust commit builds with `--locked`:
+
+- the CLI dependency fix (5b17f3a) was folded into the embedded-payload commit;
+- `Cargo.lock` at that commit and the four phase-2 commits was pruned offline
+  from the final lockfile, so package versions don't change;
+- split trailer blocks were merged, and the pitch-deck commit was given a
+  Change-Id.
+
+At the pushed tip: Rust 126 passed / 2 ignored, Python 359 passed / 2 skipped,
+html 59 passed. The four commits from the Muse batch up to the pitch deck fail
+one Rust conformance assertion, which hard-codes the number of Python goldens;
+the tip fixes it.
+
+An independent agent review (Codex) returned ready. Its non-blocking notes:
+
+- two docs pages expose host paths;
+- Python's legacy-cost total was wrong (fixed locally since);
+- some rewritten messages lost trailing blank lines.
+
+Receipt and manifests: `fleet/evidence/autophys/sink-20261104/` on
+rwc-dev-01. Still local: py's batch two, the battery hand-off and the
+`usage_total` fix.
