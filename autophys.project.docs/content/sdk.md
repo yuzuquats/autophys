@@ -740,6 +740,26 @@ The closed offline loop proves the machinery, not research skill: the heuristic
 researcher only knows two failure patterns. The first live run below replaces it
 with a model.
 
+### Spark on the coding plan: route `muse` (2026-11-04)
+
+`--route muse` runs the policy reasoner through `muse exec`, so Muse Spark can
+investigate on the Muse coding plan instead of the metered Meta API (the
+operator chose this over a metered run on 2026-11-04). `MuseExecReasoner`
+(`reasoner.py`) makes one headless call per decision: the system and user
+messages and the decision JSON schema become one prompt, with shell, writes,
+web tools and approval prompts off and at most two model steps. No API key is
+passed and `MODEL_API_KEY` is removed from its environment, so a call cannot
+fall back to metered tokens. Usage records Muse's token counts with
+`cost_usd: null`, because plan usage is not priced per token; `--max-usd` does
+not see it. `--record`/`--replay` cassettes work as for the other routes; the
+route is text-only. One live decision took 6.8 s and about 24k input tokens,
+most of them Muse's own system prompt.
+
+`tests/test_muse_route.py` checks the CLI arguments, environment and prompt with
+a fake `muse`, the failure modes, cassette replay, and a full autoloop through
+the route, in which the fake `muse` answers with the playbook-sensitive
+heuristic brain and the heuristic researcher finds the planted fix.
+
 ### First live autoloop run: Muse as researcher, 2026-11-04
 
 The operator approved a small, capped live run on 2026-11-04 ("go ahead" to the

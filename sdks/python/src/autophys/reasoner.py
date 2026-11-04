@@ -11,6 +11,10 @@ is never sent below :data:`MIN_TOKENS`.
 :class:`ChatReasoner` calls Meta or Baseten chat completions directly over
 HTTP. :func:`reasoner_from_env` selects a direct route or the legacy lane.
 
+:class:`MuseExecReasoner` (route ``muse``) runs each completion as one headless
+``muse exec`` call on the operator's Muse Code login, the coding plan, never a
+metered API key.
+
 :class:`FakeReasoner` answers from a Python callable, for tests and
 benchmarks; it never touches the network.
 """
@@ -23,6 +27,8 @@ import json
 import math
 import os
 import stat
+import subprocess
+import tempfile
 import time
 from dataclasses import asdict, dataclass, field
 from typing import Any, Callable, Literal, Protocol
@@ -59,8 +65,8 @@ class ModelSpec:
             raise ValueError("images must be a boolean")
         if self.role not in ("policy", "researcher"):
             raise ValueError("role must be policy or researcher")
-        if self.route not in ("meta", "baseten", "lane"):
-            raise ReasonerError("reason route must be meta, baseten or lane")
+        if self.route not in ("meta", "baseten", "lane", "muse"):
+            raise ReasonerError("reason route must be meta, baseten, lane or muse")
         if not isinstance(self.model, str) or not self.model:
             raise ValueError("model must be a non-empty string")
         if self.max_tokens is not None and (type(self.max_tokens) is not int or self.max_tokens < 0):
@@ -78,7 +84,7 @@ IMAGE_CAPABILITIES = {
 
 
 def images_enabled(spec):
-    return bool(spec and spec.images and spec.route != "lane"
+    return bool(spec and spec.images and spec.route not in ("lane", "muse")
                 and IMAGE_CAPABILITIES.get(spec.model) is not False)
 
 
@@ -306,6 +312,82 @@ class ChatReasoner:
         return _retry_delay(error, attempt, self._jitter)
 
 
+class MuseExecReasoner:
+    """Route ``muse``: one headless ``muse exec`` per completion, on the coding plan.
+
+    The CLI runs with the operator's Muse Code login. No API key is ever passed,
+    and ``MODEL_API_KEY`` is removed from its environment, so a call can never fall
+    back to metered tokens. The system and user messages and the JSON schema become
+    one prompt; the run has no shell, no writes, no web tools and at most
+    ``max_model_steps`` model calls. Its final text is the reply. Usage carries the
+    token counts Muse reports; cost is unknown (plan usage is not priced per token).
+    """
+
+    route = "muse"
+
+    def __init__(self, model: str = MUSE_SPARK, *, binary: str | None = None, timeout: float = 300.0,
+                 max_model_steps: int = 2) -> None:
+        self.model = model
+        self.binary = binary or os.environ.get("AUTOPHYS_MUSE_BINARY") or "muse"
+        self.timeout, self.max_model_steps = timeout, max_model_steps
+
+    def __repr__(self) -> str:
+        return f"MuseExecReasoner(model={self.model!r})"
+
+    @staticmethod
+    def prompt(messages, response_schema=None) -> str:
+        parts = []
+        for m in messages:
+            role = "system" if m.get("role") in ("system", "developer") else m.get("role", "user")
+            parts.append(f"<{role}>\n{m['content']}\n</{role}>")
+        if response_schema is not None:
+            parts.append("Reply with exactly one JSON object that matches this JSON schema, and nothing else: "
+                         "no prose, no code fences.\n" + json.dumps(response_schema, sort_keys=True))
+        return "\n\n".join(parts)
+
+    def complete(self, messages, *, response_schema=None, effort=None, max_tokens=None, images=None) -> ReasonReply:
+        from .research import parse_muse_events
+
+        if images:
+            raise ReasonerError("the muse route is text-only")
+        if any(not isinstance(m.get("content"), str) for m in messages):
+            raise ReasonerError("the muse route is text-only; message content must be a string")
+        started = time.perf_counter()
+        with tempfile.TemporaryDirectory(prefix="autophys-muse-reason-") as directory:
+            prompt = Path(directory) / "prompt.txt"
+            prompt.write_text(self.prompt(messages, response_schema), encoding="utf-8")
+            workspace = Path(directory) / "workspace"
+            workspace.mkdir()
+            argv = [self.binary, "exec", "--json", "--provider", "meta", "--model", self.model,
+                    "--workspace", str(workspace), "--prompt-file", str(prompt), "--no-session-log",
+                    "--disable-web-tools", "--disable-request-user-input", "--no-foreign-personal-context",
+                    "--disable-reminders", "--approval-mode", "never", "--disable-shell", "--disable-write",
+                    "--max-model-steps", str(self.max_model_steps)]
+            if effort:
+                argv += ["--reasoning-effort", effort]
+            env = {k: v for k, v in os.environ.items() if k != "MODEL_API_KEY"}
+            try:
+                result = subprocess.run(argv, input="", text=True, capture_output=True, timeout=self.timeout,
+                                        env=env, check=False)
+            except subprocess.TimeoutExpired:
+                raise ReasonerError("muse exec timed out") from None
+            except OSError:
+                raise ReasonerError("muse exec could not start") from None
+        if result.returncode:
+            raise ReasonerError(f"muse exec exited with status {result.returncode}")
+        events = parse_muse_events(result.stdout)
+        if events["terminal"] != "completed":
+            raise ReasonerError(f"muse exec run ended {events['terminal']}")
+        if not isinstance(events["message"], str) or not events["message"].strip():
+            raise ReasonerError("muse exec returned no text")
+        used = events["usage"] or {}
+        usage = {"input_tokens": used.get("input_tokens"), "output_tokens": used.get("output_tokens"),
+                 "calls": used.get("calls"), "billing": "muse coding plan",
+                 "prompt_tokens_details": {"cached_tokens": used.get("cached_input_tokens")},
+                 "completion_tokens_details": {"reasoning_tokens": used.get("reasoning_tokens")}}
+        return ReasonReply(events["message"], self.model, usage, self.route, (time.perf_counter() - started) * 1e3)
+
+
 def _cassette_key(body):
     from .store import canonical
     return hashlib.sha256(canonical(body).encode()).hexdigest()
@@ -377,6 +459,8 @@ def reasoner_for(spec: ModelSpec, **kw) -> Reasoner:
     record = kw.pop("record", None) or os.environ.get("AUTOPHYS_REASON_RECORD")
     if replay:
         inner = ReplayReasoner(replay, route=spec.route, model=spec.model)
+    elif spec.route == "muse":
+        inner = MuseExecReasoner(spec.model)
     elif spec.route == "lane":
         base = kw.pop("base_url", None) or os.environ.get("AUTOPHYS_REASON_URL")
         if not base:

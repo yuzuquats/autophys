@@ -24,7 +24,9 @@ def normalize_usage(reply):
               "input_tokens": inp, "output_tokens": out,
               "total_tokens": total if valid(total) else inp + out,
               "latency_ms": reply.elapsed_ms if reply.elapsed_ms is not None else 0,
-              "cost_usd": (inp * price["input_per_mtok"] + out * price["output_per_mtok"]) / 1e6 if price and known else None}
+              # Coding-plan calls (route muse) are not billed per token: cost is unknown.
+              "cost_usd": (inp * price["input_per_mtok"] + out * price["output_per_mtok"]) / 1e6
+              if price and known and reply.route != "muse" else None}
     for source, key, target in (("completion_tokens_details", "reasoning_tokens", "reasoning_tokens"),
                                 ("prompt_tokens_details", "cached_tokens", "cached_input_tokens")):
         details = raw.get(source)
