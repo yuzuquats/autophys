@@ -220,6 +220,25 @@ need `muse skills validate` and `muse exec --help` run once on the laptop
 (local commands, no tokens). The CLI researcher runs where `muse` and its key
 are; it is not on rwc-dev-01.
 
+Implemented: M-1, M-2, M-3 and M-6 (I7d2e5a9c3f1b84e06a51). The offline replay
+of `bench --policy reason --model muse-spark-1.3 --case oscillator --seeds 1`
+uses the shared cassette: 8 calls, 800 input and 320 output tokens, $0.002360.
+That replay is a recorded fixture, not a Muse run. Next: M-7, M-9, M-5, M-8,
+then M-4.
+
+### Operator decisions on Muse (open-questions, 2026-11-04)
+
+```review-table
+| Id  | Question | Decision | Reason and constraints | Implementation |
+| --- | -------- | -------- | ---------------------- | -------------- |
+| MQ-1 | Can the MCP server approve, edit or reject proposals? | No. Approval stays out of MCP; Muse Code sessions may propose and attach data only. | Operator, 2026-11-04. Approved experiments run on real hardware, so approval stays with a person in the UI (or the SDK under Q-6). | MCP agent to be told; nothing to change in sdks/python |
+| MQ-2 | Live Spark/Wonder token budget | Replay-only for now. No live Meta API or `muse exec` calls; the budget question is deferred. | Operator, 2026-11-04. No number or transcript may be labelled Spark or Wonder until a live run happens under an approved budget. | enforced: `bench --policy reason` refuses live calls without `--replay` or `AUTOPHYS_ALLOW_LIVE_REASON=1` |
+| MQ-3 | Probe the `muse` CLI on the laptop | Allowed, once, over ssh on macbookpro-laptop: `muse --version`, `muse exec --help`, `muse skills --help`, and `muse skills validate` on a temporary copy of our SKILL.md. | Operator, 2026-11-04. No installs, settings changes or real `muse exec`; stop if validate needs the network or the account. | pending: settles the SKILL.md format and the M-5 adapter |
+| MQ-4 | Research-loop score (M-9) | Lexicographic: the count of correct status-and-diagnosis results first, then lower mean log parameter error, then lower cost as the tiebreak. Every component is logged so runs can be re-scored. | Operator, 2026-11-04. | to implement in M-9 |
+| MQ-5 | Who owns the battery case suite | Open: the question was interrupted before an answer. | Blocks nothing in M-1..M-9. | open |
+| MQ-6 | 402 handling | Agent-chosen, pending operator review: 402 is terminal (`BudgetError`, no retry), since it means billing is not configured. | Alternative: retry it like 429; cost: a few lines in `reasoner.py`. | implemented (I7d2e5a9c3f1b84e06a51) |
+```
+
 ## Contract questions
 
 These are for the owner of `tento-autophys-store` and `architecture.md`. The
