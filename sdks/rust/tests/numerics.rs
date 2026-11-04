@@ -455,7 +455,7 @@ fn run_case(sim: &FunctionSimulator, i: &Value, policy: Option<&str>) -> Value {
         if let Some(theta) = &truth {
             let mut y = sim.call(theta, settings, TRUTH_OPTIONS, false)?;
             let t = y.shift_remove("t").unwrap();
-            return Observation::new(name, settings.clone(), t, y, noise.clone());
+            return Observation::new(name, settings.clone(), t, y.into(), noise.clone());
         }
         Err(SimulationError::Invalid(
             "deterministic runner exhausted".into(),
@@ -520,7 +520,7 @@ fn python_scripted_runs() {
         let runner = move |name: &str, settings: &Value| {
             let mut y = sim.call(&truth, settings, TRUTH_OPTIONS, false)?;
             let t = y.shift_remove("t").unwrap();
-            Observation::new(name, settings.clone(), t, y, sigma.clone())
+            Observation::new(name, settings.clone(), t, y.into(), sigma.clone())
         };
         let temp = tempfile::tempdir().unwrap();
         let client = autophys::connect(Some(temp.path().to_str().unwrap())).unwrap();
