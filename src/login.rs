@@ -100,8 +100,8 @@ const PAGE_STYLE: &str = "\
 *{box-sizing:border-box}\
 body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f6f6f6;\
 color:#141414;font:15px/1.45 system-ui,-apple-system,'Segoe UI',sans-serif}\
-main{width:min(380px,calc(100vw - 32px));background:#fff;border:1px solid #e4e4e4;\
-border-radius:14px;padding:28px}\
+main{width:min(380px,calc(100vw - 32px));background:#fff;border-radius:14px;padding:28px;\
+box-shadow:0 10px 30px rgba(0,0,0,.10)}\
 h1{font-size:20px;margin:0 0 4px}p{margin:0 0 18px;color:#666}\
 label{display:block;font-size:13px;font-weight:600;margin:14px 0 6px}\
 input{width:100%;padding:10px 12px;border:1px solid #d6d6d6;border-radius:8px;font:inherit}\

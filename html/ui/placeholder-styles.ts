@@ -22,7 +22,7 @@ ${w} .ap-signin-wrap { container-type:size;display:grid;place-content:safe cente
 /* Everything in the card is in em, and the card's font size follows the pane's height, so the
    whole card scales down to fit a short pane (and never overflows) and tops out at 14px. */
 ${w} .ap-signin { font:clamp(11px, calc(100cqh / 31), 14px)/1.4 var(--ap-font,system-ui);
-  width:min(100cqw, 26em);box-sizing:border-box;background:#fff;border:1px solid #e6e6e6;border-radius:.85em;
+  width:min(100cqw, 26em);box-sizing:border-box;position:relative;isolation:isolate;
   padding:2em;display:grid;gap:.45em;color:var(--ap-ink,#141414); }
 ${w} .ap-signin h2 { margin:0;font:600 1.36em/1.3 var(--ap-font,system-ui);letter-spacing:-.01em; }
 ${w} .ap-signin > p { margin:0 0 .7em;color:var(--ap-sec,#5b5b5b); }
