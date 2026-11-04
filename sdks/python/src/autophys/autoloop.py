@@ -101,11 +101,20 @@ class _Run:
 def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_seeds=(0, 1, 2), heldout_seeds=(3, 4),
              policy="reason", jobs=1, max_iterations=10, patience=3, max_usd=None, max_wall_s=None, resume=False,
              acceptance="auto", repeats=1, alpha=0.05, evaluate_fn=evaluate, **options) -> dict:
-    """Run the autoloop in ``output_dir`` until a stop condition; return the summary."""
+    """Run the autoloop in ``output_dir`` until a stop condition; return the summary.
+
+    ``max_usd`` is checked before each proposal; the closing held-out evaluations
+    run after the stop and are added to ``spent_usd``, so they can take it past
+    the cap by at most two held-out evaluations.
+    """
+    from dataclasses import asdict
+
     from .playbook import load_playbook
+    from .reasoner import ModelSpec, images_enabled
 
     root = Path(output_dir)
     run = _Run(root)
+    spec = options.get("model_spec")
     if resume:
         if not run.state_path.exists():
             raise ValueError(f"nothing to resume in {root}")
@@ -114,6 +123,13 @@ def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_se
         cases, train_seeds, heldout_seeds = config["cases"], tuple(config["train_seeds"]), tuple(config["heldout_seeds"])
         policy = config["policy"]
         acceptance, repeats, alpha = config.get("acceptance", "lexicographic"), config.get("repeats", 1), config.get("alpha", alpha)
+        # Scores are only comparable under the policy model that produced the incumbent's.
+        stored = config.get("model_spec")
+        if stored is not None:
+            if spec is None:
+                options["model_spec"] = ModelSpec(**stored)
+            elif asdict(spec) != stored:
+                raise ValueError(f"resume must use the run's policy model {stored}, not {asdict(spec)}")
     else:
         cases = list(cases or CASES)
         train_seeds, heldout_seeds = tuple(train_seeds), tuple(heldout_seeds)
@@ -130,42 +146,73 @@ def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_se
         root.mkdir(parents=True, exist_ok=False)
         config = {"cases": cases, "train_seeds": list(train_seeds), "heldout_seeds": list(heldout_seeds),
                   "policy": policy, "playbook": str(playbook), "acceptance": acceptance, "repeats": repeats,
-                  "alpha": alpha}
+                  "alpha": alpha, "model_spec": asdict(spec) if spec is not None else None}
         state = {"config": config, "started_at": _now(), "iteration": 0, "rejected_in_a_row": 0, "spent_usd": 0.0,
                  "wall_s": 0.0}
+        # Saved before the baseline, so an interrupted baseline can be resumed.
+        run.save_state(state)
     if policy == "reason":
         require_replay(options.get("replay"))
+    if images_enabled(getattr(researcher, "spec", None)):
+        options["render_images"] = True
     takes_history = "history" in inspect.signature(researcher.propose).parameters
 
+    def fresh(directory):
+        # An interrupted evaluation leaves a partial directory; keep it aside and redo it.
+        if directory.exists():
+            directory.rename(directory.with_name(f"{directory.name}.interrupted-{time.strftime('%Y%m%dT%H%M%S', time.gmtime())}"))
+        return directory
+
     def scored(path, seeds, directory):
+        result = _scored(path, seeds, fresh(directory))
+        directory.mkdir(parents=True, exist_ok=True)  # evaluators need not create it
+        return result
+
+    def _scored(path, seeds, directory):
         if repeats == 1:
             return evaluate_fn(path, cases, seeds, policy, directory, jobs=jobs, **options)
         parts = [evaluate_fn(path, cases, seeds, policy, directory / f"r{k}", jobs=jobs, **options)
                  for k in range(repeats)]
         runs = [dict(run, repeat=k) for k, part in enumerate(parts) for run in part["runs"]]
-        return {"runs": runs, "score": score(runs),
-                "failing_transcripts": [t for part in parts for t in part["failing_transcripts"]]}
+        merged = {"runs": runs, "score": score(runs),
+                  "failing_transcripts": [t for part in parts for t in part["failing_transcripts"]]}
+        artifacts = [a for part in parts for a in part.get("plot_artifacts", [])]
+        if artifacts:
+            merged["plot_artifacts"] = artifacts
+        return merged
 
     def decide(trial, incumbent, index):
         if acceptance == "bootstrap":
             return paired_bootstrap(trial["runs"], incumbent["runs"], alpha=alpha, seed=index)
         return improves(trial["score"], incumbent["score"]), {"rule": "lexicographic"}
 
+    def cost(report):
+        return report["score"].get("cost_usd") or 0.0
+
     t0 = time.monotonic()
     wall_before = float(state.get("wall_s", 0.0))
-    if not resume:
-        text = load_playbook(playbook).data.decode("utf-8")
+    if "incumbent" not in state:
+        text = load_playbook(config["playbook"] if resume else playbook).data.decode("utf-8")
         path = run.playbook(0, text)
         report = scored(path, train_seeds, root / "train" / "000")
         state.update(incumbent=path.name, incumbent_sha256=_sha(text), incumbent_score=report["score"],
-                     initial=path.name, spent_usd=state["spent_usd"] + (report["score"].get("cost_usd") or 0.0))
-        (root / "train" / "000").mkdir(parents=True, exist_ok=True)
+                     initial=path.name, spent_usd=state["spent_usd"] + cost(report))
         _write_json(root / "train" / "000" / "report.json", report)
         run.save_state(state)
     else:
         path = root / "playbooks" / state["incumbent"]
         text = path.read_text(encoding="utf-8")
         report = json.loads((root / "train" / path.stem / "report.json").read_text(encoding="utf-8"))
+        # state.json is written after the journal line; drop journal lines it never committed,
+        # so an iteration interrupted between the two is simply redone.
+        journal = run.journal()
+        if any(e["iteration"] > state["iteration"] for e in journal):
+            with (root / "journal.orphaned.jsonl").open("a", encoding="utf-8") as stream:
+                for e in journal:
+                    if e["iteration"] > state["iteration"]:
+                        stream.write(json.dumps(e, sort_keys=True) + "\n")
+            run.journal_path.write_text("".join(json.dumps(e, sort_keys=True) + "\n" for e in journal
+                                                if e["iteration"] <= state["iteration"]), encoding="utf-8")
 
     stop = None
     while stop is None:
@@ -217,9 +264,8 @@ def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_se
         else:
             candidate = run.playbook(index, proposed)
             trial = scored(candidate, train_seeds, root / "train" / f"{index:03d}")
-            (root / "train" / f"{index:03d}").mkdir(parents=True, exist_ok=True)
             _write_json(root / "train" / f"{index:03d}" / "report.json", trial)
-            state["spent_usd"] += trial["score"].get("cost_usd") or 0.0
+            state["spent_usd"] += cost(trial)
             accepted, stats = decide(trial, report, index)
             entry.update(accepted=accepted, score=trial["score"], playbook=candidate.name, sha256=_sha(proposed),
                          diff=_diff(text, proposed), acceptance=stats, reason="improves on the incumbent" if accepted
@@ -237,7 +283,11 @@ def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_se
     final = root / "playbooks" / state["incumbent"]
     stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime())
     held_initial = scored(initial, heldout_seeds, root / "heldout" / f"initial-{stamp}")
-    held_final = held_initial if final == initial else scored(final, heldout_seeds, root / "heldout" / f"final-{stamp}")
+    state["spent_usd"] += cost(held_initial)
+    held_final = held_initial
+    if final != initial:
+        held_final = scored(final, heldout_seeds, root / "heldout" / f"final-{stamp}")
+        state["spent_usd"] += cost(held_final)
     state["wall_s"] = wall_before + time.monotonic() - t0
     state["stopped"] = {"at": _now(), "reason": stop}
     run.save_state(state)

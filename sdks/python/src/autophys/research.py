@@ -43,10 +43,14 @@ def score(runs):
 
 
 def improves(candidate, baseline):
+    # Sidecars store an infinite error (no estimate) as null.
+    def error(s):
+        value = s.get("mean_log_error")
+        return math.inf if value is None else value
     if candidate["correct"] != baseline["correct"]:
         return candidate["correct"] > baseline["correct"]
-    if candidate["mean_log_error"] != baseline["mean_log_error"]:
-        return candidate["mean_log_error"] < baseline["mean_log_error"]
+    if error(candidate) != error(baseline):
+        return error(candidate) < error(baseline)
     return (candidate["cost_usd"] is not None and baseline["cost_usd"] is not None
             and candidate["cost_usd"] < baseline["cost_usd"])
 
@@ -194,9 +198,8 @@ class ScriptedResearcher:
         self.last_events = None
 
     def propose(self, playbook_text, report, history=None):
-        if not self.edits:
-            raise ReasonerError("scripted researcher has no edits left; pass one --edit per iteration")
-        return self.edits.pop(0)
+        # Out of edits means nothing further to propose: research stops iterating, autoloop stops.
+        return self.edits.pop(0) if self.edits else None
 
 
 def parse_muse_events(stdout):
@@ -414,7 +417,14 @@ def research(*, researcher, output_dir, playbook="default", cases=None, train_se
     history = []
     for index in range(1, iterations + 1):
         try:
-            proposed = validate_edit(text, researcher.propose(text, report))
+            proposal = researcher.propose(text, report)
+            if proposal is None:
+                break
+            if isinstance(proposal, dict):
+                proposal = proposal.get("skill")
+            if not isinstance(proposal, str):
+                raise _InvalidEdit("researcher returned no SKILL.md text")
+            proposed = validate_edit(text, proposal)
         except BudgetError:
             raise
         except _InvalidEdit as error:

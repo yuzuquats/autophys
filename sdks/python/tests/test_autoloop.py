@@ -268,3 +268,108 @@ def test_a_researcher_that_rejects_its_own_output_is_journalled(tmp_path):
     assert entry["reason"] == "invalid edit: researcher left SKILL.md unchanged"
     assert entry["researcher_events"] == {"terminal": "completed", "usage": {"calls": 3}}
     assert summary["stop_reason"] == "researcher has no further proposal"
+
+
+
+# --- review round 1: resume, accounting and researcher forms ------------------------
+
+class Interrupting(FakeEval):
+    """Fails once, after creating its directory, on the given evaluation number."""
+
+    def __init__(self, fail_at):
+        super().__init__()
+        self.fail_at, self.n = fail_at, 0
+
+    def __call__(self, path, cases, seeds, policy, directory, **kw):
+        self.n += 1
+        directory.mkdir(parents=True, exist_ok=False)
+        if self.n == self.fail_at:
+            raise KeyboardInterrupt
+        return super().__call__(path, cases, seeds, policy, directory, **kw)
+
+
+@pytest.mark.parametrize("fail_at", [1, 2])
+def test_an_interrupted_evaluation_is_redone_on_resume(tmp_path, fail_at):
+    evaluate = Interrupting(fail_at)
+    with pytest.raises(KeyboardInterrupt):
+        _run(tmp_path, Proposer(["\nImprove.\n"]), evaluate_fn=evaluate)
+    summary = autoloop(researcher=Proposer(["\nImprove.\n"]), output_dir=tmp_path / "run", resume=True,
+                       evaluate_fn=evaluate)
+    assert summary["accepted"] == 1 and summary["final_playbook"] == "001.md"
+    stage = "000" if fail_at == 1 else "001"
+    assert len(list((tmp_path / "run/train").glob(f"{stage}.interrupted-*"))) == 1
+
+
+def test_a_journal_line_without_state_is_set_aside_and_redone(tmp_path):
+    summary, evaluate = _run(tmp_path, Proposer(["\nImprove.\n"]), max_iterations=1)
+    run = tmp_path / "run"
+    state = json.loads((run / "state.json").read_text())
+    line = json.loads((run / "journal.jsonl").read_text().splitlines()[0])
+    # Simulate a crash after the journal append of iteration 2 but before its state save.
+    (run / "journal.jsonl").write_text((run / "journal.jsonl").read_text()
+                                       + json.dumps(dict(line, iteration=2, accepted=True)) + "\n")
+    assert state["iteration"] == 1
+    resumed = autoloop(researcher=Proposer(["\nNoise.\n"]), output_dir=run, resume=True, max_iterations=2,
+                       evaluate_fn=evaluate)
+    journal = [json.loads(l) for l in (run / "journal.jsonl").read_text().splitlines()]
+    assert [e["iteration"] for e in journal] == [1, 2] and journal[1]["accepted"] is False
+    assert resumed["accepted"] == 1 and resumed["iterations"] == 2
+    assert json.loads((run / "journal.orphaned.jsonl").read_text())["iteration"] == 2
+
+
+def test_resume_keeps_the_policy_model(tmp_path):
+    from autophys.reasoner import ModelSpec
+    spec = ModelSpec("policy", "meta", "muse-spark-1.3", "low")
+    seen = []
+    def evaluate(path, cases, seeds, policy, directory, **kw):
+        seen.append(kw["model_spec"])
+        return FakeEval()(path, cases, seeds, policy, directory)
+    _run(tmp_path, Proposer([]), evaluate_fn=evaluate, model_spec=spec)
+    with pytest.raises(ValueError, match="policy model"):
+        autoloop(researcher=Proposer([]), output_dir=tmp_path / "run", resume=True, evaluate_fn=evaluate,
+                 model_spec=ModelSpec("policy", "meta", "other"))
+    autoloop(researcher=Proposer([]), output_dir=tmp_path / "run", resume=True, evaluate_fn=evaluate)
+    assert set(seen) == {spec}
+
+
+def test_null_errors_from_sidecars_compare_as_infinite():
+    from autophys.research import improves
+    assert improves({"correct": 1, "mean_log_error": 0.5, "cost_usd": 0}, {"correct": 1, "mean_log_error": None, "cost_usd": 0})
+    assert not improves({"correct": 1, "mean_log_error": None, "cost_usd": 0}, {"correct": 1, "mean_log_error": 0.5, "cost_usd": 0})
+
+
+def test_lexicographic_resume_with_a_missing_estimate(tmp_path):
+    def evaluate(path, cases, seeds, policy, directory, **kw):
+        better = "Improve." in path.read_text()
+        return {"score": score([_component(1, 0.5 if better else float("inf"))]), "runs": [], "failing_transcripts": []}
+    _run(tmp_path, Proposer([]), evaluate_fn=evaluate)
+    resumed = autoloop(researcher=Proposer(["\nImprove.\n"]), output_dir=tmp_path / "run", resume=True,
+                       evaluate_fn=evaluate)
+    assert resumed["accepted"] == 1
+
+
+def test_heldout_cost_is_counted(tmp_path):
+    def evaluate(path, cases, seeds, policy, directory, **kw):
+        n = path.read_text().count("Improve.")
+        return {"score": {"correct": n, "mean_log_error": 1.0, "cost_usd": 1.0}, "runs": [], "failing_transcripts": []}
+    summary, _ = _run(tmp_path, Proposer(["\nImprove.\n"] * 3), evaluate_fn=evaluate, max_usd=1.0)
+    assert summary["stop_reason"] == "budget" and summary["iterations"] == 0
+    assert summary["spent_usd"] == pytest.approx(2.0)  # baseline + one held-out (same playbook)
+
+
+def test_repeats_keep_plot_artifacts(tmp_path):
+    def evaluate(path, cases, seeds, policy, directory, **kw):
+        out = FakeEval()(path, cases, seeds, policy, directory)
+        return dict(out, plot_artifacts=[{"workbook": str(directory), "images": []}])
+    _run(tmp_path, Proposer([]), evaluate_fn=evaluate, repeats=2)
+    report = json.loads((tmp_path / "run/train/000/report.json").read_text())
+    assert len(report["plot_artifacts"]) == 2
+
+
+def test_scripted_exhaustion_stops_cleanly_and_research_takes_autoloop_proposals(tmp_path):
+    from autophys.research import ScriptedResearcher, research
+    summary, _ = _run(tmp_path, ScriptedResearcher([DEFAULT + "\nImprove.\n"]))
+    assert summary["stop_reason"] == "researcher has no further proposal" and summary["accepted"] == 1
+    out = research(researcher=Proposer(["\nImprove.\n"]), output_dir=tmp_path / "research", policy="scripted",
+                   cases=["thermal"], iterations=3, evaluate_fn=FakeEval())
+    assert [i["accepted"] for i in out["iterations"]] == [True]

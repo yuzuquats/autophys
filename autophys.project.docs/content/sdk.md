@@ -666,7 +666,8 @@ that gap without a model or network.
   scripted baseline, so existing benchmark rows are unchanged. A real model
   reads the prose instead.
 - **Scripted researcher.** `autophys research --researcher scripted --edit
-  A.md --edit B.md` proposes the given SKILL.md files in order, one per iteration.
+  A.md --edit B.md` proposes the given SKILL.md files in order, one per iteration,
+  and then has nothing further to propose, which ends the run early.
 - **The test** (`tests/test_research_planted.py`, about 2.5 minutes). It starts
   from a playbook that never compares, on `battery-biased` and `battery` with
   train seeds 0-1 and held-out seeds 2-3. It proposes the fix, then the fix plus
@@ -697,7 +698,13 @@ shown to the researcher.
   spend), on `--max-wall-s`, when a `STOP` file appears in the run directory, or
   when the researcher has no further proposal. `state.json`, the numbered
   playbooks and the training reports make `--resume` continue a run without
-  re-scoring its baseline.
+  re-scoring its baseline. State is saved before the baseline and after each
+  iteration. On resume, a partial evaluation directory is moved aside as
+  `NNN.interrupted-<time>` and redone, and journal lines that `state.json` never
+  recorded go to `journal.orphaned.jsonl` and their iteration is redone. The
+  run keeps its policy model (`model_spec`): resume refuses a different one. The
+  held-out evaluations run after the stop and count toward `spent_usd`, so they
+  can take spending past `--max-usd`.
 - **Acceptance (AR-3).** `--acceptance lexicographic` keeps any MQ-4 gain
   (`research.improves`). `--acceptance bootstrap` (`research.paired_bootstrap`)
   pairs candidate and incumbent on the same (case, seed) units, averages

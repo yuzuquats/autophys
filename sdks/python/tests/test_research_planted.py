@@ -67,6 +67,5 @@ def test_cli_runs_the_research_loop_offline(tmp_path, capsys):
 
 
 def test_scripted_researcher_runs_out_cleanly(tmp_path):
-    from autophys.reasoner import ReasonerError
-    with pytest.raises(ReasonerError):
-        ScriptedResearcher([]).propose(DEFAULT, {})
+    # Out of edits is "nothing further to propose": research stops iterating early.
+    assert ScriptedResearcher([]).propose(DEFAULT, {}) is None
