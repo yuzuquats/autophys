@@ -3,15 +3,24 @@
 use std::path::Path;
 use std::process::ExitCode;
 
-use autophys::admin::run;
-use autophys::store::Store;
+use autophys_cli::admin::{Defaults, run};
+use autophys_cli::keys::KeyStore;
 
 async fn cli(db: &Path, line: &str) -> (ExitCode, String, String) {
     let mut words = line.split_whitespace().map(str::to_string);
     let command = words.next().unwrap();
     let (mut out, mut err) = (Vec::new(), Vec::new());
     let db = db.to_path_buf();
-    let code = run(&command, words, move || Ok(db), &mut out, &mut err).await;
+    let code = run(
+        &command,
+        words,
+        Defaults {
+            collection: db.clone(),
+            server_db: db.join("server.db"),
+        },
+        &mut out,
+        &mut err,
+    );
     (
         code,
         String::from_utf8(out).unwrap(),
@@ -22,12 +31,9 @@ async fn cli(db: &Path, line: &str) -> (ExitCode, String, String) {
 #[actix_web::test]
 async fn pair_keys_and_db_commands() {
     let dir = tempfile::tempdir().unwrap();
-    let db = dir.path().join("autophys.db");
-    let store = Store::open(&db).unwrap();
-    let start = store
-        .pair_start("lab-pc", "autophys-python/0.1")
-        .await
-        .unwrap();
+    let db = dir.path().join("collection");
+    let store = KeyStore::open(db.join("server.db")).unwrap();
+    let start = store.pair_start("lab-pc", "autophys-python/0.1").unwrap();
 
     let (code, out, _) = cli(&db, "pair list").await;
     assert_eq!(code, ExitCode::SUCCESS);
@@ -40,7 +46,7 @@ async fn pair_keys_and_db_commands() {
     )
     .await;
     assert_eq!(code, ExitCode::SUCCESS, "{out}");
-    let issued = store.pair_poll(&start.device_code).await.unwrap();
+    let issued = store.pair_poll(&start.device_code).unwrap();
     let (code, out, _) = cli(&db, "keys list").await;
     assert_eq!(code, ExitCode::SUCCESS);
     assert!(
@@ -54,7 +60,7 @@ async fn pair_keys_and_db_commands() {
         ExitCode::SUCCESS
     );
     assert!(
-        store.authenticate(&issued.api_key).await.unwrap().is_none(),
+        store.authenticate(&issued.api_key).unwrap().is_none(),
         "revoked from the CLI"
     );
     assert_eq!(cli(&db, "keys revoke k_missing").await.0, ExitCode::FAILURE);
@@ -63,12 +69,28 @@ async fn pair_keys_and_db_commands() {
         ExitCode::FAILURE
     );
 
+    let wb = autophys::connect(Some(db.to_str().unwrap()))
+        .unwrap()
+        .project("thermal")
+        .unwrap();
+    let body = b"{}";
+    let version = format!("sha256:{}", autophys::sha256_hex([&body[..]]));
+    wb.put_config_version(&version, body).unwrap();
+    wb.create_investigation(serde_json::json!({"config_version": version}), None)
+        .unwrap();
+    rusqlite::Connection::open(wb.path())
+        .unwrap()
+        .execute("UPDATE investigations SET status = 'drift'", [])
+        .unwrap();
+    assert_eq!(cli(&db, "db verify").await.0, ExitCode::FAILURE);
+    assert_eq!(cli(&db, "db verify --rebuild").await.0, ExitCode::SUCCESS);
+
     let (code, out, _) = cli(&db, "db check").await;
     assert_eq!(code, ExitCode::SUCCESS, "{out}");
-    assert!(out.contains("projections match the log"));
+    assert!(out.contains("projections match the records"));
     let (code, out, _) = cli(&db, "db check --rebuild --json").await;
     assert_eq!(code, ExitCode::SUCCESS);
-    assert!(out.contains("\"rebuilt\": true"));
+    assert!(out.contains("\"rebuilt\": false"));
 
     for bad in ["pair", "keys delete x", "db check --bogus", "pair approve"] {
         assert_eq!(cli(&db, bad).await.0, ExitCode::from(2), "{bad}");

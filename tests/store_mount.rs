@@ -7,8 +7,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use autophys::store::{NewInvestigation, Store};
-use autophys::{AppConfig, BuildInfo, http_server, serve, webapp};
+use autophys_cli::http::Api;
+use autophys_cli::keys::Options;
+use autophys_cli::{AppConfig, BuildInfo, http_server, serve, webapp};
 use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
@@ -24,7 +25,7 @@ fn route_tree(dir: &std::path::Path) -> PathBuf {
     web
 }
 
-async fn send(addr: std::net::SocketAddr, head: &str, body: &str) -> (u16, String) {
+async fn send(addr: std::net::SocketAddr, head: &str, body: &str) -> (u16, String, String) {
     let mut s = TcpStream::connect(addr).await.unwrap();
     let req = format!(
         "{head}\r\nHost: {addr}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
@@ -38,39 +39,37 @@ async fn send(addr: std::net::SocketAddr, head: &str, body: &str) -> (u16, Strin
         .split_once("\r\n\r\n")
         .map(|(_, b)| b.to_string())
         .unwrap_or_default();
-    (status, body)
+    (
+        status,
+        out.split_once("\r\n\r\n").unwrap().0.to_string(),
+        body,
+    )
 }
 
 #[tokio::test]
 async fn the_store_is_mounted_in_the_daemon_app() {
     let dir = tempfile::tempdir().unwrap();
-    let store = Store::open(dir.path().join("autophys.db")).unwrap();
-    let (project, _) = store.ensure_project("thermal").await.unwrap();
+    let api = Api::open(
+        &dir.path().join("collection"),
+        &dir.path().join("server.db"),
+        Options::default(),
+    )
+    .unwrap();
+    let wb = api.client.project("thermal").unwrap();
     let body = br#"{"name":"thermal"}"#;
-    let version = format!(
-        "sha256:{}",
-        autophys::store::canonical::sha256_hex([&body[..]])
-    );
-    store
-        .put_config_version(&project.id, &version, body)
-        .await
+    let version = format!("sha256:{}", autophys::sha256_hex([&body[..]]));
+    wb.put_config_version(&version, body).unwrap();
+    wb.create_investigation(json!({"config_version": version}), None)
         .unwrap();
-    let req = NewInvestigation {
-        project_id: project.id,
-        config_version: version,
-        ..Default::default()
-    };
-    store.create_investigation(req, None).await.unwrap();
 
     let config = AppConfig {
         project_root: PathBuf::from(env!("CARGO_MANIFEST_DIR")),
         web_root: route_tree(dir.path()),
-        store: Some(store),
+        store: Some(api),
     };
     let info = BuildInfo {
         version: "0.1.0".into(),
         commit: "test".into(),
-        tento_commit: "test".into(),
     };
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
@@ -78,17 +77,48 @@ async fn the_store_is_mounted_in_the_daemon_app() {
     let handle = server.handle();
     let task = tokio::spawn(serve(server, std::future::pending()));
 
-    let (s, _) = send(addr, "GET /api/healthz HTTP/1.1", "").await;
+    let (s, _, _) = send(addr, "GET /api/healthz HTTP/1.1", "").await;
     assert_eq!(s, 200, "the daemon's own routes are untouched");
-    let (s, ws) = send(
+    let (s, _, _) = send(
         addr,
         "GET /api/v1/workspace HTTP/1.1\r\nSec-Fetch-Site: same-origin",
         "",
     )
     .await;
+    assert_eq!(s, 401, "browser headers without a cookie are insufficient");
+    let (s, headers, _) = send(addr, "GET / HTTP/1.1", "").await;
+    assert_eq!(s, 200);
+    let set_cookie = headers
+        .lines()
+        .find(|line| line.to_ascii_lowercase().starts_with("set-cookie:"))
+        .unwrap();
+    let attrs = set_cookie.to_ascii_lowercase();
+    assert!(
+        attrs.contains("httponly")
+            && attrs.contains("samesite=strict")
+            && attrs.contains("path=/api")
+    );
+    let cookie = set_cookie
+        .split_once(':')
+        .unwrap()
+        .1
+        .trim()
+        .split(';')
+        .next()
+        .unwrap();
+    assert_eq!(cookie.split_once('=').unwrap().1.len(), 64);
+    let (s, _, ws) = send(
+        addr,
+        &format!(
+            "GET /api/v1/workspace?project={} HTTP/1.1\r\nCookie: {cookie}",
+            wb.id()
+        ),
+        "",
+    )
+    .await;
     assert_eq!(s, 200, "{ws}");
     assert_eq!(serde_json::from_str::<Value>(&ws).unwrap()["cursor"], 1);
-    let (s, e) = send(addr, "GET /api/v1/nope HTTP/1.1", "").await;
+    let (s, _, e) = send(addr, "GET /api/v1/nope HTTP/1.1", "").await;
     assert_eq!(
         (
             s,
@@ -96,14 +126,14 @@ async fn the_store_is_mounted_in_the_daemon_app() {
         ),
         (404, json!("not_found"))
     );
-    let (s, _) = send(addr, "GET /api/v1/whoami HTTP/1.1", "").await;
+    let (s, _, _) = send(addr, "GET /api/v1/whoami HTTP/1.1", "").await;
     assert_eq!(s, 401);
 
     // O-3 against the real bound port: a foreign Origin is refused; the
     // daemon's own origin passes the guard (and the unknown code is a 404).
     let post = |origin: String| {
         format!(
-            "POST /api/v1/pairings/ABCD-1234/approve HTTP/1.1\r\nContent-Type: application/json\r\nOrigin: {origin}"
+            "POST /api/v1/pairings/ABCD-1234/approve HTTP/1.1\r\nContent-Type: application/json\r\nOrigin: {origin}\r\nCookie: {cookie}"
         )
     };
     assert_eq!(
@@ -136,7 +166,8 @@ async fn the_store_is_mounted_in_the_daemon_app() {
     // SSE: the first frame arrives without waiting for the response to end.
     let mut s = TcpStream::connect(addr).await.unwrap();
     let head = format!(
-        "GET /api/v1/stream?after=0 HTTP/1.1\r\nHost: {addr}\r\nSec-Fetch-Site: same-origin\r\n\r\n"
+        "GET /api/v1/stream?after=0&project={} HTTP/1.1\r\nHost: {addr}\r\nCookie: {cookie}\r\n\r\n",
+        wb.id()
     );
     s.write_all(head.as_bytes()).await.unwrap();
     let mut seen = String::new();

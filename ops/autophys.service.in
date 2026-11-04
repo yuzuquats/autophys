@@ -1,8 +1,8 @@
 # Rendered by ops/deploy.sh into ~/.config/systemd/user/autophys.service.
-# @RELEASE@, @ADDR@, @COMMIT@ and @TENTO@ are filled in; edit this template,
+# @RELEASE@, @ADDR@, and @COMMIT@ are filled in; edit this template,
 # not the rendered unit.
 [Unit]
-Description=autophys daemon @COMMIT@ (vendor/tento tree @TENTO@) on @ADDR@, serving its prebuilt route tree
+Description=autophys daemon @COMMIT@ on @ADDR@, serving its prebuilt route tree
 
 [Service]
 Type=simple

@@ -1,5 +1,5 @@
-//! Shared test helpers: a store in a temp dir, an actix test service, a
-//! paired key, and request shorthands.
+//! Shared test helpers: a collection and server database in a temp dir, an
+//! actix test service, a paired key, and request shorthands.
 #![allow(dead_code)]
 
 use std::pin::Pin;
@@ -8,12 +8,13 @@ use std::time::Duration;
 use actix_web::body::MessageBody;
 use actix_web::dev::{Service, ServiceResponse};
 use actix_web::test::{self, TestRequest};
-use autophys::store::{Options, Store};
+use autophys_cli::http::Api;
+use autophys_cli::keys::Options;
 use serde_json::Value;
 use tempfile::TempDir;
 
 pub struct Fixture {
-    pub store: Store,
+    pub api: Api,
     pub dir: TempDir,
 }
 
@@ -26,8 +27,13 @@ pub fn options() -> Options {
 
 pub fn fixture_with(opts: Options) -> Fixture {
     let dir = tempfile::tempdir().unwrap();
-    let store = Store::open_with(dir.path().join("autophys.db"), opts).unwrap();
-    Fixture { store, dir }
+    let api = Api::open(
+        &dir.path().join("collection"),
+        &dir.path().join("server.db"),
+        opts,
+    )
+    .unwrap();
+    Fixture { api, dir }
 }
 
 pub fn fixture() -> Fixture {
@@ -79,8 +85,9 @@ fn with_key(req: TestRequest, key: Option<&str>) -> TestRequest {
 pub const ORIGIN: &str = "http://127.0.0.1:8080";
 
 /// Headers a same-origin page on the daemon's loopback origin sends.
-pub fn browser(req: TestRequest, with_origin: bool) -> TestRequest {
+pub fn browser(api: &Api, req: TestRequest, with_origin: bool) -> TestRequest {
     let req = req
+        .cookie(api.sessions.issue_cookie().unwrap())
         .insert_header(("host", "127.0.0.1:8080"))
         .insert_header(("sec-fetch-site", "same-origin"))
         .peer_addr("127.0.0.1:50000".parse().unwrap());
@@ -92,7 +99,7 @@ pub fn browser(req: TestRequest, with_origin: bool) -> TestRequest {
 }
 
 /// Pair a device over HTTP and approve it the way the CLI does.
-pub async fn pair<S, B>(app: &S, store: &Store, device: &str) -> String
+pub async fn pair<S, B>(app: &S, api: &Api, device: &str) -> String
 where
     S: Service<actix_http::Request, Response = ServiceResponse<B>, Error = actix_web::Error>,
     B: MessageBody,
@@ -108,9 +115,8 @@ where
     )
     .await;
     assert_eq!(s, 200, "{start}");
-    store
+    api.keys
         .pair_approve(start["user_code"].as_str().unwrap())
-        .await
         .unwrap();
     let (s, issued) = call(
         app,
@@ -127,8 +133,22 @@ where
 }
 
 /// Read SSE frames from a streaming response until `n` `record` events have
-/// arrived (or two seconds pass). Returns `(gseq, record)` pairs.
+/// arrived (or two seconds pass). Returns `(gseq, record)` pairs (a scoped
+/// stream, whose event ids are integers).
 pub async fn sse_records<B: MessageBody + Unpin>(body: &mut B, n: usize) -> Vec<(i64, Value)>
+where
+    B::Error: std::fmt::Debug,
+{
+    sse_events(body, n)
+        .await
+        .into_iter()
+        .map(|(id, r)| (id.parse().unwrap(), r))
+        .collect()
+}
+
+/// Like [`sse_records`], with each event id as sent (an unscoped stream's
+/// ids are collection cursors).
+pub async fn sse_events<B: MessageBody + Unpin>(body: &mut B, n: usize) -> Vec<(String, Value)>
 where
     B::Error: std::fmt::Debug,
 {
@@ -149,7 +169,7 @@ where
             let (mut id, mut data, mut is_record) = (None, None, false);
             for line in frame.lines() {
                 if let Some(v) = line.strip_prefix("id: ") {
-                    id = v.parse::<i64>().ok();
+                    id = Some(v.to_string());
                 } else if let Some(v) = line.strip_prefix("data: ") {
                     data = serde_json::from_str::<Value>(v).ok();
                 } else if line == "event: record" {

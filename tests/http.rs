@@ -6,7 +6,7 @@ use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
 
-use autophys::{AppConfig, BuildInfo, http_server, serve, webapp};
+use autophys_cli::{AppConfig, BuildInfo, http_server, serve, webapp};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::oneshot;
@@ -37,7 +37,6 @@ async fn start(name: &str) -> Running {
     let info = BuildInfo {
         version: "0.1.0".into(),
         commit: "abc1234".into(),
-        tento_commit: "def5678".into(),
     };
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
@@ -74,7 +73,7 @@ async fn request(addr: std::net::SocketAddr, method: &str, path: &str) -> (u16, 
 }
 
 #[tokio::test]
-async fn healthz_reports_ok_version_and_both_commits() {
+async fn healthz_reports_ok_version_and_commit() {
     let server = start("healthz").await;
     let (status, head, body) = get(server.addr, "/api/healthz").await;
     assert_eq!(status, 200);
@@ -82,7 +81,7 @@ async fn healthz_reports_ok_version_and_both_commits() {
     let json: serde_json::Value = serde_json::from_str(&body).unwrap();
     assert_eq!(
         json,
-        serde_json::json!({ "ok": true, "version": "0.1.0", "commit": "abc1234", "tento_commit": "def5678" })
+        serde_json::json!({ "ok": true, "version": "0.1.0", "commit": "abc1234" })
     );
 }
 
@@ -92,6 +91,10 @@ async fn the_route_tree_is_served() {
     let (status, head, body) = get(server.addr, "/").await;
     assert_eq!(status, 200);
     assert!(head.contains("text/html"), "{head}");
+    assert!(head.contains("set-cookie: autophys_session="), "{head}");
+    assert!(
+        head.contains("httponly") && head.contains("samesite=strict") && head.contains("path=/api")
+    );
     assert!(body.contains("<title>autophys</title>"), "{body}");
     let (status, head, body) = get(server.addr, "/index.root.js").await;
     assert_eq!((status, body.as_str()), (200, "console.log('autophys')"));
@@ -105,6 +108,10 @@ async fn app_routes_serve_the_document() {
         let (status, head, body) = get(server.addr, path).await;
         assert_eq!(status, 200, "{path}");
         assert!(head.contains("text/html"), "{path}: {head}");
+        assert!(
+            head.contains("set-cookie: autophys_session="),
+            "{path}: missing session cookie"
+        );
         assert_eq!(body, PAGE, "{path}");
     }
 }

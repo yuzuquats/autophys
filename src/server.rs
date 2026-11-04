@@ -14,16 +14,21 @@ use tento_dirs::AppDirs;
 use tento_web::{BuildState, Bundler, DomainConfigLike, EsbuildClient, TentoWeb, Webapp};
 
 use crate::app::{APP_ID, AppConfig, BuildInfo, TENTO, domain};
-use crate::store::{Options, Store};
+use crate::http::Api;
+use crate::keys::Options;
 
 /// The default listen address: loopback, port 4794 (decision AP-3).
 pub const DEFAULT_ADDR: &str = "127.0.0.1:4794";
 
-pub const USAGE: &str = "usage: autophys serve [--addr 127.0.0.1:4794] [--web-root DIR] [--db FILE]
+pub const USAGE: &str =
+    "usage: autophys serve [--addr 127.0.0.1:4794] [--web-root DIR] [--collection DIR]
+                      [--server-db FILE] [--browser-origin ORIGIN]...
        autophys build-web [--out DIR]
-       autophys pair list | pair approve <CODE> | pair deny <CODE>   [--db FILE]
-       autophys keys list [--json] | keys revoke <KEY_ID>          [--db FILE]
-       autophys db check [--rebuild] [--json]                      [--db FILE]";
+       autophys pair list | pair approve <CODE> | pair deny <CODE>
+       autophys keys list [--json] | keys revoke <KEY_ID>
+       autophys db verify [--rebuild] [--json] [--project NAME]   (db check is the same)
+       (pair, keys and db also take --collection DIR and --server-db FILE;
+        --db DIR is an alias of --collection)";
 
 /// Parse a listen address and refuse anything that is not a literal loopback
 /// IP. Host names are refused too: `localhost` can resolve to a routable
@@ -46,29 +51,79 @@ pub struct ServeConfig {
     pub addr: SocketAddr,
     /// A prebuilt route tree (`build-web` output). `None` bundles from source.
     pub web_root: Option<PathBuf>,
-    /// The record store's SQLite file. `None` means [`default_db`].
-    pub db: Option<PathBuf>,
+    /// The collection: a directory of `<slug>.ap-workbook` files. `None`
+    /// means [`default_collection`].
+    pub collection: Option<PathBuf>,
+    /// The server database (keys, pairings). `None` means
+    /// [`default_server_db`] in the app data directory.
+    pub server_db: Option<PathBuf>,
+    /// Extra origins whose keyless browser writes are admitted (O-3), such as
+    /// `http://autophys.rwc-dev-01.tento.localhost`.
+    pub browser_origins: Vec<String>,
+}
+
+/// Split a comma-separated origin list; each must be `http(s)://host[:port]`.
+fn origins(text: &str) -> Result<Vec<String>, String> {
+    text.split(',')
+        .map(str::trim)
+        .filter(|o| !o.is_empty())
+        .map(|o| {
+            let o = o.trim_end_matches('/');
+            let uri = o.parse::<actix_web::http::Uri>().ok();
+            let valid = uri.as_ref().is_some_and(|u| {
+                matches!(u.scheme_str(), Some("http" | "https"))
+                    && u.authority().is_some_and(|a| !a.as_str().contains('@'))
+                    && matches!(u.path(), "" | "/")
+                    && u.query().is_none()
+                    && !o.contains('#')
+            });
+            if valid {
+                Ok(o.to_string())
+            } else {
+                Err(format!(
+                    "--browser-origin {o:?} is not an origin (http(s)://host[:port], no path)"
+                ))
+            }
+        })
+        .collect()
 }
 
 /// `serve` flags: `--addr` / `AUTOPHYS_ADDR` (default [`DEFAULT_ADDR`]),
-/// `--web-root` / `AUTOPHYS_WEB_ROOT` and `--db` / `AUTOPHYS_DB` (default
-/// [`default_db`]). Flags win over the environment.
+/// `--web-root` / `AUTOPHYS_WEB_ROOT`, `--collection` (alias `--db`) /
+/// `AUTOPHYS_HOME` (default [`default_collection`]), `--server-db` /
+/// `AUTOPHYS_SERVER_DB`, and `--browser-origin` (repeatable,
+/// comma-separated) / `AUTOPHYS_BROWSER_ORIGINS`. Flags win over the
+/// environment.
 pub fn parse_serve(
     args: impl IntoIterator<Item = String>,
     env: impl Fn(&str) -> Option<String>,
 ) -> Result<ServeConfig, String> {
+    let nonempty = |k: &str| env(k).filter(|v| !v.is_empty());
     let mut addr = env("AUTOPHYS_ADDR");
-    let mut web_root = env("AUTOPHYS_WEB_ROOT").filter(|v| !v.is_empty());
-    let mut db = env("AUTOPHYS_DB").filter(|v| !v.is_empty());
+    let mut web_root = nonempty("AUTOPHYS_WEB_ROOT");
+    let mut collection = nonempty("AUTOPHYS_HOME");
+    let mut server_db = nonempty("AUTOPHYS_SERVER_DB");
+    let mut browser_origins = match nonempty("AUTOPHYS_BROWSER_ORIGINS") {
+        Some(list) => origins(&list)?,
+        None => Vec::new(),
+    };
+    let mut flagged_origins = Vec::new();
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         let (key, inline) = split_flag(&arg);
         match key.as_str() {
             "--addr" => addr = Some(flag_value(&key, inline, &mut args)?),
             "--web-root" => web_root = Some(flag_value(&key, inline, &mut args)?),
-            "--db" => db = Some(flag_value(&key, inline, &mut args)?),
+            "--collection" | "--db" => collection = Some(flag_value(&key, inline, &mut args)?),
+            "--server-db" => server_db = Some(flag_value(&key, inline, &mut args)?),
+            "--browser-origin" => {
+                flagged_origins.extend(origins(&flag_value(&key, inline, &mut args)?)?)
+            }
             other => return Err(format!("unknown argument {other:?}\n{USAGE}")),
         }
+    }
+    if !flagged_origins.is_empty() {
+        browser_origins = flagged_origins;
     }
     let addr = parse_loopback(addr.as_deref().unwrap_or(DEFAULT_ADDR))?;
     let web_root = web_root.map(PathBuf::from);
@@ -78,7 +133,9 @@ pub fn parse_serve(
     Ok(ServeConfig {
         addr,
         web_root,
-        db: db.map(PathBuf::from),
+        collection: collection.map(PathBuf::from),
+        server_db: server_db.map(PathBuf::from),
+        browser_origins,
     })
 }
 
@@ -198,14 +255,16 @@ pub async fn build_web(project_root: PathBuf, out: PathBuf) -> Result<PathBuf> {
     Ok(out)
 }
 
-/// The record store's file: `AUTOPHYS_DB`, else the app's tento data dir
-/// (`~/.local/share/tento/autophys/autophys.db`). `serve` and the `pair`,
-/// `keys` and `db` commands share it.
-pub fn default_db() -> Result<PathBuf> {
-    if let Some(db) = std::env::var_os("AUTOPHYS_DB").filter(|v| !v.is_empty()) {
-        return Ok(PathBuf::from(db));
-    }
-    Ok(AppDirs::resolve(APP_ID)?.data.join("autophys.db"))
+/// The collection `serve`, `pair`, `keys` and `db` use without a flag:
+/// `$AUTOPHYS_HOME`, else `~/autophys`, the same directory the SDKs open
+/// with no target, so the daemon serves the workbooks local programs write.
+pub fn default_collection() -> PathBuf {
+    autophys::default_home()
+}
+
+/// Keys and pairings live in the app's tento-dirs data directory (AX-17).
+pub fn default_server_db() -> Result<PathBuf> {
+    Ok(AppDirs::resolve(APP_ID)?.data.join("server.db"))
 }
 
 /// tento-web returns `Ok` from a build whose bundle reported errors; the
@@ -294,23 +353,30 @@ pub async fn run(serve_config: ServeConfig) -> Result<()> {
     let listener = std::net::TcpListener::bind(serve_config.addr)
         .with_context(|| format!("bind {}", serve_config.addr))?;
     let build = serve_config.web_root.is_none();
-    let db = match serve_config.db {
-        Some(db) => db,
-        None => default_db()?,
+    let collection = serve_config.collection.unwrap_or_else(default_collection);
+    let server_db = match serve_config.server_db {
+        Some(path) => path,
+        None => default_server_db()?,
     };
     let options = Options {
         verification_url: format!("http://{}/pair", listener.local_addr()?),
+        browser_origins: serve_config.browser_origins,
         ..Options::default()
     };
-    let store = Store::open_with(&db, options)
-        .with_context(|| format!("open the store {}", db.display()))?;
+    let api = Api::open(&collection, &server_db, options).with_context(|| {
+        format!(
+            "open the collection {} and the server database {}",
+            collection.display(),
+            server_db.display()
+        )
+    })?;
     let config = AppConfig {
         project_root: project_root(),
         web_root: match serve_config.web_root {
             Some(root) => root,
             None => default_web_root()?,
         },
-        store: Some(store),
+        store: Some(api),
     };
     let info = BuildInfo::current();
     let webapp = Arc::new(webapp(&config, info.clone(), build)?);
@@ -333,13 +399,12 @@ pub async fn run(serve_config: ServeConfig) -> Result<()> {
         None
     };
     eprintln!(
-        "autophys {} ({}, tento {}) serving {} {} and store {} on http://{}",
+        "autophys {} ({}) serving {} {} and collection {} on http://{}",
         info.version,
         info.commit,
-        info.tento_commit,
         if build { "dev build" } else { "prebuilt" },
         config.web_root.display(),
-        db.display(),
+        collection.display(),
         listener.local_addr()?,
     );
     serve(http_server(listener, webapp)?, termination()).await?;
@@ -395,9 +460,24 @@ mod tests {
         assert!(parse_serve(["--addr".into(), "0.0.0.0:2".into()], env).is_err());
         assert!(parse_serve(["--bogus".into()], env).is_err());
         assert!(parse_serve(["--addr".into()], env).is_err());
-        assert_eq!(from_env.db, None);
-        let with_db = parse_serve(["--db=/tmp/a.db".to_string()], env).unwrap();
-        assert_eq!(with_db.db.as_deref(), Some(Path::new("/tmp/a.db")));
+        assert_eq!(
+            (from_env.collection.as_ref(), from_env.server_db.as_ref()),
+            (None, None)
+        );
+        let with_db = parse_serve(["--db=/tmp/c".to_string()], env).unwrap();
+        assert_eq!(with_db.collection.as_deref(), Some(Path::new("/tmp/c")));
+        let flagged = parse_serve(
+            ["--collection", "/tmp/d", "--server-db", "/tmp/s.db"].map(String::from),
+            env,
+        )
+        .unwrap();
+        assert_eq!(flagged.collection.as_deref(), Some(Path::new("/tmp/d")));
+        assert_eq!(flagged.server_db.as_deref(), Some(Path::new("/tmp/s.db")));
+        assert!(
+            default_server_db()
+                .unwrap()
+                .ends_with("tento/autophys/server.db")
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -406,6 +486,50 @@ mod tests {
         let config = parse_serve(Vec::<String>::new(), |_| None).unwrap();
         assert_eq!(config.addr, DEFAULT_ADDR.parse().unwrap());
         assert_eq!(config.web_root, None);
+    }
+
+    #[test]
+    fn browser_origins_come_from_flags_or_env() {
+        let env = |k: &str| {
+            (k == "AUTOPHYS_BROWSER_ORIGINS").then(|| {
+                "http://autophys.rwc-dev-01.tento.localhost, https://x.localhost:8443/".to_string()
+            })
+        };
+        let from_env = parse_serve(Vec::<String>::new(), env).unwrap();
+        assert_eq!(
+            from_env.browser_origins,
+            [
+                "http://autophys.rwc-dev-01.tento.localhost",
+                "https://x.localhost:8443"
+            ]
+        );
+        let flagged = parse_serve(
+            [
+                "--browser-origin",
+                "http://a.localhost",
+                "--browser-origin=http://b.localhost",
+            ]
+            .map(String::from),
+            env,
+        )
+        .unwrap();
+        assert_eq!(
+            flagged.browser_origins,
+            ["http://a.localhost", "http://b.localhost"]
+        );
+        assert!(
+            parse_serve(
+                ["--browser-origin", "a.localhost"].map(String::from),
+                |_| None
+            )
+            .is_err()
+        );
+        assert!(
+            parse_serve(["--browser-origin", "http://a/x"].map(String::from), |_| {
+                None
+            })
+            .is_err()
+        );
     }
 
     #[test]

@@ -1,5 +1,5 @@
 [package]
-name = "autophys"
+name = "autophys-cli"
 description = "autophys daemon: a tento-web app; `autophys serve` serves html/routes on loopback"
 version = "0.1.0"
 edition = "2024"
@@ -7,7 +7,7 @@ license = "UNLICENSED"
 publish = false
 
 [lib]
-name = "autophys"
+name = "autophys_cli"
 path = "src/lib.rs"
 
 [[bin]]
@@ -15,6 +15,7 @@ name = "autophys"
 path = "src/main.rs"
 
 [dependencies]
+autophys = { path = "sdks/rust" }
 # The tento crates in vendor/tento: tento-web is the file-based router and
 # bundler, tento-dirs the app dirs.
 tento-web = { path = "vendor/tento/tento-web" }
@@ -49,4 +50,6 @@ iana-time-zone = { path = "vendor/tento/vendor/iana-time-zone" }
 # Cargo workspace still builds. vendor/ is excluded: vendor/tento is a
 # separate workspace for the vendored crates.
 [workspace]
+# The root is an implicit member; listing "." breaks nested vendor workspace inheritance.
+members = ["sdks/rust"]
 exclude = ["vendor"]

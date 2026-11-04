@@ -1,6 +1,6 @@
 use std::process::ExitCode;
 
-use autophys::{
+use autophys_cli::{
     BuildInfo, USAGE, build_web, default_web_root, parse_build_web, parse_serve, project_root, run,
 };
 
@@ -34,15 +34,25 @@ async fn main() -> ExitCode {
         }
         Some(command @ ("pair" | "keys" | "db")) => {
             let command = command.to_string();
-            let default = || autophys::default_db().map_err(|e| format!("{e:#}"));
-            autophys::admin::run(
+            let defaults = autophys_cli::admin::Defaults {
+                collection: autophys_cli::default_collection(),
+                server_db: match std::env::var_os("AUTOPHYS_SERVER_DB")
+                    .map(std::path::PathBuf::from)
+                {
+                    Some(path) => path,
+                    None => match autophys_cli::default_server_db() {
+                        Ok(path) => path,
+                        Err(error) => return report(Err(error)),
+                    },
+                },
+            };
+            autophys_cli::admin::run(
                 &command,
                 args,
-                default,
+                defaults,
                 &mut std::io::stdout(),
                 &mut std::io::stderr(),
             )
-            .await
         }
         Some("-h" | "--help" | "help") => {
             println!("{USAGE}");
@@ -50,10 +60,7 @@ async fn main() -> ExitCode {
         }
         Some("--version" | "version") => {
             let info = BuildInfo::current();
-            println!(
-                "autophys {} ({}, tento {})",
-                info.version, info.commit, info.tento_commit
-            );
+            println!("autophys {} ({})", info.version, info.commit);
             ExitCode::SUCCESS
         }
         Some(other) => usage_error(&format!("unknown command {other:?}\n{USAGE}")),

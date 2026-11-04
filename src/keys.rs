@@ -1,5 +1,7 @@
 //! API keys and the device-code pairing flow (RFC 8628 shaped, as the SDK's
-//! `pair_start` / `pair_poll` expect).
+//! `pair_start` / `pair_poll` expect), in the server's own database. Keys and
+//! pairings are never in a workbook (workbook-format.md); this file sits next
+//! to the app: tento-dirs data (`~/.local/share/tento/autophys/server.db`).
 //!
 //! Only sha256 hashes of keys and device codes are stored. A key exists in
 //! plaintext exactly once: in the `pair_poll` response that hands it to the
@@ -8,13 +10,16 @@
 //! that holds a secret prints it through `Debug`.
 
 use std::fmt;
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard};
+use std::time::Duration;
 
 use chrono::{DateTime, SecondsFormat, Utc};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
 
-use crate::store::canonical::sha256_hex;
-use crate::store::error::{Result, StoreError};
+use crate::error::{ApiError, Result};
+use autophys::sha256_hex;
 
 /// What the CLI and `keys_list` show about a key; never the key.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -84,7 +89,7 @@ pub(crate) fn now_text(now: DateTime<Utc>) -> String {
 
 pub(crate) fn random_hex(bytes: usize) -> Result<String> {
     let mut buf = vec![0u8; bytes];
-    getrandom::getrandom(&mut buf).map_err(|e| StoreError::Internal(format!("getrandom: {e}")))?;
+    getrandom::getrandom(&mut buf).map_err(|e| ApiError::Internal(format!("getrandom: {e}")))?;
     Ok(hex::encode(buf))
 }
 
@@ -92,7 +97,7 @@ fn user_code() -> Result<String> {
     // No vowels (no words), no 0/O or 1/I confusion: BCDFGHJKLMNPQRSTVWXZ.
     const LETTERS: &[u8] = b"BCDFGHJKLMNPQRSTVWXZ";
     let mut buf = [0u8; 8];
-    getrandom::getrandom(&mut buf).map_err(|e| StoreError::Internal(format!("getrandom: {e}")))?;
+    getrandom::getrandom(&mut buf).map_err(|e| ApiError::Internal(format!("getrandom: {e}")))?;
     let mut s = String::with_capacity(9);
     for (i, b) in buf.iter().enumerate() {
         if i == 4 {
@@ -133,7 +138,7 @@ pub(crate) fn pair_start(
 ) -> Result<PairStart> {
     // Housekeeping: finished or expired pairings are dropped on the next start.
     conn.execute(
-        "DELETE FROM pairings WHERE expires < ?1 OR state IN ('denied', 'issued')",
+        include_str!("../sql/keys/prune_pairings.sql"),
         [now_text(now)],
     )?;
     let device_code = random_hex(32)?;
@@ -141,9 +146,7 @@ pub(crate) fn pair_start(
     for _ in 0..8 {
         let code = user_code()?;
         let inserted = conn.execute(
-            "INSERT INTO pairings
-               (device_code_sha256, user_code, device, client, state, created, expires)
-             VALUES (?1, ?2, ?3, ?4, 'pending', ?5, ?6)",
+            include_str!("../sql/keys/start_pairing.sql"),
             params![
                 sha256_hex([device_code.as_bytes()]),
                 code,
@@ -171,7 +174,7 @@ pub(crate) fn pair_start(
             Err(e) => return Err(e.into()),
         }
     }
-    Err(StoreError::Internal(
+    Err(ApiError::Internal(
         "could not allocate a free user code".into(),
     ))
 }
@@ -191,28 +194,26 @@ pub(crate) fn pair_poll(
     let tx = conn.transaction()?;
     let sha = sha256_hex([device_code.as_bytes()]);
     let row: Option<(String, String, String, Option<i64>)> = tx
-        .query_row(
-            "SELECT state, device, expires, last_poll_ms FROM pairings WHERE device_code_sha256 = ?1",
-            [&sha],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
-        )
+        .query_row(include_str!("../sql/keys/poll_pairing.sql"), [&sha], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+        })
         .optional()?;
     let Some((state, device, expires, last_poll)) = row else {
-        return Err(StoreError::Pairing("expired_token"));
+        return Err(ApiError::Pairing("expired_token"));
     };
     if expires < now_text(now) || state == "issued" {
-        return Err(StoreError::Pairing("expired_token"));
+        return Err(ApiError::Pairing("expired_token"));
     }
     let now_ms = now.timestamp_millis();
     match state.as_str() {
         "denied" => {
-            tx.execute("DELETE FROM pairings WHERE device_code_sha256 = ?1", [&sha])?;
+            tx.execute(include_str!("../sql/keys/expire_pairing.sql"), [&sha])?;
             tx.commit()?;
-            Err(StoreError::Pairing("access_denied"))
+            Err(ApiError::Pairing("access_denied"))
         }
         "pending" => {
             tx.execute(
-                "UPDATE pairings SET last_poll_ms = ?2 WHERE device_code_sha256 = ?1",
+                include_str!("../sql/keys/touch_poll.sql"),
                 params![sha, now_ms],
             )?;
             tx.commit()?;
@@ -220,15 +221,15 @@ pub(crate) fn pair_poll(
             // Allow 20% jitter so a client that sleeps exactly `interval` passes.
             let min_gap = (p.interval_secs as i64) * 800;
             match last_poll {
-                Some(prev) if now_ms - prev < min_gap => Err(StoreError::Pairing("slow_down")),
-                _ => Err(StoreError::Pairing("authorization_pending")),
+                Some(prev) if now_ms - prev < min_gap => Err(ApiError::Pairing("slow_down")),
+                _ => Err(ApiError::Pairing("authorization_pending")),
             }
         }
         "approved" => {
             let api_key = format!("{KEY_PREFIX}{}", random_hex(32)?);
             let key_id = format!("k_{}", random_hex(6)?);
             tx.execute(
-                "INSERT INTO keys (id, device, sha256, created) VALUES (?1, ?2, ?3, ?4)",
+                include_str!("../sql/keys/issue_key.sql"),
                 params![
                     key_id,
                     device,
@@ -237,7 +238,7 @@ pub(crate) fn pair_poll(
                 ],
             )?;
             tx.execute(
-                "UPDATE pairings SET state = 'issued', key_id = ?2 WHERE device_code_sha256 = ?1",
+                include_str!("../sql/keys/finish_pairing.sql"),
                 params![sha, key_id],
             )?;
             tx.commit()?;
@@ -248,7 +249,7 @@ pub(crate) fn pair_poll(
                 workspace: p.workspace.to_string(),
             })
         }
-        other => Err(StoreError::Internal(format!(
+        other => Err(ApiError::Internal(format!(
             "pairing in unknown state {other}"
         ))),
     }
@@ -264,17 +265,16 @@ pub(crate) fn pair_decide(
     let code = normalize_user_code(user_code);
     let row: Option<(String, String, String, String)> = conn
         .query_row(
-            "SELECT device_code_sha256, device, client, expires FROM pairings
-              WHERE user_code = ?1 AND state = 'pending' AND expires >= ?2",
+            include_str!("../sql/keys/find_pairing.sql"),
             [&code, &now_text(now)],
             |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
         )
         .optional()?;
     let Some((sha, device, client, expires)) = row else {
-        return Err(StoreError::NotFound("pairing code"));
+        return Err(ApiError::not_found("pairing code"));
     };
     conn.execute(
-        "UPDATE pairings SET state = ?2 WHERE device_code_sha256 = ?1",
+        include_str!("../sql/keys/decide_pairing.sql"),
         [sha.as_str(), if approve { "approved" } else { "denied" }],
     )?;
     Ok(Pairing {
@@ -287,10 +287,7 @@ pub(crate) fn pair_decide(
 
 /// Pairings still waiting for a person, oldest first.
 pub(crate) fn pending(conn: &Connection, now: DateTime<Utc>) -> Result<Vec<Pairing>> {
-    let mut stmt = conn.prepare(
-        "SELECT user_code, device, client, expires FROM pairings
-          WHERE state = 'pending' AND expires >= ?1 ORDER BY created, user_code",
-    )?;
+    let mut stmt = conn.prepare(include_str!("../sql/keys/pending_pairings.sql"))?;
     let rows = stmt.query_map([now_text(now)], |r| {
         Ok(Pairing {
             user_code: r.get(0)?,
@@ -299,12 +296,11 @@ pub(crate) fn pending(conn: &Connection, now: DateTime<Utc>) -> Result<Vec<Pairi
             expires: r.get(3)?,
         })
     })?;
-    rows.map(|r| r.map_err(StoreError::from)).collect()
+    rows.map(|r| r.map_err(ApiError::from)).collect()
 }
 
 pub(crate) fn list(conn: &Connection) -> Result<Vec<KeyInfo>> {
-    let mut stmt = conn
-        .prepare("SELECT id, device, created, last_used, revoked FROM keys ORDER BY created, id")?;
+    let mut stmt = conn.prepare(include_str!("../sql/keys/list_keys.sql"))?;
     let rows = stmt.query_map([], |r| {
         Ok(KeyInfo {
             id: r.get(0)?,
@@ -314,21 +310,23 @@ pub(crate) fn list(conn: &Connection) -> Result<Vec<KeyInfo>> {
             revoked: r.get(4)?,
         })
     })?;
-    rows.map(|r| r.map_err(StoreError::from)).collect()
+    rows.map(|r| r.map_err(ApiError::from)).collect()
 }
 
 /// `Ok(true)` if the key was live and is now revoked, `Ok(false)` if it was
 /// already revoked.
 pub(crate) fn revoke(conn: &Connection, id: &str, now: DateTime<Utc>) -> Result<bool> {
     let revoked: Option<Option<String>> = conn
-        .query_row("SELECT revoked FROM keys WHERE id = ?1", [id], |r| r.get(0))
+        .query_row(include_str!("../sql/keys/key_revocation.sql"), [id], |r| {
+            r.get(0)
+        })
         .optional()?;
     match revoked {
-        None => Err(StoreError::NotFound("key")),
+        None => Err(ApiError::not_found("key")),
         Some(Some(_)) => Ok(false),
         Some(None) => {
             conn.execute(
-                "UPDATE keys SET revoked = ?2 WHERE id = ?1",
+                include_str!("../sql/keys/revoke_key.sql"),
                 [id, &now_text(now)],
             )?;
             Ok(true)
@@ -340,8 +338,7 @@ pub(crate) fn revoke(conn: &Connection, id: &str, now: DateTime<Utc>) -> Result<
 pub(crate) fn lookup(conn: &Connection, token: &str) -> Result<Option<KeyInfo>> {
     Ok(conn
         .query_row(
-            "SELECT id, device, created, last_used, revoked FROM keys
-              WHERE sha256 = ?1 AND revoked IS NULL",
+            include_str!("../sql/keys/lookup_key.sql"),
             [sha256_hex([token.as_bytes()])],
             |r| {
                 Ok(KeyInfo {
@@ -358,8 +355,209 @@ pub(crate) fn lookup(conn: &Connection, token: &str) -> Result<Option<KeyInfo>> 
 
 pub(crate) fn touch(conn: &Connection, id: &str, now: DateTime<Utc>) -> Result<()> {
     conn.execute(
-        "UPDATE keys SET last_used = ?2 WHERE id = ?1",
+        include_str!("../sql/keys/touch_key.sql"),
         [id, &now_text(now)],
     )?;
     Ok(())
+}
+
+// --- the server database ------------------------------------------------------
+
+/// Migrations of the server database, keyed by its schema version.
+const MIGRATIONS: &[&str] = &[include_str!("../sql/keys/schema_v1.sql")];
+
+fn migrate(conn: &mut Connection) -> Result<()> {
+    let current: i64 = conn.query_row(include_str!("../sql/keys/schema_version.sql"), [], |r| {
+        r.get(0)
+    })?;
+    for (i, sql) in MIGRATIONS.iter().enumerate().skip(current.max(0) as usize) {
+        let tx = conn.transaction()?;
+        tx.execute_batch(sql)?;
+        tx.pragma_update(None, "user_version", (i + 1) as i64)?;
+        tx.commit()?;
+    }
+    Ok(())
+}
+
+/// Settings a daemon may change; [`Options::default`] suits `autophys serve`.
+#[derive(Clone, Debug)]
+pub struct Options {
+    /// Reported by `whoami` and `pair_poll` (single-user daemon).
+    pub account: String,
+    pub workspace: String,
+    /// Where a person approves a device code; shown by the SDK's `pair`.
+    pub verification_url: String,
+    /// How long a device code stays valid.
+    pub pairing_ttl: Duration,
+    /// The poll interval handed to the device; faster polls get `slow_down`.
+    pub poll_interval: Duration,
+    /// Host names (no port) besides loopback literals and `*.localhost` whose
+    /// browser-session reads are allowed (`/workspace`, `/stream`, `GET /pairings`).
+    pub browser_hosts: Vec<String>,
+    /// Origins besides the daemon's own (`http://127.0.0.1:<port>`,
+    /// `http://localhost:<port>`, `http://[::1]:<port>`) whose keyless
+    /// *writes* are admitted (O-3): `serve --browser-origin` or
+    /// `AUTOPHYS_BROWSER_ORIGINS`, for example a tento.localhost proxy origin
+    /// such as `http://autophys.rwc-dev-01.tento.localhost`.
+    pub browser_origins: Vec<String>,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Options {
+            account: "local".into(),
+            workspace: "local".into(),
+            verification_url: "http://127.0.0.1:4794/pair".into(),
+            pairing_ttl: Duration::from_secs(600),
+            poll_interval: Duration::from_secs(5),
+            browser_hosts: Vec::new(),
+            browser_origins: Vec::new(),
+        }
+    }
+}
+
+/// The server database: keys and pairings. One connection behind a mutex;
+/// the admin CLI opens the same file from another process.
+pub struct KeyStore {
+    path: PathBuf,
+    opts: Options,
+    conn: Mutex<Connection>,
+}
+
+impl std::fmt::Debug for KeyStore {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("KeyStore")
+            .field("path", &self.path)
+            .finish()
+    }
+}
+
+impl KeyStore {
+    /// Open (creating if needed) the server database with default options.
+    pub fn open(path: impl AsRef<Path>) -> Result<KeyStore> {
+        KeyStore::open_with(path, Options::default())
+    }
+
+    /// Open with explicit [`Options`]: WAL mode, migrations.
+    pub fn open_with(path: impl AsRef<Path>, opts: Options) -> Result<KeyStore> {
+        let path = path.as_ref().to_path_buf();
+        if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
+            std::fs::create_dir_all(dir)
+                .map_err(|e| ApiError::Internal(format!("create {}: {e}", dir.display())))?;
+        }
+        let mut conn = Connection::open(&path)?;
+        conn.busy_timeout(Duration::from_secs(5))?;
+        let mode: String =
+            conn.query_row(include_str!("../sql/keys/journal_mode.sql"), [], |r| {
+                r.get(0)
+            })?;
+        if !mode.eq_ignore_ascii_case("wal") {
+            return Err(ApiError::Internal(format!(
+                "journal_mode is {mode}, not wal"
+            )));
+        }
+        conn.pragma_update(None, "synchronous", "NORMAL")?;
+        migrate(&mut conn)?;
+        Ok(KeyStore {
+            path,
+            opts,
+            conn: Mutex::new(conn),
+        })
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn options(&self) -> &Options {
+        &self.opts
+    }
+
+    fn conn(&self) -> Result<MutexGuard<'_, Connection>> {
+        self.conn
+            .lock()
+            .map_err(|_| ApiError::Internal("server database connection poisoned".into()))
+    }
+
+    /// Start a device-code pairing for `device` (`POST /pair/start`).
+    pub fn pair_start(&self, device: &str, client: &str) -> Result<PairStart> {
+        if device.chars().count() > 100 || client.chars().count() > 200 {
+            return Err(ApiError::invalid("device_name", "at most 100 characters"));
+        }
+        let device = if device.trim().is_empty() {
+            "unnamed device"
+        } else {
+            device
+        };
+        pair_start(
+            &*self.conn()?,
+            PairParams {
+                device,
+                client,
+                ttl_secs: self.opts.pairing_ttl.as_secs(),
+                interval_secs: self.opts.poll_interval.as_secs(),
+                verification_url: &self.opts.verification_url,
+            },
+            Utc::now(),
+        )
+    }
+
+    /// Poll a pairing (`POST /pair/poll`). `Err(Pairing(code))` until
+    /// approved; then the key, exactly once.
+    pub fn pair_poll(&self, device_code: &str) -> Result<IssuedKey> {
+        pair_poll(
+            &mut *self.conn()?,
+            device_code,
+            PollParams {
+                interval_secs: self.opts.poll_interval.as_secs(),
+                account: &self.opts.account,
+                workspace: &self.opts.workspace,
+            },
+            Utc::now(),
+        )
+    }
+
+    /// `autophys pair approve WXYZ-1234`.
+    pub fn pair_approve(&self, user_code: &str) -> Result<Pairing> {
+        pair_decide(&*self.conn()?, user_code, true, Utc::now())
+    }
+
+    /// Decline a pairing; the device's next poll gets `access_denied`.
+    pub fn pair_deny(&self, user_code: &str) -> Result<Pairing> {
+        pair_decide(&*self.conn()?, user_code, false, Utc::now())
+    }
+
+    /// Pairings waiting for approval (`GET /pairings`, `autophys pair list`).
+    pub fn pairings_pending(&self) -> Result<Vec<Pairing>> {
+        pending(&*self.conn()?, Utc::now())
+    }
+
+    pub fn keys_list(&self) -> Result<Vec<KeyInfo>> {
+        list(&*self.conn()?)
+    }
+
+    /// Revoke key `id`: `Ok(true)` if it was live, `Ok(false)` if already revoked.
+    pub fn keys_revoke(&self, id: &str) -> Result<bool> {
+        revoke(&*self.conn()?, id, Utc::now())
+    }
+
+    /// The live key matching a bearer token. Refreshes `last_used` at most
+    /// once a minute.
+    pub fn authenticate(&self, token: &str) -> Result<Option<KeyInfo>> {
+        let conn = self.conn()?;
+        let found = lookup(&conn, token)?;
+        if let Some(key) = &found {
+            let stale = key
+                .last_used
+                .as_deref()
+                .and_then(|t| DateTime::parse_from_rfc3339(t).ok())
+                .is_none_or(|t| {
+                    Utc::now().signed_duration_since(t) > chrono::Duration::seconds(60)
+                });
+            if stale {
+                let _ = touch(&conn, &key.id, Utc::now());
+            }
+        }
+        Ok(found)
+    }
 }

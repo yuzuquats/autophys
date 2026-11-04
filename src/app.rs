@@ -11,7 +11,7 @@ use tento_web::{
     compiler::{Action, Compiler},
 };
 
-use crate::store::Store;
+use crate::http::Api;
 
 pub const APP_ID: &str = "autophys";
 
@@ -25,22 +25,14 @@ pub struct BuildInfo {
     pub version: String,
     /// The autophys commit `ops/deploy.sh` stamps in through `AUTOPHYS_COMMIT`.
     pub commit: String,
-    /// The git tree id of `vendor/tento`, the tento tree whose cookbook and
-    /// tento-ui the bundle was built from, stamped through
-    /// `AUTOPHYS_TENTO_COMMIT`.
-    pub tento_commit: String,
 }
 
 impl BuildInfo {
-    /// The Cargo version plus the stamped commits; a plain `cargo build`
-    /// reports `dev` for both.
+    /// The Cargo version and stamped commit; a plain build reports `dev`.
     pub fn current() -> Self {
         BuildInfo {
             version: env!("CARGO_PKG_VERSION").to_string(),
             commit: option_env!("AUTOPHYS_COMMIT").unwrap_or("dev").to_string(),
-            tento_commit: option_env!("AUTOPHYS_TENTO_COMMIT")
-                .unwrap_or("dev")
-                .to_string(),
         }
     }
 }
@@ -54,9 +46,9 @@ pub struct AppConfig {
     /// The route tree that is served: written by a build, or prebuilt by
     /// `autophys build-web` and passed as `serve --web-root`.
     pub web_root: PathBuf,
-    /// The record store behind `/api/v1`. `None` (a bare `build-web`) leaves
-    /// `/api/v1/*` on the JSON 404.
-    pub store: Option<Store>,
+    /// The collection and server database behind `/api/v1`. `None` (a bare
+    /// `build-web`) leaves `/api/v1/*` on the JSON 404.
+    pub store: Option<Api>,
 }
 
 #[derive(Serialize)]
@@ -64,7 +56,6 @@ struct Health<'a> {
     ok: bool,
     version: &'a str,
     commit: &'a str,
-    tento_commit: &'a str,
 }
 
 /// The page the cookbook's client routes answer with: the built shell.
@@ -88,6 +79,12 @@ pub fn domain(config: &AppConfig, info: BuildInfo) -> DomainConfig {
     let info = web::Data::new(info);
     let shell = web::Data::new(Shell(config.web_root.join("routes/index.anon.html")));
     let store = config.store.clone();
+    let sessions = web::Data::new(
+        store
+            .as_ref()
+            .map(|api| api.sessions.clone())
+            .unwrap_or_default(),
+    );
 
     DomainConfig::builder()
         .hostname("localhost")
@@ -96,13 +93,14 @@ pub fn domain(config: &AppConfig, info: BuildInfo) -> DomainConfig {
         .config(move |cfg| {
             cfg.app_data(info.clone());
             cfg.app_data(shell.clone());
+            cfg.app_data(sessions.clone());
             cfg.route("/api/healthz", web::get().to(healthz));
             configure_api_v1(cfg, store.as_ref());
             // Anything else under /api is a JSON 404, never the page.
             cfg.route("/api", web::route().to(api_not_found));
             cfg.route("/api/{tail:.*}", web::route().to(api_not_found));
-            // The cookbook's client routes (`/app`, `/app/<item>`) are the
-            // same document as `/`; the file router serves `/` itself.
+            // Every document load mints a process-local browser session.
+            cfg.route("/", web::get().to(app_document));
             cfg.route("/app", web::get().to(app_document));
             cfg.route("/app/{tail:.*}", web::get().to(app_document));
         })
@@ -113,14 +111,15 @@ pub fn domain(config: &AppConfig, info: BuildInfo) -> DomainConfig {
 // HOOK: /api/v1
 //
 // `crate::http::configure` registers every `/api/v1` route and the SSE stream
-// (`src/http.rs`; decisions in store.md). It runs after `/api/healthz` and
-// before the `/api` JSON 404 catch-all, so its scope wins over the catch-all;
-// unknown `/api/v1/*` paths get the scope's own JSON 404. Without a store
-// (`build-web`) nothing is registered and the catch-all answers.
+// (`src/http.rs` over the `autophys` crate; decisions in store.md and
+// rust-sdk.md). It runs after `/api/healthz` and before the `/api` JSON 404
+// catch-all, so its scope wins over the catch-all; unknown `/api/v1/*` paths
+// get the scope's own JSON 404. Without an `Api` (`build-web`) nothing is
+// registered and the catch-all answers.
 // ---------------------------------------------------------------------------
-fn configure_api_v1(cfg: &mut web::ServiceConfig, store: Option<&Store>) {
-    if let Some(store) = store {
-        crate::http::configure(cfg, store.clone());
+fn configure_api_v1(cfg: &mut web::ServiceConfig, api: Option<&Api>) {
+    if let Some(api) = api {
+        crate::http::configure(cfg, api.clone());
     }
 }
 
@@ -129,7 +128,6 @@ async fn healthz(info: web::Data<BuildInfo>) -> HttpResponse {
         ok: true,
         version: &info.version,
         commit: &info.commit,
-        tento_commit: &info.tento_commit,
     })
 }
 
@@ -138,13 +136,18 @@ async fn api_not_found(req: HttpRequest) -> HttpResponse {
         .json(serde_json::json!({ "ok": false, "error": "not found", "path": req.path() }))
 }
 
-async fn app_document(shell: web::Data<Shell>) -> HttpResponse {
+async fn app_document(
+    shell: web::Data<Shell>,
+    sessions: web::Data<crate::http::auth::BrowserSessions>,
+) -> Result<HttpResponse, crate::error::ApiError> {
     match tokio::fs::read(&shell.0).await {
-        Ok(html) => HttpResponse::Ok()
+        Ok(html) => Ok(HttpResponse::Ok()
+            .cookie(sessions.issue_cookie()?)
+            .insert_header((actix_web::http::header::CACHE_CONTROL, "no-store"))
             .content_type("text/html; charset=utf-8")
-            .body(html),
-        Err(error) => HttpResponse::InternalServerError()
+            .body(html)),
+        Err(error) => Ok(HttpResponse::InternalServerError()
             .content_type("text/plain; charset=utf-8")
-            .body(format!("the built shell is missing ({error})\n")),
+            .body(format!("the built shell is missing ({error})\n"))),
     }
 }

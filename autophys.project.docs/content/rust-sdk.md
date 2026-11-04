@@ -1,9 +1,9 @@
 # autophys-rs: the daemon's endpoints are a thin layer over a Rust library that matches the Python SDK
 
-Status: plan, rev 3, 2026-11-04. Rev 2: full API parity (AX-2 revised). Rev 3: the numerics case format, the `autophys-cli` layout, the conformance tree as committed. Operator direction (autophys/rs thread): the
+Status: phase 1 implemented, rev 4, 2026-11-04. Rev 2: full API parity (AX-2 revised). Rev 3: the numerics case format, the `autophys-cli` layout, the conformance tree as committed. Operator direction (autophys/rs thread): the
 Rust binary produces the app and serves the endpoints, and each endpoint
 calls a Rust library crate that is the Rust counterpart of the Python SDK, so
-Rust programs can import it directly. Not implemented yet. It refines W-4
+Rust programs can import it directly. Phase 1 is implemented; phase 2 remains pending. It refines W-4
 (`workbook.md`) and does not change the workbook format (`workbook-format.md`).
 
 ## The shape
@@ -96,8 +96,9 @@ wb.investigation("inv-7")?.approve("p-3", "james", None)?;
 async fn approvals(state: web::Data<Server>, path: web::Path<(String, String)>,
                    body: web::Json<ApprovalBody>) -> Result<HttpResponse, ApiError> {
     let (inv, pid) = path.into_inner();
-    let wb = state.collection.workbook_for(&inv)?;           // Local client
-    let appended = wb.investigation(&inv)?.decide(&pid, body.into_inner())?; // approve/edit/reject
+    let inv = state.collection.find_investigation(&inv)?;   // Local client
+    let envelope = body.into_inner(); // validated decision envelope, including proposal id
+    let appended = inv.append("proposal", envelope.payload, Some(&envelope.id))?;
     Ok(HttpResponse::Ok().json(appended))                    // {record, gseq}
 }
 ```
@@ -206,7 +207,7 @@ depend on it.
 
 ```
 autophys/
-  Cargo.toml          [workspace] members = [".", "sdks/rust"]; package `autophys-cli`, [[bin]] name = "autophys"
+  Cargo.toml          [workspace] members = ["sdks/rust"] (root implicit); exclude = ["vendor"]; package `autophys-cli`, [[bin]] name = "autophys"
   src/                autophys-cli: main, scripts (commands), app (tento-web), server, http/ (handlers), keys/pairing DB
   sdks/rust/          crate `autophys` (autophys-rs): client, workbook, records, projections, validate, canonical, remote
   sdks/python/        package `autophys` (owned by autophys/api)
@@ -266,22 +267,117 @@ title: Not settled yet
 - `inv.records_after` and the HTTP `?after=` cursor are Rust- and server-only.
   `gseq` orders records within one workbook only (W-6), so a remote stream that
   spans projects needs a cursor per workbook.
-- The crate name `autophys` is an agent choice awaiting operator review.
+- The crate name `autophys` and root `autophys-cli` are operator-confirmed (RS-1).
 - Phase 2's tolerances are not yet set. Python's solvers are adaptive, so
   results that match within 1e-6 on the example models may still drift on
   stiff user models.
 ```
 
+## Phase 1: record library and daemon
 
-## Phase-1 record library
+The record store now lives in `sdks/rust`, crate `autophys`. Its dependencies
+contain no tento, actix or async runtime. `connect` supports a collection
+directory, one `.ap-workbook` path, or the default `AUTOPHYS_HOME` /
+`~/autophys`; HTTP targets return an explicit remote-not-implemented error.
+The Rust column above is implemented through `wait_for_approval`, config
+versions and `verify`. Phase-2 names remain reserved without stubs.
 
-`sdks/rust` now implements the Rust-column record API: local connect,
-Client, Workbook and Investigation; config versions, approvals, data,
-data-version watching and verification. Workbooks use format v1 (APWB,
-WAL, one project, blobs, no server auth tables). Appends are transactional
-and preserve replay/conflict semantics; data attachment commits both records
-together. Canonical numbers follow Python's shortest ties-to-even form.
-Repeated outlook axis names use the last axis, as the operator confirmed.
+A workbook has APWB / version 1, WAL, exactly one project, the specified
+`blobs` table and no keys or pairings. Appends validate, replay, check
+transitions, insert and fold under `BEGIN IMMEDIATE`. Replays retain the
+original record and gseq; different content with the same id conflicts.
+Canonical float formatting also handles decimal halfway cases with Python's
+ties-to-even rule; Rust's ordinary float display does not.
 
-The crate's unit and file tests cover the API and invariants. Daemon wiring
-and shared workbook conformance follow in separate scoped commits.
+`attach_data` commits its measurement and `data_attached` event together,
+returning the latter as `Appended {record, gseq, created}`; `created` is
+omitted from JSON. Creation returns `(Investigation, created)`.
+`verify` returns the five documented fields; each chain error also carries
+a human-readable `problem`. Public collection helpers for the daemon are
+`ensure_project`, `project_by_id`, `find_investigation`, `workbooks`,
+`snapshots` and `investigations_in`; workbook helpers provide snapshots,
+heads, projection rows, rebuilds and paged records. The core client API
+remains the table above.
+
+The root package is `autophys-cli`, library `autophys_cli`, binary
+`autophys`. The root package is implicitly a workspace member; explicitly
+listing `"."` makes this Cargo version resolve nested vendor dependency
+inheritance against the wrong workspace. Operator confirmed the equivalent
+`members = ["sdks/rust"]`, `exclude = ["vendor"]` form. Metadata shows
+exactly the two autophys packages; the tento crates still inherit from
+`vendor/tento/Cargo.toml`. HEAD's comments are retained. Apart from the
+required package/library renames, the manifest diff contains additions only.
+
+Handlers parse requests, resolve their workbook, call the library and
+serialize. The old `src/store` and `src/ingest.rs` are moved out; no SQL
+statements remain in `src/`. Keys and pairing operations live in
+`src/keys.rs`, using their own `~/.local/share/tento/autophys/server.db`
+(tento-dirs data, AX-17); the
+server-only statements are included from `sql/keys/`.
+`serve --collection DIR` (`--db DIR` alias) / `AUTOPHYS_HOME` selects
+the collection; `--server-db FILE` / `AUTOPHYS_SERVER_DB` selects the key
+database. These are fresh format-v1 workbooks; no legacy daemon database is
+silently converted. The old argument parser remains in place.
+Repeatable `--browser-origin ORIGIN` or comma-separated
+`AUTOPHYS_BROWSER_ORIGINS` admits an explicitly configured
+tento.localhost origin; flagged values override the environment. JSON plus
+Origin CSRF checks and keyed SDK calls retain their existing rules.
+AX-9 replaces the header-only read exemption with a document-issued cookie:
+GET `/`, `/app` and `/app/*` mint a fresh random 256-bit
+`autophys_session`, `HttpOnly; SameSite=Strict; Path=/api`. The document
+is `Cache-Control: no-store`. Valid tokens live only in this server process;
+a restart invalidates them and reloading a document mints a new one.
+Browser reads on `/workspace`, `/stream` and `GET /pairings` require
+the cookie (401 without it); `Sec-Fetch-Site` grants no exemption.
+Browser writes require the cookie as well as O-3: valid Origin without a
+cookie returns 401; cross-origin writes return 403 even with a valid cookie.
+API keys remain sufficient on their existing routes.
+R-9 removes `tento_commit` from BuildInfo and healthz: the latter is exactly
+`{ok, version, commit}`. The deploy script and unit no longer stamp or
+record `TENTO_COMMIT`; no deployment or service restart is part of phase 1.
+
+### HTTP and cursor contract changes in phase 1
+
+All route paths, append envelopes, `/approvals`, `/data`, their
+`{record, gseq}` results and ordinary statuses remain: 201 for a new write,
+200 for its replay, 409 `idempotency_conflict` for reused content,
+422 for an invalid/out-of-axis edit. Investigation creation still returns
+`{id}`. Config and proposal response shapes retain their existing fields.
+
+| Route / concern | Phase-1 behaviour |
+| --- | --- |
+| `GET /workspace?project=<prj_id>` | Added project filter; the same arrays restricted to one workbook. `cursor` is that workbook's integer gseq; added `cursors: {prj_id: gseq}`. Each workbook snapshot is one read transaction. |
+| `GET /workspace` | `cursor` changes from a global integer to a string collection cursor, `prj_id:gseq,prj_id:gseq`, sorted by project id (empty string for no workbooks). Added the same `cursors` map. No cross-file atomic snapshot is claimed. |
+| `GET /stream?project=<prj_id>` or `?investigation=<inv_id>` | Project filter added; integer `after`, integer `Last-Event-ID`, integer event ids and unchanged eight-field record data. gseq now orders one workbook. Both filters together must refer to the same workbook (else 400). An unknown selected project/investigation now returns 404 before streaming. |
+| Unscoped `GET /stream` | Covers all workbooks with the collection cursor as `after`, `Last-Event-ID` and event ids. Missing / empty / `0` means the beginning. A bare nonzero integer or malformed query cursor returns 400; it cannot identify positions across files. Reconnect merges each workbook position by maximum. |
+| `GET /investigations/{inv}/records?after=<gseq>` | Added exclusive per-workbook cursor filter. Retains `{records: [eight-field record…]}` and may combine with `kind`; invalid kind is still 422. |
+| Collection listing / streaming | Workbooks are traversed in file-path order, with each file's own record order. There is no global ordering across projects. Streams poll every second for other processes' writes and wake immediately for this server's writes; keep-alive comments remain every 15 seconds. |
+
+These resolve store.md's five workbook conflicts: per-project collection,
+separate key database, blobs schema, per-workbook / collection cursors, and
+the common projection fold demonstrated against all three Python workbooks.
+The existing `tests/vectors/chain.json` stays in place.
+
+Agent choice RS-CURSOR-1, **pending operator review**: an unscoped stream uses a
+vector of per-project cursors rather than a server-owned global sequence.
+This requires no cross-file writes or extra workbook tables; an alternative
+global server sequence requires server indexing/recovery and persisted state.
+The implementation is covered by two-workbook reconnect and external-writer
+tests. Reversal costs a daemon cursor/index change plus consumer migration;
+scoped streams keep integers. This is the phase-1 daemon commit's choice.
+
+Agent choice RS-WAIT-1, **pending operator review**: `wait_for_approval(timeout)`
+waits on the newest currently proposed proposal, since this signature has no
+proposal id. It opens a dedicated read-only connection and polls
+`data_version`, so writes through the same Client and other clients are
+visible. An explicit proposal-id variant is the alternative; adding it later
+costs an API addition without file changes.
+
+Questions for autophys/api: confirm RS-CURSOR-1's unscoped cursor is consumed as an
+opaque string; consider making Python's measurement-plus-data-attachment
+operation atomic too. Remote Rust transport and the investigation/numerics
+loop remain phase 2 or later. No schema-format question remains open.
+
+Repeated outlook axis names use the last axis's range when checking edits,
+matching Python. Operator confirmed this v1 interpretation on 2026-11-04;
+no schema change or new payload rejection was introduced.

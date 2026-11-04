@@ -6,7 +6,7 @@
 //! `{id, kind, payload}` that is hashed after `prev_hash`. The SDK asserts the
 //! same file.
 
-use autophys::store::{GENESIS, canonical, chain_hash};
+use autophys::{GENESIS, canonical, chain_hash};
 use serde_json::{Value, json};
 
 #[test]

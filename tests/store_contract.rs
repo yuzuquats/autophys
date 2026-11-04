@@ -5,15 +5,16 @@
 mod common;
 
 use actix_web::{App, test};
-use autophys::http::configure;
-use autophys::store::{GENESIS, Options, canonical::sha256_hex, chain_hash};
+use autophys::{GENESIS, chain_hash, sha256_hex};
+use autophys_cli::http::configure;
+use autophys_cli::keys::Options;
 use common::*;
 use serde_json::{Value, json};
 
 macro_rules! app {
     ($store:expr) => {{
-        let store = $store.clone();
-        test::init_service(App::new().configure(move |cfg| configure(cfg, store.clone()))).await
+        let api = $store.clone();
+        test::init_service(App::new().configure(move |cfg| configure(cfg, api.clone()))).await
     }};
 }
 
@@ -40,7 +41,7 @@ fn proposed(pid: &str) -> Value {
 }
 
 /// A project, its config version and one investigation; returns (key, inv).
-async fn seeded<S, B>(app: &S, store: &autophys::store::Store) -> (String, String)
+async fn seeded<S, B>(app: &S, api: &autophys_cli::http::Api) -> (String, String)
 where
     S: actix_web::dev::Service<
             actix_http::Request,
@@ -49,7 +50,7 @@ where
         >,
     B: actix_web::body::MessageBody,
 {
-    let key = pair(app, store, "lab-pc").await;
+    let key = pair(app, api, "lab-pc").await;
     let k = Some(key.as_str());
     let (_, p) = call(
         app,
@@ -77,7 +78,7 @@ where
 #[actix_web::test]
 async fn pairing_issues_a_key_once_and_stores_only_hashes() {
     let f = fixture();
-    let app = app!(f.store);
+    let app = app!(f.api);
     let (s, start) = call(
         &app,
         post(
@@ -105,14 +106,14 @@ async fn pairing_issues_a_key_once_and_stores_only_hashes() {
         (400, Some("authorization_pending"))
     );
 
-    assert!(f.store.pair_approve("NOPE-0000").await.is_err());
+    assert!(f.api.keys.pair_approve("NOPE-0000").is_err());
     // People type codes loosely; approval normalises them.
     let typed = start["user_code"]
         .as_str()
         .unwrap()
         .replace('-', " ")
         .to_lowercase();
-    let approved = f.store.pair_approve(&typed).await.unwrap();
+    let approved = f.api.keys.pair_approve(&typed).unwrap();
     assert_eq!(approved.device_name, "lab-pc");
 
     let (s, issued) = call(&app, post("/pair/poll", None, &code).to_request()).await;
@@ -130,7 +131,7 @@ async fn pairing_issues_a_key_once_and_stores_only_hashes() {
     assert!(!me.to_string().contains(&api_key));
 
     // Neither secret is anywhere on disk, and no listing shows the key.
-    let keys = f.store.keys_list().await.unwrap();
+    let keys = f.api.keys.keys_list().unwrap();
     assert_eq!(keys.len(), 1);
     assert!(!format!("{keys:?}").contains(&api_key));
     let device_code = start["device_code"].as_str().unwrap();
@@ -141,7 +142,7 @@ async fn pairing_issues_a_key_once_and_stores_only_hashes() {
             assert!(!text.contains(device_code), "{name} holds the device code");
         }
     }
-    let fresh = f.store.pair_start("x", "y").await.unwrap();
+    let fresh = f.api.keys.pair_start("x", "y").unwrap();
     assert!(
         !format!("{fresh:?}").contains(&fresh.device_code),
         "Debug never prints the device code"
@@ -155,14 +156,14 @@ async fn pairing_denied_expired_and_slow_down() {
         poll_interval: std::time::Duration::from_secs(5),
         ..options()
     });
-    let app = app!(f.store);
-    let start = f.store.pair_start("a", "t").await.unwrap();
+    let app = app!(f.api);
+    let start = f.api.keys.pair_start("a", "t").unwrap();
     let code = json!({"device_code": start.device_code});
     let (_, first) = call(&app, post("/pair/poll", None, &code).to_request()).await;
     assert_eq!(first["error"], "authorization_pending");
     let (s, fast) = call(&app, post("/pair/poll", None, &code).to_request()).await;
     assert_eq!((s, fast["error"].as_str()), (400, Some("slow_down")));
-    f.store.pair_deny(&start.user_code).await.unwrap();
+    f.api.keys.pair_deny(&start.user_code).unwrap();
     let (_, denied) = call(&app, post("/pair/poll", None, &code).to_request()).await;
     assert_eq!(denied["error"], "access_denied");
 
@@ -170,8 +171,8 @@ async fn pairing_denied_expired_and_slow_down() {
         pairing_ttl: std::time::Duration::ZERO,
         ..options()
     });
-    let app = app!(g.store);
-    let start = g.store.pair_start("b", "t").await.unwrap();
+    let app = app!(g.api);
+    let start = g.api.keys.pair_start("b", "t").unwrap();
     tokio::time::sleep(std::time::Duration::from_millis(5)).await;
     let (_, expired) = call(
         &app,
@@ -185,7 +186,7 @@ async fn pairing_denied_expired_and_slow_down() {
     .await;
     assert_eq!(expired["error"], "expired_token");
     assert!(
-        g.store.pair_approve(&start.user_code).await.is_err(),
+        g.api.keys.pair_approve(&start.user_code).is_err(),
         "an expired code cannot be approved"
     );
     let (_, unknown) = call(
@@ -199,8 +200,8 @@ async fn pairing_denied_expired_and_slow_down() {
 #[actix_web::test]
 async fn every_keyed_route_refuses_missing_wrong_and_revoked_keys() {
     let f = fixture();
-    let app = app!(f.store);
-    let (key, inv) = seeded(&app, &f.store).await;
+    let app = app!(f.api);
+    let (key, inv) = seeded(&app, &f.api).await;
     // (method, path); the keyless-write routes answer 403, not 401, when no
     // key is sent (O-3), and are covered by their own test.
     let routes: Vec<(&str, String)> = vec![
@@ -242,28 +243,28 @@ async fn every_keyed_route_refuses_missing_wrong_and_revoked_keys() {
     for (method, path) in &routes[..15] {
         let (s, _) = call(
             &app,
-            browser(request(method, path, None), true).to_request(),
+            browser(&f.api, request(method, path, None), true).to_request(),
         )
         .await;
         assert_eq!(s, 401, "{method} {path} must need a key");
     }
-    let id = f.store.keys_list().await.unwrap()[0].id.clone();
-    assert!(f.store.keys_revoke(&id).await.unwrap());
+    let id = f.api.keys.keys_list().unwrap()[0].id.clone();
+    assert!(f.api.keys.keys_revoke(&id).unwrap());
     assert!(
-        !f.store.keys_revoke(&id).await.unwrap(),
+        !f.api.keys.keys_revoke(&id).unwrap(),
         "second revoke reports already revoked"
     );
-    assert!(f.store.keys_revoke("k_missing").await.is_err());
+    assert!(f.api.keys.keys_revoke("k_missing").is_err());
     let (s, _) = call(&app, get("/whoami", Some(&key)).to_request()).await;
     assert_eq!(s, 401, "a revoked key is refused");
-    assert!(f.store.keys_list().await.unwrap()[0].revoked.is_some());
+    assert!(f.api.keys.keys_list().unwrap()[0].revoked.is_some());
 }
 
 #[actix_web::test]
-async fn same_origin_loopback_browser_needs_no_key_on_browser_routes_only() {
+async fn browser_session_opens_only_browser_routes_and_headers_alone_do_not() {
     let f = fixture();
-    let app = app!(f.store);
-    let (key, inv) = seeded(&app, &f.store).await;
+    let app = app!(f.api);
+    let (key, inv) = seeded(&app, &f.api).await;
     call(
         &app,
         post(
@@ -275,7 +276,17 @@ async fn same_origin_loopback_browser_needs_no_key_on_browser_routes_only() {
     )
     .await;
 
-    let (s, ws) = call(&app, browser(get("/workspace", None), false).to_request()).await;
+    let headers_only = get("/workspace", None)
+        .insert_header(("host", "127.0.0.1:8080"))
+        .insert_header(("sec-fetch-site", "same-origin"));
+    assert_eq!(call(&app, headers_only.to_request()).await.0, 401);
+    let forged = get("/workspace", None).insert_header(("cookie", "autophys_session=forged"));
+    assert_eq!(call(&app, forged.to_request()).await.0, 401);
+    let (s, ws) = call(
+        &app,
+        browser(&f.api, get("/workspace", None), false).to_request(),
+    )
+    .await;
     assert_eq!(s, 200, "{ws}");
 
     let cross = get("/workspace", None)
@@ -291,15 +302,15 @@ async fn same_origin_loopback_browser_needs_no_key_on_browser_routes_only() {
         "DNS rebinding host"
     );
     let proxied = get("/workspace", None)
-        .insert_header(("host", "autophys.rwc-dev-01.tento.localhost"))
-        .insert_header(("sec-fetch-site", "same-origin"));
+        .cookie(f.api.sessions.issue_cookie().unwrap())
+        .insert_header(("host", "autophys.rwc-dev-01.tento.localhost"));
     assert_eq!(
         call(&app, proxied.to_request()).await.0,
         200,
         "tento.localhost proxy host"
     );
-    let remote =
-        browser(get("/workspace", None), false).peer_addr("100.64.0.9:5000".parse().unwrap());
+    let remote = browser(&f.api, get("/workspace", None), false)
+        .peer_addr("100.64.0.9:5000".parse().unwrap());
     assert_eq!(
         call(&app, remote.to_request()).await.0,
         403,
@@ -312,8 +323,8 @@ async fn same_origin_loopback_browser_needs_no_key_on_browser_routes_only() {
 #[actix_web::test]
 async fn keyless_writes_refuse_cross_origin_and_form_posts() {
     let f = fixture();
-    let app = app!(f.store);
-    let (key, inv) = seeded(&app, &f.store).await;
+    let app = app!(f.api);
+    let (key, inv) = seeded(&app, &f.api).await;
     let base = format!("/investigations/{inv}/proposals");
     call(
         &app,
@@ -336,7 +347,7 @@ async fn keyless_writes_refuse_cross_origin_and_form_posts() {
 
     let (s, e) = call(
         &app,
-        browser(post(&path, None, &approve("a1", "p1")), false).to_request(),
+        browser(&f.api, post(&path, None, &approve("a1", "p1")), false).to_request(),
     )
     .await;
     assert_eq!(
@@ -344,14 +355,14 @@ async fn keyless_writes_refuse_cross_origin_and_form_posts() {
         (403, Some("forbidden")),
         "no Origin"
     );
-    let cross = browser(post(&path, None, &approve("a1", "p1")), false)
+    let cross = browser(&f.api, post(&path, None, &approve("a1", "p1")), false)
         .insert_header(("origin", "http://evil.example"));
     assert_eq!(
         call(&app, cross.to_request()).await.0,
         403,
         "cross-origin JSON POST"
     );
-    let other_port = browser(post(&path, None, &approve("a1", "p1")), false)
+    let other_port = browser(&f.api, post(&path, None, &approve("a1", "p1")), false)
         .insert_header(("origin", "http://127.0.0.1:9999"));
     assert_eq!(
         call(&app, other_port.to_request()).await.0,
@@ -369,7 +380,7 @@ async fn keyless_writes_refuse_cross_origin_and_form_posts() {
         (415, Some("unsupported_media_type")),
         "form-encoded POST"
     );
-    let text = browser(post(&path, None, &approve("a1", "p1")), true)
+    let text = browser(&f.api, post(&path, None, &approve("a1", "p1")), true)
         .insert_header(("content-type", "text/plain"));
     assert_eq!(
         call(&app, text.to_request()).await.0,
@@ -379,13 +390,16 @@ async fn keyless_writes_refuse_cross_origin_and_form_posts() {
     let (_, p) = call(&app, get(&format!("{base}/p1"), Some(&key)).to_request()).await;
     assert_eq!(p["status"], "proposed", "nothing refused was written");
 
+    let missing_cookie = post(&path, None, &approve("a1", "p1")).insert_header(("origin", ORIGIN));
+    assert_eq!(call(&app, missing_cookie.to_request()).await.0, 401);
     let (s, rec) = call(
         &app,
-        browser(post(&path, None, &approve("a1", "p1")), true).to_request(),
+        browser(&f.api, post(&path, None, &approve("a1", "p1")), true).to_request(),
     )
     .await;
     assert_eq!(s, 201, "same-origin JSON POST: {rec}");
     let localhost = browser(
+        &f.api,
         post(&format!("{base}/p2/approvals"), None, &approve("a2", "p2")),
         false,
     )
@@ -419,7 +433,7 @@ async fn keyless_writes_refuse_cross_origin_and_form_posts() {
 #[actix_web::test]
 async fn browser_approves_and_denies_pairings() {
     let f = fixture();
-    let app = app!(f.store);
+    let app = app!(f.api);
     let start = |name: &'static str| {
         post(
             "/pair/start",
@@ -430,7 +444,11 @@ async fn browser_approves_and_denies_pairings() {
     let (_, a) = call(&app, start("laptop").to_request()).await;
     let (_, b) = call(&app, start("lab-pc").to_request()).await;
 
-    let (s, list) = call(&app, browser(get("/pairings", None), false).to_request()).await;
+    let (s, list) = call(
+        &app,
+        browser(&f.api, get("/pairings", None), false).to_request(),
+    )
+    .await;
     assert_eq!(s, 200, "{list}");
     let rows = list["pairings"].as_array().unwrap();
     assert_eq!(rows.len(), 2);
@@ -448,7 +466,7 @@ async fn browser_approves_and_denies_pairings() {
     let approve = format!("/pairings/{code_a}/approve");
     let (s, _) = call(
         &app,
-        browser(post(&approve, None, &json!({})), false)
+        browser(&f.api, post(&approve, None, &json!({})), false)
             .insert_header(("origin", "http://evil.example"))
             .to_request(),
     )
@@ -456,7 +474,7 @@ async fn browser_approves_and_denies_pairings() {
     assert_eq!(s, 403, "cross-origin approve");
     let (s, _) = call(
         &app,
-        browser(post(&approve, None, &json!({})), true)
+        browser(&f.api, post(&approve, None, &json!({})), true)
             .insert_header(("content-type", "application/x-www-form-urlencoded"))
             .to_request(),
     )
@@ -464,7 +482,7 @@ async fn browser_approves_and_denies_pairings() {
     assert_eq!(s, 415, "form approve");
     let (s, done) = call(
         &app,
-        browser(post(&approve, None, &json!({})), true).to_request(),
+        browser(&f.api, post(&approve, None, &json!({})), true).to_request(),
     )
     .await;
     assert_eq!(
@@ -473,7 +491,7 @@ async fn browser_approves_and_denies_pairings() {
     );
     let (s, _) = call(
         &app,
-        browser(post(&approve, None, &json!({})), true).to_request(),
+        browser(&f.api, post(&approve, None, &json!({})), true).to_request(),
     )
     .await;
     assert_eq!(s, 404, "an approved code is no longer pending");
@@ -494,6 +512,7 @@ async fn browser_approves_and_denies_pairings() {
     let (s, _) = call(
         &app,
         browser(
+            &f.api,
             post(&format!("/pairings/{code_b}/deny"), None, &json!({})),
             true,
         )
@@ -512,7 +531,11 @@ async fn browser_approves_and_denies_pairings() {
     )
     .await;
     assert_eq!(denied["error"], "access_denied");
-    let (_, list) = call(&app, browser(get("/pairings", None), false).to_request()).await;
+    let (_, list) = call(
+        &app,
+        browser(&f.api, get("/pairings", None), false).to_request(),
+    )
+    .await;
     assert_eq!(list["pairings"], json!([]));
     assert_eq!(
         call(&app, get("/pairings", None).to_request()).await.0,
@@ -524,8 +547,8 @@ async fn browser_approves_and_denies_pairings() {
 #[actix_web::test]
 async fn projects_and_config_versions() {
     let f = fixture();
-    let app = app!(f.store);
-    let key = pair(&app, &f.store, "d").await;
+    let app = app!(f.api);
+    let key = pair(&app, &f.api, "d").await;
     let k = Some(key.as_str());
     let (s, a) = call(
         &app,
@@ -593,8 +616,8 @@ async fn projects_and_config_versions() {
 #[actix_web::test]
 async fn investigations_pin_a_config_and_replay_by_idempotency_key() {
     let f = fixture();
-    let app = app!(f.store);
-    let (key, inv) = seeded(&app, &f.store).await;
+    let app = app!(f.api);
+    let (key, inv) = seeded(&app, &f.api).await;
     let k = Some(key.as_str());
     let (s, e) = call(
         &app,
@@ -672,8 +695,8 @@ async fn investigations_pin_a_config_and_replay_by_idempotency_key() {
 #[actix_web::test]
 async fn appends_are_idempotent_validated_and_routed_by_kind() {
     let f = fixture();
-    let app = app!(f.store);
-    let (key, inv) = seeded(&app, &f.store).await;
+    let app = app!(f.api);
+    let (key, inv) = seeded(&app, &f.api).await;
     let k = Some(key.as_str());
     let runs = format!("/investigations/{inv}/runs");
     let run = env("abc", "run", json!({"loss": 1.0}));
@@ -818,8 +841,8 @@ async fn appends_are_idempotent_validated_and_routed_by_kind() {
 #[actix_web::test]
 async fn proposal_state_machine() {
     let f = fixture();
-    let app = app!(f.store);
-    let (key, inv) = seeded(&app, &f.store).await;
+    let app = app!(f.api);
+    let (key, inv) = seeded(&app, &f.api).await;
     let k = Some(key.as_str());
     let base = format!("/investigations/{inv}/proposals");
     let ev = |id: &str, pid: &str, event: &str| {
@@ -1037,8 +1060,8 @@ async fn proposal_state_machine() {
 #[actix_web::test]
 async fn outlook_is_validated_and_passed_through_untouched() {
     let f = fixture();
-    let app = app!(f.store);
-    let (key, inv) = seeded(&app, &f.store).await;
+    let app = app!(f.api);
+    let (key, inv) = seeded(&app, &f.api).await;
     let k = Some(key.as_str());
     let base = format!("/investigations/{inv}/proposals");
     let outlook = json!({
@@ -1130,8 +1153,8 @@ async fn outlook_is_validated_and_passed_through_untouched() {
 #[actix_web::test]
 async fn hash_chain_is_continuous_and_matches_the_sdk_rule() {
     let f = fixture();
-    let app = app!(f.store);
-    let (key, inv) = seeded(&app, &f.store).await;
+    let app = app!(f.api);
+    let (key, inv) = seeded(&app, &f.api).await;
     let k = Some(key.as_str());
     for i in 0..5 {
         let p = json!({"i": i, "x": 0.1 * i as f64, "tiny": 1e-7, "name": "naïve"});
@@ -1164,16 +1187,23 @@ async fn hash_chain_is_continuous_and_matches_the_sdk_rule() {
         assert_eq!(r["hash"], h.as_str());
         prev = h;
     }
-    let report = f.store.db_check(false).await.unwrap();
-    assert!(report.ok(), "{report:?}");
+    let report = f
+        .api
+        .client
+        .find_investigation(&inv)
+        .unwrap()
+        .workbook()
+        .verify()
+        .unwrap();
+    assert!(report.ok, "{report:?}");
     assert_eq!(report.records, 6);
 }
 
 #[actix_web::test]
 async fn workspace_is_one_snapshot_with_a_cursor() {
     let f = fixture();
-    let app = app!(f.store);
-    let (key, inv) = seeded(&app, &f.store).await;
+    let app = app!(f.api);
+    let (key, inv) = seeded(&app, &f.api).await;
     call(
         &app,
         post(
@@ -1186,7 +1216,16 @@ async fn workspace_is_one_snapshot_with_a_cursor() {
     .await;
     let (s, ws) = call(&app, get("/workspace", Some(&key)).to_request()).await;
     assert_eq!(s, 200);
-    assert_eq!(ws["cursor"], 2);
+    let pid = ws["projects"][0]["id"].as_str().unwrap();
+    assert_eq!(ws["cursor"], format!("{pid}:2"));
+    assert_eq!(ws["cursors"][pid], 2);
+    let (s, scoped) = call(
+        &app,
+        get(&format!("/workspace?project={pid}"), Some(&key)).to_request(),
+    )
+    .await;
+    assert_eq!(s, 200);
+    assert_eq!(scoped["cursor"], 2);
     assert_eq!(ws["projects"].as_array().unwrap().len(), 1);
     assert_eq!(ws["config_versions"][0]["config"]["x"], 1.5);
     assert_eq!(ws["investigations"][0]["status"], "awaiting_approval");
@@ -1197,8 +1236,8 @@ async fn workspace_is_one_snapshot_with_a_cursor() {
 #[actix_web::test]
 async fn stream_resumes_after_a_cursor_then_goes_live() {
     let f = fixture();
-    let app = app!(f.store);
-    let (key, inv) = seeded(&app, &f.store).await; // gseq 1: the investigation record
+    let app = app!(f.api);
+    let (key, inv) = seeded(&app, &f.api).await; // gseq 1: the investigation record
     let k = Some(key.as_str());
     for i in 0..3 {
         call(
@@ -1213,7 +1252,11 @@ async fn stream_resumes_after_a_cursor_then_goes_live() {
         .await;
     } // gseq 2, 3, 4
 
-    let resp = test::call_service(&app, get("/stream?after=2", k).to_request()).await;
+    let resp = test::call_service(
+        &app,
+        get(&format!("/stream?after=2&investigation={inv}"), k).to_request(),
+    )
+    .await;
     assert_eq!(resp.status().as_u16(), 200);
     assert_eq!(
         resp.headers().get("content-type").unwrap(),
@@ -1244,7 +1287,7 @@ async fn stream_resumes_after_a_cursor_then_goes_live() {
     // EventSource reconnects with Last-Event-ID; it wins over a lower `after`.
     let resumed = test::call_service(
         &app,
-        get("/stream?after=0", k)
+        get(&format!("/stream?after=0&investigation={inv}"), k)
             .insert_header(("last-event-id", "4"))
             .to_request(),
     )
@@ -1256,7 +1299,12 @@ async fn stream_resumes_after_a_cursor_then_goes_live() {
     // The browser may stream without a key.
     let resp = test::call_service(
         &app,
-        browser(get("/stream?after=4", None), false).to_request(),
+        browser(
+            &f.api,
+            get(&format!("/stream?after=4&investigation={inv}"), None),
+            false,
+        )
+        .to_request(),
     )
     .await;
     assert_eq!(resp.status().as_u16(), 200);
@@ -1265,8 +1313,8 @@ async fn stream_resumes_after_a_cursor_then_goes_live() {
 #[actix_web::test]
 async fn appends_return_their_cursor_and_the_stream_filters_by_investigation() {
     let f = fixture();
-    let app = app!(f.store);
-    let (key, a) = seeded(&app, &f.store).await; // gseq 1
+    let app = app!(f.api);
+    let (key, a) = seeded(&app, &f.api).await; // gseq 1
     let k = Some(key.as_str());
     let (_, list) = call(&app, get("/investigations", k).to_request()).await;
     let pid = list["investigations"][0]["project_id"]
@@ -1367,7 +1415,90 @@ async fn appends_return_their_cursor_and_the_stream_filters_by_investigation() {
 #[actix_web::test]
 async fn unknown_routes_are_json_404() {
     let f = fixture();
-    let app = app!(f.store);
+    let app = app!(f.api);
     let (s, e) = call(&app, get("/nope", None).to_request()).await;
     assert_eq!((s, e["error"].as_str()), (404, Some("not_found")));
+}
+
+#[actix_web::test]
+async fn collection_cursors_resume_two_workbooks_and_detect_external_writes() {
+    let f = fixture();
+    let app = app!(f.api);
+    let (key, a) = seeded(&app, &f.api).await;
+    let k = Some(key.as_str());
+    let wb_a = f
+        .api
+        .client
+        .find_investigation(&a)
+        .unwrap()
+        .workbook()
+        .clone();
+    let wb_b = f.api.client.project("battery").unwrap();
+    wb_b.put_config_version(&version(), CONFIG).unwrap();
+    let (b, _) = wb_b
+        .create_investigation(json!({"config_version": version()}), None)
+        .unwrap();
+    let (_, ws) = call(&app, get("/workspace", k).to_request()).await;
+    assert_eq!(ws["cursors"][wb_a.id()], 1);
+    assert_eq!(ws["cursors"][wb_b.id()], 1);
+    let cursor = ws["cursor"].as_str().unwrap();
+    let resp = test::call_service(
+        &app,
+        get(&format!("/stream?after={cursor}"), k).to_request(),
+    )
+    .await;
+    assert_eq!(resp.status().as_u16(), 200);
+    let mut stream = resp.into_body();
+
+    // A separate local SDK client changes both files; no server wake-up is sent.
+    let external = autophys::connect(Some(f.api.client.root().to_str().unwrap())).unwrap();
+    external
+        .find_investigation(&a)
+        .unwrap()
+        .append("run", json!({"a": true}), Some("a-external"))
+        .unwrap();
+    external
+        .find_investigation(&b.id)
+        .unwrap()
+        .append("run", json!({"b": true}), Some("b-external"))
+        .unwrap();
+    let events = sse_events(&mut stream, 2).await;
+    let ids: std::collections::BTreeSet<_> = events
+        .iter()
+        .map(|(_, r)| r["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(ids, ["a-external", "b-external"].into_iter().collect());
+    let last = &events[1].0;
+    assert!(last.contains(&format!("{}:2", wb_a.id())));
+    assert!(last.contains(&format!("{}:2", wb_b.id())));
+
+    let resp = test::call_service(
+        &app,
+        get("/stream?after=0", k)
+            .insert_header(("last-event-id", last.as_str()))
+            .to_request(),
+    )
+    .await;
+    let mut resumed = resp.into_body();
+    external
+        .find_investigation(&b.id)
+        .unwrap()
+        .append("step", json!({}), Some("b-live"))
+        .unwrap();
+    let live = sse_events(&mut resumed, 1).await;
+    assert_eq!(live[0].1["id"], "b-live");
+
+    let (status, _) = call(&app, get("/stream?after=2", k).to_request()).await;
+    assert_eq!(
+        status, 400,
+        "an unscoped integer cannot name positions in two files"
+    );
+    let (status, recs) = call(
+        &app,
+        get(&format!("/investigations/{}/records?after=2", b.id), k).to_request(),
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(recs["records"].as_array().unwrap().len(), 1);
+    assert_eq!(recs["records"][0]["id"], "b-live");
 }
