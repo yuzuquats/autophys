@@ -11,6 +11,8 @@ parameters) matches the case's expectation.
 from __future__ import annotations
 
 import json
+import warnings
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 import os
 import re
 import statistics
@@ -126,9 +128,20 @@ class BenchRow:
 
 
 def run_case(case: str, policy: str, seed: int, store: Store | None = None, **reason_options) -> BenchRow:
+    workbook_path = reason_options.pop("workbook_path", None)
+    if workbook_path:
+        from .workbook import WorkbookStore
+        with WorkbookStore(workbook_path) as workbook:
+            return run_case(case, policy, seed, store=workbook, **reason_options)
     view, evaluator = CASES[case](seed)
     project = case_project(view)
-    inv = Investigation(project, view.dataset, view.runner, policy=POLICIES[policy](**reason_options) if policy == "reason" else POLICIES[policy](), store=store or MemoryStore(), seed=seed,
+    if policy == "reason":
+        selected_policy = POLICIES[policy](**reason_options)
+    elif policy == "fake-reasoner" and reason_options.get("playbook"):
+        selected_policy = ReasonLanePolicy(FakeReasoner(heuristic_responder), playbook=reason_options["playbook"])
+    else:
+        selected_policy = POLICIES[policy]()
+    inv = Investigation(project, view.dataset, view.runner, policy=selected_policy, store=store or MemoryStore(), seed=seed,
                         title=f"bench {case} seed {seed}")
     t0 = time.perf_counter()
     out = inv.run()
@@ -149,13 +162,41 @@ def run_case(case: str, policy: str, seed: int, store: Store | None = None, **re
     )
 
 
-def run_benchmark(cases=None, policies=None, seeds=3, **reason_options) -> list[BenchRow]:
-    rows = []
-    for case in cases or list(CASES):
-        for pol in policies or DEFAULT_POLICIES:
-            for seed in range(seeds):
-                rows.append(run_case(case, pol, seed, **reason_options))
-    return rows
+def _run_unit(unit):
+    case, policy, seed, options = unit
+    return run_case(case, policy, seed, **options)
+
+
+def run_units(units, jobs=1):
+    """Ordered bounded execution; never share mutable stores between workers."""
+    if isinstance(jobs, bool) or jobs < 1:
+        raise ValueError("jobs must be a positive integer")
+    if jobs > 1 and any(u[3].get("record") or os.environ.get("AUTOPHYS_REASON_RECORD") for u in units):
+        warnings.warn("recording requires jobs=1; running serially", stacklevel=2)
+        jobs = 1
+    if jobs == 1:
+        return [_run_unit(u) for u in units]
+    # Separate CPU-bound and model-bound batches keep the total bound at jobs.
+    results = [None] * len(units)
+    for model_bound, executor in ((False, ProcessPoolExecutor), (True, ThreadPoolExecutor)):
+        selected = [(i, u) for i, u in enumerate(units) if (u[1] == "reason") == model_bound]
+        if selected:
+            with executor(max_workers=jobs) as pool:
+                try:
+                    for (index, _), row in zip(selected, pool.map(_run_unit, (u for _, u in selected))):
+                        results[index] = row
+                except BaseException:
+                    # MQ-6: a BudgetError (or any failure) stops the run; queued units never start.
+                    pool.shutdown(wait=False, cancel_futures=True)
+                    raise
+    return results
+
+
+def run_benchmark(cases=None, policies=None, seeds=3, jobs=1, **reason_options) -> list[BenchRow]:
+    return run_units([(case, pol, seed, reason_options)
+                      for case in cases or list(CASES)
+                      for pol in policies or DEFAULT_POLICIES
+                      for seed in range(seeds)], jobs)
 
 
 def summarize(rows: list[BenchRow]) -> list[dict]:

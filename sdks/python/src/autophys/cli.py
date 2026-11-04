@@ -83,11 +83,49 @@ def cmd_bench(args, out=sys.stdout) -> int:
         options = dict(model_spec=ModelSpec("policy", args.route, args.model, args.effort),
                        playbook=args.playbook, replay=args.replay, record=args.record)
     try:
-        rows = run_benchmark(cases=args.case or None, policies=args.policy or None, seeds=args.seeds, **options)
-    except ReasonerError as e:
+        rows = run_benchmark(cases=args.case or None, policies=args.policy or None, seeds=args.seeds, jobs=args.jobs, **options)
+    except (ReasonerError, ValueError) as e:
         print(str(e), file=out)
         return 2
     print(rows_json(rows) if args.json else format_table(summarize(rows)), file=out)
+    return 0
+
+
+def cmd_research(args, out=sys.stdout):
+    from .research import APIResearcher, MuseCLIResearcher, research
+    from .reasoner import ModelSpec, MUSE_SPARK, MUSE_WONDER, ReasonerError
+    try:
+        spec = ModelSpec("researcher", args.researcher_route, args.researcher_model, args.researcher_effort)
+        if args.researcher == "muse":
+            researcher = MuseCLIResearcher(binary=args.muse_binary, spec=spec, timeout=args.timeout,
+                                           max_model_steps=args.max_model_steps, replay=args.researcher_replay,
+                                           record=args.researcher_record)
+        else:
+            researcher = APIResearcher(spec, replay=args.researcher_replay, record=args.researcher_record)
+        result = research(researcher=researcher, output_dir=args.output_dir, playbook=args.playbook,
+                          cases=args.case, train_seeds=args.train_seeds, heldout_seeds=args.heldout_seeds,
+                          iterations=args.iterations, policy=args.policy, jobs=args.jobs,
+                          model_spec=ModelSpec("policy", args.route, args.model, args.effort),
+                          replay=args.replay, record=args.record)
+    except (ReasonerError, ValueError, OSError) as error:
+        print(str(error), file=out)
+        return 2
+    print(json.dumps(result, indent=2), file=out)
+    return 0
+
+
+def cmd_export(args, out=sys.stdout):
+    from .trajectories import export_trajectories
+    try:
+        if args.output:
+            # Exclusive creation protects both the input and previous exports.
+            with open(args.output, "x", encoding="utf-8") as stream:
+                export_trajectories(args.source, stream)
+        else:
+            export_trajectories(args.source, out)
+    except (ValueError, OSError) as error:
+        print(str(error), file=out)
+        return 2
     return 0
 
 
@@ -103,6 +141,7 @@ def build_parser() -> argparse.ArgumentParser:
     pw.add_argument("--server")
     pw.add_argument("--json", action="store_true")
     pb = sub.add_parser("bench", help="run the synthetic benchmark (no network)")
+    pb.add_argument("--jobs", type=int, default=1)
     pb.add_argument("--seeds", type=int, default=3)
     pb.add_argument("--case", action="append", help="case name (repeatable); default all")
     pb.add_argument("--policy", action="append", help="scripted, fake-reasoner or reason (repeatable); default scripted + fake-reasoner")
@@ -113,6 +152,32 @@ def build_parser() -> argparse.ArgumentParser:
     pb.add_argument("--replay")
     pb.add_argument("--record")
     pb.add_argument("--json", action="store_true")
+    pr = sub.add_parser("research", help="evaluate and improve playbook strategies (offline by default)")
+    pr.add_argument("--playbook", default="default")
+    pr.add_argument("--case", action="append")
+    pr.add_argument("--train-seeds", type=lambda s: [int(x) for x in s.split(",")], default=[0, 1, 2])
+    pr.add_argument("--heldout-seeds", type=lambda s: [int(x) for x in s.split(",")], default=[3, 4])
+    pr.add_argument("--iterations", type=int, default=1)
+    pr.add_argument("--policy", choices=("reason", "scripted", "fake-reasoner"), default="reason")
+    pr.add_argument("--model", default="muse-spark-1.3")
+    pr.add_argument("--route", choices=("meta", "baseten", "lane"), default="meta")
+    pr.add_argument("--effort")
+    pr.add_argument("--replay")
+    pr.add_argument("--record")
+    pr.add_argument("--researcher", choices=("api", "muse"), default="api")
+    pr.add_argument("--researcher-model", default="muse-wonder-1.0")
+    pr.add_argument("--researcher-route", choices=("meta", "baseten"), default="meta")
+    pr.add_argument("--researcher-effort")
+    pr.add_argument("--researcher-replay")
+    pr.add_argument("--researcher-record")
+    pr.add_argument("--muse-binary", default="muse")
+    pr.add_argument("--timeout", type=float, default=300)
+    pr.add_argument("--max-model-steps", type=int)
+    pr.add_argument("--output-dir", required=True)
+    pr.add_argument("--jobs", type=int, default=1)
+    pe = sub.add_parser("export-trajectories", help="export recorded reasoner decisions as JSONL")
+    pe.add_argument("source")
+    pe.add_argument("--output", help="new output file; default stdout")
     from .mcp.cli import add_parser
     add_parser(sub)
     return p
@@ -123,7 +188,7 @@ def main(argv: list[str] | None = None, out=sys.stdout) -> int:
     if args.command == "mcp":
         from .mcp.cli import run
         return run(args)
-    return {"pair": cmd_pair, "whoami": cmd_whoami, "bench": cmd_bench}[args.command](args, out=out)
+    return {"pair": cmd_pair, "whoami": cmd_whoami, "bench": cmd_bench, "research": cmd_research, "export-trajectories": cmd_export}[args.command](args, out=out)
 
 
 if __name__ == "__main__":  # pragma: no cover

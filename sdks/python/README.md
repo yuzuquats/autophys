@@ -42,6 +42,71 @@ there is no approve or reject MCP tool. See the
 [demo and verification guide](../../autophys.project.docs/content/muse-plugin.md)
 for explicit venv configuration and the built-in battery CSV path.
 
+## Offline benchmarks, research and trajectory export
+
+The CLI entry point is `autophys.cli:main`. From `sdks/python`, use the
+installed `autophys` command or this source-checkout wrapper:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src ~/.cache/autophys/venv/bin/python -c   'from autophys.cli import main; import sys; sys.exit(main(sys.argv[1:]))' bench --seeds 5 --jobs 4
+```
+
+`bench --jobs N` defaults to 1. Scripted/fake units use processes; model-bound
+units use threads. Rows retain case/policy/seed order and match serial output
+except wall time. Recording forces one worker with a warning.
+
+`research` evaluates the initial playbook on train seeds, asks a researcher
+for an edited strategy, validates it, evaluates it on the same train seeds,
+and retains strict lexicographic improvements only. The final report compares
+the initial and retained strategies on held-out seeds. Defaults are all cases,
+train 0,1,2, held-out 3,4, Spark policy and Wonder API researcher.
+
+```sh
+autophys research --playbook default --iterations 2 --jobs 4   --replay policy-cassette.jsonl --researcher-replay researcher-cassette.jsonl   --output-dir ./research-result
+autophys export-trajectories ./research-result --output ./decisions.jsonl
+autophys export-trajectories ./collection
+```
+
+Replay cassettes must cover the chosen cases, seeds and strategies; the bundled
+Spark cassette covers oscillator seed 0 with the default playbook only.
+`--case` is repeatable; `--train-seeds 0,1,2`, `--heldout-seeds 3,4`,
+`--policy scripted|fake-reasoner|reason`, `--model`, `--route`, `--effort`,
+and the analogous `--researcher-model/route/effort` configure the two roles.
+Training and held-out seeds must be disjoint and unique.
+
+The new output directory holds every candidate's SKILL.md bytes and SHA-256,
+one workbook per case/seed in each evaluation, per-run scores and failing
+transcripts in `scores.json`, `iterations.json`, and `summary.json`.
+The input playbook is never overwritten. Scoring first maximizes correct
+status **and** diagnosis, then minimizes mean absolute log fitted/true error
+over identifiable combinations, then total cost. Unknown cost cannot win a
+cost tie; missing estimates score infinite error (written as null in JSON).
+The contract stays in Python; researchers edit only strategy skills.
+
+`--researcher muse` selects the Muse Code adapter. `--muse-binary`,
+`--timeout`, and `--max-model-steps` configure it. Its isolated temporary
+workspace contains SKILL.md, failing transcripts and a prompt file; it disables
+shell, web tools, user questions, reminders and session logs. Keys are read from
+`MODEL_API_KEY` and passed through stdin with `--api-key-stdin`, never argv.
+No Muse installation or model run is needed for tests. The JSONL event schema
+has not been verified against a live run: the defensive parser ignores unknown
+events/non-JSON lines and retains recognized assistant/final text and usage.
+
+Both roles refuse live calls unless `AUTOPHYS_ALLOW_LIVE_REASON=1`.
+`--record` records policy API replies; `--researcher-record` records API
+replies or CLI edited-skill JSONL cassettes, depending on the adapter.
+CLI `--researcher-replay` reads these cassettes (or one saved edited SKILL.md)
+without starting Muse. Researcher request keys omit volatile IDs/timings.
+**MQ-2 remains replay-only: live API and real Muse runs await operator budget
+authorization.** The environment override is a gate, not that authorization.
+
+Trajectory export reads workbooks through the store API in read-only mode,
+including collections and research directories. It emits one JSONL line per
+reasoner decision: investigation/step, contract hash, playbook identity, model,
+recorded messages (null when absent), raw response, parsed decision, validity,
+normalized usage, replay flag and known research score components. Legacy
+provider usage is emitted as null. Output files are created exclusively.
+
 ## Connections and workbooks (W-1..W-8)
 
 The operator's decisions are in
@@ -253,11 +318,11 @@ python3 -m venv ~/.cache/autophys/venv
 cd ~/workspace/autophys/sdks/python
 
 PYTHONDONTWRITEBYTECODE=1 ~/.cache/autophys/venv/bin/python -m pytest -q
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src ~/.cache/autophys/venv/bin/python -m autophys.cli bench --seeds 5
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src ~/.cache/autophys/venv/bin/python -c 'from autophys.cli import main; import sys; sys.exit(main(sys.argv[1:]))' bench --seeds 5
 ```
 
 On rwc-dev-01 (Python 3.12.3, SQLite 3.45.1, NumPy 2.5.4, SciPy 1.18.1,
-aarch64) the suite is 289 passed, 2 skipped, in about 80 s with no network.
+aarch64) the suite is 382 passed, 2 skipped, in about 112 s with no network (Muse batch 2).
 HTTP code is tested against an in-process fake of `/api/v1`
 (`tests/fake_server.py`), including the stream. Workbook tests include a
 second process approving while the SDK waits. The two skips are opt-in:

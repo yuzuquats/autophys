@@ -38,7 +38,7 @@ import numpy as np
 from .data import Dataset, Observation
 from .design import outlook, rank_experiments
 from .fit import FitResult, fit
-from .reasoner import Reasoner, ReasonerError, parse_json_content
+from .reasoner import BudgetError, Reasoner, ReasonerError, parse_json_content
 from .playbook import Playbook, load_playbook
 from .usage import normalize_usage, price_for, usage_total
 from .sensitivity import SensitivityReport, jacobian, report_from_jacobian
@@ -773,6 +773,13 @@ class Investigation:
                         raw, param_names=self.sim.param_names, catalog=list(self.limits))
                 except (ReasonerError, DecisionError) as e:
                     step.update(getattr(e, "trace", {}))
+                    if isinstance(e, BudgetError):
+                        # MQ-6: billing is not configured; retrying or continuing cannot help.
+                        self.last_error = f"BudgetError: {e}"
+                        step.update({"valid": False, "error": self.last_error})
+                        self._record("step", step)
+                        self._finish("failed", ["billing: provider refused the call (HTTP 402)"], t0)
+                        raise
                     failures += 1
                     self.last_error = f"{type(e).__name__}: {e}"
                     step.update({"valid": False, "error": self.last_error})
