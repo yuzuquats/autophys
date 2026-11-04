@@ -43,7 +43,8 @@ pub fn configure(cfg: &mut web::ServiceConfig, api: Api) {
             .route("/invite", web::post().to(accept))
             .route("/logout", web::post().to(logout))
             .route("/me", web::get().to(me))
-            .route("/badge", web::get().to(badge_fragment)),
+            .route("/badge", web::get().to(badge_fragment))
+            .route("/demo", web::post().to(demo_sign_in)),
     );
     cfg.service(
         web::resource("/login")
@@ -127,7 +128,8 @@ button{margin-top:20px;width:100%;padding:11px;border:0;border-radius:8px;\
 background:#141414;color:#fff;font:inherit;font-weight:600;cursor:pointer}\
 .err{background:#fdecec;color:#9b1c1c;border-radius:8px;padding:9px 12px;margin:0 0 6px}\
 .mark{width:28px;height:28px;border-radius:7px;background:#141414;margin-bottom:16px}\
-.alt{margin:18px 0 0;font-size:13px}.alt a{color:#141414}";
+.alt{margin:18px 0 0;font-size:13px}.alt a{color:#141414}\
+form.demo{margin-top:10px}button.secondary{background:#efefef;color:#141414}";
 
 fn page(title: &str, body: &str) -> String {
     format!(
@@ -148,7 +150,13 @@ fn html(status: actix_web::http::StatusCode, body: String) -> HttpResponse {
         .body(body)
 }
 
-fn login_form(next: &str, email: &str, error: Option<&str>) -> String {
+/// The demo button under the sign-in form, when a demo account exists.
+const DEMO_FORM: &str = "<form method=\"post\" action=\"/api/auth/demo\" class=\"demo\">\
+<input type=\"hidden\" name=\"next\" value=\"/app\">\
+<button type=\"submit\" class=\"secondary\">Continue as demo</button></form>";
+
+fn login_form(next: &str, email: &str, error: Option<&str>, demo: bool) -> String {
+    let demo = if demo { DEMO_FORM } else { "" };
     let error = error
         .map(|e| format!("<div class=\"err\" role=\"alert\">{}</div>", escape(e)))
         .unwrap_or_default();
@@ -162,12 +170,22 @@ fn login_form(next: &str, email: &str, error: Option<&str>) -> String {
              <input id=\"email\" name=\"email\" type=\"email\" autocomplete=\"username\" required value=\"{}\" autofocus>\
              <label for=\"password\">Password</label>\
              <input id=\"password\" name=\"password\" type=\"password\" autocomplete=\"current-password\" required>\
-             <button type=\"submit\">Sign in</button></form>\\
+             <button type=\"submit\">Sign in</button></form>{demo}\
              <p class=\"alt\"><a href=\"/\">Back to the overview</a></p>",
             escape(next),
-            escape(email)
+            escape(email),
         ),
     )
+}
+
+/// Whether the sign-in page offers the demo account.
+async fn has_demo(api: &Api) -> bool {
+    let keys = api.keys.clone();
+    blocking(move || keys.users_demo())
+        .await
+        .ok()
+        .flatten()
+        .is_some()
 }
 
 fn invite_form(error: Option<&str>) -> String {
@@ -210,7 +228,7 @@ async fn login_page(
     }
     Ok(html(
         actix_web::http::StatusCode::OK,
-        login_form(&next, "", None),
+        login_form(&next, "", None, has_demo(&api).await),
     ))
 }
 
@@ -241,11 +259,12 @@ async fn login(
         .app_data::<web::Data<Throttle>>()
         .cloned()
         .ok_or_else(|| ApiError::Internal("no sign-in throttle".into()))?;
+    let demo = has_demo(&api).await;
     let key = crate::accounts::normalize_email(&email).unwrap_or_else(|_| email.to_lowercase());
     let refuse = |m: &str| {
         Ok(html(
             actix_web::http::StatusCode::TOO_MANY_REQUESTS,
-            login_form(&next, &email, Some(m)),
+            login_form(&next, &email, Some(m), demo),
         ))
     };
     if throttle.locked(&key) {
@@ -270,6 +289,7 @@ async fn login(
                 &next,
                 &email,
                 Some("That email and password don't match an account."),
+                demo,
             ),
         ));
     };
@@ -283,6 +303,26 @@ async fn start_session(api: &Api, user: User, to: &str) -> Result<HttpResponse> 
     resp.add_cookie(&session_cookie(api, token))
         .map_err(|e| ApiError::Internal(format!("set cookie: {e}")))?;
     Ok(resp)
+}
+
+#[derive(Deserialize)]
+struct DemoForm {
+    next: Option<String>,
+}
+
+/// `POST /api/auth/demo`: sign in as the demo account, without a password.
+async fn demo_sign_in(
+    api: web::Data<Api>,
+    req: HttpRequest,
+    form: web::Form<DemoForm>,
+) -> Result<HttpResponse> {
+    form_origin(&req, api.options())?;
+    let next = safe_next(form.next.as_deref());
+    let keys = api.keys.clone();
+    match blocking(move || keys.users_demo()).await? {
+        Some(user) => start_session(&api, user, &next).await,
+        None => Err(ApiError::not_found("demo account")),
+    }
 }
 
 #[derive(Deserialize)]
@@ -465,10 +505,11 @@ pub fn badge(user: &User) -> String {
             .to_uppercase()
             .to_string(),
     );
-    let mode = if user.read_only {
-        "<span class=\"ap-acct-mode\">Read-only</span>"
-    } else {
-        ""
+    let mode = match (user.demo, user.read_only) {
+        (true, true) => "<span class=\"ap-acct-mode\">Demo · read-only</span>",
+        (true, false) => "<span class=\"ap-acct-mode\">Demo account</span>",
+        (false, true) => "<span class=\"ap-acct-mode\">Read-only</span>",
+        (false, false) => "",
     };
     format!(
         "<div id=\"ap-account\" data-signed-in=\"true\">\
@@ -483,9 +524,9 @@ pub fn badge(user: &User) -> String {
 
 /// What a signed-out visitor sees where the account control goes
 /// (`serve --login`): an icon-only Sign in button.
-pub fn anonymous_badge() -> String {
+pub fn anonymous_badge(demo: bool) -> String {
     format!(
-        "<a id=\"ap-account\" data-signed-in=\"false\" class=\"ap-acct-btn\" href=\"/login?next=/app\" \
+        "<a id=\"ap-account\" data-signed-in=\"false\" data-demo=\"{demo}\" class=\"ap-acct-btn\" href=\"/login?next=/app\" \
          aria-label=\"Sign in\" title=\"Sign in\">\
          <svg viewBox=\"0 0 20 20\" aria-hidden=\"true\"><circle cx=\"10\" cy=\"7\" r=\"3.25\"/>\
          <path d=\"M3.75 16.5c.9-3 3.3-4.5 6.25-4.5s5.35 1.5 6.25 4.5\"/></svg></a>{ACCOUNT_STYLE}"
@@ -546,6 +587,7 @@ mod tests {
             created: String::new(),
             active: true,
             read_only: false,
+            demo: false,
         };
         let html = badge(&user);
         assert!(html.contains("a&lt;b&gt;@x.org") && !html.contains("a<b>"));

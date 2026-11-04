@@ -369,6 +369,7 @@ const MIGRATIONS: &[&str] = &[
     // v2: browser sign-in accounts and sessions (`crate::accounts`).
     include_str!("../sql/keys/schema_v2.sql"),
     include_str!("../sql/keys/schema_v3.sql"),
+    include_str!("../sql/keys/schema_v4.sql"),
 ];
 
 fn migrate(conn: &mut Connection) -> Result<()> {
@@ -594,6 +595,16 @@ impl KeyStore {
         crate::accounts::accept_check(&*self.conn()?, token, password, Utc::now())?;
         let phc = crate::accounts::password_hash(password)?;
         crate::accounts::accept_commit(&mut *self.conn()?, token, &phc, Utc::now())
+    }
+
+    /// Make EMAIL the demo account (creating it; no password), or stop it being one.
+    pub fn users_set_demo(&self, email: &str, demo: bool) -> Result<crate::accounts::User> {
+        crate::accounts::set_demo(&mut *self.conn()?, email, demo)
+    }
+
+    /// The demo account, if one is set.
+    pub fn users_demo(&self) -> Result<Option<crate::accounts::User>> {
+        crate::accounts::demo_user(&*self.conn()?)
     }
 
     /// Mark an account read-only (or read-write again).

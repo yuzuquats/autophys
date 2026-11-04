@@ -37,8 +37,8 @@ use crate::keys::KeyStore;
 pub const USAGE: &str = "\
 usage: autophys pair list | pair approve <CODE> | pair deny <CODE>
        autophys keys list [--json] | keys revoke <KEY_ID>
-       autophys users list [--json] | users add <EMAIL> [--public-url URL] [--read-only] | users remove <EMAIL>
-       autophys users set <EMAIL> --read-only | --read-write
+       autophys users list [--json] | users add <EMAIL> [--public-url URL] [--read-only] [--demo] | users remove <EMAIL>
+       autophys users set <EMAIL> --read-only | --read-write | --demo | --no-demo
        autophys db verify [--rebuild] [--json] [--project NAME]   (db check is the same)
        (each also takes --collection <dir> (alias --db) and --server-db <file>)";
 
@@ -50,6 +50,8 @@ struct Args {
     public_url: Option<String>,
     /// `users add|set --read-only` / `--read-write`.
     read_only: Option<bool>,
+    /// `users add|set --demo` / `--no-demo`.
+    demo: Option<bool>,
     json: bool,
     rebuild: bool,
 }
@@ -62,6 +64,7 @@ fn parse(args: impl IntoIterator<Item = String>) -> Result<Args, String> {
         project: None,
         public_url: None,
         read_only: None,
+        demo: None,
         json: false,
         rebuild: false,
     };
@@ -86,6 +89,8 @@ fn parse(args: impl IntoIterator<Item = String>) -> Result<Args, String> {
             "--public-url" => out.public_url = Some(value(&key)?),
             "--read-only" => out.read_only = Some(true),
             "--read-write" => out.read_only = Some(false),
+            "--demo" => out.demo = Some(true),
+            "--no-demo" => out.demo = Some(false),
             s if s.starts_with("--") => return Err(format!("unknown flag {s:?}")),
             _ => out.words.push(arg),
         }
@@ -210,7 +215,7 @@ pub fn run(
                     let _ = writeln!(out, "no accounts (add one with `autophys users add EMAIL`)");
                 }
                 for u in list {
-                    let state = match (u.active, u.read_only) {
+                    let state = match (u.active || u.demo, u.read_only) {
                         (true, true) => "active, read-only",
                         (true, false) => "active",
                         (false, true) => "invited, read-only",
@@ -219,23 +224,58 @@ pub fn run(
                     let _ = writeln!(
                         out,
                         "{}  {}  {}  created {}",
-                        u.id, u.email, state, u.created
+                        u.id,
+                        u.email,
+                        if u.demo { format!("{state}, demo") } else { state.to_string() },
+                        u.created
                     );
                 }
             }
             ExitCode::SUCCESS
         }),
-        ("users", ["set", email]) => match args.read_only {
-            None => {
-                let _ = writeln!(err, "autophys: users set needs --read-only or --read-write");
-                return ExitCode::from(2);
-            }
-            Some(on) => keys.users_set_read_only(email, on).map(|u| {
+        ("users", ["set", email]) if args.read_only.is_none() && args.demo.is_none() => {
+            let _ = writeln!(
+                err,
+                "autophys: users set needs --read-only, --read-write, --demo or --no-demo"
+            );
+            return ExitCode::from(2);
+        }
+        ("users", ["set", email]) => args
+            .demo
+            .map(|on| keys.users_set_demo(email, on))
+            .transpose()
+            .and_then(|_| {
+                args.read_only
+                    .map(|on| keys.users_set_read_only(email, on))
+                    .transpose()
+            })
+            .and_then(|_| {
+                keys.users_list()?
+                    .into_iter()
+                    .find(|u| u.email == email.trim().to_lowercase())
+                    .ok_or_else(|| crate::error::ApiError::not_found("account"))
+            })
+            .map(|u| {
                 let mode = if u.read_only { "read-only" } else { "read-write" };
-                let _ = writeln!(out, "{} ({}) is now {mode}", u.email, u.id);
+                let demo = if u.demo { ", the demo account (no password)" } else { "" };
+                let _ = writeln!(out, "{} ({}) is now {mode}{demo}", u.email, u.id);
                 ExitCode::SUCCESS
             }),
-        },
+        ("users", ["add", email]) if args.demo == Some(true) => keys
+            .users_set_demo(email, true)
+            .and_then(|u| match args.read_only {
+                Some(on) => keys.users_set_read_only(&u.email, on),
+                None => Ok(u),
+            })
+            .map(|u| {
+                let mode = if u.read_only { "read-only" } else { "read-write" };
+                let _ = writeln!(
+                    out,
+                    "{} ({}) is the demo account ({mode}, no password): anyone can continue as it from the sign-in page",
+                    u.email, u.id
+                );
+                ExitCode::SUCCESS
+            }),
         ("users", ["add", email]) => keys
             .users_invite(email)
             .and_then(|inv| match args.read_only {

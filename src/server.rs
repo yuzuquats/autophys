@@ -28,7 +28,7 @@ pub const USAGE: &str =
        autophys pack --web-root DIR --out FILE [--no-maps]
        autophys pair list | pair approve <CODE> | pair deny <CODE>
        autophys keys list [--json] | keys revoke <KEY_ID>
-       autophys users list | users add <EMAIL> [--read-only] | users set <EMAIL> --read-only|--read-write | users remove <EMAIL>
+       autophys users list | users add <EMAIL> [--read-only] | users set <EMAIL> --read-only|--read-write|--demo|--no-demo | users remove <EMAIL>
        autophys db verify [--rebuild] [--json] [--project NAME]   (db check is the same)
        autophys train dataset | train run | train eval | train runs   (autophys train for details)
        (pair, keys and db also take --collection DIR and --server-db FILE;

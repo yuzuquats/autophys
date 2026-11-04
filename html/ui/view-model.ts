@@ -108,7 +108,7 @@ export type MainBody =
   | { kind: "loading"; title: string; description: string }
   | { kind: "unavailable"; title: string; description: string }
   /** `serve --login`, signed out: the one place that asks to sign in. */
-  | { kind: "signed-out"; title: string; description: string }
+  | { kind: "signed-out"; title: string; description: string; demo?: boolean }
   | { kind: "onboarding"; title: string; description: string; snippet: string; copyLabel: string; note: string }
   | { kind: "configuration"; parameters: RangesChart; experiments: Section[]; sections: Section[] }
   /** Cards stacked in one column, each a Section with its caption (a proposal: candidates, then reasoning). */

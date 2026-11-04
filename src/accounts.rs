@@ -39,6 +39,8 @@ pub struct User {
     pub active: bool,
     /// May read but not change anything (`autophys users set EMAIL --read-only`).
     pub read_only: bool,
+    /// The demo account: no password; anyone may continue as it.
+    pub demo: bool,
 }
 
 /// `users add`: the account and its one-time invite token.
@@ -106,12 +108,13 @@ fn user_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<User> {
         id: r.get(0)?,
         email: r.get(1)?,
         created: r.get(2)?,
-        active: r.get::<_, Option<String>>(3)?.is_some(),
+        active: r.get::<_, Option<String>>(3)?.is_some() || r.get::<_, i64>(5)? != 0,
         read_only: r.get::<_, i64>(4)? != 0,
+        demo: r.get::<_, i64>(5)? != 0,
     })
 }
 
-const USER_COLS: &str = "id, email, created, password, read_only";
+const USER_COLS: &str = "id, email, created, password, read_only, demo";
 
 /// Create the account for `email` if it is new, and issue a fresh invite
 /// (replacing any earlier one). An existing password keeps working until the
@@ -263,6 +266,57 @@ pub(crate) fn check_password(
     Ok(verify_row(password_row(conn, email)?, password))
 }
 
+/// Make EMAIL the demo account, or stop it being one. A demo account has no
+/// password and no invite; there is at most one (setting it moves the flag).
+/// Turning it off leaves the account without a password until re-invited.
+pub(crate) fn set_demo(conn: &mut Connection, email: &str, demo: bool) -> Result<User> {
+    let email = normalize_email(email)?;
+    let tx = conn.transaction()?;
+    if demo {
+        tx.execute(
+            "INSERT INTO users (id, email, created) VALUES (?1, ?2, ?3) ON CONFLICT(email) DO NOTHING",
+            params![format!("u_{}", random_hex(6)?), email, now_text(Utc::now())],
+        )?;
+        tx.execute(
+            "UPDATE users SET demo = 0 WHERE demo = 1 AND email <> ?1",
+            [&email],
+        )?;
+        tx.execute(
+            "UPDATE users SET demo = 1, password = NULL, invite_sha256 = NULL, invite_expires = NULL
+             WHERE email = ?1",
+            [&email],
+        )?;
+    } else {
+        let n = tx.execute("UPDATE users SET demo = 0 WHERE email = ?1", [&email])?;
+        if n == 0 {
+            return Err(ApiError::not_found("account"));
+        }
+        // Whoever was signed in as the demo account is signed out with it.
+        tx.execute(
+            "DELETE FROM sessions WHERE user_id = (SELECT id FROM users WHERE email = ?1)",
+            [&email],
+        )?;
+    }
+    let user = tx.query_row(
+        &format!("SELECT {USER_COLS} FROM users WHERE email = ?1"),
+        [&email],
+        user_row,
+    )?;
+    tx.commit()?;
+    Ok(user)
+}
+
+/// The demo account, if one is set.
+pub(crate) fn demo_user(conn: &Connection) -> Result<Option<User>> {
+    Ok(conn
+        .query_row(
+            &format!("SELECT {USER_COLS} FROM users WHERE demo = 1 LIMIT 1"),
+            [],
+            user_row,
+        )
+        .optional()?)
+}
+
 /// Mark an account read-only, or read-write again.
 pub(crate) fn set_read_only(conn: &Connection, email: &str, read_only: bool) -> Result<User> {
     let email = normalize_email(email)?;
@@ -305,9 +359,9 @@ pub(crate) fn session_user(
 ) -> Result<Option<User>> {
     Ok(conn
         .query_row(
-            "SELECT u.id, u.email, u.created, u.password, u.read_only FROM sessions s
+            "SELECT u.id, u.email, u.created, u.password, u.read_only, u.demo FROM sessions s
              JOIN users u ON u.id = s.user_id
-             WHERE s.sha256 = ?1 AND s.expires > ?2 AND u.password IS NOT NULL",
+             WHERE s.sha256 = ?1 AND s.expires > ?2 AND (u.password IS NOT NULL OR u.demo = 1)",
             params![sha256_hex([token.as_bytes()]), now_text(now)],
             user_row,
         )

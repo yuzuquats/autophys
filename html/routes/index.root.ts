@@ -58,8 +58,9 @@ const ctl = new Controller(new Store(source), { user: USER, now: clock });
 // `serve --login` marks a signed-out page (the Sign in badge). The landing page stays usable:
 // the app makes no API calls (no 401, no reload) and its main pane asks to sign in.
 let SIGNED_OUT = forced !== "fixtures" && document.getElementById("ap-account")?.dataset.signedIn === "false";
+const DEMO = document.getElementById("ap-account")?.dataset.demo === "true";
 const baseView = ctl.view.bind(ctl);
-ctl.view = () => SIGNED_OUT ? signedOutView(baseView()) : quietLoading(baseView());
+ctl.view = () => SIGNED_OUT ? signedOutView(baseView(), DEMO) : quietLoading(baseView());
 
 let teardown: (() => void) | null = null;
 

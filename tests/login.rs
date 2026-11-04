@@ -277,6 +277,68 @@ async fn sign_in_gates_the_app_and_the_browser_api() {
         s == 200 && frag.contains("ada@lab.org") && frag.contains("/api/auth/logout"),
         "{frag}"
     );
+    // The demo account: no password; offered on the sign-in pages only when set.
+    let (_, _, _, page) = send(&app, public(test::TestRequest::get().uri("/login")), "x").await;
+    assert!(!page.contains("/api/auth/demo"));
+    let (s, _, _, _) = send(
+        &app,
+        form("/api/auth/demo", "next=%2Fapp", Some(PUBLIC)),
+        "x",
+    )
+    .await;
+    assert_eq!(s, 404, "no demo account yet");
+    let demo = f.api.keys.users_set_demo("Demo@Lab.org", true).unwrap();
+    assert!(demo.demo && demo.active);
+    let (_, _, _, page) = send(&app, public(test::TestRequest::get().uri("/login")), "x").await;
+    assert!(
+        page.contains("/api/auth/demo") && page.contains("Continue as demo"),
+        "{page}"
+    );
+    let (_, _, _, page) = send(&app, public(test::TestRequest::get().uri("/")), "x").await;
+    assert!(page.contains("data-demo=\"true\""), "{page}");
+    let (s, _, _, _) = send(&app, form("/api/auth/demo", "next=%2Fapp", None), "x").await;
+    assert_eq!(s, 403, "the demo form needs an Origin");
+    let (s, to, demo_cookie, _) = send(
+        &app,
+        form("/api/auth/demo", "next=%2Fapp", Some(PUBLIC)),
+        "autophys_login",
+    )
+    .await;
+    assert_eq!((s, to.as_str()), (303, "/app"));
+    let as_demo = |req: test::TestRequest| {
+        public(req).cookie(actix_web::cookie::Cookie::new(
+            "autophys_login",
+            demo_cookie.clone().unwrap(),
+        ))
+    };
+    let (_, _, _, frag) = send(
+        &app,
+        as_demo(test::TestRequest::get().uri("/api/auth/badge")),
+        "x",
+    )
+    .await;
+    assert!(
+        frag.contains("demo@lab.org") && frag.contains("Demo account"),
+        "{frag}"
+    );
+    assert!(
+        f.api
+            .keys
+            .users_check("demo@lab.org", "")
+            .unwrap()
+            .is_none(),
+        "no password sign-in"
+    );
+    // Turning the demo off signs its sessions out and drops the button.
+    f.api.keys.users_set_demo("demo@lab.org", false).unwrap();
+    assert_eq!(
+        call(&app, as_demo(get("/workspace", None)).to_request())
+            .await
+            .0,
+        401
+    );
+    let (_, _, _, page) = send(&app, public(test::TestRequest::get().uri("/login")), "x").await;
+    assert!(!page.contains("/api/auth/demo"));
     // A read-only account reads but cannot write, and the popover says so.
     f.api.keys.users_set_read_only("ada@lab.org", true).unwrap();
     assert_eq!(

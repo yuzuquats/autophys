@@ -11,12 +11,15 @@ export function signInInPlace(onSignedIn: () => void): () => void {
     const form = event.target;
     if (!(form instanceof HTMLFormElement) || !form.classList.contains("ap-signin")) return;
     event.preventDefault();
-    const button = form.querySelector<HTMLButtonElement>("button[type=submit]");
-    if (button) button.disabled = true;
+    const buttons = [...form.querySelectorAll<HTMLButtonElement>("button[type=submit]")];
+    for (const b of buttons) b.disabled = true;
     try {
       const body = new URLSearchParams();
       for (const [k, v] of new FormData(form)) body.append(k, String(v));
-      const r = await fetch(form.action, { method: "POST", body, redirect: "manual", credentials: "same-origin" });
+      // "Continue as demo" posts the same form to /api/auth/demo (its formaction).
+      const submitter = (event as SubmitEvent).submitter;
+      const action = submitter instanceof HTMLButtonElement && submitter.hasAttribute("formaction") ? submitter.formAction : form.action;
+      const r = await fetch(action, { method: "POST", body, redirect: "manual", credentials: "same-origin" });
       if (r.type === "opaqueredirect" || r.ok) {
         document.removeEventListener("submit", onSubmit, true);
         await swapBadge();
@@ -27,7 +30,7 @@ export function signInInPlace(onSignedIn: () => void): () => void {
     } catch {
       showError(form, "Couldn't reach Autophys. Try again.");
     } finally {
-      if (button) button.disabled = false;
+      for (const b of buttons) b.disabled = false;
     }
   };
   document.addEventListener("submit", onSubmit, true);

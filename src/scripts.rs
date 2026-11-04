@@ -283,7 +283,7 @@ admin_command!(
 admin_command!(
     users_add,
     "add",
-    "Invite EMAIL (or re-invite: a password reset); prints a one-time link; --read-only, --public-url, --server-db",
+    "Invite EMAIL (or re-invite: a password reset); prints a one-time link; --read-only, --demo, --public-url, --server-db",
     "users",
     "add"
 );
@@ -297,7 +297,7 @@ admin_command!(
 admin_command!(
     users_set,
     "set",
-    "Make EMAIL read-only or read-write again: --read-only | --read-write; --server-db",
+    "Change EMAIL: --read-only | --read-write, --demo (no password; anyone may continue as it) | --no-demo; --server-db",
     "users",
     "set"
 );

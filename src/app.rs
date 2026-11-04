@@ -158,7 +158,15 @@ async fn app_document(
     if let Some(api) = api.filter(|a| a.options().login) {
         match crate::http::auth::signed_in(&api, &req).await? {
             Some(user) => badge = Some(crate::login::badge(&user)),
-            None if req.path() == "/" => badge = Some(crate::login::anonymous_badge()),
+            None if req.path() == "/" => {
+                let keys = api.keys.clone();
+                let demo = crate::http::blocking(move || keys.users_demo())
+                    .await
+                    .ok()
+                    .flatten()
+                    .is_some();
+                badge = Some(crate::login::anonymous_badge(demo))
+            }
             None => {
                 let path = req.uri().path_and_query().map_or("/app", |p| p.as_str());
                 let next: String = path
