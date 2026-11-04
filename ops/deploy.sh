@@ -1,15 +1,8 @@
 #!/usr/bin/env bash
-# Build autophys from a clean checkout at HEAD and run it as the systemd user
-# unit autophys.service (`autophys serve --web-root`) from an immutable release
-# directory:
-#
-#   ~/.local/share/tento/services/autophys/<sha7>-<yyyymmdd>/{bin/autophys,web/autophys/routes/…,COMMIT}
-#   ~/.local/share/tento/services/autophys/current -> that directory
-#
-# web/autophys is the route tree `autophys build-web` bundles from html/routes
-# (tento-web's `<stage tree>/<domain>` shape, so its per-file module store lands
-# inside the release at target.web.modules). The service never runs from the
-# checkout or a build directory.
+# Build a single-file autophys release from a clean checkout at HEAD.
+# The native Linux executable carries its deflated web ZIP; strip BEFORE pack.
+# Releases contain bin/autophys and COMMIT, with no accompanying web folder.
+# The service never runs from the checkout or a build directory.
 # Usage: ops/deploy.sh   (AUTOPHYS_ADDR overrides 127.0.0.1:4794)
 set -euo pipefail
 
@@ -40,13 +33,17 @@ if [ -e "$release" ]; then
   fi
 else
   (cd "$repo" && cargo test -q && deno test -q --allow-read --permit-no-files html/)
-  (cd "$repo" && AUTOPHYS_COMMIT=$commit cargo build -q --release --bin autophys)
+  (cd "$repo" && AUTOPHYS_COMMIT=$commit AUTOPHYS_RELEASE=1 cargo build -q --release --locked --bin autophys)
   mkdir -p "$release_root"
   stage=$(mktemp -d "$release_root/.staging-XXXXXX")
-  install -D -m 0755 "$CARGO_TARGET_DIR/release/autophys" "$stage/bin/autophys"
-  # build-web exits non-zero when tento-web's build-status.json reports errors.
-  AUTOPHYS_PROJECT_ROOT=$repo "$stage/bin/autophys" build-web --out "$stage/web/autophys" >/dev/null
-  test -f "$stage/web/autophys/routes/index.anon.html" && test -f "$stage/web/autophys/routes/index.root.js"
+  mkdir -p "$stage/.build" "$stage/bin"
+  install -m 0755 "$CARGO_TARGET_DIR/release/autophys" "$stage/.build/autophys"
+  strip "$stage/.build/autophys"
+  # build-web fails when build-status.json reports bundle errors.
+  AUTOPHYS_PROJECT_ROOT=$repo "$stage/.build/autophys" build-web --out "$stage/.build/web/autophys" >/dev/null
+  test -f "$stage/.build/web/autophys/routes/index.anon.html" && test -f "$stage/.build/web/autophys/routes/index.root.js"
+  "$stage/.build/autophys" pack --web-root "$stage/.build/web/autophys" --out "$stage/bin/autophys"
+  rm -rf -- "$stage/.build"
   echo "$commit" > "$stage/COMMIT"
   chmod 0755 "$stage"
   mv -T "$stage" "$release"

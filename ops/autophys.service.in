@@ -2,12 +2,12 @@
 # @RELEASE@, @ADDR@, and @COMMIT@ are filled in; edit this template,
 # not the rendered unit.
 [Unit]
-Description=autophys daemon @COMMIT@ on @ADDR@, serving its prebuilt route tree
+Description=autophys daemon @COMMIT@ on @ADDR@, serving its embedded web app
 
 [Service]
 Type=simple
 WorkingDirectory=@RELEASE@
-ExecStart=@RELEASE@/bin/autophys serve --addr @ADDR@ --web-root @RELEASE@/web/autophys
+ExecStart=@RELEASE@/bin/autophys serve --addr @ADDR@
 # A crash or kill restarts; a deliberate SIGTERM stop stays stopped (AP-4).
 Restart=on-failure
 RestartSec=2
