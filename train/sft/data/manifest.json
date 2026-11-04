@@ -1,0 +1,511 @@
+{
+ "cases": [
+  "oscillator-free-only",
+  "oscillator",
+  "thermal-short-only",
+  "thermal"
+ ],
+ "playbook": "default",
+ "splits": {
+  "heldout": {
+   "actions": {
+    "analyze_sensitivity": 12,
+    "optimize_parameters": 12,
+    "rank_experiments": 4,
+    "request_experiment": 4,
+    "stop": 8,
+    "validate_predictions": 8
+   },
+   "distinct_prompts": 44,
+   "rows": 48,
+   "seeds": [
+    3,
+    4
+   ]
+  },
+  "train": {
+   "actions": {
+    "analyze_sensitivity": 18,
+    "optimize_parameters": 18,
+    "rank_experiments": 6,
+    "request_experiment": 6,
+    "stop": 12,
+    "validate_predictions": 12
+   },
+   "distinct_prompts": 64,
+   "rows": 72,
+   "seeds": [
+    0,
+    1,
+    2
+   ]
+  },
+  "validation": {
+   "actions": {
+    "analyze_sensitivity": 12,
+    "optimize_parameters": 12,
+    "rank_experiments": 4,
+    "request_experiment": 4,
+    "stop": 8,
+    "validate_predictions": 8
+   },
+   "distinct_prompts": 44,
+   "rows": 48,
+   "seeds": [
+    5,
+    6
+   ]
+  }
+ },
+ "system_prompt_sha256": "09efc2870fb45534b39ccf17039f027a18e4ba28c395459dbd0e81623dc91802",
+ "trajectories": [
+  {
+   "case": "oscillator-free-only",
+   "diagnosis_correct": true,
+   "experiments": 0,
+   "guardrail_overrides": [],
+   "max_rel_error": 0.004204815297056852,
+   "rel_errors": {
+    "c/m": 0.004204815297056852,
+    "k/m": 0.0008615428056821806
+   },
+   "seed": 0,
+   "split": "train",
+   "status": "inconclusive",
+   "steps": 4,
+   "test_rmse": 0.2169684066214577
+  },
+  {
+   "case": "oscillator-free-only",
+   "diagnosis_correct": true,
+   "experiments": 0,
+   "guardrail_overrides": [],
+   "max_rel_error": 0.01569222100756429,
+   "rel_errors": {
+    "c/m": 0.01569222100756429,
+    "k/m": 0.0003050090372634928
+   },
+   "seed": 1,
+   "split": "train",
+   "status": "inconclusive",
+   "steps": 4,
+   "test_rmse": 0.19022470975332398
+  },
+  {
+   "case": "oscillator-free-only",
+   "diagnosis_correct": true,
+   "experiments": 0,
+   "guardrail_overrides": [],
+   "max_rel_error": 0.01522664697199394,
+   "rel_errors": {
+    "c/m": 0.01522664697199394,
+    "k/m": 0.0038043165370018617
+   },
+   "seed": 2,
+   "split": "train",
+   "status": "inconclusive",
+   "steps": 4,
+   "test_rmse": 0.15364727554183805
+  },
+  {
+   "case": "oscillator",
+   "diagnosis_correct": true,
+   "experiments": 1,
+   "guardrail_overrides": [],
+   "max_rel_error": 0.0013208391936936348,
+   "rel_errors": {
+    "c": 0.0013208391936936348,
+    "k": 9.132803492728492e-05,
+    "m": 6.27174545198006e-06
+   },
+   "seed": 0,
+   "split": "train",
+   "status": "validated",
+   "steps": 8,
+   "test_rmse": 0.010207324818170537
+  },
+  {
+   "case": "oscillator",
+   "diagnosis_correct": true,
+   "experiments": 1,
+   "guardrail_overrides": [],
+   "max_rel_error": 0.0019316436859282415,
+   "rel_errors": {
+    "c": 0.0006681358692135486,
+    "k": 0.0019316436859282415,
+    "m": 0.0018604512654341043
+   },
+   "seed": 1,
+   "split": "train",
+   "status": "validated",
+   "steps": 8,
+   "test_rmse": 0.009960989241924914
+  },
+  {
+   "case": "oscillator",
+   "diagnosis_correct": true,
+   "experiments": 1,
+   "guardrail_overrides": [],
+   "max_rel_error": 0.002953022935005989,
+   "rel_errors": {
+    "c": 0.0001379599217606886,
+    "k": 0.002900846709608995,
+    "m": 0.002953022935005989
+   },
+   "seed": 2,
+   "split": "train",
+   "status": "validated",
+   "steps": 8,
+   "test_rmse": 0.01000117179111784
+  },
+  {
+   "case": "thermal-short-only",
+   "diagnosis_correct": true,
+   "experiments": 0,
+   "guardrail_overrides": [],
+   "max_rel_error": 0.000511742813632976,
+   "rel_errors": {
+    "C": 0.000511742813632976
+   },
+   "seed": 0,
+   "split": "train",
+   "status": "inconclusive",
+   "steps": 4,
+   "test_rmse": 0.05940181623477967
+  },
+  {
+   "case": "thermal-short-only",
+   "diagnosis_correct": true,
+   "experiments": 0,
+   "guardrail_overrides": [],
+   "max_rel_error": 0.0073197017741121195,
+   "rel_errors": {
+    "C": 0.0073197017741121195
+   },
+   "seed": 1,
+   "split": "train",
+   "status": "inconclusive",
+   "steps": 4,
+   "test_rmse": 0.7295699010390941
+  },
+  {
+   "case": "thermal-short-only",
+   "diagnosis_correct": true,
+   "experiments": 0,
+   "guardrail_overrides": [],
+   "max_rel_error": 0.0024246127741717194,
+   "rel_errors": {
+    "C": 0.0024246127741717194
+   },
+   "seed": 2,
+   "split": "train",
+   "status": "inconclusive",
+   "steps": 4,
+   "test_rmse": 0.7761163196436337
+  },
+  {
+   "case": "thermal",
+   "diagnosis_correct": true,
+   "experiments": 1,
+   "guardrail_overrides": [],
+   "max_rel_error": 0.0005623801212886193,
+   "rel_errors": {
+    "C": 0.00010754548374913853,
+    "R": 0.0005623801212886193
+   },
+   "seed": 0,
+   "split": "train",
+   "status": "validated",
+   "steps": 8,
+   "test_rmse": 0.05116467463056711
+  },
+  {
+   "case": "thermal",
+   "diagnosis_correct": true,
+   "experiments": 1,
+   "guardrail_overrides": [],
+   "max_rel_error": 0.000397309957482328,
+   "rel_errors": {
+    "C": 4.931141182540344e-05,
+    "R": 0.000397309957482328
+   },
+   "seed": 1,
+   "split": "train",
+   "status": "validated",
+   "steps": 8,
+   "test_rmse": 0.05298873100111058
+  },
+  {
+   "case": "thermal",
+   "diagnosis_correct": true,
+   "experiments": 1,
+   "guardrail_overrides": [],
+   "max_rel_error": 0.0010171818650347442,
+   "rel_errors": {
+    "C": 0.0010171818650347442,
+    "R": 0.0007420197842601395
+   },
+   "seed": 2,
+   "split": "train",
+   "status": "validated",
+   "steps": 8,
+   "test_rmse": 0.052703577126685434
+  },
+  {
+   "case": "oscillator-free-only",
+   "diagnosis_correct": true,
+   "experiments": 0,
+   "guardrail_overrides": [],
+   "max_rel_error": 0.0038272258733904607,
+   "rel_errors": {
+    "c/m": 0.0038272258733904607,
+    "k/m": 0.0009838723468174049
+   },
+   "seed": 5,
+   "split": "validation",
+   "status": "inconclusive",
+   "steps": 4,
+   "test_rmse": 0.014575247068621506
+  },
+  {
+   "case": "oscillator-free-only",
+   "diagnosis_correct": true,
+   "experiments": 0,
+   "guardrail_overrides": [],
+   "max_rel_error": 0.03436591628401342,
+   "rel_errors": {
+    "c/m": 0.03436591628401342,
+    "k/m": 0.0005462739850068399
+   },
+   "seed": 6,
+   "split": "validation",
+   "status": "inconclusive",
+   "steps": 4,
+   "test_rmse": 0.035666006983687985
+  },
+  {
+   "case": "oscillator",
+   "diagnosis_correct": true,
+   "experiments": 1,
+   "guardrail_overrides": [],
+   "max_rel_error": 0.007082762624147421,
+   "rel_errors": {
+    "c": 0.007082762624147421,
+    "k": 0.005486498838895071,
+    "m": 0.005441152655283998
+   },
+   "seed": 5,
+   "split": "validation",
+   "status": "validated",
+   "steps": 8,
+   "test_rmse": 0.009926442615360485
+  },
+  {
+   "case": "oscillator",
+   "diagnosis_correct": true,
+   "experiments": 1,
+   "guardrail_overrides": [],
+   "max_rel_error": 0.006649049620566894,
+   "rel_errors": {
+    "c": 0.005367503756171121,
+    "k": 0.006649049620566894,
+    "m": 0.006277510746988568
+   },
+   "seed": 6,
+   "split": "validation",
+   "status": "validated",
+   "steps": 8,
+   "test_rmse": 0.010098237471147584
+  },
+  {
+   "case": "thermal-short-only",
+   "diagnosis_correct": true,
+   "experiments": 0,
+   "guardrail_overrides": [],
+   "max_rel_error": 0.010496266203593896,
+   "rel_errors": {
+    "C": 0.010496266203593896
+   },
+   "seed": 5,
+   "split": "validation",
+   "status": "inconclusive",
+   "steps": 4,
+   "test_rmse": 1.1869982392351908
+  },
+  {
+   "case": "thermal-short-only",
+   "diagnosis_correct": true,
+   "experiments": 0,
+   "guardrail_overrides": [],
+   "max_rel_error": 0.002137688589760378,
+   "rel_errors": {
+    "C": 0.002137688589760378
+   },
+   "seed": 6,
+   "split": "validation",
+   "status": "inconclusive",
+   "steps": 4,
+   "test_rmse": 1.4303792997975602
+  },
+  {
+   "case": "thermal",
+   "diagnosis_correct": true,
+   "experiments": 1,
+   "guardrail_overrides": [],
+   "max_rel_error": 0.00017321100282696733,
+   "rel_errors": {
+    "C": 6.906574489473627e-05,
+    "R": 0.00017321100282696733
+   },
+   "seed": 5,
+   "split": "validation",
+   "status": "validated",
+   "steps": 8,
+   "test_rmse": 0.04672644446232251
+  },
+  {
+   "case": "thermal",
+   "diagnosis_correct": true,
+   "experiments": 1,
+   "guardrail_overrides": [],
+   "max_rel_error": 0.0004043435589600186,
+   "rel_errors": {
+    "C": 9.84160299892789e-05,
+    "R": 0.0004043435589600186
+   },
+   "seed": 6,
+   "split": "validation",
+   "status": "validated",
+   "steps": 8,
+   "test_rmse": 0.05122975722035487
+  },
+  {
+   "case": "oscillator-free-only",
+   "diagnosis_correct": true,
+   "experiments": 0,
+   "guardrail_overrides": [],
+   "max_rel_error": 0.02229451509356406,
+   "rel_errors": {
+    "c/m": 0.02229451509356406,
+    "k/m": 0.0012405878579573315
+   },
+   "seed": 3,
+   "split": "heldout",
+   "status": "inconclusive",
+   "steps": 4,
+   "test_rmse": 0.19392465593542105
+  },
+  {
+   "case": "oscillator-free-only",
+   "diagnosis_correct": true,
+   "experiments": 0,
+   "guardrail_overrides": [],
+   "max_rel_error": 0.007892116153359163,
+   "rel_errors": {
+    "c/m": 0.007892116153359163,
+    "k/m": 0.0017718965913855467
+   },
+   "seed": 4,
+   "split": "heldout",
+   "status": "inconclusive",
+   "steps": 4,
+   "test_rmse": 0.2901953521302302
+  },
+  {
+   "case": "oscillator",
+   "diagnosis_correct": true,
+   "experiments": 1,
+   "guardrail_overrides": [],
+   "max_rel_error": 0.0018163773491195467,
+   "rel_errors": {
+    "c": 0.0018163773491195467,
+    "k": 0.000706840969021294,
+    "m": 0.0008199474979153631
+   },
+   "seed": 3,
+   "split": "heldout",
+   "status": "validated",
+   "steps": 8,
+   "test_rmse": 0.009788519630722095
+  },
+  {
+   "case": "oscillator",
+   "diagnosis_correct": true,
+   "experiments": 1,
+   "guardrail_overrides": [],
+   "max_rel_error": 0.0066727764904537246,
+   "rel_errors": {
+    "c": 0.0034322314662100784,
+    "k": 0.0066727764904537246,
+    "m": 0.006658756333264515
+   },
+   "seed": 4,
+   "split": "heldout",
+   "status": "validated",
+   "steps": 8,
+   "test_rmse": 0.009867506271993957
+  },
+  {
+   "case": "thermal-short-only",
+   "diagnosis_correct": true,
+   "experiments": 0,
+   "guardrail_overrides": [],
+   "max_rel_error": 0.006947958367006457,
+   "rel_errors": {
+    "C": 0.006947958367006457
+   },
+   "seed": 3,
+   "split": "heldout",
+   "status": "inconclusive",
+   "steps": 4,
+   "test_rmse": 0.2786378561310704
+  },
+  {
+   "case": "thermal-short-only",
+   "diagnosis_correct": true,
+   "experiments": 0,
+   "guardrail_overrides": [],
+   "max_rel_error": 0.004538860390953525,
+   "rel_errors": {
+    "C": 0.004538860390953525
+   },
+   "seed": 4,
+   "split": "heldout",
+   "status": "inconclusive",
+   "steps": 4,
+   "test_rmse": 0.356358559527746
+  },
+  {
+   "case": "thermal",
+   "diagnosis_correct": true,
+   "experiments": 1,
+   "guardrail_overrides": [],
+   "max_rel_error": 0.0004304699756976227,
+   "rel_errors": {
+    "C": 0.00041791034542115746,
+    "R": 0.0004304699756976227
+   },
+   "seed": 3,
+   "split": "heldout",
+   "status": "validated",
+   "steps": 8,
+   "test_rmse": 0.05129029178208415
+  },
+  {
+   "case": "thermal",
+   "diagnosis_correct": true,
+   "experiments": 1,
+   "guardrail_overrides": [],
+   "max_rel_error": 0.00036793872513540826,
+   "rel_errors": {
+    "C": 5.377137459805503e-05,
+    "R": 0.00036793872513540826
+   },
+   "seed": 4,
+   "split": "heldout",
+   "status": "validated",
+   "steps": 8,
+   "test_rmse": 0.05101245867698839
+  }
+ ]
+}

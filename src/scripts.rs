@@ -17,6 +17,7 @@ pub fn scripts() -> Scripts<()> {
         .add_subcommand("keys", keys_commands())
         .add_subcommand("users", users_commands())
         .add_subcommand("db", db_commands())
+        .add_subcommand("train", train_commands())
         .add_command(projects)
         .add_command(investigations)
         .add_command(records)
@@ -50,6 +51,60 @@ fn db_commands() -> Scripts<()> {
         .add_command(db_check)
 }
 
+fn train_commands() -> Scripts<()> {
+    Scripts::new(())
+        .add_command(train_dataset)
+        .add_command(train_run)
+        .add_command(train_eval)
+        .add_command(train_runs)
+}
+
+/// Train errors are reported here and end the process: returning `Err` would
+/// make the dispatcher print the generic command help to stdout first, which
+/// both buries the message and corrupts `--json` output.
+fn train_result(result: Result<Value, crate::train::Failure>) -> tento_sh::Result<Value> {
+    match result {
+        Ok(value) => Ok(value),
+        Err(failure) => {
+            let _ = std::io::stdout().flush();
+            eprintln!("autophys: {}", failure.message());
+            std::process::exit(failure.code());
+        }
+    }
+}
+
+#[command(
+    name = "dataset",
+    description = "Build train/validation/held-out chat rows offline: [--out DIR] [--train-seeds 0,1,2] [--case NAME]..."
+)]
+async fn train_dataset(_: (), args: Option<Vec<String>>) -> tento_sh::Result<Value> {
+    train_result(crate::train::dataset(args.unwrap_or_default()))
+}
+
+#[command(
+    name = "run",
+    description = "Plan (dry run + cost) or train a LoRA: --name N --base-model HF_ID --data DIR [--usd-per-mtok X --max-usd Y --live]"
+)]
+async fn train_run(_: (), args: Option<Vec<String>>) -> tento_sh::Result<Value> {
+    train_result(crate::train::run(args.unwrap_or_default()))
+}
+
+#[command(
+    name = "eval",
+    description = "Held-out benchmark vs scripted: --out DIR [--model NAME] [--replay FILE], or --backend modal --run NAME --gpu G --usd-per-hour X --max-usd Y"
+)]
+async fn train_eval(_: (), args: Option<Vec<String>>) -> tento_sh::Result<Value> {
+    train_result(crate::train::eval(args.unwrap_or_default()))
+}
+
+#[command(
+    name = "runs",
+    description = "List training runs and their status, newest first"
+)]
+async fn train_runs(_: (), args: Option<Vec<String>>) -> tento_sh::Result<Value> {
+    train_result(crate::train::runs(args.unwrap_or_default()))
+}
+
 fn description(root: &Scripts<()>) -> Value {
     // The vendored root manifest reflects leaf commands. Compose its nested
     // groups through the same public registry reflection, with no env access.
@@ -59,6 +114,7 @@ fn description(root: &Scripts<()>) -> Value {
         ("keys", keys_commands()),
         ("users", users_commands()),
         ("db", db_commands()),
+        ("train", train_commands()),
     ] {
         doc["commands"][name] = tento_sh::command_index_value(&group);
     }
@@ -449,10 +505,17 @@ pub async fn run(mut argv: Vec<String>, out: &mut impl Write) -> u8 {
     if !help
         && matches!(
             argv.get(1).map(String::as_str),
-            Some("pair" | "keys" | "users" | "db")
+            Some("pair" | "keys" | "users" | "db" | "train")
         )
         && argv.get(2).is_none_or(|word| word.starts_with('-'))
     {
+        if argv[1] == "train" {
+            eprintln!(
+                "autophys: a train subcommand is required\n{}",
+                crate::train::USAGE
+            );
+            return 2;
+        }
         eprintln!(
             "autophys: an admin subcommand is required\n{}",
             crate::admin::USAGE

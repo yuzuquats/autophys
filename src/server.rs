@@ -30,6 +30,7 @@ pub const USAGE: &str =
        autophys keys list [--json] | keys revoke <KEY_ID>
        autophys users list | users add <EMAIL> | users remove <EMAIL>
        autophys db verify [--rebuild] [--json] [--project NAME]   (db check is the same)
+       autophys train dataset | train run | train eval | train runs   (autophys train for details)
        (pair, keys and db also take --collection DIR and --server-db FILE;
         --db DIR is an alias of --collection)";
 

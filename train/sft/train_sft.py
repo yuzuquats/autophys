@@ -1,0 +1,187 @@
+#!/usr/bin/env python3
+"""LoRA SFT of an autophys decision policy on Baseten Loops.
+
+``--dry-run`` (the default) is offline: it renders every row with the base
+model's own chat template and tokenizer (both public, from Hugging Face),
+checks lengths, and prints the trained-token share, the schedule and the
+token totals the cost estimate is based on. It never contacts Baseten.
+
+A live run needs ``BASETEN_API_KEY`` in the environment and the explicit
+``--live`` flag. It trains a LoRA adapter with cross-entropy on the
+assistant (Decision JSON) tokens only, reports validation NLL, saves sampler
+weights and resumable state, writes ``runs/<name>/run.json`` and deactivates
+nothing (see README for deactivation and deployment).
+
+Training rendering = upstream template, ``system`` role, ``enable_thinking``
+false, then the target JSON and the template's own end-of-turn marker
+(``<|im_end|>`` for Qwen; see ``render.end_of_turn``). ``patch_chat_template.py``
+proves the serving template renders the SDK's ``developer`` request to the
+same prompt.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import os
+import random
+import sys
+import time
+import urllib.request
+from pathlib import Path
+
+from patch_chat_template import fetch
+from render import end_of_turn, render_prompt, special_tokens
+
+HERE = Path(__file__).parent
+
+
+def load(path: Path) -> list[tuple[str, str]]:
+    """(system, user, answer) text per row."""
+    pairs = []
+    for line in path.open():
+        m = json.loads(line)["messages"]
+        assert [x["role"] for x in m] == ["system", "user", "assistant"]
+        pairs.append((m[0]["content"], m[1]["content"], m[2]["content"]))
+    return pairs
+
+
+class Encoder:
+    def __init__(self, model: str, tokenizer=None):
+        self.template = fetch(model)
+        self.special = special_tokens(model)
+        self.end_of_turn = end_of_turn(self.template, **self.special)
+        if tokenizer is None:  # offline: public tokenizer.json only
+            from tokenizers import Tokenizer
+            with urllib.request.urlopen(f"https://huggingface.co/{model}/resolve/main/tokenizer.json", timeout=120) as r:
+                tok = Tokenizer.from_str(r.read().decode())
+            self.encode = lambda s: tok.encode(s, add_special_tokens=False).ids
+        else:
+            self.encode = lambda s: tokenizer.encode(s, add_special_tokens=False)
+
+    def tokens(self, system: str, user: str, answer: str) -> tuple[list[int], list[int]]:
+        prompt = render_prompt(self.template, [{"role": "system", "content": system}, {"role": "user", "content": user}],
+                               enable_thinking=False, **self.special)
+        return self.encode(prompt), self.encode(answer + self.end_of_turn)
+
+
+def datum(p: list[int], a: list[int]):
+    from baseten.loops import Datum, ModelInput, TensorData
+    full = p + a
+    # Loops does not shift labels: position i predicts full[i + 1].
+    targets = full[1:]
+    weights = [0.0] * (len(p) - 1) + [1.0] * len(a)
+    return Datum(model_input=ModelInput.from_ints(full[:-1]),
+                 loss_fn_inputs={"target_tokens": TensorData(data=targets, dtype="int64", shape=[len(targets)]),
+                                 "weights": TensorData(data=weights, dtype="float32", shape=[len(weights)])})
+
+
+def lr_at(step: int, total: int, base: float, warmup: int) -> float:
+    if step < warmup:
+        return base * (step + 1) / warmup
+    progress = (step - warmup) / max(1, total - warmup)
+    return base * 0.5 * (1 + math.cos(math.pi * progress))
+
+
+def main(argv=None) -> int:
+    p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    p.add_argument("--base-model", default="Qwen/Qwen3.6-35B-A3B")
+    p.add_argument("--data", type=Path, default=HERE / "data")
+    p.add_argument("--rank", type=int, default=32)
+    p.add_argument("--max-seq-len", type=int, default=2048)
+    p.add_argument("--lr", type=float, default=2e-4)
+    p.add_argument("--warmup", type=int, default=5)
+    p.add_argument("--batch-size", type=int, default=8)
+    p.add_argument("--epochs", type=int, default=4)
+    p.add_argument("--eval-every", type=int, default=10)
+    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--scope", default="serverless", help="Loops scope; 'serverless' fails rather than fall back to GPU billing")
+    p.add_argument("--name", default="autophys-sft")
+    p.add_argument("--live", action="store_true", help="actually train on Baseten (spends money)")
+    a = p.parse_args(argv)
+    train, val = load(a.data / "train.jsonl"), load(a.data / "validation.jsonl")
+    overlap = None
+    if (a.data / "heldout.jsonl").exists():
+        # Seeds are disjoint (build_dataset.py enforces it), but states that carry
+        # no seed-specific numbers (e.g. "FIT: none" at step 1) repeat across seeds.
+        held = load(a.data / "heldout.jsonl")
+        seen = {json.dumps(x) for x in train + val}
+        overlap = {"heldout_rows": len(held), "identical_to_a_training_row": sum(json.dumps(x) in seen for x in held)}
+
+    tokenizer = client = None
+    if a.live:
+        if not os.environ.get("BASETEN_API_KEY"):
+            p.error("--live needs BASETEN_API_KEY in the environment")
+        from baseten.loops import ServiceClient
+        client = ServiceClient().create_lora_training_client(
+            base_model=a.base_model, rank=a.rank, max_seq_len=a.max_seq_len, scope=a.scope or None,
+            seed=a.seed, name=a.name)
+        tokenizer = client.get_tokenizer()
+    enc = Encoder(a.base_model, tokenizer)
+    tr = [enc.tokens(*x) for x in train]
+    va = [enc.tokens(*x) for x in val]
+    lengths = [len(p_) + len(a_) for p_, a_ in tr + va]
+    if max(lengths) > a.max_seq_len:
+        p.error(f"longest sequence {max(lengths)} exceeds --max-seq-len {a.max_seq_len}")
+    steps_per_epoch = math.ceil(len(tr) / a.batch_size)
+    total = steps_per_epoch * a.epochs
+    seq_tokens = sum(len(p_) + len(a_) for p_, a_ in tr)
+    trained = sum(len(a_) for _, a_ in tr)
+    val_tokens = sum(len(p_) + len(a_) for p_, a_ in va)
+    evals = total // a.eval_every + 2
+    summary = {
+        "base_model": a.base_model, "end_of_turn": enc.end_of_turn, "rows": {"train": len(tr), "validation": len(va)},
+        "tokens_per_sequence": {"min": min(lengths), "max": max(lengths)},
+        "trained_token_share": round(trained / seq_tokens, 4),
+        "heldout_overlap": overlap,
+        "schedule": {"updates": total, "per_epoch": steps_per_epoch, "epochs": a.epochs, "batch_size": a.batch_size,
+                     "lr": a.lr, "warmup": a.warmup, "lr_schedule": "cosine", "rank": a.rank},
+        "billed_token_estimate": {"train_forward_backward": seq_tokens * a.epochs,
+                                  "validation_forward": val_tokens * evals,
+                                  "total": seq_tokens * a.epochs + val_tokens * evals},
+    }
+    print(json.dumps(summary, indent=1))
+    if not a.live:
+        print("dry run: nothing sent to Baseten")
+        return 0
+
+    from baseten.loops import AdamParams
+    run_dir = HERE / "runs" / a.name
+    run_dir.mkdir(parents=True, exist_ok=True)
+    train_data = [datum(*x) for x in tr]
+    val_data = [datum(*x) for x in va]
+    log = []
+
+    def val_nll():
+        return client.forward(val_data, "cross_entropy").result(timeout=1800).loss
+
+    log.append({"step": 0, "val_nll": val_nll()})
+    print(json.dumps(log[-1]), flush=True)
+    rng, step = random.Random(a.seed), 0
+    for epoch in range(a.epochs):
+        order = list(range(len(train_data)))
+        rng.shuffle(order)
+        for i in range(0, len(order), a.batch_size):
+            batch = [train_data[j] for j in order[i:i + a.batch_size]]
+            fb = client.forward_backward(batch, "cross_entropy").result(timeout=1800)
+            lr = lr_at(step, total, a.lr, a.warmup)
+            client.optim_step(AdamParams(learning_rate=lr)).result(timeout=1800)
+            step += 1
+            entry = {"step": step, "epoch": epoch, "train_loss": fb.loss, "lr": lr, "t": time.time()}
+            if step % a.eval_every == 0 or step == total:
+                entry["val_nll"] = val_nll()
+            log.append(entry)
+            print(json.dumps(entry), flush=True)
+    sampler = client.save_weights_for_sampler(name=f"{a.name}-step-{step}").result(timeout=1800)
+    state = client.save_state(name=f"{a.name}-state-{step}").result(timeout=1800)
+    record = {"run_id": client.run_id, "sampler_weights": sampler.path, "state": state.path, "args": vars(a) | {"data": str(a.data)},
+              "summary": summary, "log": log}
+    (run_dir / "run.json").write_text(json.dumps(record, indent=1, default=str) + "\n")
+    print(f"run_id={client.run_id} sampler_weights={sampler.path}")
+    client.close()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
