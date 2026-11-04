@@ -95,7 +95,7 @@ checkout has a real `target/`.
 | Batch | Content | State |
 | ----- | ------- | ----- |
 | B1 | `autophys serve` + the vanilla cookbook skeleton (sidebar, header, details, tutorial, pitch deck, seamless flow), systemd unit, fleet registration | implemented |
-| B2+ | not defined | pending operator direction |
+| B2 | generic workbench: the display manifest (DM-1): simulators declare channels, settings and views; `PUT /projects/{pid}/display` outside the config hash; one UI renders any product. Python SDK (autophys/py), daemon and Rust SDK (autophys/rs), UI (autophys/ui) | planned (PURPOSE, operator 2026-11-04) |
 ```
 
 ## Decisions
@@ -126,12 +126,16 @@ network errors. Results: [verification-b1.md](verification-b1.md) for the
 rev 2 release (`ac0a7b1`), [verification-b1-cookbook.md](verification-b1-cookbook.md)
 for this one.
 
-## Open question for the operator
+## Purpose (operator, 2026-11-04)
 
 ```review-callout
-note
-What is autophys for, beyond "a new physics app"? Until that is answered the
-app stays the vanilla skeleton and no batch after B1 is proposed.
+kind: decision
+title: PURPOSE: a general physics-investigation workbench
+autophys is a general physics-investigation workbench, not a
+battery-calibration product. Battery is one example domain beside
+oscillator and thermal_rc. B2 planning is unblocked on that basis and
+includes the generic display manifest (DM-1, [display-manifest.md](display-manifest.md)).
+Recorded in [decisions.md](decisions.md).
 ```
 
 ## Remaining work
@@ -142,7 +146,7 @@ app stays the vanilla skeleton and no batch after B1 is proposed.
   orchestrator's); fill in O-3 in decisions.md; replace deploy's tento pin
   with the vendored tree id. The dev watch (tento-web `watch_dev`) was
   checked once: an edit to html/routes/content.ts rebuilt the served bundle.
-- Operator direction for B2+; review of AP-3, AP-4 and AP-8.
+- B2 (display manifest, DM-1): see [display-manifest.md](display-manifest.md). AP-3, AP-4 and AP-8 were confirmed on 2026-11-04 (decisions.md).
 - Confirm `http://tento.localhost/#/rwc-dev-01/autophys` from the laptop
   after its next registry refresh.
 - Task board: unavailable on rwc-dev-01 (no `lona task` CLI and no

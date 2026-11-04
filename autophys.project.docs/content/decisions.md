@@ -88,3 +88,11 @@ this record I81f7837f7c0ee007ff06.
 | --- | --- | --- | --- |
 | DM-1 | The UI holds no product knowledge. Simulators declare a display manifest (channels, setting roles and units, views, input previews), uploaded with `PUT /projects/{pid}/display` outside `config()` and its hashes, and one compiled UI renders any product from it. Approved as written in [display-manifest.md](display-manifest.md) rev 2, with implementation handed to autophys/py (SDK, goldens) and autophys/rs (daemon, Rust SDK) | operator, 2026-11-04 ("autophys should be generic"; "have autophys/py and autophys/rs implement") | `sdks/python`, `src/http.rs` and the workbook, `sdks/rust`, then `html/client` |
 ```
+
+## Purpose, 2026-11-04
+
+```review-table
+| Id | Decision | Who | Consequence |
+| --- | --- | --- | --- |
+| PURPOSE | autophys is a **general physics-investigation workbench**, not a battery-calibration product. Battery is one example domain beside oscillator and thermal_rc | operator, 2026-11-04 (relayed from the progress-review thread) | unblocks B2 planning; B2 includes the generic display-manifest contract (DM-1): Display type and `PUT /projects/{pid}/display` outside the config hash. Rust SDK and daemon parts are autophys/rs's |
+```
