@@ -18,7 +18,17 @@ Favicon SHA-256: 93c26c889ee8d98b73e7f124ad35febb7513d01b32e21da9bce74fbf19496b4
 
 Validation: retained SVG hashes match the design source; all artwork is vector-only.
 The design build reproduces byte-identically and the favicon was inspected at
-16/24/32px on light and dark grounds. Live cutover pending.
+16/24/32px on light and dark grounds.
+
+Live on 2026-11-04: release 0ce95e8-response-c887327-20261104. UI owner handed
+runtime control to this thread after deploying 0ce95e8. The verified resource
+transform preserves that native executable and six unaffected web entries;
+only brand.svg and the favicon link change, with favicon.svg added. The native
+health commit remains 0ce95e8; RESOURCE_TRANSFORM.json records branding source
+c887327. Public SVG hashes, browser image decoding and both mounted marks pass.
+No additional UI, server, auth or data changes were deployed.
+Receipt: workspace/fleet/evidence/lona-family-landings/autophys/response_cutover_20261104/receipt.json.
+Future master builds include these committed resources normally.
 
 ## Earlier circle integration (superseded artwork)
 
