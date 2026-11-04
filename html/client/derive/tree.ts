@@ -5,6 +5,7 @@ import type { IconName, SidebarModel, Trail, TreeNode } from "../../ui/view-mode
 import { type View, VIEW_LABEL, viewsOf } from "./charts.ts";
 import { int, pct } from "./fmt.ts";
 import { configFor, ids, latestConfig, latestFit, projectOf, proposalLabel, rankOf, type State } from "./shared.ts";
+import { groundTruthNode } from "./truth.ts";
 
 
 const VIEW_ICON: Record<View, IconName> = { fit: "view", residuals: "residuals", landscape: "landscape", envelope: "envelope", frequency: "frequency", "zoom:edges": "zoom" };
@@ -57,6 +58,8 @@ export function investigationNode(project: Project, inv: Investigation): TreeNod
   children.push({ id: ids.validate(inv), label: "Validate", icon: "validate", selectable: true, children: null, dim: v.state === "needs-data",
     trail: v.state === "needs-data" ? { text: "needs data" } : v.state === "summary" ? { text: v.passed ? "passed" : "failed", tone: v.passed ? "ok" : "warn" }
       : { text: v.state === "passed" ? pct(v.worst.relative) : "failed", tone: v.state === "passed" ? "ok" : "warn" } });
+  const truth = groundTruthNode(inv);
+  if (truth) children.push(truth);
   return { id: ids.inv(inv), label: inv.name, icon: "investigation", selectable: true, trail: investigationTrail(inv), children };
 }
 

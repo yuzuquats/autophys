@@ -88,9 +88,15 @@ export function fitPanels(ctx: Ctx, fit: Fit): ChartPanel[] {
   });
 }
 
+/** The declared noise σ, or the measurement's recorded estimate when the config declares none (default noise). */
+const noiseSigma = (config: ProjectConfig, m: Measurement) => {
+  const declared = sigmaOf(config);
+  return Number.isFinite(declared) && declared > 0 ? declared : m.sigmaEstimate;
+};
+
 /** Normalized residuals on recorded sample times; no interpolation of downsampled curves. */
 function residualStrip(config: ProjectConfig, fit: Fit, m: Measurement): XYChart {
-  const fitted = curve(fit, m, "fit"), sigma = sigmaOf(config);
+  const fitted = curve(fit, m, "fit"), sigma = noiseSigma(config, m);
   const points = m.t.map((t, i): Point => [t, (m.output[i] - fitted[i]) / sigma]).filter((p) => Number.isFinite(p[1]));
   return { kind: "xy", height: 80, x: timeAxis(m.t), label: "(measured − model) / σ",
     y: axisAround(points.map((p) => p[1]), { symmetric: true, include: [-1, 1], count: 3 }),
@@ -99,10 +105,10 @@ function residualStrip(config: ProjectConfig, fit: Fit, m: Measurement): XYChart
 }
 
 export function residualPanels(ctx: Ctx, fit: Fit): ChartPanel[] {
-  const { config, inv } = ctx, sigma = sigmaOf(config);
+  const { config, inv } = ctx;
   return fit.measurements.map((id): ChartPanel | null => {
     if (!hasCurve(fit, measurementOf(inv, id))) return null;
-    const m = measurementOf(inv, id), f = curve(fit, m, "fit"), r = m.output.map((y, i) => y - f[i]);
+    const m = measurementOf(inv, id), f = curve(fit, m, "fit"), r = m.output.map((y, i) => y - f[i]), sigma = noiseSigma(config, m);
     const rho = fit.lag1[id], structured = Math.abs(rho) > 0.3;
     const unit = specOf(config, m.experiment).output.unit;
     return {

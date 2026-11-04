@@ -28,6 +28,26 @@ Deno.test("derive: Fit residual strip shares time axis and uses only matching do
   assertEquals(residualPanels(ctx, fit), []);
 });
 
+Deno.test("derive: residuals fall back to the measurement's sigma estimate when the config declares no noise", async () => {
+  const { fitPanels, residualPanels } = await import("./charts.ts");
+  const project = structuredClone(ws.projects[0]), inv = project.investigations[0], fit = inv.fits[0], m = inv.measurements[0];
+  const config = project.configs.find((c) => c.version === inv.configVersion)!;
+  config.noise.sigma = {};
+  m.sigmaEstimate = 0.02;
+  const ctx = { config, inv };
+  fit.curves[m.id] = { t: [m.t[0], m.t[4]], fit: [m.output[0] - 0.02, m.output[4] + 0.04], initial: [0, 0] };
+  const strip = fitPanels(ctx, fit)[0].charts.at(-1)!;
+  assert(strip.kind === "xy");
+  const dots = strip.layers.at(-1)!;
+  assert(dots.kind === "dots");
+  assertEquals(dots.points.length, 2, "default-noise residuals are not dropped");
+  assertAlmostEquals(dots.points[0][1], 1);
+  assertAlmostEquals(dots.points[1][1], -2);
+  const band = residualPanels(ctx, fit)[0].charts[0];
+  assert(band.kind === "xy");
+  assertEquals(band.layers[0], { kind: "hband", from: -0.02, to: 0.02, tone: "muted" });
+});
+
 Deno.test("derive: Ground truth is conditional and formats payload ratios, tolerance and within", async () => {
   const { investigationNode } = await import("./tree.ts");
   const { groundTruthNode, truthPanels } = await import("./truth.ts");
@@ -38,6 +58,7 @@ Deno.test("derive: Ground truth is conditional and formats payload ratios, toler
   inv.reveal.quantities[0].ratio = 1.37;
   inv.reveal.quantities[0].sigma_ratio = .06;
   assertEquals(groundTruthNode(inv), { id: inv.id + "/truth", label: "Ground truth", icon: "validate", selectable: true, children: null });
+  assertEquals(investigationNode(project, inv).children!.at(-1), groundTruthNode(inv), "a revealed investigation lists Ground truth in the tree");
   const state = { ...s0, ws: { ...ws, projects: [project] }, projectId: project.id, selected: { [project.id]: inv.id + "/truth" } };
   assertEquals(parseSel(project, inv.id + "/truth")?.kind, "truth");
   const model = mainModel(state);
