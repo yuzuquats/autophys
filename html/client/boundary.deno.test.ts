@@ -69,7 +69,9 @@ Deno.test("client boundary: no DOM, storage or network outside api.ts", async ()
   for (const file of await walk(ROOT)) {
     if (file.endsWith(".deno.test.ts")) continue;
     const src = await readReal(file);
-    for (const banned of ["fetch(", "EventSource", "XMLHttpRequest", "WebSocket", "localStorage", "indexedDB", "document.", "window.", "HTMLElement", ...(file === "api.ts" ? [] : ["/api/"])]) {
+    // api.ts is the one network module (the daemon source): fetch, EventSource and /api/ are its own.
+    const network = ["fetch(", "EventSource", "/api/"];
+    for (const banned of [...(file === "api.ts" ? [] : network), "XMLHttpRequest", "WebSocket", "localStorage", "indexedDB", "document.", "window.", "HTMLElement"]) {
       assert(!src.includes(banned), `${file} uses ${banned}`);
     }
   }

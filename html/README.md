@@ -11,8 +11,13 @@ each experiment type asks for), what the data does and does not pin down (sensit
 next experiment the agent proposes, and validation. The user approves, edits or rejects the
 proposal.
 
-Status: runs in tento-cookbook-js's shell on a deterministic fixture Source. There is no
-network code, and `daemon()` is not wired. The root builds against tento-cookbook-js at
+Status: runs in tento-cookbook-js's shell against the daemon's `/api/v1/workspace` and
+resumable record stream, with approval/edit/reject and device pairing. It falls back to
+the deterministic fixture when the daemon cannot load; `?source=fixtures` forces the demo.
+The sidebar status line names the active source. Same-origin requests carry the daemon's
+HttpOnly session cookie; a host-injected callback renews expired sessions by reloading
+the document, guarded to once per 30 seconds per tab. Missing SDK chart data stays explicitly
+unrecorded. See [the UI implementation record](../autophys.project.docs/content/ui.md). The root builds against tento-cookbook-js at
 561cad2f5 (see [COOKBOOK-CONTRACT.md](COOKBOOK-CONTRACT.md)). Not deployed and not pushed.
 
 ## Layout and rules (approved spec: projects/autophys.project.docs/content/architecture.md)
@@ -20,7 +25,8 @@ network code, and `daemon()` is not wired. The root builds against tento-cookboo
 ```text
 ui/           view-only components: sidebar, main, details; charts; the view-model and intent types
 client/       the logic the ui refuses to hold; imports only ui's view-model and intent *types*
-  api.ts        Source { load, stream, post }, Rec, Snapshot; daemon() is a stub that throws "not wired"
+  api.ts        Source { load, stream, post }, Rec, Snapshot; daemon(), firstOf(), pairing and the only network calls
+  wire.ts       pure daemon record/config mapping; no simulation or network
   store.ts      the snapshot plus every record applied in gseq order; subscribe()
   records.ts    applying a decision record to a workspace (shared by the store and the fixture)
   proposal.ts   the proposal state machine; applyDecision() is the daemon's 409 rule
@@ -29,6 +35,7 @@ client/       the logic the ui refuses to hold; imports only ui's view-model and
   controller.ts Intent → selection change, a POST through the store, or a download
   fixtures/     a Source that loads a computed workspace and replays canned records, plus the
                 simulators that compute it at build time
+e2e/          headless browser drivers, using vendored tento-headless-js
 routes/       the composition root: index.root.ts (+ index.anon.html, content.ts); tento-web
               bundles it by file name
 ```
@@ -37,8 +44,7 @@ routes/       the composition root: index.root.ts (+ index.anon.html, content.ts
   raw intents. It has no state, derivations, validation or maths beyond pixel mapping. Its
   only dependency is tento-ui's tree list.
 - **`client/` holds all the logic and never draws.** No DOM, storage or network outside
-  `api.ts`. Data arrives through a `Source`; `fixtures()` is the only implementation today.
-  The daemon store (`src/store`, `src/http.rs`) will back `daemon()`.
+  `api.ts`. Data arrives through a `Source`: `daemon()` reads the real API and `fixtures()` replays the demo.
 - **`client/derive` does not simulate.** Fit curves, gain/phase, previews, landscapes,
   rankings and the proposal outlook grid all arrive in the domain. Derive formats, selects
   and interpolates.
@@ -109,10 +115,11 @@ free response (≈ 0). A build takes about 0.4 s.
 ## Tests and build
 
 ```sh
-deno test --allow-read html/                       # from the repo root: 37 tests (html/deno.json)
+deno test --allow-read html/                       # from the repo root (html/deno.json)
 (cd html && deno check routes/index.root.ts)
 autophys build-web --out <dir>/web/autophys        # tento-web bundles html/routes (html/tsconfig.json)
-deno run -A e2e/approve.ts <autophys> <shots-dir>   # serve on 127.0.0.1:4795, deck -> app -> Approve
+deno run -A html/e2e/fixture-flow.ts <base-url> <shots-dir> # 60 shell checks
+deno run -A html/e2e/daemon-flow.ts <base-url> <shots-dir>  # seeded daemon, SSE, 409, pairing
 ```
 
 The tests cover:
@@ -124,10 +131,6 @@ The tests cover:
   scoring lower; the full round trip through Controller, Store and Source (edit, refused
   values, approve posted as `edited`, withdraw, reject, restore, each record applied once).
 - All three boundary tests.
-
-Screenshots on rwc-dev-01 are in `~/workspace/fleet/evidence/autophys-ui/`:
-`20-26-cookbook-*.png` come from the real cookbook build, and `01-15` from an earlier
-temporary harness.
 
 ## Decisions (agent-chosen, pending operator review)
 

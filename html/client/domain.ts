@@ -62,6 +62,9 @@ export type Measurement = {
   /** NaN marks a missing sample (exported as null). */
   output: number[];
   sigmaEstimate: number;
+  /** False when the source records no input channel or series. */
+  inputRecorded?: boolean;
+  sigmaSource?: "declared" | "estimated";
 };
 
 export type Landscape = {
@@ -87,7 +90,7 @@ export type SensitivityResult = {
 
 export type Fit = {
   n: number;
-  state: "converged" | "running";
+  state: "converged" | "running" | "failed";
   variant: string | null;
   measurements: string[];
   free: string[];
@@ -97,7 +100,8 @@ export type Fit = {
   chi2N: number;
   evals: number;
   starts: number;
-  basins: number;
+  /** Distinct minima among the starts; null when the source did not record them. */
+  basins: number | null;
   loss: "linear" | "soft_l1";
   /** Lag-1 autocorrelation of the residuals per measurement. */
   lag1: Record<string, number>;
@@ -110,6 +114,11 @@ export type Fit = {
   /** Steady-state gain and phase against frequency, when the fit includes a sine measurement. */
   frequency: FrequencyResponse | null;
   seed: number;
+  /**
+   * What the SDK's identifiability rule concluded at this fit, when only its summary was
+   * recorded (the daemon's step records carry no singular values or vectors). Null otherwise.
+   */
+  identification?: { identified: string[]; nonIdentified: string[]; condition: number | null } | null;
 };
 
 export type GainPhase = { gain: number; phase: number };
@@ -140,7 +149,7 @@ export type Proposal = {
   /** Ranking against the catalog's other candidates at `atFit`; the proposal's own row is recomputed on edit. */
   ranking: RankedCandidate[];
   /** Parameters not identified before the experiment, and their expected 1σ (log) after it; null stays unbounded. */
-  expected: { param: string; after: number | null }[];
+  expected: { param: string; after: number | null; before?: "unknown" }[];
   /** Where the SDK will send the data from. */
   dataFrom: string;
   /** The drive as proposed and the response the ranking fit predicts for it. */
@@ -152,13 +161,17 @@ export type Proposal = {
    * A non-finite `after` value means that parameter stays unbounded there.
    */
   outlook: ProposalOutlook;
+  /** Whether the SDK attached the approved experiment's data (the daemon's data_attached); absent: inferred from the measurements. */
+  delivered?: boolean;
 };
 
 export type ProposalOutlook = { axes: { name: string; values: number[] }[]; score: number[]; after: Record<string, number[]> };
 
 export type Validation =
-  | { state: "needs-data" }
-  | { state: "passed" | "failed"; measurement: string; fit: number; chi2N: number; threshold: number; worst: { param: string; relative: number }; predicted: number[] };
+  | { state: "needs-data"; recorded?: boolean }
+  | { state: "passed" | "failed"; measurement: string; fit: number; chi2N: number; threshold: number; worst: { param: string; relative: number }; predicted: number[] }
+  /** The outcome's held-out check as recorded by the SDK: no predicted series, no worst parameter. */
+  | { state: "summary"; passed: boolean; chi2N: number; threshold: number; measurements: string[] };
 
 export type Investigation = {
   id: string;
@@ -182,3 +195,6 @@ export type Investigation = {
 export type Project = { id: string; name: string; configs: ProjectConfig[]; investigations: Investigation[] };
 
 export type Workspace = { user: string; projects: Project[] };
+
+/** A device waiting for the operator to approve its pairing (O-3): never a key. */
+export type Pairing = { code: string; device: string; client: string; expires: string };

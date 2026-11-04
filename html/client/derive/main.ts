@@ -5,6 +5,7 @@ import {
   configPanels, edgePanels, envelopePanels, fitPanels, frequencyPanels, landscapeChart, measurementPanels, proposalPanels, residualPanels, sensitivityPanels,
   validationPanels, VIEW_LABEL,
 } from "./charts.ts";
+import { simulatorLabel } from "../config.ts";
 import { int, sig } from "./fmt.ts";
 import { displayedFields, outlookAt } from "./outlook.ts";
 import { configFor, defaultSelection, experimentsUsed, ids, latestConfig, latestFit, parseSel, projectOf, proposalLabel, rankOf, type State, statusText } from "./shared.ts";
@@ -13,7 +14,7 @@ import { configFor, defaultSelection, experimentsUsed, ids, latestConfig, latest
 const EXPORT: Action = { name: "export", label: "Export", variant: "ghost" };
 
 const credit = (c: ProjectConfig, inv: Investigation, measurements: string[], extra = "") =>
-  `${c.simulator.name} v${c.simulator.version} · ${measurements.join(" + ") || "no data"} · seed ${inv.seed}${extra}`;
+  `${simulatorLabel(c)} · ${measurements.join(" + ") || "no data"} · seed ${Number.isFinite(inv.seed) ? inv.seed : "not recorded"}${extra}`;
 
 /** The ranking bars, the proposal's own row at its current (possibly edited) fields. */
 export function rankingBars(s: State, inv: Investigation, p: Proposal): BarRow[] {
@@ -32,7 +33,7 @@ export function mainModel(s: State): MainModel {
     case "config": {
       const c = latestConfig(project);
       return { crumb: [{ label: project.name }, { label: "Configuration" }], meta: `v${c.version} · ${c.hash.slice(0, 12)}`, actions: [EXPORT],
-        body: { kind: "panels", panels: configPanels(c) }, credit: `${c.simulator.name} v${c.simulator.version} · source ${c.simulator.sourceHash} · config ${c.hash.slice(0, 12)}` };
+        body: { kind: "panels", panels: configPanels(c) }, credit: `${simulatorLabel(c)} · source ${c.simulator.sourceHash || "–"} · config ${c.hash.slice(0, 12)}` };
     }
     case "investigation": {
       const c = configFor(project, sel.inv), fit = latestFit(sel.inv);
@@ -56,8 +57,11 @@ export function mainModel(s: State): MainModel {
       const meta = fit.state === "running" ? `running · ${fit.evals} evals` : view === "landscape" && fit.landscape
         ? `${fit.landscape.xs.length - 1} × ${fit.landscape.ys.length - 1} · ${fit.landscape.held} held` : `${fit.evals} evals · χ²/N ${fit.chi2N.toFixed(2)}`;
       let body: MainModel["body"];
-      if (view === "landscape") { const chart = landscapeChart(c, fit); body = chart ? { kind: "panels", panels: [{ charts: [chart] }] } : { kind: "empty", text: "No landscape for this fit" }; }
-      else if (view === "residuals") body = { kind: "panels", panels: residualPanels(ctx, fit) };
+      if (view === "landscape") { const chart = landscapeChart(c, fit); body = chart ? { kind: "panels", panels: [{ charts: [chart] }] } : { kind: "empty", text: "No landscape recorded for this fit" }; }
+      else if (view === "residuals") {
+        const panels = residualPanels(ctx, fit);
+        body = panels.length ? { kind: "panels", panels } : { kind: "empty", text: "Residuals need the fit's curve, which is not recorded for this fit" };
+      }
       else if (view === "envelope") body = { kind: "panels", panels: envelopePanels(ctx, fit) };
       else if (view === "frequency") body = { kind: "panels", panels: frequencyPanels(ctx, fit) };
       else if (view === "zoom:edges") body = { kind: "panels", panels: edgePanels(ctx, fit), columns: 2 };
@@ -65,7 +69,12 @@ export function mainModel(s: State): MainModel {
       return { crumb, meta, actions: [EXPORT], body, credit: credit(c, sel.inv, fit.measurements, ` · fit #${fit.n}`) };
     }
     case "sensitivity": {
-      const c = configFor(project, sel.inv);
+      const c = configFor(project, sel.inv), id = sel.fit.identification;
+      if (!sel.fit.sensitivity && id) {
+        return { crumb: [invCrumb(sel.inv), { label: "Sensitivity" }], meta: `${id.identified.length} of ${id.identified.length + id.nonIdentified.length} identified · at Fit #${sel.fit.n}`, actions: [EXPORT],
+          body: { kind: "empty", text: `Identified: ${id.identified.join(", ") || "none"}. Not identified: ${id.nonIdentified.join(", ") || "none"}. Singular values and directions are not recorded.` },
+          credit: credit(c, sel.inv, sel.fit.measurements, ` · fit #${sel.fit.n}`) };
+      }
       return { crumb: [invCrumb(sel.inv), { label: "Sensitivity" }], meta: `rank ${rankOf(sel.fit.sensitivity!)} of ${sel.fit.sensitivity!.names.length} · at Fit #${sel.fit.n}`, actions: [EXPORT],
         body: { kind: "panels", panels: sensitivityPanels(sel.fit) }, credit: credit(c, sel.inv, sel.fit.measurements, ` · fit #${sel.fit.n}`) };
     }
@@ -76,7 +85,12 @@ export function mainModel(s: State): MainModel {
     }
     case "validate": {
       const c = configFor(project, sel.inv), v = sel.inv.validation;
-      if (v.state === "needs-data") return { crumb: [invCrumb(sel.inv), { label: "Validate" }], meta: "needs data", actions: [EXPORT], body: { kind: "empty", text: "Needs a held-out measurement" }, credit: credit(c, sel.inv, []) };
+      if (v.state === "needs-data") return { crumb: [invCrumb(sel.inv), { label: "Validate" }], meta: "needs data", actions: [EXPORT], body: { kind: "empty", text: sel.inv.measurements.some((m) => m.split === "test") ? "Held-out measurements are present; no validation check recorded yet" : "Needs a held-out measurement" }, credit: credit(c, sel.inv, []) };
+      if (v.state === "summary") {
+        return { crumb: [invCrumb(sel.inv), { label: "Validate" }], meta: `χ²/N ${v.chi2N.toFixed(2)} · ${v.passed ? "passed" : "failed"}`, actions: [EXPORT],
+          body: { kind: "empty", text: `Held-out check ${v.passed ? "passed" : "failed"}: χ²/N ${v.chi2N.toFixed(2)} (≤ ${sig(v.threshold, 3)})${v.measurements.length ? ` on ${v.measurements.join(", ")}` : ""}. The predicted series is not recorded.` },
+          credit: credit(c, sel.inv, v.measurements) };
+      }
       const fit = sel.inv.fits.find((f) => f.n === v.fit)!;
       return { crumb: [invCrumb(sel.inv), { label: "Validate" }], meta: `χ²/N ${v.chi2N.toFixed(2)} on ${v.measurement}`, actions: [EXPORT],
         body: { kind: "panels", panels: validationPanels({ config: c, inv: sel.inv }, fit, v.measurement, v.predicted) }, credit: credit(c, sel.inv, [v.measurement], ` · fit #${fit.n}`) };

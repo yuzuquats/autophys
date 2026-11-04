@@ -1,0 +1,383 @@
+/// <reference lib="deno.ns" />
+/**
+ * daemon(): the /api/v1 source against a fake fetch and a fake EventSource. Load maps the
+ * daemon's workspace onto the domain; the stream resumes from its last gseq after a drop;
+ * a refused POST (409) becomes the details panel's "Not saved" notice; pairings are listed
+ * and decided; firstOf falls back to the fixture when the daemon does not answer.
+ */
+import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
+import { ApiError, daemon, type Cursor, type DaemonOptions, type EventStream, firstOf } from "./api.ts";
+import { Controller } from "./controller.ts";
+import { fixtures } from "./fixtures/source.ts";
+import { Store } from "./store.ts";
+import type { WireRecord, WireWorkspace } from "./wire.ts";
+
+const settle = () => new Promise((r) => setTimeout(r, 0));
+
+const CONFIG = {
+  name: "bench",
+  simulator: { name: "oscillator", source_hash: "abc123def", outputs: ["x"] },
+  params: { m: { unit: "kg", lo: 0.1, hi: 10, initial: 1, fixed: false }, k: { unit: "N/m", lo: 1, hi: 100, initial: 10, fixed: false }, b: { unit: "m", lo: -1, hi: 1, initial: null, fixed: true } },
+  catalog: { free_response: { settings: { x0: 0.1, duration: 2 }, max_runs: 1 }, sine: { settings: { amplitude: 1, frequency: 0.4, duration: 2 }, max_runs: null, edit: { amplitude: [0.5, 2], frequency: [0.1, 1] } } },
+  noise: { sigma: { x: 0.01 }, estimate: false, bias: "off" },
+  budgets: { max_steps: 24, max_simulations: 20000, max_experiments: 2 },
+  stop: {}, policy: { kind: "scripted", effort: "low", max_tokens: 2400 }, n_starts: 4,
+};
+const OUTLOOK = { axes: [{ name: "amplitude", values: [0.5, 1, 2] }, { name: "frequency", values: [0.1, 0.4, 1] }], score: [1, 2, 3, 4, 5, 6, 7, 8, 9], after: { m: [0.5, 0.4, 0.3, 0.3, 0.2, 0.1, 0.2, 0.1, 0.05], k: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1] } };
+const T0 = Date.UTC(2026, 10, 4, 10, 0) / 1000;
+let seq = 0;
+const rec = (kind: string, payload: Record<string, unknown>, inv = "inv_1"): WireRecord =>
+  ({ id: `r${seq}`, investigation: inv, seq: seq, kind, ts: T0 + 60 * seq++, payload, prev_hash: "", hash: "" });
+
+function workspace(): WireWorkspace {
+  seq = 0;
+  const records = [
+    rec("investigation", { project_id: "p_bench", config_version: "v1hash", title: "bench A", seed: 7, overrides: { free: ["m", "k"] } }),
+    rec("measurement", { observation: { experiment: "free_response", settings: { x0: 0.1, duration: 2 }, t: [0, 0.5, 1, 1.5, 2], y: { x: [0.1, 0.05, null, -0.02, 0.01] }, sigma: { x: 0.01 }, split: "train", source: "bench", meta: {} } }),
+    rec("measurement", { observation: { experiment: "free_response", settings: { x0: 0.1, duration: 2 }, t: [0, 1, 2], y: { x: [0.1, 0, 0.01] }, sigma: { x: 0.01 }, split: "validation", source: "bench", meta: {} } }),
+    rec("run", { fit_id: 1, model: "base", simulator: "oscillator", params: { m: 1.1, k: 9.5 }, loss: 3.2, chi2_per_n: 1.04, n: 5, nfev: 40, status: 1, message: "", success: true, loss_kind: "linear", at_bounds: [], starts: [{}, {}, {}], seed: 7 }),
+    rec("step", { index: 1, fit_id: 1, decision: { action: "analyze_sensitivity" }, result: { condition_number: 1.5e7, identified: ["k"], non_identified: ["m"], non_identifiable: ["m·k"] }, simulations: 12 }),
+    rec("step", { index: 2, fit_id: 1, decision: { action: "rank_experiments" }, result: { criterion: "min_eig", ranking: [["sine", 40, 900], ["free_response", 0, 10]] }, simulations: 30 }),
+    rec("proposal", { proposal_id: "prop_1", event: "proposed", experiment: "sine", settings: { amplitude: 1, frequency: 0.4, duration: 2 }, rationale: "a sine pins m", criterion: "min_eig", score: 5, outlook: OUTLOOK }),
+    rec("outcome", { status: "awaiting_data", validation: null, simulations: 42 }),
+  ];
+  return { cursor: records.length, projects: [{ id: "p_bench", name: "Bench" }], config_versions: [{ project_id: "p_bench", version: "v1hash", config: CONFIG }], records };
+}
+
+type Call = { url: string; init: RequestInit };
+function fakeDaemon(answer: (c: Call) => Response | undefined = () => undefined) {
+  const calls: Call[] = [], streams: { url: string; fire: Record<string, ((e: { data: string; lastEventId: string }) => void)[]>; closed: boolean }[] = [];
+  const ws = workspace();
+  const opts: DaemonOptions = {
+    user: "james",
+    newId: () => `ui-${calls.length}`,
+    setTimer: (fn) => { queueMicrotask(fn); return 0; },
+    clearTimer: () => {},
+    fetch: (input, init) => {
+      const c = { url: String(input), init: init ?? {} };
+      calls.push(c);
+      const own = answer(c);
+      if (own) return Promise.resolve(own);
+      if (c.url === "/api/v1/workspace") return Promise.resolve(Response.json(ws));
+      if (c.url === "/api/v1/pairings") return Promise.resolve(Response.json({ pairings: [] }));
+      return Promise.resolve(Response.json({ error: "not_found", message: "unknown route" }, { status: 404 }));
+    },
+    openStream: (url) => {
+      const s = { url, fire: {} as Record<string, ((e: { data: string; lastEventId: string }) => void)[]>, closed: false };
+      streams.push(s);
+      return {
+        addEventListener: (type: string, fn: (e: { data: string; lastEventId: string }) => void) => { (s.fire[type] ??= []).push(fn); },
+        close: () => { s.closed = true; },
+      } as EventStream;
+    },
+  };
+  const emit = (gseq: Cursor, r: WireRecord) => streams.at(-1)!.fire.record?.forEach((fn) => fn({ data: JSON.stringify(r), lastEventId: String(gseq) }));
+  const drop = () => streams.at(-1)!.fire.error?.forEach((fn) => (fn as () => void)());
+  return { calls, streams, opts, emit, drop, ws };
+}
+
+Deno.test("daemon: load maps projects, config versions and every record kind onto the domain", async () => {
+  const d = fakeDaemon(), snap = await daemon(d.opts).load();
+  assertEquals([snap.source, snap.gseq, snap.events], ["daemon", 8, ["approved", "edited", "rejected"]]);
+  const [project] = snap.workspace.projects;
+  assertEquals([project.id, project.name, project.configs.map((c) => [c.version, c.hash])], ["p_bench", "Bench", [[1, "v1hash"]]]);
+  const c = project.configs[0];
+  assertEquals(c.params.map((p) => [p.name, p.coord, p.fixed]), [["m", "log", false], ["k", "log", false], ["b", "linear", true]]);
+  assert(Number.isNaN(c.params[2].initial), "a missing initial stays NaN, it is not invented");
+  assertEquals(c.catalog.map((e) => [e.id, e.label, e.maxRuns]), [["free_response", "Free response", 1], ["sine", "Sine", null]]);
+  assertEquals(c.catalog[1].settings.find((s) => s.name === "frequency"), { name: "frequency", label: "frequency", unit: "", lo: 0.1, hi: 1, default: 0.4 });
+  const inv = project.investigations[0];
+  assertEquals([inv.id, inv.name, inv.configVersion, inv.free, inv.seed, inv.updated], ["inv_1", "bench A", 1, ["m", "k"], 7, "Nov 4 10:07 UTC"]);
+  assertEquals(inv.measurements.map((m) => [m.id, m.split, m.output.length]), [["free_response@1", "train", 5], ["free_response@2", "test", 3]]);
+  assert(Number.isNaN(inv.measurements[0].output[2]), "a null sample is NaN");
+  assertEquals(inv.measurements[0].rate, 2);
+  const fit = inv.fits[0];
+  assertEquals([fit.n, fit.chi2N, fit.evals, fit.starts, fit.basins, fit.measurements, fit.curves], [1, 1.04, 40, 3, null, ["free_response@1"], {}]);
+  assertEquals(fit.identification, { identified: ["k"], nonIdentified: ["m"], condition: 1.5e7 });
+  const p = inv.proposals[0];
+  assertEquals([p.id, p.status, p.atFit, p.hypothesis, p.fixedSettings], ["prop_1", "proposed", 1, "a sine pins m", { duration: 2 }]);
+  assertEquals(p.fields.map((f) => [f.name, f.value, f.lo, f.hi]), [["amplitude", 1, 0.5, 2], ["frequency", 0.4, 0.1, 1]]);
+  assertEquals(p.ranking, [{ label: "sine", score: 40, proposal: true }, { label: "free_response", score: 0, proposal: false }]);
+  assertEquals(p.expected, [{ param: "m", after: null }], "only what was not identified");
+  assertEquals(inv.budget, { steps: 2, simulations: 42, experiments: 2 });
+});
+
+Deno.test("daemon: the workbench renders the seeded investigation, with gaps said, not invented", async () => {
+  const d = fakeDaemon(), store = new Store(daemon(d.opts)), ctl = new Controller(store, { user: "james", now: () => "10:46" });
+  await store.start();
+  const side = ctl.view().sidebar;
+  assertEquals(side.nodes[0].label, "bench A");
+  assertEquals(side.nodes[0].children!.map((n) => n.label), ["Measurements", "Fit #1", "Sensitivity", "Sine 0.4 Hz", "Validate"]);
+  ctl.handle({ kind: "select", id: "inv_1/fit-1/fit" });
+  assertStringIncludes(JSON.stringify(ctl.view().main.body), "fit curve not recorded");
+  ctl.handle({ kind: "select", id: "inv_1/fit-1/residuals" });
+  assertEquals(ctl.view().main.body.kind, "empty");
+  ctl.handle({ kind: "select", id: "inv_1/prop/prop_1" });
+  const details = ctl.view().details;
+  assertEquals(details.status.text, "Awaiting approval");
+  assertEquals(details.decision?.map((a) => a.name), ["approve", "reject"]);
+  assertStringIncludes(JSON.stringify(ctl.view().main.body), "preview not recorded");
+});
+
+Deno.test("daemon: the stream resumes with after=<last gseq> after a drop and skips what it saw", async () => {
+  const d = fakeDaemon(), src = daemon(d.opts), store = new Store(src);
+  await store.start();
+  assertEquals(d.streams[0].url, "/api/v1/stream?after=8");
+  seq = 8;
+  d.emit(9, rec("proposal", { proposal_id: "prop_1", event: "approved", by: "sdk" }));
+  assertEquals(store.snapshot()!.workspace.projects[0].investigations[0].proposals[0].status, "approved");
+  d.drop();
+  await settle();
+  assert(d.streams[0].closed, "the dropped stream is closed");
+  assertEquals(d.streams.map((s) => s.url), ["/api/v1/stream?after=8", "/api/v1/stream?after=9"]);
+  d.emit(9, rec("proposal", { proposal_id: "prop_1", event: "approved", by: "sdk" }));
+  seq = 10;
+  d.emit(10, rec("measurement", { observation: { experiment: "sine", settings: { amplitude: 1, frequency: 0.4 }, t: [0, 1], y: { x: [0, 1] }, sigma: { x: 0.01 }, split: "train" } }));
+  assertEquals(store.applied.map((r) => r.gseq), [9, 10], "the replayed 9 applies once");
+  assertEquals(store.snapshot()!.gseq, 10);
+  assertEquals(store.snapshot()!.workspace.projects[0].investigations[0].measurements.at(-1)!.id, "sine@1");
+});
+
+Deno.test("daemon: a 409 from the approval route shows as Not saved in details", async () => {
+  const d = fakeDaemon((c) => c.url.endsWith("/approvals")
+    ? Response.json({ error: "conflict", message: "proposal is approved; approved is not allowed" }, { status: 409 }) : undefined);
+  const store = new Store(daemon(d.opts)), ctl = new Controller(store, { user: "james", now: () => "10:46" });
+  await store.start();
+  ctl.handle({ kind: "select", id: "inv_1/prop/prop_1" });
+  ctl.handle({ kind: "action", name: "approve" });
+  await settle(); await settle();
+  const post = d.calls.find((c) => c.url.endsWith("/approvals"))!;
+  assertEquals(post.url, "/api/v1/investigations/inv_1/proposals/prop_1/approvals");
+  assertEquals([post.init.method, (post.init.headers as Record<string, string>)["content-type"]], ["POST", "application/json"]);
+  assertEquals(post.init.credentials, "same-origin");
+  assertEquals((post.init.headers as Record<string, string>).authorization, undefined);
+  const env = JSON.parse(String(post.init.body));
+  assertEquals({ ...env, id: env.id.startsWith("ui-") }, { id: true, kind: "proposal", payload: { proposal_id: "prop_1", event: "approved", by: "james" } });
+  assertStringIncludes(ctl.error!, "409 conflict: proposal is approved");
+  const notice = ctl.view().details.sections[0];
+  assertEquals(notice.heading, "Not saved");
+  assertEquals(notice.blocks[0], { kind: "text", text: "Not saved: 409 conflict: proposal is approved; approved is not allowed", tone: "danger" });
+  ctl.handle({ kind: "select", id: "inv_1" });
+  assert(ctl.view().details.sections[0].heading !== "Not saved", "the next pick clears it");
+});
+
+Deno.test("daemon: an edit posts every proposed setting, edited ones replaced, and applies the answer once", async () => {
+  const d = fakeDaemon((c) => {
+    if (!c.url.endsWith("/approvals")) return undefined;
+    const env = JSON.parse(String(c.init.body));
+    return Response.json({ record: { id: env.id, investigation: "inv_1", seq: 8, kind: "proposal", ts: T0 + 600, payload: env.payload, prev_hash: "", hash: "" }, gseq: 9 }, { status: 201 });
+  });
+  const store = new Store(daemon(d.opts)), ctl = new Controller(store, { user: "james", now: () => "10:46" });
+  await store.start();
+  ctl.handle({ kind: "select", id: "inv_1/prop/prop_1" });
+  ctl.handle({ kind: "field", name: "amplitude", raw: "1.5", commit: true });
+  ctl.handle({ kind: "action", name: "approve" });
+  await settle(); await settle();
+  const env = JSON.parse(String(d.calls.find((c) => c.url.endsWith("/approvals"))!.init.body));
+  assertEquals(env.payload, { proposal_id: "prop_1", event: "edited", by: "james", settings: { amplitude: 1.5, frequency: 0.4, duration: 2 } });
+  assertEquals((d.calls.find((c) => c.url.endsWith("/approvals"))!.init.headers as Record<string, string>)["idempotency-key"], env.id);
+  const p = store.snapshot()!.workspace.projects[0].investigations[0].proposals[0];
+  assertEquals([p.status, p.decidedBy, p.fields[0].value, p.fields[0].original], ["approved", "james", 1.5, 1]);
+  d.emit(9, { id: env.id, investigation: "inv_1", seq: 8, kind: "proposal", ts: T0 + 600, payload: env.payload });
+  assertEquals(store.applied.length, 1, "the stream echo of the POST's record applies once");
+  assertEquals(ctl.view().details.actions, undefined, "the daemon records no withdraw, so none is offered");
+});
+
+Deno.test("daemon: records that arrive out of order still all apply", async () => {
+  const d = fakeDaemon(), store = new Store(daemon(d.opts));
+  await store.start();
+  seq = 9;
+  d.emit(10, rec("step", { index: 3, decision: { action: "inspect_data" }, simulations: 0 }));
+  seq = 8;
+  store.apply({ gseq: 9, id: "r8", investigation: "inv_1", seq: 8, kind: "record", ts: "", record: rec("proposal", { proposal_id: "prop_1", event: "rejected", by: "sdk" }) });
+  const inv = store.snapshot()!.workspace.projects[0].investigations[0];
+  assertEquals([inv.proposals[0].status, inv.budget.steps], ["rejected", 3]);
+});
+
+Deno.test("daemon: decisions it does not record are refused before any request", async () => {
+  const d = fakeDaemon(), src = daemon(d.opts);
+  await src.load();
+  const n = d.calls.length;
+  const err = await src.post("/investigations/inv_1/proposals/prop_1/approvals", { event: "unapproved" }).catch((e) => e);
+  assert(err instanceof ApiError && err.code === "unsupported", String(err));
+  assertEquals(d.calls.length, n);
+});
+
+Deno.test("daemon: pairings are listed and approved from the configuration panel (O-3)", async () => {
+  let pending = [{ user_code: "WXYZ-1234", device_name: "laptop", client: "autophys-py 0.1", expires: "2026-11-04T10:10:00Z" }];
+  const d = fakeDaemon((c) => {
+    if (c.url === "/api/v1/pairings") return Response.json({ pairings: pending });
+    if (c.url === "/api/v1/pairings/WXYZ-1234/approve") { pending = []; return Response.json({ pairing: {} }); }
+  });
+  const store = new Store(daemon(d.opts)), ctl = new Controller(store, { user: "james", now: () => "10:46" });
+  await store.start();
+  await settle();
+  assertEquals(store.snapshot()!.pairings, [{ code: "WXYZ-1234", device: "laptop", client: "autophys-py 0.1", expires: "2026-11-04T10:10:00Z" }]);
+  assertEquals(ctl.view().sidebar.pinned.trail, { badge: "1" });
+  ctl.handle({ kind: "select", id: "config:p_bench" });
+  assertEquals(ctl.view().details.actions?.map((a) => a.name), ["pair-approve:WXYZ-1234", "pair-deny:WXYZ-1234"]);
+  ctl.handle({ kind: "action", name: "pair-approve:WXYZ-1234" });
+  await settle(); await settle(); await settle();
+  const post = d.calls.find((c) => c.url.endsWith("/approve"))!;
+  assertEquals([post.init.method, (post.init.headers as Record<string, string>)["content-type"], post.init.body], ["POST", "application/json", "{}"]);
+  assertEquals(store.snapshot()!.pairings, []);
+  assertEquals(ctl.view().details.actions, undefined);
+});
+
+Deno.test("firstOf: the daemon when it answers, the fixture when it does not", async () => {
+  const up = firstOf(daemon(fakeDaemon().opts), fixtures());
+  assertEquals((await up.load()).source, "daemon");
+  assertEquals((await up.chosen).name, "daemon");
+  const down = firstOf(daemon({ fetch: () => Promise.resolve(new Response("<html>", { status: 404 })) }), fixtures());
+  const snap = await down.load();
+  assertEquals([snap.source, down.name, down.fold], ["fixture", "fixture", undefined]);
+});
+
+Deno.test("daemon: an empty daemon shows an empty workspace, not a crash", async () => {
+  const d = fakeDaemon((c) => c.url === "/api/v1/workspace" ? Response.json({ cursor: 0, projects: [], config_versions: [], investigations: [], proposals: [], records: [] }) : undefined);
+  const store = new Store(daemon(d.opts)), ctl = new Controller(store, { user: "james", now: () => "10:46" });
+  await store.start();
+  assertEquals(ctl.view().main.crumb, [{ label: "No projects yet" }]);
+  ctl.handle({ kind: "select", id: "anything" });
+});
+
+Deno.test("daemon: collection cursor survives a drop; workbook gseq collisions and POST echoes apply once", async () => {
+  const d = fakeDaemon();
+  d.ws.cursor = "prj_bench:8,prj_other:8";
+  const src = daemon(d.opts), store = new Store(src);
+  await store.start();
+  assertEquals(d.streams[0].url, "/api/v1/stream?after=prj_bench%3A8%2Cprj_other%3A8");
+  seq = 8;
+  const approved = rec("proposal", { proposal_id: "prop_1", event: "approved", by: "browser" });
+  // A POST returns a workbook-local integer, before the stream catches up.
+  store.apply({ gseq: 9, id: approved.id, investigation: approved.investigation, seq: approved.seq, kind: "record", ts: "", record: approved });
+  assertEquals(store.snapshot()!.gseq, "prj_bench:8,prj_other:8");
+  d.emit("prj_bench:9,prj_other:8", approved);
+  d.emit("prj_bench:9,prj_other:9", { ...approved, id: "other-r8", investigation: "inv_other", seq: 0, kind: "investigation", payload: { project_id: "p_bench", config_version: "v1hash", title: "second" } });
+  assertEquals(store.applied.length, 2);
+  assertEquals(store.snapshot()!.workspace.projects[0].investigations.length, 2);
+  d.drop();
+  await settle();
+  assertEquals(d.streams.at(-1)!.url, "/api/v1/stream?after=prj_bench%3A9%2Cprj_other%3A9");
+  const n = d.streams.length;
+  store.close();
+  d.drop();
+  await settle();
+  assertEquals(d.streams.length, n, "closing the store cancels reconnects");
+});
+
+Deno.test("daemon: no outlook retains all proposed settings read-only and makes no curves or residual claims", async () => {
+  const d = fakeDaemon();
+  delete d.ws.records.find((r) => r.kind === "proposal")!.payload.outlook;
+  const store = new Store(daemon(d.opts)), ctl = new Controller(store, { user: "james", now: () => "10:46" });
+  await store.start();
+  ctl.handle({ kind: "select", id: "inv_1/prop/prop_1" });
+  assertStringIncludes(JSON.stringify(ctl.view().details), "No outlook grid recorded");
+  assertStringIncludes(JSON.stringify(ctl.view().details), "frequency");
+  assertStringIncludes(JSON.stringify(ctl.view().main), "Sine 0.4 Hz");
+  ctl.handle({ kind: "select", id: "inv_1/fit-1" });
+  assertStringIncludes(JSON.stringify(ctl.view().details), "not recorded");
+  const main = JSON.stringify(ctl.view().main);
+  assert(!main.includes("force · none"), "missing input is not a zero-force chart");
+  store.close();
+});
+
+Deno.test("daemon: the first device can pair before any project exists, and a refusal stays visible", async () => {
+  let approved = false;
+  const d = fakeDaemon((c) => {
+    if (c.url === "/api/v1/workspace") return Response.json({ cursor: "", projects: [], config_versions: [], records: [] });
+    if (c.url === "/api/v1/pairings") return Response.json({ pairings: approved ? [] : [{ user_code: "FIRST", device_name: "first device", client: "test", expires: "soon" }] });
+    if (c.url.endsWith("/FIRST/deny")) return Response.json({ error: "expired_token", message: "code expired; start pairing again" }, { status: 409 });
+    if (c.url.endsWith("/FIRST/approve")) { approved = true; return Response.json({ pairing: {} }); }
+  });
+  const store = new Store(daemon(d.opts)), ctl = new Controller(store, { user: "james", now: () => "" });
+  await store.start();
+  await settle();
+  assertEquals(ctl.view().details.actions?.map((a) => a.name), ["pair-approve:FIRST", "pair-deny:FIRST"]);
+  ctl.handle({ kind: "action", name: "pair-deny:FIRST" });
+  await settle(); await settle();
+  assertStringIncludes(JSON.stringify(ctl.view().details), "code expired; start pairing again");
+  ctl.handle({ kind: "action", name: "pair-approve:FIRST" });
+  await settle(); await settle();
+  assertEquals(approved, true);
+  assertEquals(store.snapshot()!.pairings, []);
+  assert(!JSON.stringify(ctl.view().details).includes("Not saved"));
+  store.close();
+});
+
+Deno.test("daemon: reference refresh brings the first streamed project into an initially empty workspace", async () => {
+  const d = fakeDaemon();
+  const full = structuredClone(d.ws);
+  d.ws.projects = [];
+  d.ws.config_versions = [];
+  d.ws.records = [];
+  d.ws.cursor = "";
+  const store = new Store(daemon(d.opts));
+  await store.start();
+  Object.assign(d.ws, full, { cursor: "prj_bench:8" });
+  d.emit("prj_bench:1", full.records[0]);
+  await settle(); await settle();
+  assertEquals(store.snapshot()!.workspace.projects[0].investigations[0].name, "bench A");
+  store.close();
+});
+
+Deno.test("daemon: reject posts a rejected envelope and does not offer fixture-only restore", async () => {
+  const d = fakeDaemon((c) => {
+    if (!c.url.endsWith("/approvals")) return undefined;
+    const env = JSON.parse(String(c.init.body));
+    return Response.json({ record: { id: env.id, investigation: "inv_1", seq: 8, kind: "proposal", ts: T0, payload: env.payload }, gseq: 9 });
+  });
+  const store = new Store(daemon(d.opts)), ctl = new Controller(store, { user: "james", now: () => "" });
+  await store.start();
+  ctl.handle({ kind: "select", id: "inv_1/prop/prop_1" });
+  ctl.handle({ kind: "action", name: "reject" });
+  await settle(); await settle();
+  assertEquals(store.snapshot()!.workspace.projects[0].investigations[0].proposals[0].status, "rejected");
+  assertEquals(ctl.view().details.actions, undefined);
+  store.close();
+});
+
+
+Deno.test("daemon: a 401 during load asks the host to reauthenticate, stays visible and never falls back to fixtures", async () => {
+  let reauth = 0;
+  const src = firstOf(daemon({ reauth: () => { reauth++; }, fetch: () => Promise.resolve(Response.json({ error: "unauthorized", message: "session expired" }, { status: 401 })) }), fixtures());
+  const store = new Store(src), ctl = new Controller(store, { user: "james", now: () => "" });
+  await store.start().catch(() => {});
+  assertEquals(reauth, 1);
+  assertEquals((await src.chosen).name, "daemon");
+  assertEquals(store.snapshot(), null);
+  assertStringIncludes(JSON.stringify(ctl.view()), "Browser session expired");
+  store.close();
+});
+
+Deno.test("daemon: a 401 POST asks for reauth and preserves the recorded proposal", async () => {
+  let reauth = 0;
+  const d = fakeDaemon((c) => c.url.endsWith("/approvals") ? Response.json({ error: "unauthorized", message: "session expired" }, { status: 401 }) : undefined);
+  const store = new Store(daemon({ ...d.opts, reauth: () => { reauth++; } })), ctl = new Controller(store, { user: "james", now: () => "" });
+  await store.start();
+  ctl.handle({ kind: "select", id: "inv_1/prop/prop_1" });
+  ctl.handle({ kind: "action", name: "approve" });
+  await settle(); await settle();
+  assertEquals(reauth, 1);
+  assertStringIncludes(JSON.stringify(ctl.view().details), "Browser session expired");
+  assertEquals(store.snapshot()!.workspace.projects[0].investigations[0].proposals[0].status, "proposed");
+  store.close();
+});
+
+Deno.test("daemon: SSE auth failure probes the cookie, reauthenticates once and stops reconnecting", async () => {
+  let expired = false, reauth = 0;
+  const d = fakeDaemon((c) => expired && c.url === "/api/v1/pairings" ? Response.json({ error: "unauthorized" }, { status: 401 }) : undefined);
+  const store = new Store(daemon({ ...d.opts, reauth: () => { reauth++; } }));
+  await store.start();
+  await settle();
+  expired = true;
+  d.drop();
+  await settle(); await settle();
+  assertEquals(reauth, 1);
+  assertEquals(d.streams.length, 1);
+  assert(d.streams[0].closed);
+  assertStringIncludes(store.error!, "Browser session expired");
+  await store.refreshPairings();
+  assertEquals(reauth, 1, "overlapping failed calls cannot create a reload storm");
+  store.close();
+});

@@ -20,7 +20,9 @@ export function decide(ws: Workspace, project: string, investigation: string, pr
   return { ...ws, projects: ws.projects.map((x) => (x === at.project ? { ...x, investigations: invs } : x)) };
 }
 
+/** A decision record applied in order; any other record (a daemon record) is the source's own fold. */
 export function applyRecord(ws: Workspace, r: Rec): Workspace | null {
+  if (r.kind !== "proposal") return null;
   const { project, proposal, ...d } = r.payload;
   return decide(ws, project, r.investigation, proposal, d);
 }

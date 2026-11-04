@@ -3,8 +3,8 @@
  * and the small text helpers (status lines, ±, labels).
  */
 import { configOf, sineLabel } from "../config.ts";
-import type { Fit, Investigation, Measurement, Project, ProjectConfig, Proposal, SensitivityResult, Workspace } from "../domain.ts";
-import { awaiting, expectedMeasurement, stateOf } from "../proposal.ts";
+import type { Fit, Investigation, Measurement, Pairing, Project, ProjectConfig, Proposal, SensitivityResult, Workspace } from "../domain.ts";
+import { awaiting, type Decision, expectedMeasurement, stateOf } from "../proposal.ts";
 import { pct, sig } from "./fmt.ts";
 import { type View, viewsOf } from "./charts.ts";
 
@@ -19,10 +19,18 @@ export type Selection = {
   drafts: Record<string, Draft>;
   /** Parsed edits not yet sent (they go with Approve), keyed by draftKey. */
   edits: Record<string, number>;
+  /** The last refused write, shown in details until the next pick or decision. */
+  notice?: string;
 };
 
 /** A selection over a loaded workspace: what every derivation reads. */
-export type State = Selection & { ws: Workspace };
+export type State = Selection & {
+  ws: Workspace;
+  /** Decision events the source records (absent: all). */
+  events?: readonly Decision["event"][];
+  /** Devices waiting to pair (absent: the source has no pairing). */
+  pairings?: Pairing[];
+};
 
 export const draftKey = (inv: Investigation, p: Proposal, field: string) => `${inv.id}/${p.id}/${field}`;
 
@@ -76,7 +84,7 @@ export function parseSel(project: Project, id: string): Sel | null {
     if (view && (fit.state !== "converged" || !viewsOf(configFor(project, inv), inv, fit).includes(view))) return null;
     return { kind: "fit", inv, fit, view: view ?? null };
   }
-  if (part === "sens") { const fit = latestFit(inv); return fit?.sensitivity ? { kind: "sensitivity", inv, fit } : null; }
+  if (part === "sens") { const fit = latestFit(inv); return fit?.sensitivity || fit?.identification ? { kind: "sensitivity", inv, fit } : null; }
   if (part === "prop") { const proposal = inv.proposals.find((p) => p.id === rest[0]); return proposal ? { kind: "proposal", inv, proposal } : null; }
   if (part === "validate") return { kind: "validate", inv };
   return null;
@@ -85,6 +93,7 @@ export function parseSel(project: Project, id: string): Sel | null {
 /** What opens first in a project: the mock's bench A / Fit #1 / Landscape, else the first investigation's latest fit. */
 export function defaultSelection(project: Project): string {
   const inv = project.investigations[0];
+  if (!inv) return ids.config(project);
   const fit = latestFit(inv);
   if (!fit) return ids.inv(inv);
   return project.id === "bench-oscillators" ? ids.view(inv, fit, "landscape") : ids.view(inv, fit, "fit");
@@ -101,7 +110,9 @@ export function ancestors(id: string): string[] {
 }
 
 export function defaultExpanded(project: Project): string[] {
-  const inv = project.investigations[0], fit = latestFit(inv);
+  const inv = project.investigations[0];
+  if (!inv) return [];
+  const fit = latestFit(inv);
   return [inv.id, `${inv.id}/data`, ...(fit ? [ids.fit(inv, fit)] : [])];
 }
 
@@ -119,7 +130,10 @@ export function plusMinus(c: ProjectConfig, name: string, std: number): string {
 
 export const rankOf = (s: SensitivityResult) => s.kinds.filter((k) => k === "identifiable").length;
 
-export const proposalLabel = (p: Proposal) => (p.experiment === "sine" ? sineLabel(p.fields.find((f) => f.name === "frequency")!.value) : p.experiment);
+export const proposalLabel = (p: Proposal) => {
+  const frequency = p.fields.find((f) => f.name === "frequency")?.value ?? p.fixedSettings.frequency;
+  return p.experiment === "sine" && Number.isFinite(frequency) ? sineLabel(frequency) : p.experiment;
+};
 
 const trainCount = (inv: Investigation) => inv.measurements.filter((m) => m.split === "train").length;
 export const experimentsUsed = (inv: Investigation) => trainCount(inv) + awaiting(inv).length;
@@ -130,7 +144,7 @@ export function statusText(inv: Investigation): { text: string; tone?: "ok" | "r
     case "awaiting-data": return { text: `Waiting for data · ${inv.host}` };
     case "awaiting-agent": return { text: `Waiting for the agent's next step · ${inv.host}` };
     case "running": return { text: `Running · step ${inv.progress!.done} of ${inv.progress!.total} · ${inv.host}`, tone: "run" };
-    case "validated": return { text: `Validated ${inv.validation.state === "needs-data" ? "" : pct(inv.validation.worst.relative)} · ${inv.updated}`, tone: "ok" };
+    case "validated": return { text: `Validated${inv.validation.state === "passed" || inv.validation.state === "failed" ? ` ${pct(inv.validation.worst.relative)}` : ""} · ${inv.updated}`, tone: "ok" };
     case "inconclusive": return { text: `Inconclusive · ${inv.updated}`, tone: "warn" };
   }
 }

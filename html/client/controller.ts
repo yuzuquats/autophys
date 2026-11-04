@@ -16,6 +16,7 @@ export type Env = { user: string; now: () => string };
 
 export type Effect =
   | { kind: "post"; path: string; body: Decision }
+  | { kind: "pairing"; code: string; approve: boolean }
   | { kind: "download"; filename: string; type: string; data: string }
   | { kind: "picked" };
 
@@ -23,7 +24,7 @@ export type Step = { selection: Selection; effects: Effect[] };
 
 export function initialSelection(ws: Workspace): Selection {
   return {
-    projectId: ws.projects[0].id,
+    projectId: ws.projects[0]?.id ?? "",
     selected: Object.fromEntries(ws.projects.map((p) => [p.id, defaultSelection(p)])),
     expanded: Object.fromEntries(ws.projects.map((p) => [p.id, defaultExpanded(p)])),
     drafts: {}, edits: {},
@@ -36,6 +37,13 @@ const without = <T>(r: Record<string, T>, keys: string[]) => Object.fromEntries(
 
 export function reduce(sel: Selection, snap: Snapshot, intent: Intent, env: Env): Step {
   const ws = snap.workspace, project = ws.projects.find((p) => p.id === sel.projectId) ?? ws.projects[0];
+  // A refused write is shown until the next pick or decision.
+  if (sel.notice && (intent.kind === "select" || intent.kind === "switch" || intent.kind === "action")) sel = without(sel, ["notice"]) as Selection;
+  if (intent.kind === "action") {
+    const pairing = /^pair-(approve|deny):(.+)$/.exec(intent.name);
+    if (pairing && snap.pairings?.some((p) => p.code === pairing[2])) return { selection: sel, effects: [{ kind: "pairing", code: pairing[2], approve: pairing[1] === "approve" }] };
+  }
+  if (!project) return none(sel);
   const at = parseSel(project, sel.selected[project.id] ?? "");
   switch (intent.kind) {
     case "select": {
@@ -65,7 +73,7 @@ export function reduce(sel: Selection, snap: Snapshot, intent: Intent, env: Env)
       const name = intent.name;
       if (name === "export") return { selection: sel, effects: [json(`autophys-${snap.source}.json`, exportDocument(snap, sel))] };
       const inv = at && "inv" in at ? at.inv : null;
-      if (inv && name === "export-investigation") return { selection: sel, effects: [json(`autophys-${inv.id}.json`, { demo: true, source: snap.source, investigation: inv })] };
+      if (inv && name === "export-investigation") return { selection: sel, effects: [json(`autophys-${inv.id}.json`, { demo: snap.source === "fixture", source: snap.source, investigation: inv })] };
       if (inv && name === "report") return { selection: sel, effects: [{ kind: "download", filename: `autophys-${inv.id}-report.md`, type: "text/markdown", data: reportText(snap, project, inv) }] };
       if (at?.kind !== "proposal") return none(sel);
       const p = at.proposal, keys = p.fields.map((f) => draftKey(at.inv, p, f.name));
@@ -78,8 +86,9 @@ export function reduce(sel: Selection, snap: Snapshot, intent: Intent, env: Env)
           : { event: "approved", by: env.user, at: env.now() });
       }
       if (name === "reject" && p.status === "proposed") return post({ event: "rejected", by: env.user, at: env.now() });
-      if (name === "withdraw" && p.status === "approved") return post({ event: "unapproved" });
-      if (name === "restore" && p.status === "rejected") return post({ event: "restored" });
+      const allowed = (e: Decision["event"]) => !snap.events || snap.events.includes(e);
+      if (name === "withdraw" && p.status === "approved" && allowed("unapproved")) return post({ event: "unapproved" });
+      if (name === "restore" && p.status === "rejected" && allowed("restored")) return post({ event: "restored" });
       return none(sel);
     }
   }
@@ -87,7 +96,7 @@ export function reduce(sel: Selection, snap: Snapshot, intent: Intent, env: Env)
 
 /** The whole state as JSON: workspace (missing samples become null), selection, source. */
 export function exportDocument(snap: Snapshot, sel: Selection) {
-  return { demo: true, source: snap.source, gseq: snap.gseq, project: sel.projectId, selected: sel.selected, workspace: snap.workspace };
+  return { demo: snap.source === "fixture", source: snap.source, gseq: snap.gseq, project: sel.projectId, selected: sel.selected, workspace: snap.workspace };
 }
 
 export function reportText(snap: Snapshot, project: Project, inv: Investigation): string {
@@ -107,7 +116,7 @@ export function reportText(snap: Snapshot, project: Project, inv: Investigation)
 export class Controller {
   private sel: Selection | null = null;
   private subs = new Set<() => void>();
-  /** The last refused post, shown nowhere yet but kept for tests and the console. */
+  /** The last refused write; the details panel shows it (selection.notice) until the next pick. */
   error: string | null = null;
   shell: { download(filename: string, type: string, data: string): void; picked(): void } = { download: () => {}, picked: () => {} };
 
@@ -123,7 +132,13 @@ export class Controller {
 
   view(): View {
     const snap = this.store.snapshot(), sel = this.selection;
-    return derive(snap, sel ?? { projectId: "", selected: {}, expanded: {}, drafts: {}, edits: {} });
+    const view = derive(snap, sel ?? { projectId: "", selected: {}, expanded: {}, drafts: {}, edits: {} }, this.store.source.name);
+    const error = this.store.error;
+    if (!error) return view;
+    return { ...view,
+      main: snap ? view.main : { ...view.main, crumb: [{ label: "Connection error" }], body: { kind: "empty", text: error } },
+      details: { ...view.details, sections: [{ heading: "Connection error", blocks: [{ kind: "text", text: error, tone: "danger" }] }, ...view.details.sections] },
+    };
   }
 
   exportDocument(): unknown {
@@ -141,7 +156,8 @@ export class Controller {
     for (const e of step.effects) {
       if (e.kind === "picked") this.shell.picked();
       else if (e.kind === "download") this.shell.download(e.filename, e.type, e.data);
-      else this.store.post(e.path, e.body).then(() => { this.error = null; }, (err) => { this.error = String(err?.message ?? err); this.notify(); });
+      else if (e.kind === "pairing") this.settle(this.store.decidePairing(e.code, e.approve), `${e.approve ? "Approving" : "Denying"} ${e.code}`);
+      else this.settle(this.store.post(e.path, e.body), "Not saved");
     }
     if (changed) this.notify();
   };
@@ -149,6 +165,18 @@ export class Controller {
   subscribe(fn: () => void): () => void {
     this.subs.add(fn);
     return () => this.subs.delete(fn);
+  }
+
+  /** A write's outcome: a refusal becomes the visible notice; success clears it. */
+  private settle(write: Promise<unknown>, what: string): void {
+    write.then(() => {
+      this.error = null;
+      if (this.sel?.notice) { this.sel = without(this.sel, ["notice"]) as Selection; this.notify(); }
+    }, (err) => {
+      this.error = `${what}: ${String(err?.message ?? err)}`;
+      if (this.sel) this.sel = { ...this.sel, notice: this.error };
+      this.notify();
+    });
   }
 
   private notify(): void {

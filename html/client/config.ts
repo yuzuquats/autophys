@@ -6,6 +6,8 @@ export const specOf = (c: ProjectConfig, kind: ExperimentKind): ExperimentSpec =
 /** The declared noise σ of the (single) output channel. */
 export const sigmaOf = (c: ProjectConfig): number => Object.values(c.noise.sigma)[0];
 export const sineLabel = (frequency: number) => `Sine ${+frequency.toFixed(2)} Hz`;
+/** "oscillator v1.2", or the bare name when the source records no simulator version. */
+export const simulatorLabel = (c: ProjectConfig): string => (c.simulator.version ? `${c.simulator.name} v${c.simulator.version}` : c.simulator.name);
 
 /** A uniform sample grid from 0: `duration · rate` samples. */
 export function timeGrid(duration: number, rate: number): number[] {

@@ -70,17 +70,17 @@ export function transition(p: Proposal, e: ProposalEvent): Proposal {
 
 export const edited = (p: Proposal): ProposalField[] => p.fields.filter((f) => f.value !== f.original);
 
-/** The measurement id the SDK will upload for an approved proposal: sine_044@1 for 0.44 Hz. */
+/** The measurement id the SDK will upload for an approved proposal: sine_044@1 for a 0.44 Hz sine, else `<experiment>@<n>`. */
 export function expectedMeasurement(inv: Investigation, p: Proposal): string {
-  const f = p.fields.find((x) => x.name === "frequency")?.value ?? 0;
-  const base = `${p.experiment}_${String(Math.round(f * 100)).padStart(3, "0")}`;
+  const f = p.fields.find((x) => x.name === "frequency")?.value;
+  const base = p.experiment === "sine" && f != null ? `${p.experiment}_${String(Math.round(f * 100)).padStart(3, "0")}` : p.experiment;
   const runs = inv.measurements.filter((m) => m.id.startsWith(`${base}@`)).length;
   return `${base}@${runs + 1}`;
 }
 
 /** Whether an approved proposal's data has arrived (its experiment has a measurement uploaded after approval). */
 export const delivered = (inv: Investigation, p: Proposal): boolean =>
-  p.status === "approved" && inv.measurements.some((m) => m.experiment === p.experiment && m.split === "train");
+  p.status === "approved" && (p.delivered ?? inv.measurements.some((m) => m.experiment === p.experiment && m.split === "train"));
 
 /** Decisions waiting on the user in an investigation. */
 export const pendingDecisions = (inv: Investigation): number => inv.proposals.filter((p) => p.status === "proposed").length;

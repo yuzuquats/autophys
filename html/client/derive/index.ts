@@ -4,13 +4,24 @@
  * seam between data and drawing.
  */
 import type { Snapshot } from "../api.ts";
+import type { Pairing } from "../domain.ts";
 import type { DetailsModel, MainModel, SidebarModel } from "../../ui/view-model.ts";
-import { detailsModel } from "./details.ts";
+import { detailsModel, devices } from "./details.ts";
 import { mainModel } from "./main.ts";
 import type { Selection } from "./shared.ts";
 import { sidebarModel } from "./tree.ts";
 
 export type View = { sidebar: SidebarModel; main: MainModel; details: DetailsModel };
+
+/** What the surfaces show when the source answered with no project yet. */
+export function empty(source: string, pairings?: Pairing[], notice?: string): View {
+  const base = loading(source), dev = devices({ pairings });
+  return {
+    sidebar: { ...base.sidebar, section: { label: "Investigations", count: "0" }, pinned: { ...base.sidebar.pinned, label: "Devices", dim: false, selectable: true, trail: pairings?.length ? { badge: String(pairings.length) } : { text: "none" } } },
+    main: { crumb: [{ label: "No projects yet" }], meta: source, actions: [], body: { kind: "empty", text: "No projects yet. Start an investigation from the SDK; it appears here as its records arrive." }, credit: "" },
+    details: { icon: "workspace", title: "Workspace", status: { text: `Empty · ${source}` }, sections: [...(notice ? [{ heading: "Not saved", blocks: [{ kind: "text" as const, text: notice, tone: "danger" as const }] }] : []), ...(dev ? [dev.section] : [])], actions: dev?.actions },
+  };
+}
 
 /** What the surfaces show before the source has answered. */
 export function loading(source: string): View {
@@ -22,9 +33,10 @@ export function loading(source: string): View {
   };
 }
 
-export function derive(snapshot: Snapshot | null, selection: Selection): View {
-  if (!snapshot) return loading("the source");
-  const s = { ...selection, ws: snapshot.workspace };
+export function derive(snapshot: Snapshot | null, selection: Selection, source = "the source"): View {
+  if (!snapshot) return loading(source);
+  if (!snapshot.workspace.projects.length) return empty(snapshot.source, snapshot.pairings, selection.notice);
+  const s = { ...selection, ws: snapshot.workspace, events: snapshot.events, pairings: snapshot.pairings };
   return { sidebar: sidebarModel(s), main: mainModel(s), details: detailsModel(s) };
 }
 

@@ -3,7 +3,7 @@
  * simulation here (AX-2): curves, gain/phase and previews arrive computed in the domain; this
  * file selects, decimates, subtracts and lays out axes. The ui's charts map it to pixels.
  */
-import { sigmaOf, specOf } from "../config.ts";
+import { sigmaOf, simulatorLabel, specOf } from "../config.ts";
 import type { Fit, Investigation, Measurement, ProjectConfig, Proposal, ViewHint } from "../domain.ts";
 import type { BarRow, Chart, ChartPanel, HeatmapChart, LegendItem, Point, RangeRow, XYChart } from "../../ui/view-model.ts";
 import { axisAround, int, logTicks, niceTicks, sig } from "./fmt.ts";
@@ -62,13 +62,18 @@ function outputChart(config: ProjectConfig, m: Measurement, lines: { y: number[]
 const FIT_LEGEND: LegendItem[] = [{ label: "measured", mark: "dot", tone: "measured" }, { label: "initial", mark: "dashed", tone: "initial" }, { label: "fit", mark: "line", tone: "fit" }];
 const RUN_LEGEND: LegendItem[] = [{ label: "measured", mark: "dot", tone: "measured" }, { label: "initial", mark: "dashed", tone: "initial" }, { label: "current", mark: "line", tone: "run" }];
 
+/** Whether the source sent the fit's curve on this measurement (the daemon records none yet). */
+const hasCurve = (fit: Fit, m: Measurement) => !!fit.curves[m.id];
+const NO_CURVE = "fit curve not recorded";
+
 export function fitPanels(ctx: Ctx, fit: Fit): ChartPanel[] {
   const { config, inv } = ctx, running = fit.state === "running";
   return fit.measurements.map((id) => {
     const m = measurementOf(inv, id);
+    if (!hasCurve(fit, m)) return { title: `${m.id} · ${NO_CURVE}`, charts: [...(m.inputRecorded === false ? [] : [inputStrip(config, m)]), outputChart(config, m, [], [{ label: "measured", mark: "dot", tone: "measured" }])] };
     return {
       title: m.id,
-      charts: [inputStrip(config, m), outputChart(config, m, [
+      charts: [...(m.inputRecorded === false ? [] : [inputStrip(config, m)]), outputChart(config, m, [
         { y: curve(fit, m, "initial"), tone: "initial", dashed: true },
         { y: curve(fit, m, "fit"), tone: running ? "run" : "fit" },
       ], running ? RUN_LEGEND : FIT_LEGEND)],
@@ -78,7 +83,8 @@ export function fitPanels(ctx: Ctx, fit: Fit): ChartPanel[] {
 
 export function residualPanels(ctx: Ctx, fit: Fit): ChartPanel[] {
   const { config, inv } = ctx, sigma = sigmaOf(config);
-  return fit.measurements.map((id) => {
+  return fit.measurements.map((id): ChartPanel | null => {
+    if (!hasCurve(fit, measurementOf(inv, id))) return null;
     const m = measurementOf(inv, id), f = curve(fit, m, "fit"), r = m.output.map((y, i) => y - f[i]);
     const rho = fit.lag1[id] ?? 0, structured = Math.abs(rho) > 0.3;
     const unit = specOf(config, m.experiment).output.unit;
@@ -94,7 +100,7 @@ export function residualPanels(ctx: Ctx, fit: Fit): ChartPanel[] {
         ],
       }],
     };
-  });
+  }).filter((p): p is ChartPanel => p !== null);
 }
 
 export function landscapeChart(config: ProjectConfig, fit: Fit): HeatmapChart | null {
@@ -202,35 +208,37 @@ export function edgePanels(ctx: Ctx, fit: Fit): ChartPanel[] {
 }
 
 export function measurementPanels(config: ProjectConfig, m: Measurement): ChartPanel[] {
-  return [{ title: m.id, charts: [inputStrip(config, m), outputChart(config, m, [], [])] }];
+  return [{ title: m.id, charts: [...(m.inputRecorded === false ? [] : [inputStrip(config, m)]), outputChart(config, m, [], [])] }];
 }
 
 export function validationPanels(ctx: Ctx, fit: Fit, testId: string, predicted: number[]): ChartPanel[] {
   const { config, inv } = ctx, m = measurementOf(inv, testId);
-  return [{ title: `${m.id} · held out, predicted by Fit #${fit.n}`, charts: [inputStrip(config, m), outputChart(config, m, [{ y: predicted, tone: "fit" }],
+  return [{ title: `${m.id} · held out, predicted by Fit #${fit.n}`, charts: [...(m.inputRecorded === false ? [] : [inputStrip(config, m)]), outputChart(config, m, [{ y: predicted, tone: "fit" }],
     [{ label: "measured", mark: "dot", tone: "measured" }, { label: "predicted", mark: "line", tone: "fit" }])] }];
 }
 
 /** The drive as proposed and the response the ranking fit predicts for it (both computed upstream). */
 export function proposalPanels(ctx: Ctx, p: Proposal, ranking: BarRow[], edited: boolean): ChartPanel[] {
   const { config } = ctx, t = p.preview.t;
+  const asProposed = p.fields.map((f) => `${sig(f.original, 3)} ${f.unit}`.trim()).join(" · ");
+  const bars: ChartPanel = { charts: [{ kind: "bars", rows: ranking, label: ranking.length ? "ranked against · weakest-direction score" : "no ranking recorded" }] };
+  if (!t.length) return [{ title: `${asProposed ? `${edited ? "as proposed: " : ""}${asProposed} · ` : ""}preview not recorded`, charts: [] }, bars];
   const drive = { experiment: p.experiment, t, input: p.preview.input };
   const out = specOf(config, p.experiment).output;
   const charts: Chart[] = [inputStrip(config, drive, 70), {
     kind: "xy", height: 130, x: timeAxis(t), y: axisAround(p.preview.predicted, { count: 4 }), label: `${out.label} · ${out.unit}, predicted at Fit #${p.atFit}`,
     layers: [{ kind: "line", points: decimate(zip(t, p.preview.predicted)), tone: "fit" }],
   }];
-  const asProposed = p.fields.map((f) => `${sig(f.original, 3)} ${f.unit}`).join(" · ");
-  return [{ title: edited ? `as proposed: ${asProposed}` : asProposed, charts }, { charts: [{ kind: "bars", rows: ranking, label: "ranked against · weakest-direction score" }] }];
+  return [{ title: edited ? `as proposed: ${asProposed}` : asProposed, charts }, bars];
 }
 
 export function configPanels(config: ProjectConfig): ChartPanel[] {
   const rows: RangeRow[] = config.params.map((p) => ({
     label: p.name, unit: p.unit, lo: sig(p.lo, 3), hi: sig(p.hi, 3),
     at: p.coord === "log" ? Math.log(p.initial / p.lo) / Math.log(p.hi / p.lo) : (p.initial - p.lo) / (p.hi - p.lo),
-    tag: p.fixed ? { text: "fixed", tone: "muted" } : { text: "free" },
+    tag: p.fixed ? { text: "fixed", tone: "muted" } : Number.isFinite(p.initial) ? { text: "free" } : { text: "free · no initial", tone: "muted" },
   }));
-  return [{ title: `${config.simulator.name} v${config.simulator.version} · parameter bounds, initial guess marked`, charts: [{ kind: "ranges", rows }] }];
+  return [{ title: `${simulatorLabel(config)} · parameter bounds, initial guess marked`, charts: [{ kind: "ranges", rows }] }];
 }
 
 export function sensitivityPanels(fit: Fit): ChartPanel[] {

@@ -1,8 +1,8 @@
 /** Details: one panel per node type, with the proposal's decision row. */
-import { specOf } from "../config.ts";
+import { simulatorLabel, specOf } from "../config.ts";
 import type { Fit, Investigation, Measurement, Project, ProjectConfig, Proposal, SensitivityResult } from "../domain.ts";
-import { awaiting, delivered, edited, expectedMeasurement, stateOf } from "../proposal.ts";
-import type { DetailsModel, Fact, Section, TableRow } from "../../ui/view-model.ts";
+import { awaiting, type Decision, delivered, edited, expectedMeasurement, stateOf } from "../proposal.ts";
+import type { Action, DetailsModel, Fact, Section, TableRow } from "../../ui/view-model.ts";
 import { int, pct, plural, sig } from "./fmt.ts";
 import { rankingBars } from "./main.ts";
 import { displayedFields, outlookAt } from "./outlook.ts";
@@ -20,8 +20,19 @@ export function directionText(s: SensitivityResult, i: number): string {
   return used.map(([k, x]) => `${k}^${sig(x, 2)}`).join(" · ");
 }
 
+/** Whether the source records this decision event (the daemon has no withdraw or restore). */
+const allows = (s: State, e: Decision["event"]) => !s.events || s.events.includes(e);
+
 function whereItStands(c: ProjectConfig, fit: Fit | null): Section {
-  if (!fit?.sensitivity) return { heading: "Where it stands", blocks: [{ kind: "text", text: "No converged fit yet", tone: "muted" }] };
+  if (!fit) return { heading: "Where it stands", blocks: [{ kind: "text", text: "No converged fit yet", tone: "muted" }] };
+  if (!fit.sensitivity && fit.identification) {
+    const id = fit.identification;
+    return { heading: "Where it stands", blocks: [{ kind: "facts", rows: [
+      ...id.identified.map((k) => ({ label: k, value: `${sig(fit.params[k], 3)} ${unitOf(c, k)}`.trim(), tag: { text: "identified", tone: "ok" as const } })),
+      ...id.nonIdentified.map((k) => ({ label: k, value: "", tag: { text: "not identified", tone: "warn" as const } })),
+    ] }, { kind: "text", text: "Uncertainties are not recorded", tone: "muted" }] };
+  }
+  if (!fit.sensitivity) return { heading: "Where it stands", blocks: [{ kind: "text", text: `No sensitivity recorded at Fit #${fit.n}`, tone: "muted" }] };
   const s = fit.sensitivity;
   const rows: Fact[] = [
     ...s.combos.map((x) => ({ label: x.name, value: `${sig(x.value, 3)} ${pct(x.logStd)}` })),
@@ -46,10 +57,16 @@ function paramsTable(c: ProjectConfig, fit: Fit): TableRow[] {
 }
 
 export function detailsModel(s: State): DetailsModel {
+  const m = selectedDetails(s);
+  // A refused write (a 409 from the daemon, say) stays visible above the panel until the next pick.
+  return s.notice ? { ...m, sections: [{ heading: "Not saved", blocks: [{ kind: "text", text: s.notice, tone: "danger" }] }, ...m.sections] } : m;
+}
+
+function selectedDetails(s: State): DetailsModel {
   const project = projectOf(s);
   const sel = parseSel(project, s.selected[project.id] ?? "") ?? parseSel(project, defaultSelection(project))!;
   switch (sel.kind) {
-    case "config": return configDetails(project);
+    case "config": return configDetails(s, project);
     case "investigation": return investigationDetails(project, sel.inv);
     case "measurement": return measurementDetails(project, sel.inv, sel.m);
     case "awaiting": return awaitingDetails(project, sel.inv, sel.proposal, sel.id);
@@ -60,9 +77,24 @@ export function detailsModel(s: State): DetailsModel {
   }
 }
 
-function configDetails(project: Project): DetailsModel {
-  const c = latestConfig(project);
+/** O-3: devices waiting to pair, each approvable here (or with `autophys pair approve` on the host). */
+export function devices(s: Pick<State, "pairings">): { section: Section; actions: Action[] } | null {
+  if (!s.pairings) return null;
+  if (!s.pairings.length) return { section: { heading: "Devices", blocks: [{ kind: "text", text: "No device is waiting to pair", tone: "muted" }] }, actions: [] };
   return {
+    section: { heading: "Devices waiting to pair", blocks: [{ kind: "table", rows: s.pairings.map((p) => ({ cells: [{ text: p.device }, { text: p.code, end: true }, { text: p.client || "–", end: true }] })) },
+      { kind: "text", text: `Codes expire ${s.pairings.map((p) => p.expires).join(", ")}`, tone: "muted" }] },
+    actions: s.pairings.flatMap((p): Action[] => [
+      { name: `pair-approve:${p.code}`, label: s.pairings!.length > 1 ? `Approve ${p.code}` : "Approve device", variant: "primary" },
+      { name: `pair-deny:${p.code}`, label: s.pairings!.length > 1 ? `Deny ${p.code}` : "Deny" },
+    ]),
+  };
+}
+
+function configDetails(s: State, project: Project): DetailsModel {
+  const c = latestConfig(project), dev = devices(s);
+  return {
+    actions: dev?.actions.length ? dev.actions : undefined,
     icon: "config", title: "Configuration", status: { text: `v${c.version} · ${c.hash.slice(0, 12)} · declared in code` },
     sections: [
       { heading: "Parameters", blocks: [{ kind: "table", rows: c.params.map((p) => ({ cells: [{ text: p.name, unit: p.unit }, { text: `${sig(p.lo, 3)} – ${sig(p.hi, 3)}`, end: true },
@@ -75,6 +107,7 @@ function configDetails(project: Project): DetailsModel {
       { heading: "Budget", blocks: [{ kind: "facts", rows: [{ label: "Agent steps", value: String(c.budgets.maxSteps) }, { label: "Simulations", value: int(c.budgets.maxSimulations) },
         { label: "Experiments", value: String(c.budgets.maxExperiments) }, { label: "Policy", value: c.policy.label }] }] },
       { heading: "Used by", blocks: [{ kind: "links", links: project.investigations.map((inv) => ({ label: `${inv.name} · v${inv.configVersion}${inv.configVersion === c.version ? "" : " (older)"}`, id: ids.inv(inv) })) }] },
+      ...(dev ? [dev.section] : []),
     ],
   };
 }
@@ -94,9 +127,9 @@ function investigationDetails(project: Project, inv: Investigation): DetailsMode
       ] }] },
       whereItStands(c, latestFit(inv)),
       { heading: "Run", blocks: [{ kind: "facts", rows: [
-        { label: "Simulator", value: `${c.simulator.name} v${c.simulator.version}` }, { label: "Source hash", value: c.simulator.sourceHash.slice(0, 6) },
+        { label: "Simulator", value: simulatorLabel(c) }, { label: "Source hash", value: c.simulator.sourceHash.slice(0, 6) || "–" },
         { label: "Config", value: `v${c.version} · ${c.hash.slice(0, 8)}` }, { label: "Free", value: inv.free.join(", ") },
-        { label: "Policy", value: c.policy.label }, { label: "Seed", value: String(inv.seed) },
+        { label: "Policy", value: c.policy.label }, { label: "Seed", value: Number.isFinite(inv.seed) ? String(inv.seed) : "not recorded" },
       ] }] },
     ],
     actions: [{ name: "report", label: "Report" }, { name: "export-investigation", label: "Export" }],
@@ -106,18 +139,20 @@ function investigationDetails(project: Project, inv: Investigation): DetailsMode
 function measurementDetails(project: Project, inv: Investigation, m: Measurement): DetailsModel {
   const c = configFor(project, inv), spec = specOf(c, m.experiment);
   const settings: Fact[] = spec.settings.map((x) => ({ label: x.label, value: `${sig(m.settings[x.name] ?? x.default, 3)} ${x.unit}`.trim() }));
-  if (!spec.input) settings.push({ label: "Force", value: "none" });
+  if (m.inputRecorded === false) settings.push({ label: "Input series", value: "not recorded" });
+  else if (!spec.input) settings.push({ label: "Force", value: "none" });
   const usedBy = inv.fits.filter((f) => f.measurements.includes(m.id)).map((f) => ({ label: `Fit #${f.n}`, id: ids.fit(inv, f) }));
   const fit = latestFit(inv);
   if (fit?.sensitivity && fit.measurements.includes(m.id)) usedBy.push({ label: "Sensitivity", id: ids.sens(inv) });
-  if (inv.validation.state !== "needs-data" && inv.validation.measurement === m.id) usedBy.push({ label: "Validate", id: ids.validate(inv) });
+  const v = inv.validation;
+  if ((v.state === "passed" || v.state === "failed") ? v.measurement === m.id : v.state === "summary" && v.measurements.includes(m.id)) usedBy.push({ label: "Validate", id: ids.validate(inv) });
   const missing = m.output.filter((y) => !Number.isFinite(y)).length;
   return {
     icon: "measurement", title: m.id, status: { text: `${m.split === "test" ? "Held out · " : ""}Uploaded ${m.uploadedAt} · ${m.source}` },
     sections: [
       { heading: "Experiment", blocks: [{ kind: "facts", rows: [{ label: "Type", value: spec.label }, ...settings] }] },
       { heading: "Samples", blocks: [{ kind: "facts", rows: [{ label: "Count", value: int(m.output.length) }, { label: "Rate", value: `${sig(m.rate, 3)} Hz` },
-        { label: "Missing", value: String(missing), tone: missing ? "warn" : undefined }, { label: "Noise σ (est.)", value: `${sig(m.sigmaEstimate, 3)} ${spec.output.unit}` }] }] },
+        { label: "Missing", value: String(missing), tone: missing ? "warn" : undefined }, { label: m.sigmaSource === "declared" ? "Noise σ (declared)" : "Noise σ (est.)", value: `${sig(m.sigmaEstimate, 3)} ${spec.output.unit}` }] }] },
       { heading: "Columns", blocks: [{ kind: "facts", rows: [{ label: "t", value: "time · s" }, ...(spec.input ? [{ label: spec.input.name, value: `input · ${spec.input.unit}` }] : []),
         { label: spec.output.name, value: `output · ${spec.output.unit}` }] }] },
       { heading: "Used by", blocks: usedBy.length ? [{ kind: "links", links: usedBy }] : [{ kind: "text", text: "Not used yet", tone: "muted" }] },
@@ -142,14 +177,14 @@ function fitDetails(project: Project, inv: Investigation, fit: Fit): DetailsMode
   const structured = Object.entries(fit.lag1).filter(([, r]) => Math.abs(r) > 0.3).map(([id]) => id);
   return {
     icon: "fit", title: `Fit #${fit.n}`,
-    status: running ? { text: `Running · ${fit.evals} evals`, tone: "run" } : { text: `Converged · ${fit.evals} evals · ${plural(fit.starts, "start")}${fit.variant ? ` · ${fit.variant}` : ""}` },
+    status: fit.state === "failed" ? { text: `Not converged · ${fit.evals} evals`, tone: "warn" } : running ? { text: `Running · ${fit.evals} evals`, tone: "run" } : { text: `Converged · ${fit.evals} evals · ${plural(fit.starts, "start")}${fit.variant ? ` · ${fit.variant}` : ""}` },
     sections: [
       { heading: "Parameters", blocks: [{ kind: "table", rows: paramsTable(c, fit) }] },
       { heading: "Quality", blocks: [{ kind: "facts", rows: [
         { label: "χ²/N", value: fit.chi2N.toFixed(2), tone: fit.chi2N > 2 ? "warn" : undefined },
-        { label: "Residuals", value: running ? "–" : structured.length ? "structured" : "white", tone: structured.length ? "warn" : undefined },
+        { label: "Residuals", value: running ? "–" : !Object.keys(fit.lag1).length ? "not recorded" : structured.length ? "structured" : "white", tone: structured.length ? "warn" : undefined },
         { label: "Loss", value: fit.loss === "linear" ? "least squares" : "soft L1" },
-        { label: "Starts", value: `${fit.starts} → ${plural(fit.basins, "basin")}` },
+        { label: "Starts", value: fit.basins == null ? String(fit.starts) : `${fit.starts} → ${plural(fit.basins, "basin")}` },
         { label: "Data", value: fit.measurements.join(", ") },
       ] }] },
     ],
@@ -157,6 +192,17 @@ function fitDetails(project: Project, inv: Investigation, fit: Fit): DetailsMode
 }
 
 function sensitivityDetails(project: Project, inv: Investigation, fit: Fit): DetailsModel {
+  if (!fit.sensitivity && fit.identification) {
+    const id = fit.identification, n = id.identified.length + id.nonIdentified.length;
+    return {
+      icon: "sensitivity", title: "Sensitivity", status: { text: `${id.identified.length} of ${n} identified · at Fit #${fit.n}`, tone: id.nonIdentified.length ? "warn" : undefined },
+      sections: [{ heading: "Identifiability", blocks: [{ kind: "facts", rows: [
+        { label: "Identified", value: id.identified.join(", ") || "none" },
+        { label: "Not identified", value: id.nonIdentified.join(", ") || "none", tone: id.nonIdentified.length ? "warn" : undefined },
+        { label: "Condition", value: id.condition == null ? "–" : id.condition > 1e6 ? "> 10⁶" : int(id.condition) },
+      ] }, { kind: "text", text: "Singular values and directions are not recorded", tone: "muted" }] }],
+    };
+  }
   const s = fit.sensitivity!, top = s.singular[0];
   const proposal = inv.proposals.find((p) => p.atFit === fit.n);
   const free = s.kinds.map((k, i) => (k === "identifiable" ? null : directionText(s, i))).filter((x): x is string => !!x);
@@ -188,11 +234,13 @@ function proposalDetails(s: State, project: Project, inv: Investigation, p: Prop
   } else {
     sections.push({ heading: "Experiment", blocks: [{ kind: "facts", rows: p.fields.map((f) => ({ label: f.label, value: `${sig(f.value, 3)} ${f.unit}`, note: f.value !== f.original ? `(was ${sig(f.original, 3)})` : undefined })) }] });
   }
+  if (Object.keys(p.fixedSettings).length) sections[0].blocks.push({ kind: "facts", rows: Object.entries(p.fixedSettings).map(([label, value]) => ({ label, value: sig(value, 4) })) });
+  if (!p.outlook.axes.length && !Object.keys(p.outlook.after).length) sections.push({ heading: "Outlook", blocks: [{ kind: "text", text: "No outlook grid recorded. Settings are read-only; approve or reject the experiment as proposed.", tone: "muted" }] });
   const unedited = shown.every((f) => f.value === f.original);
   sections.push({ heading: "Expected", blocks: [{ kind: "facts", rows: [
     ...p.expected.map((e) => {
       const after = look ? look.after[e.param] ?? null : e.after;
-      return { label: e.param, value: `unbounded → ${after == null ? "unbounded" : pct(after)}`, tone: after == null ? "warn" as const : undefined,
+      return { label: e.param, value: `${e.before === "unknown" ? "not recorded" : "unbounded"} → ${after == null ? "unbounded" : pct(after)}`, tone: after == null ? "warn" as const : undefined,
         tag: unedited || !look ? undefined : { text: "interpolated", tone: "muted" as const } };
     }),
     { label: "Budget after", value: `${experimentsUsed(inv) + (p.status === "proposed" ? 1 : 0)} / ${c.budgets.maxExperiments} experiments` },
@@ -211,15 +259,24 @@ function proposalDetails(s: State, project: Project, inv: Investigation, p: Prop
   return {
     icon: "proposal", title: spec.label, cardName: true, status, sections,
     decision: p.status === "proposed" ? [{ name: "approve", label: "Approve", variant: "primary", disabled: invalid, title: invalid ? "Fix the marked field first" : undefined }, { name: "reject", label: "Reject" }] : undefined,
-    actions: p.status === "approved" && !delivered(inv, p) ? [{ name: "withdraw", label: "Withdraw approval" }] : p.status === "rejected" ? [{ name: "restore", label: "Restore proposal" }] : undefined,
+    actions: p.status === "approved" && !delivered(inv, p) && allows(s, "unapproved") ? [{ name: "withdraw", label: "Withdraw approval" }]
+      : p.status === "rejected" && allows(s, "restored") ? [{ name: "restore", label: "Restore proposal" }] : undefined,
   };
 }
 
 function validateDetails(project: Project, inv: Investigation): DetailsModel {
   const v = inv.validation;
+  if (v.state === "summary") {
+    return { icon: "validate", title: "Validate", status: { text: v.passed ? "Passed" : "Failed", tone: v.passed ? "ok" : "warn" },
+      sections: [{ heading: "Held-out check", blocks: [{ kind: "facts", rows: [
+        { label: "Measurement", value: v.measurements.join(", ") || "–" },
+        { label: "χ²/N", value: `${v.chi2N.toFixed(2)} (≤ ${sig(v.threshold, 3)})`, tone: v.passed ? "ok" : "warn" },
+        { label: "Worst parameter", value: "not recorded" },
+      ] }] }] };
+  }
   if (v.state === "needs-data") {
     return { icon: "validate", title: "Validate", status: { text: "Needs data", tone: "muted" },
-      sections: [{ heading: "Held-out check", blocks: [{ kind: "facts", rows: [{ label: "Measurement", value: "none yet" }, { label: "Threshold", value: `χ²/N ≤ 2` }] }] }] };
+      sections: [{ heading: "Held-out check", blocks: [{ kind: "facts", rows: [{ label: "Measurement", value: inv.measurements.some((m) => m.split === "test") ? "check not recorded" : "none yet" }, { label: "Threshold", value: v.recorded === false ? "not recorded" : `χ²/N ≤ 2` }] }] }] };
   }
   const c = configFor(project, inv);
   return {

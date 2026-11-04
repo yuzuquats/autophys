@@ -4,7 +4,7 @@
  * the daemon will: it checks a decision against the proposal's state and refuses it with a
  * 409-style error, numbers records globally and per investigation, and streams them.
  */
-import type { Rec, Snapshot, Source } from "../api.ts";
+import type { Cursor, DecisionRec, Rec, Snapshot, Source } from "../api.ts";
 import type { Workspace } from "../domain.ts";
 import type { Decision } from "../proposal.ts";
 import { applyRecord, decide } from "../records.ts";
@@ -15,21 +15,21 @@ export const CANNED: { project: string; investigation: string; proposal: string;
   { project: "bench-oscillators", investigation: "bench-b", proposal: "p1", ts: "2026-11-02T10:05:00Z", decision: { event: "approved", by: "james", at: "Nov 2 10:05" } },
 ];
 
-export type FixtureSource = Source & { readonly log: readonly Rec[] };
+export type FixtureSource = Omit<Source, "post" | "stream"> & { readonly log: readonly DecisionRec[]; stream(after: Cursor, on: (r: DecisionRec) => void): () => void; post(path: string, body: unknown): Promise<DecisionRec> };
 
 export function fixtures(canned = CANNED): FixtureSource {
   let base: Workspace | null = null, current: Workspace | null = null;
-  const log: Rec[] = [], listeners = new Set<(r: Rec) => void>();
+  const log: DecisionRec[] = [], listeners = new Set<(r: DecisionRec) => void>();
   const ready = () => {
     if (current) return current;
     current = base = buildWorkspace();
     for (const c of canned) append(c.project, c.investigation, c.proposal, c.decision, c.ts);
     return current;
   };
-  function append(project: string, investigation: string, proposal: string, d: Decision, ts: string): Rec {
+  function append(project: string, investigation: string, proposal: string, d: Decision, ts: string): DecisionRec {
     const next = decide(current!, project, investigation, proposal, d);
     if (!next) throw new Error(`409 conflict: ${d.event} does not apply to ${investigation}/${proposal}`);
-    const rec: Rec = {
+    const rec: DecisionRec = {
       gseq: log.length + 1, id: `r${log.length + 1}`, investigation, seq: log.filter((r) => r.investigation === investigation).length + 1,
       kind: "proposal", ts, payload: { project, proposal, ...d },
     };
@@ -44,9 +44,9 @@ export function fixtures(canned = CANNED): FixtureSource {
     stream(after, on) {
       ready();
       let live = true;
-      const backlog = log.filter((r) => r.gseq > after);
+      const backlog = log.filter((r) => r.gseq > Number(after));
       queueMicrotask(() => { if (live) for (const r of backlog) on(r); });
-      const listener = (r: Rec) => { if (live) on(r); };
+      const listener = (r: DecisionRec) => { if (live) on(r); };
       listeners.add(listener);
       return () => { live = false; listeners.delete(listener); };
     },
