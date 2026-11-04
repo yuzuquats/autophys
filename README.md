@@ -8,6 +8,13 @@ the fit looks. When parameters are tied together, autophys ranks the next
 experiment that would separate them. An agent (Muse Spark, or a scripted
 policy) can drive that loop, with a human approving each experiment.
 
+For local development, start with [CONTRIBUTING.md](CONTRIBUTING.md) and the
+[repository map](docs/README.md). The daemon, browser and SDKs build from this
+checkout; no Lona account, fleet CLI or sibling repository is required.
+Optional model providers, Muse and systemd deployment have separate setup.
+Licensing must be reconciled before an open-source release; see
+[vendor/README.md](vendor/README.md).
+
 ## Quick start: fit a battery cell
 
 ```sh
@@ -46,11 +53,14 @@ The rest of the repo does the following:
 | `plugins/muse-autophys` | Muse Code plugin: a local MCP server, so Muse can run the calibration ([guide](autophys.project.docs/content/muse-plugin.md)) |
 | `src/`, `html/` | Rust daemon and browser workbench, where experiments are approved |
 | `sdks/rust` | Rust SDK |
-| `autophys.project.docs/content` | design notes and decisions |
+| `tests/`, `sdks/*/tests`, `html/**/*.test.ts` | daemon, SDK and browser contract checks |
+| `ops/` | standalone packaging and optional systemd operation ([guide](ops/README.md)) |
+| `train/sft` | optional policy training and evaluation ([guide](train/sft/README.md)) |
+| `vendor/` | checked-in reusable dependencies and provenance ([guide](vendor/README.md)) |
+| `autophys.project.docs/content` | internal design decisions and project records; contributor setup is above |
 
 The closed loop works like this. You fit, autophys ranks candidate
 experiments, the agent proposes one, you approve or edit it in the browser,
 the new data is attached, and it fits again. That loop runs on the built-in
-catalogue experiments today. The browser draws measured data, parameters and
-sensitivity, but it doesn't draw the fitted curve yet. Use the example for
-curves.
+catalogue experiments today. The browser renders the display metadata and fit curves supplied by the SDK;
+the SDK owns the numerical calculations.

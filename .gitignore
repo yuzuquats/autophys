@@ -2,3 +2,7 @@
 vendor/tento/node_modules
 vendor/tento/Cargo.lock
 vendor/tento/target/
+
+# Optional contributor environments and local build output.
+/.venv/
+/.venv-train/

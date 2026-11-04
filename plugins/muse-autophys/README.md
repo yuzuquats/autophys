@@ -50,16 +50,16 @@ experiments must be declared accurately rather than guessed.
 See `autophys.project.docs/content/muse-plugin.md` for the demo, tool table
 and offline verification receipt.
 
-For the hackathon's laptop/Linux split, the builder accepts an optional stdio
-bridge. The server still runs next to the simulator:
+For a simulator on another machine, the builder accepts an optional SSH stdio
+bridge. Configure your own SSH host and remote paths; the SDK interpreter and
+simulator must already be installed there:
 
 ```sh
 python3 plugins/muse-autophys/build.py --output /tmp/autophys-ssh-plugin \
-  --ssh-host rwc-dev-01 --python /home/james/.cache/autophys/venv/bin/python \
-  --source-root /home/james/workspace/autophys/sdks/python/src \
-  --root /absolute/remote/lab --workbook /home/james/autophys --project battery_ecm
+  --ssh-host my-lab --python /absolute/remote/venv/bin/python \
+  --source-root /absolute/remote/autophys/sdks/python/src \
+  --root /absolute/remote/lab --workbook /absolute/remote/books --project battery_ecm
 ```
 
-Build on rwc-dev-01, then copy the generated bundle to the laptop and install
-it there. The generated shell wrapper uses SSH's existing authentication and
+Build the bundle where Muse runs and install it there. The generated shell wrapper uses SSH's existing authentication and
 contains no credentials. The full guide has a reproducible synthetic CSV setup.

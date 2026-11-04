@@ -36,7 +36,7 @@ from pathlib import Path
 import modal
 
 HERE = Path(__file__).resolve().parent
-SDK = Path(os.environ.get("AUTOPHYS_SDK_DIR", Path.home() / "autophys-train/sdk/sdks/python"))
+SDK = Path(os.environ.get("AUTOPHYS_SDK_DIR", HERE.parents[1] / "sdks/python"))
 # Never ship data, runs or any env file (partner.env can hold a key).
 IGNORE = ["data", "data-*", "runs", "results", "__pycache__", "*.env", ".env*", "*.jsonl", "serving"]
 

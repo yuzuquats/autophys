@@ -70,7 +70,7 @@ included. In deploy, `autophys build-web` writes a prebuilt tree that
 ├── sdks/python/                         pyproject.toml, src/autophys/, tests/
 ├── tests/                               actix contract tests for /api/v1
 ├── e2e/                                 real daemon + SDK benchmark + headless Approve
-├── ops/                                 deploy.sh, autophys.service.in
+├── ops/                                 deploy.sh, systemd/autophys.service.in (current template path)
 └── autophys.project.docs/content/       the one record
 ```
 

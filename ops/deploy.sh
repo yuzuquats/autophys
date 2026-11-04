@@ -14,7 +14,7 @@ if ! [[ "$addr" =~ ^(127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|\[::1\]):[0-9]{1,5}
   echo "deploy: refusing non-loopback address $addr" >&2; exit 2
 fi
 export PATH="$HOME/.deno/bin:$HOME/.cargo/bin:$PATH"
-# rwc-dev-01 has one NVMe; build output lives in the cache, never in the checkout.
+# Build output is configurable and stays outside the checkout.
 export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$HOME/.cache/autophys/target}
 # A release bundles with the tento-web in vendor/, never one TENTO_WEB names.
 unset TENTO_WEB
@@ -24,7 +24,11 @@ if [ -n "$(git -C "$repo" status --porcelain)" ]; then
   exit 1
 fi
 commit=$(git -C "$repo" rev-parse HEAD)
-release_root=$HOME/.local/share/tento/services/autophys
+release_root=${AUTOPHYS_RELEASE_ROOT:-$HOME/.local/share/tento/services/autophys}
+# It is rendered into a systemd unit with sed below; reject metacharacters.
+if [[ "$release_root" != /* || "$release_root" == *'&'* || "$release_root" == *'|'* || "$release_root" == *$'\n'* ]]; then
+  echo "deploy: AUTOPHYS_RELEASE_ROOT must be an absolute path without &, | or newlines" >&2; exit 2
+fi
 release=$release_root/${commit:0:7}-$(date +%Y%m%d)
 
 if [ -e "$release" ]; then
@@ -35,7 +39,7 @@ if [ -e "$release" ]; then
     exit 1
   fi
 else
-  (cd "$repo" && cargo test -q --workspace --locked && deno test -q --allow-read --permit-no-files html/)
+  (cd "$repo" && cargo test -q --workspace --locked && deno test -q --allow-read --config html/deno.json html/)
   (cd "$repo" && AUTOPHYS_COMMIT=$commit AUTOPHYS_RELEASE=1 cargo build -q --release --locked --bin autophys)
   mkdir -p "$release_root"
   stage=$(mktemp -d "$release_root/.staging-XXXXXX")
@@ -58,7 +62,7 @@ mv -T "$release_root/.current.tmp" "$release_root/current"
 mkdir -p "$HOME/.local/state/autophys/logs" "$HOME/.config/systemd/user"
 unit=$HOME/.config/systemd/user/autophys.service
 sed -e "s|@RELEASE@|$release|g" -e "s|@ADDR@|$addr|g" -e "s|@COMMIT@|${commit:0:12}|g" \
-  "$repo/ops/autophys.service.in" > "$unit.tmp"
+  "$repo/ops/systemd/autophys.service.in" > "$unit.tmp"
 mv "$unit.tmp" "$unit"
 systemctl --user daemon-reload
 systemctl --user enable autophys.service

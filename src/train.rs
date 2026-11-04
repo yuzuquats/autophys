@@ -35,7 +35,7 @@ pub const USAGE: &str =
                            [--out DIR] [--seeds 3,4] [--case NAME]...
        autophys train runs
        (all take --train-dir DIR (AUTOPHYS_TRAIN_DIR, default <project>/train/sft)
-        and --python FILE (AUTOPHYS_TRAIN_PYTHON, default ~/autophys-train/.venv/bin/python))";
+        and --python FILE (AUTOPHYS_TRAIN_PYTHON, default python3 on PATH))";
 
 const BACKENDS: &[&str] = &["loops", "modal"];
 
@@ -197,6 +197,34 @@ struct Worker {
     python: PathBuf,
 }
 
+// Return an absolute spelling without resolving the final symlink: a venv's
+// bin/python may link to the system binary, but its spelling selects the venv.
+fn find_python(python: &Path, search_path: Option<&std::ffi::OsStr>) -> Result<PathBuf> {
+    let candidates: Vec<PathBuf> = if python.components().count() > 1 || python.is_absolute() {
+        vec![python.to_path_buf()]
+    } else {
+        search_path
+            .map(std::env::split_paths)
+            .into_iter()
+            .flatten()
+            .map(|dir| dir.join(python))
+            .collect()
+    };
+    for candidate in candidates {
+        if candidate.is_file() {
+            return Ok(if candidate.is_absolute() {
+                candidate
+            } else {
+                std::env::current_dir()?.join(candidate)
+            });
+        }
+    }
+    bail!(
+        "python {} not found; set --python or AUTOPHYS_TRAIN_PYTHON, or activate a Python environment",
+        python.display()
+    )
+}
+
 impl Worker {
     fn new(flags: &Flags) -> Result<Self> {
         let dir = flags
@@ -208,18 +236,12 @@ impl Worker {
             .get("python")
             .map(PathBuf::from)
             .or_else(|| env_path("AUTOPHYS_TRAIN_PYTHON"))
-            .or_else(|| env_path("HOME").map(|h| h.join("autophys-train/.venv/bin/python")))
-            .ok_or_else(|| anyhow!("set --python or AUTOPHYS_TRAIN_PYTHON"))?;
+            .unwrap_or_else(|| PathBuf::from("python3"));
+        let python = find_python(&python, std::env::var_os("PATH").as_deref())?;
         if !dir.join("train_sft.py").is_file() {
             bail!(
                 "{} has no train_sft.py; set --train-dir or AUTOPHYS_TRAIN_DIR",
                 dir.display()
-            );
-        }
-        if !python.is_file() {
-            bail!(
-                "python {} not found; set --python or AUTOPHYS_TRAIN_PYTHON (see train/sft/README.md, Setup)",
-                python.display()
             );
         }
         Ok(Worker { dir, python })
@@ -1065,6 +1087,23 @@ mod tests {
             modal_budget(Some(3.95), Some(0.05), Some("H100"))["live_allowed"],
             false
         );
+    }
+
+    #[test]
+    fn worker_python_uses_the_selected_environment_without_resolving_venv_links() {
+        let temp = tempfile::tempdir().unwrap();
+        let system = temp.path().join("system-python");
+        std::fs::write(&system, "").unwrap();
+        let venv = temp.path().join("venv/bin");
+        std::fs::create_dir_all(&venv).unwrap();
+        std::os::unix::fs::symlink(&system, venv.join("python3")).unwrap();
+        let path = std::env::join_paths([&venv]).unwrap();
+        assert_eq!(
+            find_python(Path::new("python3"), Some(&path)).unwrap(),
+            venv.join("python3")
+        );
+        assert_eq!(find_python(&system, None).unwrap(), system);
+        assert!(find_python(Path::new("python3"), None).is_err());
     }
 
     #[test]

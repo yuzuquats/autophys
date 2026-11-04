@@ -38,7 +38,7 @@ Captured by the SDK's own code (`ReasonLanePolicy.decide`), not copied:
 The Rust CLI owns the workflow: dataset identity, budget gates, run manifests,
 evaluation and history. These scripts are its worker. All commands take
 `--train-dir DIR` (`AUTOPHYS_TRAIN_DIR`, default `<project>/train/sft`) and
-`--python FILE` (`AUTOPHYS_TRAIN_PYTHON`, default `~/autophys-train/.venv/bin/python`).
+`--python FILE` (`AUTOPHYS_TRAIN_PYTHON`, default `python3` on PATH, including an activated venv).
 
 | command | what it does |
 |---|---|
@@ -80,18 +80,13 @@ $26/h) from `GET /v1/instance_type_prices`. A live run with a missing price, cap
 credentials is refused before anything starts. A run name that is no longer
 `planned` cannot be reused.
 
-**Credentials.** Presence is checked, values are never read by the CLI. Keys
-live only on rwc-01 (`~/workspace/.env`). For a run on rwc-dev-01, read just
-the needed variables on rwc-01 and pipe them over SSH stdin into the one
-process, never onto disk there:
-
-```sh
-( set -a; eval "$(grep -E '^MODAL_TOKEN_(ID|SECRET)=' ~/workspace/.env)"; set +a
-  printf '%s\n%s\n' "$MODAL_TOKEN_ID" "$MODAL_TOKEN_SECRET" ) |
-ssh rwc-dev-01 'IFS= read -r MODAL_TOKEN_ID; IFS= read -r MODAL_TOKEN_SECRET
-  export MODAL_TOKEN_ID MODAL_TOKEN_SECRET; cd ~/workspace/autophys &&
-  exec target/debug/autophys train run --backend modal ... --live'
-```
+**Credentials.** Configure your own provider account through its documented
+login or a private environment loader on the machine that runs the worker.
+The CLI checks the required variable names for presence; it does not load a
+workspace `.env` or fetch credentials from another machine. Never put token
+values in command arguments or tracked files. Offline dataset/replay work needs
+no provider credentials. Live work additionally requires the explicit budget
+and `--live` gates above.
 
 `modal_app.py` ships no data, runs, serving templates or `*.env` files into its
 images (`IGNORE`).
@@ -181,18 +176,28 @@ data problem (more cases, weight the experiment steps).
   $6.50/h (Modal's about $3.95/h), and startup dominates short runs, so small
   experiments are cheaper on Modal.
 
-## Setup (private venv, never the shared checkout)
+## Setup in your own Python environment
+
+From the repository root, with Python 3.10 or newer:
 
 ```sh
-mkdir -p ~/autophys-train/sdk && git -C ~/workspace/autophys archive HEAD sdks/python | tar -x -C ~/autophys-train/sdk
-python3 -m venv ~/autophys-train/.venv
-~/autophys-train/.venv/bin/pip install ~/autophys-train/sdk/sdks/python baseten-loops tokenizers jinja2
-cd ~/workspace/autophys/train/sft
-~/autophys-train/.venv/bin/python build_dataset.py          # data/
-~/autophys-train/.venv/bin/python patch_chat_template.py    # serving/Qwen__Qwen3.6-35B-A3B.jinja
-~/autophys-train/.venv/bin/python train_sft.py              # dry run: lengths, schedule, billed tokens
-~/autophys-train/.venv/bin/python selftest_replay.py        # harness check, offline
+python3 -m venv .venv-train
+. .venv-train/bin/activate
+python -m pip install ./sdks/python baseten-loops tokenizers jinja2
+export AUTOPHYS_TRAIN_PYTHON="$VIRTUAL_ENV/bin/python"
+cd train/sft
+python build_dataset.py           # offline, writes data/
+python patch_chat_template.py     # writes a serving template
+python train_sft.py               # dry run: lengths, schedule, billed tokens
+python selftest_replay.py         # harness check, offline
 ```
+
+Modal is an optional backend and needs its own SDK (`python -m pip install modal`)
+and your account configuration. Its SDK source defaults to this checkout's
+`sdks/python`; set `AUTOPHYS_SDK_DIR` to an explicit SDK directory when worker
+scripts are distributed separately. No sibling repository or operator venv is
+required. Put generated datasets, runs and evaluation output in a directory you
+own (or use the workers' output flags); they are not contributor test inputs.
 
 The `loops-cookbook` package that Baseten's docs reference is not on PyPI (checked 2026-11-04), so `train_sft.py` uses the `baseten-loops` 0.32.0 SDK directly.
 
