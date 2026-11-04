@@ -246,6 +246,26 @@ then M-4.
 | MQ-7 | One zero-token `muse exec` echo run to learn the event format | Allowed once. Run on macbookpro-laptop with isolated XDG dirs, `--provider echo --json --no-session-log`, shell/writes/web off; output kept as `sdks/python/tests/data/muse-exec-echo-1.4.14.jsonl`, temp dirs removed. | Operator, 2026-11-04. Exit 0, 14 events, zero tokens, SKILL.md unchanged (sha256 cd65c7b3...). Events are `{schema_version: 1, payload_type, payload}`; final text in `run.terminal.completed` payload.text, streamed text in `run.output.delta`, usage in `run.usage` payload.models[] (`input_tokens`, `cached_tokens`, `output_tokens`, `reasoning_tokens`, `calls`). Real-model usage values remain unverified until a live run. | implemented: `parse_muse_events` reads this envelope; a non-completed terminal is an error |
 ```
 
+## Battery case suite (MQ-5, plan 2026-11-04)
+
+The operator assigned the battery suite to autophys/py (MQ-5). The battery
+model (`models/battery.py`: first-order Thevenin, R0, R1, C1) already existed
+but had no benchmark case. Truth is R0 = 0.025 ohm, R1 = 0.045 ohm,
+C1 = 1600 F (tau = 72 s). These choices are **agent-chosen, pending operator
+review**; each is cheap to change until the Rust SDK mirrors it.
+
+```review-table
+| Id | Choice | Strongest alternative and tradeoff | Reverse |
+| --- | --- | --- | --- |
+| BT-1 | Two cases shaped like the thermal ones. `battery-short-only` starts from one short current pulse: R0 shows as the instant drop and C1 as the initial slope, but R1 needs the RC relaxation and is not identified, so the expected result is inconclusive with that diagnosis. `battery` starts from the same pulse and may request two experiments, and is expected to validate. | A single case with a larger budget. It is simpler, but it would not test the non-identifiability diagnosis on batteries. | edit `synthetic.py` and its tests |
+| BT-2 | Catalog experiments may carry `cost_hours`: the test duration plus a fixed 1 h rest, since a cell must relax before a test. A new `Budgets.max_test_hours` (default unset) caps the total. Unset, it is omitted from the config, so every existing config hash is unchanged (as with `max_outlook_simulations`). | Charge cost through `max_experiments` only. That needs no new field, but it treats a 5 min pulse and a 10 h discharge alike. | drop the field (a new config version for projects that set it) |
+| BT-3 | Ranking reports `cost_hours` only when the catalog defines costs, and leaves out unaffordable candidates. `request_experiment` refuses an experiment that would exceed the budget. | Rank by information per test hour. It favours cheap experiments, but it changes the default criterion (ML-9) for costed catalogs. | one filter in the ranking |
+| BT-4 | No new record fields. Test hours used are recomputed from the experiments run, as resume already rebuilds experiment counts. Bench rows gain a `test_hours` column. | Record `test_hours` on outcomes. Readers would not need the catalog, but it is a format change both SDKs must validate. | add the field later as optional |
+```
+
+The Rust SDK mirrors BT-2 and BT-3 once implemented; the numerics set gains
+battery run cases.
+
 ## Contract questions
 
 These are for the owner of `tento-autophys-store` and `architecture.md`. The
