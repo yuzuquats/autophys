@@ -25,9 +25,11 @@ is weakened. The live Deno gate passes all 82 tests after this fix, using the
 other sessions' existing sidebar drafts; this does not establish a passing
 clean master. The ten sidebar failures remain blocked on their owners.
 
-An extra root type-check found a separate readonly-tuple callback error in
-ui/state-markup.ts. It is not a deploy-test failure; its disposition and the
-post-commit clean-export results are recorded in the external receipt.
+An extra root type-check found a separate committed readonly-tuple callback
+error in ui/state-markup.ts (introduced by 32c9e15), with no existing draft.
+The callback now accepts readonly tuples, matching the placeholder definition;
+rendered markup is unchanged and the composition-root type-check passes.
+Post-commit clean-export results are recorded in the external receipt.
 
 Evidence: rwc-dev-01:~/workspace/fleet/evidence/autophys/deploy-gate-tests-20261104-fe56c0cc/
 contains full logs, test-to-draft hunk mappings and final gate counts.

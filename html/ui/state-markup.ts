@@ -8,7 +8,7 @@ const PH = {
   details: [["t", 58], ["", 38], ["card", 100], ["", 82], ["", 64], ["", 74]],
 } as const;
 export const skeletonMarkup = (shape: keyof typeof PH = "list") =>
-  `<div class="ap-ph ap-ph-${shape}" aria-hidden="true">${PH[shape].map(([k, w]) => `<i class="${k}" style="--w:${w}%"></i>`).join("")}</div>`;
+  `<div class="ap-ph ap-ph-${shape}" aria-hidden="true">${PH[shape].map(([k, w]: readonly [string, number]) => `<i class="${k}" style="--w:${w}%"></i>`).join("")}</div>`;
 export function componentButton(name: string, label: string): string {
   return `<span data-ap-button="${esc(name)}"><button type="button">${esc(label)}</button></span>`;
 }
