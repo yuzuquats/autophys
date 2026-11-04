@@ -4,8 +4,10 @@ A Python SDK that calibrates an engineer's simulator against noisy
 measurements, says which parameters those measurements actually determine,
 and ranks the experiments that would determine the rest. An agent loop
 drives the same tools through structured decisions and records every step.
-It uploads those records to the autophys daemon, where a reviewer approves
-or edits each proposed experiment in the browser.
+Its records live in one workbook per project, `<project>.ap-workbook` (a
+SQLite file), which the SDK writes directly or through an autophys daemon. A
+reviewer approves or edits each proposed experiment in the browser viewer,
+which writes into the same workbook.
 
 ```python
 import autophys as ap
@@ -17,8 +19,46 @@ def block(params, experiment, options=ap.FIT_OPTIONS):
     ...  # return {"t": t, "T": temperature}
 
 project = ap.Project("heated-block", block, budgets=ap.Budgets(max_experiments=2))
-outcome = project.investigate(measurements, runner, policy=ap.ScriptedPolicy()).run()
+client = ap.connect("~/autophys")            # a directory, a .ap-workbook file, or a daemon URL
+wb = client.project(project)                 # ~/autophys/heated-block.ap-workbook
+inv = wb.investigate(measurements, ap.ProposalRunner(), policy=ap.ScriptedPolicy())
+outcome = inv.run()                          # ends "awaiting_data" at the first proposal
+
+# later, in any process:
+inv = ap.connect("~/autophys").project(project).investigation(outcome.investigation)
+inv.wait_for_approval()                      # the viewer's approve/edit lands in the file
+inv.attach_data(outcome.proposal_id, observation)
+inv.run()
 ```
+
+## Connections and workbooks (W-1..W-8)
+
+The operator's decisions are in
+[`workbook.md`](../../autophys.project.docs/content/workbook.md); the file
+format both Rust and Python implement is
+[`workbook-format.md`](../../autophys.project.docs/content/workbook-format.md).
+
+| Call | What it does |
+| --- | --- |
+| `ap.connect(target=None, api_key=None)` | a directory (local collection, created if missing), a `*.ap-workbook` path, an `http(s)://` daemon URL, or nothing (`$AUTOPHYS_HOME`, default `~/autophys`) |
+| `client.projects()` | `[{id, name}]` (plus `path` locally) |
+| `client.project(project)` | the project's `Workbook`, created if new. Pass the `Project` to run investigations, or its name to read, review and approve only. |
+| `wb.investigate(dataset, runner, **kw)` | a new recorded `Investigation`; `.run()` runs the loop |
+| `wb.investigations()` | the projection rows: `id, status, budget_used, overrides, …` |
+| `wb.investigation(id, runner=None, policy=None)` | resume from the records (`Investigation.resume`) |
+| `wb.config_versions()`, `wb.verify()` | stored config versions; chain and projection check |
+| `inv.records(kind=None)`, `inv.proposal(pid)` | this investigation's records; a proposal's folded state |
+| `inv.approve(pid, by=, settings=)`, `inv.reject(pid, by=, reason=)`, `inv.attach_data(pid, obs)`, `inv.wait_for_approval(timeout=)` | the proposal verbs |
+
+Locally, `WorkbookStore` opens the file with the standard library's
+`sqlite3` in WAL mode and appends each record in one `BEGIN IMMEDIATE`
+transaction with the daemon's rules: payload validation with field paths,
+idempotent client ids, the proposal state machine, edit limits on outlook
+axes, the hash chain and the projection fold. Another process (the viewer, a
+second SDK) may write the same file; `wait_for_approval` notices its commit
+through `PRAGMA data_version`. Resuming restores the measurements, counts,
+adopted model variant, pending proposal and last outcome. Fits, sensitivities
+and rankings are recomputed by the next `run()`.
 
 ## Where this came from
 
@@ -65,7 +105,7 @@ benchmark reproduces the source's table (see Test).
 
 - **This package** runs on the user's machine next to their simulator:
   fits, diagnostics, the agent loop, the outlook grids and local recording.
-  All numerics live here (AX-2).
+  All numerics live here, and this package is their reference: AX-2 (revised 2026-11-04) has autophys-rs port them in phase 2.
 - **The daemon** is this repo's `autophys serve` (loopback
   `127.0.0.1:4794`). Its record store is being built from
   `tento-autophys-store`. It stores and projects records and never computes
@@ -90,7 +130,9 @@ benchmark reproduces the source's table (see Test).
 | `project.py` | `Project`: the declared configuration and its content-hashed config version |
 | `agent.py` | `Investigation`, tools, decision schema, `ScriptedPolicy`, `ReasonLanePolicy`, guardrail |
 | `reasoner.py` | `HttpReasoner` (reason lane), `FakeReasoner` |
-| `store.py`, `http.py` | append-only `MemoryStore`/`JsonlStore`; `HttpStore` (`/api/v1`, record stream), pairing and credentials |
+| `workbook.py` | `WorkbookStore`: the `.ap-workbook` file (format, validation, state machine, projections, `check()`) |
+| `client.py` | `connect`, `LocalClient`, `RemoteClient`, `Workbook` |
+| `store.py`, `http.py` | append-only `MemoryStore`/`JsonlStore` (tests); `HttpStore` (`/api/v1`, record stream), pairing and credentials |
 
 | `bench.py`, `cli.py` | benchmark runner; `autophys pair`, `whoami`, `bench` |
 
@@ -186,12 +228,33 @@ PYTHONDONTWRITEBYTECODE=1 ~/.cache/autophys/venv/bin/python -m pytest -q
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src ~/.cache/autophys/venv/bin/python -m autophys.cli bench --seeds 5
 ```
 
-On rwc-dev-01 (Python 3.12.3, NumPy 2.5.4, SciPy 1.18.1, aarch64) the suite
-is 65 passed, 1 skipped, in about 40 s with no network. HTTP code is tested
-against an in-process fake of `/api/v1` (`tests/fake_server.py`), including
-the stream. The skipped test is an opt-in smoke that sends one decision
-through a running reason lane:
-`AUTOPHYS_LIVE_REASON_URL=http://127.0.0.1:4861 pytest -k live`.
+On rwc-dev-01 (Python 3.12.3, SQLite 3.45.1, NumPy 2.5.4, SciPy 1.18.1,
+aarch64) the suite is 93 passed, 2 skipped, in about 50 s with no network.
+HTTP code is tested against an in-process fake of `/api/v1`
+(`tests/fake_server.py`), including the stream. Workbook tests include a
+second process approving while the SDK waits. The skips are an opt-in smoke
+that sends one decision through a running reason lane
+(`AUTOPHYS_LIVE_REASON_URL=http://127.0.0.1:4861 pytest -k live`) and the
+Rust-written conformance workbooks, until `tests/conformance/rust/` has any.
+
+`tests/test_conformance.py` is the shared suite (W-4): the hash-chain vectors
+in `tests/vectors/chain.json` and the golden workbooks in
+`tests/conformance/` (see its README; regenerate the Python ones with
+`tests/conformance_cases.py`).
+
+Build the wheel and test the installed package in a clean environment:
+
+```sh
+~/.cache/autophys/venv/bin/python -m pip wheel --no-deps -w ~/.cache/autophys/dist .
+rm -rf build src/autophys.egg-info               # setuptools' build leftovers
+python3 -m venv ~/.cache/autophys/venv-check
+~/.cache/autophys/venv-check/bin/pip install ~/.cache/autophys/dist/autophys-0.1.0-py3-none-any.whl pytest
+PYTHONDONTWRITEBYTECODE=1 ~/.cache/autophys/venv-check/bin/python -m pytest -q -o pythonpath=
+~/.cache/autophys/venv-check/bin/autophys bench --seeds 5
+```
+
+`-o pythonpath=` drops `src` from the path, so the tests import the installed
+wheel.
 
 The benchmark (5 seeds per row, medians, evaluator view) reproduces the
 source's statuses, errors and requests on both policies:

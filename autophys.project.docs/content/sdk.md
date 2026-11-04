@@ -1,6 +1,6 @@
 # The Python SDK: moved from hacks-site, renamed autophys, speaking /api/v1
 
-Status: SDK page, rev 1, 2026-11-04. It covers the SDK half of phase 5 in
+Status: SDK page, rev 2, 2026-11-04. Owner: autophys/api (thread 755eea02). It covers the SDK half of phase 5 in
 tento's `projects/autophys.project.docs/content/architecture.md` ("SDK
 retargeted to `/api/v1` (renamed to autophys)"). That means the package at
 `autophys/sdks/python`, what changed in the move, the decisions it carries,
@@ -105,6 +105,27 @@ low cost unless stated.
 | ML-14 | catalog constants: free response x0 = 0.1 m; impulse 0.5 N s; thermal truth C = 500 J/K, R = 2 K/W; the 120 s short step leaves R practically non-identifiable (log-std 0.29) | other constants; the benchmark table would change | the model and synthetic modules |
 ```
 
+## Workbooks in the SDK (rev 2)
+
+The operator's W-1..W-8 (`workbook.md`) are implemented in the SDK:
+`workbook.py` (`WorkbookStore`, the format in `workbook-format.md`),
+`client.py` (`connect`, `LocalClient`, `RemoteClient`, `Workbook`),
+`Investigation.resume`, `inv.records`, `inv.proposal`, the proposal event
+`withdrawn`, and the shared suite `tests/test_conformance.py` with goldens in
+`tests/conformance/`. The Python names in `rust-sdk.md`'s table are the ones
+shipped. These details are **agent-chosen, pending operator review**:
+
+```review-table
+| Id   | Choice | Strongest alternative and tradeoff | Reverse |
+| ---- | ------ | ---------------------------------- | ------- |
+| WB-1 | Resume restores measurements, step/simulation/experiment counts, the adopted model variant, the fit counter, the pending proposal and the last outcome. Fits, sensitivities and rankings are recomputed by the next `run()`. | Rebuild the last `FitResult` from its `run` record, so a resumed run can skip one fit. That saves simulations, but adds a second source of fit state. | add `FitResult.from_dict` and restore in `_replay` |
+| WB-2 | `client.project(Project)` records the project in its workbook at once, so a slug collision (`Thermal` vs `thermal`) is refused when it is opened. | Record it at the first `investigate`. That means no write on open, but the collision surfaces later. | one line in `LocalClient.project` |
+| WB-3 | Opening by name (`client.project("heated-block")`) is review-only: `investigate` and `investigation(id)` need the `Project`, because resuming checks the pinned config version and runs the simulator. | Allow record-only reads of an investigation by name through a separate handle. That costs a second investigation type. | a small read-only class |
+| WB-4 | A local `wait_for_approval` checks `PRAGMA data_version` every 0.1 s and re-reads the proposal only when the file changed. | Use OS file notifications. That avoids polling, but differs per OS and isn't reliable for WAL commits. | `WorkbookStore.watch_interval` |
+| WB-5 | `MemoryStore` and `JsonlStore` stay as test backends with their older, looser checks. Only `WorkbookStore` and the daemon enforce the full rules. | Port the rules into the base `Store`. That gives one behaviour everywhere, but breaks tests that write partial payloads. | move `payload_shape` and the transition check into `Store.append` |
+| WB-6 | The goldens are committed SQLite files (about 360 KB) with a JSON expectation each. Ids and timestamps are random, so regenerating changes the bytes. | Deterministic generation (seeded ids, fixed clock). That gives reproducible bytes, but needs hooks into the store for ids and time. | inject an id/clock factory |
+```
+
 ## Contract questions
 
 These are for the owner of `tento-autophys-store` and `architecture.md`. The
@@ -186,9 +207,14 @@ give identical benchmark rows on the same host.
 
 ## Remaining work
 
-- Run the SDK against the real daemon once `/api/v1` is served, and settle
-  questions 1-13.
-- SDK withdraw (question 7). Resume an investigation from its records in a
-  new process (architecture D2).
+- Question 8 is settled: the Python suite checks the shared vectors
+  (`tests/vectors/chain.json`), and the Rust crate is to verify
+  `tests/conformance/python/` and write `tests/conformance/rust/`.
+- Run `HttpStore` and `RemoteClient` against the real daemon (it serves
+  `/api/v1` since d82deaa), and settle the open contract questions.
+- SDK withdraw (question 7): the store accepts `withdrawn`, but there is no
+  `inv.withdraw` yet.
+- Phase 2 of autophys-rs (AX-2 revised): numeric golden cases in
+  `tests/conformance/numerics/`, format to be drafted in `rust-sdk.md`.
 - Retire the yuzuquats original and `~/.cache/modellab/venv`, once the
   operator approves.
