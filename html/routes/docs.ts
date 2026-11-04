@@ -302,7 +302,7 @@ outcome = inv.run()
 print(outcome.status, outcome.investigation, outcome.proposal_id)   # awaiting_data inv_… prop_…
 \`\`\`
 
-Run it from the repository root with \`.venv/bin/python\`; the workbook lands in \`./autophys-demo\`. To review it, start \`./target/release/autophys serve --collection ./autophys-demo\` in another terminal and open \`http://127.0.0.1:4794\`, or use the daemon's \`approve\` with \`--target ./autophys-demo\` and the printed IDs. Then call \`inv.wait_for_approval()\`, \`inv.attach_data(outcome.proposal_id, measured)\` and \`inv.run()\` again.
+Save it as \`demo.py\` and run \`.venv/bin/python -i demo.py\` from the repository root; \`-i\` keeps \`inv\` available when the script finishes, and the workbook lands in \`./autophys-demo\`. To review it, start \`./target/release/autophys serve --collection ./autophys-demo\` in another terminal and open \`http://127.0.0.1:4794\`, or use the daemon's \`approve\` with \`--target ./autophys-demo\` and the printed IDs. Then call \`inv.wait_for_approval()\`, \`inv.attach_data(outcome.proposal_id, measured)\` and \`inv.run()\` again.
 
 **Connections and workbooks**
 
