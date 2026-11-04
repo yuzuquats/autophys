@@ -463,3 +463,25 @@ and commit stamp; `AUTOPHYS_PROJECT_ROOT` can select that checkout. This keeps
 the native linker's signature valid. The alternative is an explicit build-time
 ZIP/link step instead of `pack`; switching costs a small command/build change.
 The section and relink implementation remains untested on macOS.
+
+## Phase 3: Muse roles
+
+The direct `ChatReasoner` exposes `MUSE_SPARK` (`muse-spark-1.3`) and
+`MUSE_WONDER` (`muse-wonder-1.0`). `ChatReasonerConfig.role` defaults to
+`policy` (Spark); `researcher` selects Wonder. An explicit model wins.
+`ReasonOptions.images` accepts `ReasonImage {media_type, data}` with base64
+bytes, attaching OpenAI `image_url` data-URI parts to the last user message.
+`HttpReasoner` retains the text-only lane and its `elapsed_ms` reply field.
+Direct calls retry 429 and 5xx up to four attempts, respecting numeric
+Retry-After (0–30 seconds) and otherwise backing off 1, 2, 4 seconds. A 402
+fails immediately with the committed Python `billing_not_configured` detail.
+
+The Muse Code CLI adapter remains Python-only. Record metadata, prices and
+cassette integration await the Python Muse batch being committed; Rust does
+not consume peer working files. No schema or projection-table change is
+planned; workbook `user_version` remains 1. All tests use loopback HTTP or
+fixtures. No live provider call, deployment or restart is part of phase 3.
+The numerics reader selects ScriptedPolicy only for the top-level
+`policy: "scripted"`; all 21 shared cases pass in its clean-export workspace
+gate. Task-board CLI is unavailable on rwc-dev-01; this section and the active
+session plan carry the work state until the CLI is available.

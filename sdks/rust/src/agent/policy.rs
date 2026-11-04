@@ -492,6 +492,7 @@ impl Policy for ReasonLanePolicy {
                 response_schema: Some(decision_schema()),
                 effort: self.effort.clone(),
                 max_tokens: Some(self.max_tokens),
+                ..Default::default()
             },
         )?;
         let d = parse_json_content(&reply.content)?;

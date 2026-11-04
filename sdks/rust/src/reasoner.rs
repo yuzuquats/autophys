@@ -1,10 +1,12 @@
-//! Text-only HTTP reasoners and injectable deterministic test reasoners.
+//! HTTP reasoners and injectable deterministic test reasoners.
 mod chat;
 use crate::simulator::{Result, invalid};
 pub use chat::{ChatReasoner, ChatReasonerConfig, reasoner_from_env};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
+pub const MUSE_SPARK: &str = "muse-spark-1.3";
+pub const MUSE_WONDER: &str = "muse-wonder-1.0";
 pub const MIN_TOKENS: usize = 1800;
 pub const REASON_PATH: &str = "/api/inference/reason";
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -16,11 +18,19 @@ pub struct ReasonReply {
     pub route: Option<String>,
     pub elapsed_ms: Option<f64>,
 }
+/// An image sent to a direct chat reasoner as a data URI.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ReasonImage {
+    pub media_type: String,
+    /// Base64-encoded image bytes.
+    pub data: String,
+}
 #[derive(Clone, Debug, Default)]
 pub struct ReasonOptions {
     pub response_schema: Option<Value>,
     pub effort: Option<String>,
     pub max_tokens: Option<usize>,
+    pub images: Vec<ReasonImage>,
 }
 pub trait Reasoner: Send {
     fn complete(&mut self, messages: &[Value], options: &ReasonOptions) -> Result<ReasonReply>;
@@ -52,6 +62,9 @@ impl Reasoner for HttpReasoner {
         format!("HttpReasoner({:?})", self.url)
     }
     fn complete(&mut self, messages: &[Value], o: &ReasonOptions) -> Result<ReasonReply> {
+        if !o.images.is_empty() {
+            return Err(invalid("the reason lane is text-only"));
+        }
         for m in messages {
             let c = &m["content"];
             if !c.is_string()

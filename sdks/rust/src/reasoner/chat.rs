@@ -5,6 +5,8 @@ use std::{env, path::PathBuf};
 #[derive(Clone)]
 pub struct ChatReasonerConfig {
     pub route: String,
+    /// policy selects Spark; researcher selects Wonder unless model is explicit.
+    pub role: String,
     pub base_url: Option<String>,
     pub model: Option<String>,
     pub api_key: Option<String>,
@@ -14,6 +16,7 @@ impl Default for ChatReasonerConfig {
     fn default() -> Self {
         Self {
             route: "meta".into(),
+            role: "policy".into(),
             base_url: None,
             model: None,
             api_key: None,
@@ -105,17 +108,22 @@ fn reason_key(route: &str, explicit: Option<String>) -> Result<String> {
         .ok(),
     )
 }
-fn retry_delay(value: Option<&str>) -> Duration {
+fn retry_delay(value: Option<&str>, attempt: u32) -> Duration {
     let v = value
         .and_then(|s| s.trim().parse::<f64>().ok())
         .filter(|v| v.is_finite())
-        .unwrap_or(1.);
+        .unwrap_or(2_f64.powi(attempt as i32));
     Duration::from_secs_f64(v.clamp(0., 30.))
 }
 impl ChatReasoner {
     pub fn new(config: ChatReasonerConfig) -> Result<Self> {
+        let role_model = match config.role.as_str() {
+            "policy" => MUSE_SPARK,
+            "researcher" => MUSE_WONDER,
+            _ => return Err(invalid("role must be policy or researcher")),
+        };
         let (base, model) = match config.route.as_str() {
-            "meta" => ("https://api.meta.ai/v1", Some("muse-spark-1.3")),
+            "meta" => ("https://api.meta.ai/v1", Some(role_model)),
             "baseten" => ("https://inference.baseten.co/v1", None),
             _ => return Err(invalid("reason route must be meta or baseten")),
         };
@@ -191,8 +199,31 @@ impl Reasoner for ChatReasoner {
             ));
         }
         let mut budget = options.max_tokens.unwrap_or(MIN_TOKENS);
-        if self.route == "meta" {
+        if self.route == "meta" || [MUSE_SPARK, MUSE_WONDER].contains(&self.model.as_str()) {
             budget = budget.max(MIN_TOKENS);
+        }
+        let mut messages = messages.to_vec();
+        if !options.images.is_empty() {
+            let user = messages
+                .iter_mut()
+                .rev()
+                .find(|m| m["role"] == "user")
+                .ok_or_else(|| invalid("images require a user message"))?;
+            let mut parts = vec![json!({"type":"text", "text":user["content"]})];
+            for image in &options.images {
+                if !image.media_type.starts_with("image/")
+                    || image.media_type.contains([
+                        char::from(10),
+                        char::from(13),
+                        char::from(59),
+                        char::from(44),
+                    ])
+                {
+                    return Err(invalid("invalid image media_type"));
+                }
+                parts.push(json!({"type":"image_url", "image_url":{"url":format!("data:{};base64,{}", image.media_type, image.data)}}));
+            }
+            user["content"] = json!(parts);
         }
         let mut body = json!({"model":self.model,"messages":messages,"max_tokens":budget});
         if let Some(schema) = &options.response_schema {
@@ -215,12 +246,13 @@ impl Reasoner for ChatReasoner {
                 .send_json(&body)
                 .map_err(|_| invalid("chat completions request failed"))?;
             let status = response.status().as_u16();
-            if status == 429 && attempt < 3 {
+            if (status == 429 || (500..600).contains(&status)) && attempt < 3 {
                 (self.sleep)(retry_delay(
                     response
                         .headers()
                         .get("Retry-After")
                         .and_then(|v| v.to_str().ok()),
+                    attempt,
                 ));
                 continue;
             }
@@ -336,6 +368,7 @@ mod tests {
             max_tokens: Some(8),
             response_schema: Some(json!({"type":"object"})),
             effort: Some("low".into()),
+            ..Default::default()
         };
         let reply = r
             .complete(&[json!({"role":"user","content":"hi"})], &options)
@@ -408,8 +441,57 @@ mod tests {
             r.complete(&[json!({"content":[]})], &Default::default())
                 .is_err()
         );
-        assert_eq!(retry_delay(Some("NaN")), Duration::from_secs(1));
-        assert_eq!(retry_delay(Some("-5")), Duration::ZERO);
+        assert_eq!(retry_delay(Some("NaN"), 0), Duration::from_secs(1));
+        assert_eq!(retry_delay(Some("-5"), 0), Duration::ZERO);
+    }
+    #[test]
+    fn muse_roles_images_and_server_backoff() {
+        let (url, server) = serve(vec![
+            (503, "", json!({})),
+            (502, "Retry-After: 0\r\n", json!({})),
+            (500, "", json!({})),
+            (200, "", json!({"choices":[{"message":{"content":"ok"}}]})),
+        ]);
+        let mut cfg = config("meta", url);
+        cfg.role = "researcher".into();
+        cfg.model = None;
+        let sleeps = Arc::new(Mutex::new(vec![]));
+        let captured = sleeps.clone();
+        let mut r = ChatReasoner::new(cfg)
+            .unwrap()
+            .with_sleep(move |d| captured.lock().unwrap().push(d));
+        let messages = vec![json!({"role":"user", "content":"explain"})];
+        r.complete(
+            &messages,
+            &ReasonOptions {
+                images: vec![ReasonImage {
+                    media_type: "image/png".into(),
+                    data: "aGk=".into(),
+                }],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let requests = server.join().unwrap();
+        assert_eq!(requests.len(), 4);
+        assert!(requests.iter().all(|b| b == &requests[0]));
+        assert_eq!(requests[0]["model"], MUSE_WONDER);
+        assert_eq!(
+            requests[0]["messages"][0]["content"][1]["image_url"]["url"],
+            "data:image/png;base64,aGk="
+        );
+        assert_eq!(messages[0]["content"], "explain");
+        assert_eq!(
+            *sleeps.lock().unwrap(),
+            vec![
+                Duration::from_secs(1),
+                Duration::ZERO,
+                Duration::from_secs(4)
+            ]
+        );
+        let mut cfg = config("meta", String::new());
+        cfg.model = None;
+        assert_eq!(ChatReasoner::new(cfg).unwrap().model, MUSE_SPARK);
     }
     #[test]
     fn private_credentials() {
