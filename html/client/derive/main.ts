@@ -26,6 +26,18 @@ export function rankingBars(s: State, inv: Investigation, p: Proposal): BarRow[]
 }
 
 export function mainModel(s: State): MainModel {
+  const model = selectedMain(s);
+  if (model.body.kind !== "panels") return model;
+  const gap = (description: string) => ({ kind: "missing" as const, title: "Not recorded yet", description });
+  if (!model.body.panels.length) return { ...model, body: gap("No chart data has been recorded for this view. Upload the corresponding series from the SDK; new records appear live.") };
+  return { ...model, body: { ...model.body, panels: model.body.panels.map((p) => ({ ...p,
+    charts: p.charts.length ? p.charts.map((c) => (c.kind === "bars" || c.kind === "ranges") && !c.rows.length
+      ? gap("No values have been recorded for this panel. Record them through the SDK to populate this view.") : c)
+      : [gap("No data has been recorded for this panel. Upload it through the SDK to populate this view.")],
+  })) } };
+}
+
+function selectedMain(s: State): MainModel {
   const project = projectOf(s);
   const sel = parseSel(project, s.selected[project.id] ?? "") ?? parseSel(project, defaultSelection(project))!;
   const invCrumb = (inv: Investigation) => ({ label: inv.name, id: ids.inv(inv) });
@@ -39,7 +51,7 @@ export function mainModel(s: State): MainModel {
       const c = configFor(project, sel.inv), fit = latestFit(sel.inv);
       const panels = fit ? fitPanels({ config: c, inv: sel.inv }, fit) : sel.inv.measurements.flatMap((m) => measurementPanels(c, m));
       return { crumb: [{ label: sel.inv.name }], meta: fit ? `Fit #${fit.n} · χ²/N ${fit.chi2N.toFixed(2)}` : statusText(sel.inv).text, actions: [EXPORT],
-        body: { kind: "panels", panels }, credit: credit(c, sel.inv, fit?.measurements ?? sel.inv.measurements.map((m) => m.id), fit ? ` · fit #${fit.n}` : "") };
+        body: panels.length ? { kind: "panels", panels } : { kind: "missing", title: "Not recorded yet", description: "No measurements or fits have arrived. Run the investigation from the SDK; records appear live here." }, credit: credit(c, sel.inv, fit?.measurements ?? sel.inv.measurements.map((m) => m.id), fit ? ` · fit #${fit.n}` : "") };
     }
     case "measurement": {
       const c = configFor(project, sel.inv), m = sel.m;
@@ -49,7 +61,7 @@ export function mainModel(s: State): MainModel {
     case "awaiting": {
       const c = configFor(project, sel.inv);
       return { crumb: [invCrumb(sel.inv), { label: "Measurements" }, { label: sel.id }], meta: "awaiting data", actions: [EXPORT],
-        body: { kind: "empty", text: `Waiting for ${sel.id} from ${sel.proposal.dataFrom}` }, credit: credit(c, sel.inv, []) };
+        body: { kind: "missing", title: "Not recorded yet", description: `Waiting for ${sel.id} from ${sel.proposal.dataFrom}. Attach the requested measurement through the SDK to continue.` }, credit: credit(c, sel.inv, []) };
     }
     case "fit": {
       const c = configFor(project, sel.inv), ctx = { config: c, inv: sel.inv }, fit = sel.fit, view = sel.view ?? "fit";
@@ -57,10 +69,10 @@ export function mainModel(s: State): MainModel {
       const meta = fit.state === "running" ? `running · ${fit.evals} evals` : view === "landscape" && fit.landscape
         ? `${fit.landscape.xs.length - 1} × ${fit.landscape.ys.length - 1} · ${fit.landscape.held} held` : `${fit.evals} evals · χ²/N ${fit.chi2N.toFixed(2)}`;
       let body: MainModel["body"];
-      if (view === "landscape") { const chart = landscapeChart(c, fit); body = chart ? { kind: "panels", panels: [{ charts: [chart] }] } : { kind: "empty", text: "No landscape recorded for this fit" }; }
+      if (view === "landscape") { const chart = landscapeChart(c, fit); body = chart ? { kind: "panels", panels: [{ charts: [chart] }] } : { kind: "missing", title: "Not recorded yet", description: "No landscape recorded for this fit" }; }
       else if (view === "residuals") {
         const panels = residualPanels(ctx, fit);
-        body = panels.length ? { kind: "panels", panels } : { kind: "empty", text: "Residuals need the fit's curve, which is not recorded for this fit" };
+        body = panels.length ? { kind: "panels", panels } : { kind: "missing", title: "Not recorded yet", description: "Residuals need the fit's curve, which is not recorded for this fit" };
       }
       else if (view === "envelope") body = { kind: "panels", panels: envelopePanels(ctx, fit) };
       else if (view === "frequency") body = { kind: "panels", panels: frequencyPanels(ctx, fit) };
@@ -72,7 +84,7 @@ export function mainModel(s: State): MainModel {
       const c = configFor(project, sel.inv), id = sel.fit.identification;
       if (!sel.fit.sensitivity && id) {
         return { crumb: [invCrumb(sel.inv), { label: "Sensitivity" }], meta: `${id.identified.length} of ${id.identified.length + id.nonIdentified.length} identified · at Fit #${sel.fit.n}`, actions: [EXPORT],
-          body: { kind: "empty", text: `Identified: ${id.identified.join(", ") || "none"}. Not identified: ${id.nonIdentified.join(", ") || "none"}. Singular values and directions are not recorded.` },
+          body: { kind: "missing", title: "Not recorded yet", description: `Identified: ${id.identified.join(", ") || "none"}. Not identified: ${id.nonIdentified.join(", ") || "none"}. Singular values and directions are not recorded.` },
           credit: credit(c, sel.inv, sel.fit.measurements, ` · fit #${sel.fit.n}`) };
       }
       return { crumb: [invCrumb(sel.inv), { label: "Sensitivity" }], meta: `rank ${rankOf(sel.fit.sensitivity!)} of ${sel.fit.sensitivity!.names.length} · at Fit #${sel.fit.n}`, actions: [EXPORT],
@@ -85,10 +97,10 @@ export function mainModel(s: State): MainModel {
     }
     case "validate": {
       const c = configFor(project, sel.inv), v = sel.inv.validation;
-      if (v.state === "needs-data") return { crumb: [invCrumb(sel.inv), { label: "Validate" }], meta: "needs data", actions: [EXPORT], body: { kind: "empty", text: sel.inv.measurements.some((m) => m.split === "test") ? "Held-out measurements are present; no validation check recorded yet" : "Needs a held-out measurement" }, credit: credit(c, sel.inv, []) };
+      if (v.state === "needs-data") return { crumb: [invCrumb(sel.inv), { label: "Validate" }], meta: "needs data", actions: [EXPORT], body: { kind: "missing", title: "Not recorded yet", description: sel.inv.measurements.some((m) => m.split === "test") ? "Held-out measurements are present; no validation check recorded yet" : "Needs a held-out measurement" }, credit: credit(c, sel.inv, []) };
       if (v.state === "summary") {
         return { crumb: [invCrumb(sel.inv), { label: "Validate" }], meta: `χ²/N ${v.chi2N.toFixed(2)} · ${v.passed ? "passed" : "failed"}`, actions: [EXPORT],
-          body: { kind: "empty", text: `Held-out check ${v.passed ? "passed" : "failed"}: χ²/N ${v.chi2N.toFixed(2)} (≤ ${sig(v.threshold, 3)})${v.measurements.length ? ` on ${v.measurements.join(", ")}` : ""}. The predicted series is not recorded.` },
+          body: { kind: "missing", title: "Not recorded yet", description: `Held-out check ${v.passed ? "passed" : "failed"}: χ²/N ${v.chi2N.toFixed(2)} (≤ ${sig(v.threshold, 3)})${v.measurements.length ? ` on ${v.measurements.join(", ")}` : ""}. The predicted series is not recorded.` },
           credit: credit(c, sel.inv, v.measurements) };
       }
       const fit = sel.inv.fits.find((f) => f.n === v.fit)!;

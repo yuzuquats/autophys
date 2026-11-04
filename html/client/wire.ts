@@ -289,7 +289,12 @@ export class WireModel {
     const projects: Project[] = [];
     for (const wp of this.projects) {
       const cfgs = this.configs.get(wp.id) ?? [];
-      if (!cfgs.length) continue;
+      if (!cfgs.length) {
+        projects.push({ id: wp.id, name: wp.name, configs: [], investigations: [] });
+        // Its first streamed investigation may reference a config registered after load.
+        if ([...this.logs.values()].some((log) => str(log[0]?.payload.project_id) === wp.id)) this.stale = true;
+        continue;
+      }
       const mapped: NonNullable<ReturnType<typeof mapInvestigation>>[] = [];
       for (const [id, log] of this.logs) {
         if (str(log[0]?.payload.project_id) !== wp.id) continue;

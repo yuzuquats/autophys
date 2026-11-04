@@ -4,6 +4,7 @@
  * meters, fields and links, an optional decision row of exactly two buttons and an optional
  * row of other buttons. Fields report raw text; the caller validates it.
  */
+import { emptyMarkup } from "./state-markup.ts";
 import { barsMarkup } from "./charts.ts";
 import { ICONS } from "./icons.ts";
 import { ATTR, escapeHtml as esc, intentOf, type IntentHandler } from "./intent.ts";
@@ -18,6 +19,7 @@ const tone = (t?: string) => (t ? ` ap-t-${t}` : "");
 
 function blockMarkup(b: Block): string {
   switch (b.kind) {
+    case "missing": return `<div class="ap-gap">${emptyMarkup(b.title, b.description)}</div>`;
     case "facts":
       return `<dl class="ap-facts">${b.rows.map((r) => `<div><dt>${esc(r.label)}</dt><dd class="${tone(r.tone).trim()}">${r.value ? `<span>${esc(r.value)}</span>` : ""}${r.note ? ` <span class="ap-note">${esc(r.note)}</span>` : ""}${tag(r.tag)}</dd></div>`).join("")}</dl>`;
     case "table":
@@ -53,7 +55,7 @@ export function detailsMarkup(model: DetailsModel, classes: DetailsClasses = {})
 export class AutophysDetails {
   private abort = new AbortController();
 
-  constructor(private host: HTMLElement, onIntent: IntentHandler, private classes: DetailsClasses = {}) {
+  constructor(private host: HTMLElement, onIntent: IntentHandler, private classes: DetailsClasses = {}, private hydrate: (host: HTMLElement) => void = () => {}) {
     const { signal } = this.abort;
     host.addEventListener("click", (e) => {
       const el = (e.target as Element).closest?.<HTMLElement>(`[${ATTR.role}]`);
@@ -80,6 +82,7 @@ export class AutophysDetails {
     const field = active && this.host.contains(active) && active.getAttribute(ATTR.role) === "field" ? active.getAttribute(ATTR.name) : null;
     const caret = field ? [active!.selectionStart, active!.selectionEnd] as const : null;
     this.host.innerHTML = detailsMarkup(model, this.classes);
+    this.hydrate(this.host);
     if (!field) return;
     const next = this.host.querySelector<HTMLInputElement>(`[${ATTR.name}="${CSS.escape(field)}"]`);
     if (!next) return;

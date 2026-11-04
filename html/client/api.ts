@@ -115,7 +115,9 @@ export function daemon(opts: DaemonOptions = {}): Source {
         body: body === undefined ? undefined : JSON.stringify(body),
       });
     } catch (error) {
-      throw new ApiError(0, "unreachable", String((error as Error)?.message ?? error));
+      const failure = new ApiError(0, "unreachable", String((error as Error)?.message ?? error));
+      for (const on of errors) on(failure);
+      throw failure;
     }
     const text = await res.text();
     let json: unknown = null;

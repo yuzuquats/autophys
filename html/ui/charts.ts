@@ -1,3 +1,4 @@
+import { emptyMarkup } from "./state-markup.ts";
 /**
  * Chart drawing: data coordinates to pixels, nothing else. Every series, tick, label and
  * opacity arrives computed; the only decisions here are layout (margins, where the legend
@@ -22,6 +23,7 @@ const M = { left: 44, right: 12 };
 /** Markup for one chart at `width` pixels; `key` makes its clip-path id unique on the page. */
 export function chartMarkup(chart: Chart, width: number, key: string): string {
   switch (chart.kind) {
+    case "missing": return `<div class="ap-gap">${emptyMarkup(chart.title, chart.description)}</div>`;
     case "xy": return xyMarkup(chart, width, key);
     case "heatmap": return heatmapMarkup(chart, width);
     case "bars": return barsMarkup(chart.rows, chart.label);

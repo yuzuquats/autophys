@@ -9,8 +9,9 @@ import type { Action, SidebarModel, Trail, TreeNode } from "./view-model.ts";
 
 export function switcherMarkup(model: SidebarModel): string {
   const s = model.switcher;
-  return `<label class="ap-switch"><span class="ap-hidden">${esc(s.label)}</span><select id="ap-switch" ${ATTR.role}="switch" aria-label="${esc(s.label)}">${s.options
-    .map((o) => `<option value="${esc(o.value)}"${o.value === s.value ? " selected" : ""}>${esc(o.label)}</option>`).join("")}</select></label>`;
+  if (s.kind === "none" || s.kind === "loading" || s.kind === "unavailable") return "";
+  if (s.kind === "single") return `<div class="ap-project-label"><span>Project</span><b>${esc(s.options[0]?.label ?? "")}</b></div>`;
+  return `<div id="ap-switch" data-ap-switcher data-options="${esc(JSON.stringify(s.options))}" data-value="${esc(s.value)}"></div>`;
 }
 
 export function actionAttrs(a: Action): string {
@@ -19,6 +20,7 @@ export function actionAttrs(a: Action): string {
 
 export function sectionMarkup(model: SidebarModel): string {
   const { label, count, add } = model.section;
+  if (!label) return "";
   return `<div class="ap-section-head"><span>${esc(label)}<span class="ap-count">${esc(count)}</span></span>${add
     ? `<button type="button" class="ap-add" ${actionAttrs(add)} aria-label="${esc(add.label)}">${ICONS.plus}</button>` : ""}</div>`;
 }

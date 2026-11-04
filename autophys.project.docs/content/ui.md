@@ -7,8 +7,8 @@ commit-project; it adopts and completes the stopped implementer's uncommitted
 `html/` work. Scope is `html/**` and this page only; server, SDK, vendor and
 other agents' changes remain theirs.
 
-The composition root tries `daemon()` first and uses the computed fixture when its
-load fails. `?source=fixtures` explicitly selects the demo; `?source=daemon`
+The composition root loads `daemon()` by default and shows a recovery banner when
+its load fails. `?source=fixtures` explicitly selects the demo; `?source=daemon`
 forces the daemon. The sidebar status names the source. A daemon that answers with
 no projects stays an empty workspace, including controls to approve the first
 device. It never substitutes sample investigations for an empty daemon.
@@ -47,13 +47,13 @@ device. It never substitutes sample investigations for an empty daemon.
   generation was added to the client. Missing input is not shown as zero force;
   missing residual diagnostics are not called white.
 
-The existing `ui/` remains view-only and unchanged. Both source mapping and
-missing-data presentation live in `client/`; the root only composes them.
+The `ui/` remains view-only. Source mapping and explicit empty-state models live
+in `client/derive`; browser-only component binding lives in `ui/components.ts`.
+The root owns navigation, clipboard access and guarded reauthentication.
 
 ## Verification and reproduction
 
-Run from `/home/james/workspace/autophys` on rwc-dev-01 with the documented
-Deno/Cargo/local-bin PATH. Build outputs are in
+Run from the repository root with Deno, Cargo and the installed CLI on PATH. Build outputs are in
 `~/.cache/autophys/target-ui`; web output is in
 `~/.cache/autophys/ui-stage/web.cookie/autophys`.
 The scratch daemon uses an isolated collection and server DB beneath
@@ -207,5 +207,133 @@ placeholder assertions prevent the literal requested command from passing.
 
 Review inherited diff/current API: done. Adapter/pairing/missing-data states and
 unit regressions: done. Fresh cookie-auth browser qualification: done. Local UI commit: this change. The task-board CLI and a supported installed `lona-console` are
-unavailable on rwc-dev-01; no task database was written directly. This page is
+unavailable on the UI implementation host; no task database was written directly. This page is
 the scoped task receipt; no other threads were messaged.
+
+
+## Null and edge states
+
+The workbench distinguishes a pending first load, an empty collection, a project
+without investigations, an interrupted connection, and a missing recorded series.
+No successful empty daemon load is replaced with demo data. Demo mode has a small
+indicator and a link back to live data. A refused connection has an in-flow alert,
+retry action and demo link. Retrying reloads the document, retaining AX-9's cookie
+minting and UI-10's automatic reload guard.
+
+With no projects, the sidebar explains what a project is and omits the selector
+and empty investigation header. Main gives a copyable Python SDK recipe and a demo
+link; Details explains how to connect a device and shows pending approvals. The
+recipe deliberately names the caller-supplied simulator and measured dataset.
+One project is a label; several use lona-js's SelectInput. A project with no
+investigations gets its own recipe and live-update explanation. UI-4 still holds:
+the UI does not create investigations.
+
+Missing chart, uncertainty, sensitivity, preview, ranking and outlook data use a
+quiet “Not recorded yet” treatment. Recorded measurements remain visible beside
+the absent fitted curve. A proposal without an outlook grid keeps its settings
+read-only and explains that edits cannot be scored; approve and reject remain
+available. No new numerical data is computed or invented.
+
+### Decisions (agent-chosen, pending operator review)
+
+- **UI-11 — explicit state variants and deliberate demo entry.** Before: a
+  loading source and an empty collection shared empty controls, and a failed
+  connection could silently select fixtures. Now: derive supplies distinct
+  loading/onboarding/unavailable/missing variants; demo entry is explicit.
+  Recommended because operators can tell whether they are looking at their own
+  records. Strongest alternative: automatic demo fallback, which makes first use
+  effortless but obscures connection failures. Implemented. Reversal is a small
+  root/derive change, with no data migration.
+- **UI-12 — lona-js view primitives with a browser binding adapter.** Adopted
+  `components/empty-state/empty-state`, `components/skeleton/skeleton`,
+  `components/input/select-input`, `components/button/button` and `ui/icons`,
+  retaining `components/tree-list/tree-list`. Pure markup supplies escaped markers;
+  the browser adapter binds the components and forwards intents. The boundary
+  allows only these specific modules. Core's surveyed utilities supply no needed
+  visual primitive. Recommended for consistent controls without moving application
+  state into views. Alternative: hand-written controls, with a larger maintenance
+  burden. Implemented; replacing the adapter is local, inexpensive work.
+  `Code` was rejected because it imports the CodeMirror bundle through an
+  instance-specific static URL and plugin types; the SDK recipe uses semantic
+  `pre/code` with a lona-js copy button. `Banner` is an absolutely positioned
+  floating notice without action slots; recovery uses an in-flow semantic alert
+  with the shared button. `Badge` is an absolute avatar overlay, so the existing
+  tree trail badge remains. `PropertyList` brings editable number controls and
+  rounded-card layout; the existing semantic `dl` better fits compact read-only
+  facts. Reorderable `List` adds interaction the investigation tree does not need.
+  Searchable `Dropdown` adds search/overlay handling; SelectInput suits this small
+  project collection. No vendor changes are required.
+- **UI-13 — an honest SDK recipe and collection guidance.** Before: no first-run
+  instruction. Now: `ap.connect`, `ap.Project`, `wb.investigate`,
+  `ap.ProposalRunner`, `ap.ScriptedPolicy` and `inv.run()` match the Python SDK.
+  The workspace API does not expose the served collection path, so the copy says
+  “your autophys collection” and asks the user to supply its path or daemon URL.
+  Recommended over assuming the daemon's default path. Alternative: expose the
+  collection path through a new API contract. Implemented; changing the recipe or
+  consuming a future API field is cheap and needs no migration.
+- **UI-14 — pending devices, not an invented paired-device inventory.** Before:
+  “Devices … none” suggested the daemon had enumerated paired machines. Now:
+  Details says there are no pending requests and explains SDK URL pairing and
+  `autophys pair`. Pending requests have a named badge and approve/deny controls,
+  including before any project exists. Recommended because the API lists pending
+  requests, not approved devices. Alternative: omit all device guidance until a
+  request exists, which hides how to connect. Implemented; the wording and row
+  presentation are cheap to reverse.
+- **UI-15 — recorded-data gaps remain visible.** Before: some missing panels had
+  only a title or an empty body. Now: all missing charts use the same small empty
+  component and explain what has not arrived; read-only proposal settings explain
+  the missing outlook. Recommended over hiding panels, because absence is useful
+  calibration context. Alternative: hide unsupported chart views, reducing clutter
+  at the cost of discoverability. Implemented; reversal is confined to derive and
+  presentation, with no effect on stored records.
+
+- **UI-16 — keep a registered project visible before its first config.** Before:
+  the wire adapter discarded projects without config versions. Now: the name
+  remains in the switcher, Main explains how to start its first investigation,
+  and Details names the missing configuration without inventing one. Recommended
+  because `client.project(Project(...))` can precede `wb.investigate(...)`.
+  Alternative: keep hiding the project until its first configuration arrives,
+  which makes a successful SDK registration look unsuccessful. Implemented;
+  reversal is a small adapter/derive change with no data migration.
+
+### Null-state task receipt
+
+Component/API inventory: done. Explicit models and scoped implementation: done.
+Unit and boundary tests: passed. Browser qualification: passed. Local commit:
+this change. Task-board CLI remains unavailable; no task database was edited directly.
+No other threads were messaged.
+
+
+### Null-state verification
+
+| Check | Result |
+| --- | --- |
+| `deno test --allow-read html/` | 59 passed, 0 failed; layer boundaries included |
+| Root and three e2e script type checks | Passed |
+| `cargo build --locked` with the required UI cache target | Passed on current master; dependency warnings only |
+| `autophys build-web` into the UI staging directory | Passed |
+| Fixture flow | 62 checks, 0 browser/network errors |
+| Daemon flow, with a second empty scratch daemon | 22 checks, 0 unexpected browser/network errors; SSE, 409, pairing and AX-9 renewal/guard passed |
+| Null-state flow | 39 checks, 0 errors; 39 screenshots at 1280×800 and 390×844 |
+| Process cleanup | Both scratch daemon PIDs stopped; no test Chrome processes remain |
+
+Screenshot stems (each has `-1280x800.png` and `-390x844.png`): `empty`,
+`project-empty`, `project-unconfigured`, `devices-none`, `pairings-pending`,
+`switcher`, `single-project`, `loading`, `unreachable`, `reauth-failed`,
+`missing-fit`, `missing-residuals`, `missing-landscape`, `missing-sensitivity`,
+`missing-outlook`, and `demo`. Seven additional phone captures use the
+`-390x844-sidebar.png` suffix. The manifest enumerates every file.
+
+The empty and populated daemons used separate scratch collections and server
+DBs. The populated collection came from the real Python SDK seed. Network
+faults, delayed loads, project-only snapshots and a proposal without outlook
+were explicit browser test inputs based on that real snapshot. They are not
+production API changes. Chromium ran through the vendored `withHeadless`
+launcher and closed in its finalizer. Captures, logs and the cleanup receipt
+are retained as external workstream evidence, not committed.
+
+No vendor changes are required. Useful upstream follow-ups would be a
+standalone read-only code entry point without instance/plugin dependencies,
+and a public `Cookbook.Shell.setStatus` hook: the current shell accepts only
+an initial status callback, so the root updates its existing status node when
+a later connection error arrives. No new cookbook or component API was assumed.

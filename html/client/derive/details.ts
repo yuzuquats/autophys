@@ -30,7 +30,7 @@ function whereItStands(c: ProjectConfig, fit: Fit | null): Section {
     return { heading: "Where it stands", blocks: [{ kind: "facts", rows: [
       ...id.identified.map((k) => ({ label: k, value: `${sig(fit.params[k], 3)} ${unitOf(c, k)}`.trim(), tag: { text: "identified", tone: "ok" as const } })),
       ...id.nonIdentified.map((k) => ({ label: k, value: "", tag: { text: "not identified", tone: "warn" as const } })),
-    ] }, { kind: "text", text: "Uncertainties are not recorded", tone: "muted" }] };
+    ] }, { kind: "missing", title: "Not recorded yet", description: "Parameter uncertainties have not been recorded by the SDK." }] };
   }
   if (!fit.sensitivity) return { heading: "Where it stands", blocks: [{ kind: "text", text: `No sensitivity recorded at Fit #${fit.n}`, tone: "muted" }] };
   const s = fit.sensitivity;
@@ -57,7 +57,11 @@ function paramsTable(c: ProjectConfig, fit: Fit): TableRow[] {
 }
 
 export function detailsModel(s: State): DetailsModel {
-  const m = selectedDetails(s);
+  const selected = selectedDetails(s);
+  const m: DetailsModel = { ...selected, sections: selected.sections.map((section) => {
+    const blocks = section.blocks.filter((b) => !(b.kind === "facts" || b.kind === "table" || b.kind === "bars" || b.kind === "meters") || b.rows.length > 0);
+    return { ...section, blocks: blocks.length ? blocks : [{ kind: "missing", title: "Not recorded yet", description: "No values have been recorded for this section. They will appear when recorded by the SDK." }] };
+  }) };
   // A refused write (a 409 from the daemon, say) stays visible above the panel until the next pick.
   return s.notice ? { ...m, sections: [{ heading: "Not saved", blocks: [{ kind: "text", text: s.notice, tone: "danger" }] }, ...m.sections] } : m;
 }
@@ -80,7 +84,7 @@ function selectedDetails(s: State): DetailsModel {
 /** O-3: devices waiting to pair, each approvable here (or with `autophys pair approve` on the host). */
 export function devices(s: Pick<State, "pairings">): { section: Section; actions: Action[] } | null {
   if (!s.pairings) return null;
-  if (!s.pairings.length) return { section: { heading: "Devices", blocks: [{ kind: "text", text: "No device is waiting to pair", tone: "muted" }] }, actions: [] };
+  if (!s.pairings.length) return { section: { heading: "Devices", blocks: [{ kind: "text", text: "No pending connection requests. Connect the Python SDK to your daemon URL to request access, then approve its code here or with autophys pair.", tone: "muted" }] }, actions: [] };
   return {
     section: { heading: "Devices waiting to pair", blocks: [{ kind: "table", rows: s.pairings.map((p) => ({ cells: [{ text: p.device }, { text: p.code, end: true }, { text: p.client || "–", end: true }] })) },
       { kind: "text", text: `Codes expire ${s.pairings.map((p) => p.expires).join(", ")}`, tone: "muted" }] },
@@ -200,7 +204,7 @@ function sensitivityDetails(project: Project, inv: Investigation, fit: Fit): Det
         { label: "Identified", value: id.identified.join(", ") || "none" },
         { label: "Not identified", value: id.nonIdentified.join(", ") || "none", tone: id.nonIdentified.length ? "warn" : undefined },
         { label: "Condition", value: id.condition == null ? "–" : id.condition > 1e6 ? "> 10⁶" : int(id.condition) },
-      ] }, { kind: "text", text: "Singular values and directions are not recorded", tone: "muted" }] }],
+      ] }, { kind: "missing", title: "Not recorded yet", description: "Singular values and directions have not been recorded by the SDK." }] }],
     };
   }
   const s = fit.sensitivity!, top = s.singular[0];
@@ -229,13 +233,13 @@ function proposalDetails(s: State, project: Project, inv: Investigation, p: Prop
   const drafts = p.fields.map((f) => s.drafts[draftKey(inv, p, f.name)]);
   const look = outlookAt(p, shown);
   const sections: Section[] = [];
-  if (p.status === "proposed") {
+  if (p.status === "proposed" && p.outlook.axes.length) {
     sections.push({ heading: "Experiment", blocks: [{ kind: "fields", fields: shown.map((f, i) => ({ name: f.name, label: f.label, unit: f.unit, value: drafts[i]?.raw ?? sig(f.value, 3), invalid: drafts[i]?.message })) }] });
   } else {
     sections.push({ heading: "Experiment", blocks: [{ kind: "facts", rows: p.fields.map((f) => ({ label: f.label, value: `${sig(f.value, 3)} ${f.unit}`, note: f.value !== f.original ? `(was ${sig(f.original, 3)})` : undefined })) }] });
   }
   if (Object.keys(p.fixedSettings).length) sections[0].blocks.push({ kind: "facts", rows: Object.entries(p.fixedSettings).map(([label, value]) => ({ label, value: sig(value, 4) })) });
-  if (!p.outlook.axes.length && !Object.keys(p.outlook.after).length) sections.push({ heading: "Outlook", blocks: [{ kind: "text", text: "No outlook grid recorded. Settings are read-only; approve or reject the experiment as proposed.", tone: "muted" }] });
+  if (!p.outlook.axes.length && !Object.keys(p.outlook.after).length) sections.push({ heading: "Outlook", blocks: [{ kind: "missing", title: "Not recorded yet", description: "This proposal has no outlook grid. Settings are read-only because edits cannot be scored; approve or reject the experiment as proposed." }] });
   const unedited = shown.every((f) => f.value === f.original);
   sections.push({ heading: "Expected", blocks: [{ kind: "facts", rows: [
     ...p.expected.map((e) => {
@@ -245,7 +249,8 @@ function proposalDetails(s: State, project: Project, inv: Investigation, p: Prop
     }),
     { label: "Budget after", value: `${experimentsUsed(inv) + (p.status === "proposed" ? 1 : 0)} / ${c.budgets.maxExperiments} experiments` },
   ] }] });
-  sections.push({ heading: "Ranked against", blocks: [{ kind: "bars", rows: rankingBars(s, inv, p) }] });
+  const ranking = rankingBars(s, inv, p);
+  sections.push({ heading: "Ranked against", blocks: [ranking.length ? { kind: "bars", rows: ranking } : { kind: "missing", title: "Not recorded yet", description: "No experiment ranking has been recorded by the SDK." }] });
   if (p.status === "approved") {
     const id = expectedMeasurement(inv, p);
     sections.push(delivered(inv, p)

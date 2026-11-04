@@ -15,7 +15,7 @@
 // tento-headless-js (pipe transport, closed in finally), so it cannot outlive the script.
 import type { ElementHandle, HTTPRequest, Page } from "npm:puppeteer-core@22.7.1";
 
-const [base, outDir] = Deno.args;
+const [base, outDir, emptyBase] = Deno.args;
 if (!base || !outDir) throw new Error("usage: daemon-flow.ts <base-url> <screenshot-dir>");
 if (!/^http:\/\/127\.0\.0\.1:\d+$/.test(base) || base.endsWith(":4794")) throw new Error(`refusing ${base}: a scratch loopback daemon only, never the live 4794`);
 await Deno.mkdir(outDir, { recursive: true });
@@ -84,6 +84,23 @@ const statusLine = (page: Page) => page.$eval(".ck-status", (el) => el.textConte
 
 try {
 await withHeadless(async (browser: { newPage(): Promise<Page> }) => {
+  if (emptyBase) {
+    if (!/^http:\/\/127\.0\.0\.1:479[5-9][0-9]$/.test(emptyBase)) throw new Error("empty daemon must use a scratch loopback port");
+    const empty = await browser.newPage();
+    watch(empty, "empty daemon");
+    await empty.setViewport({ width: 1280, height: 800 });
+    await empty.goto(`${emptyBase}/app`, { waitUntil: "load" });
+    await empty.waitForSelector(".ap-onboarding");
+    if (await empty.$(".ck-tour-dismiss")) await empty.click(".ck-tour-dismiss");
+    await settle(empty);
+    check(await empty.$("#ap-switch") === null, "empty daemon has no blank project selector");
+    check(await empty.$eval(".ap-side-notice std-empty-state", (el) => el.shadowRoot?.textContent?.includes("No projects yet") ?? false), "empty daemon explains a project");
+    check((await text(empty, ".ap-code")).includes("wb.investigate"), "empty daemon offers a real SDK recipe");
+    check(await empty.$('.ap-demo-link a[href="?source=fixtures"]') !== null, "empty daemon links to demo data");
+    check((await text(empty, ".ck-details")).includes("Connect"), "empty daemon has useful device guidance");
+    await snap(empty, "empty-daemon");
+    await empty.close();
+  }
   // What the daemon holds, read from a document-authenticated browser (AX-9).
 const bootstrap = await browser.newPage();
 await bootstrap.goto(`${base}/`, { waitUntil: "load" });

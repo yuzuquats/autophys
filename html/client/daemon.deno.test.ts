@@ -111,7 +111,7 @@ Deno.test("daemon: the workbench renders the seeded investigation, with gaps sai
   ctl.handle({ kind: "select", id: "inv_1/fit-1/fit" });
   assertStringIncludes(JSON.stringify(ctl.view().main.body), "fit curve not recorded");
   ctl.handle({ kind: "select", id: "inv_1/fit-1/residuals" });
-  assertEquals(ctl.view().main.body.kind, "empty");
+  assertEquals(ctl.view().main.body.kind, "missing");
   ctl.handle({ kind: "select", id: "inv_1/prop/prop_1" });
   const details = ctl.view().details;
   assertEquals(details.status.text, "Awaiting approval");
@@ -213,7 +213,7 @@ Deno.test("daemon: pairings are listed and approved from the configuration panel
   await store.start();
   await settle();
   assertEquals(store.snapshot()!.pairings, [{ code: "WXYZ-1234", device: "laptop", client: "autophys-py 0.1", expires: "2026-11-04T10:10:00Z" }]);
-  assertEquals(ctl.view().sidebar.pinned.trail, { badge: "1" });
+  assertEquals(ctl.view().sidebar.pinned.trail, { badge: "1 pending" });
   ctl.handle({ kind: "select", id: "config:p_bench" });
   assertEquals(ctl.view().details.actions?.map((a) => a.name), ["pair-approve:WXYZ-1234", "pair-deny:WXYZ-1234"]);
   ctl.handle({ kind: "action", name: "pair-approve:WXYZ-1234" });
@@ -237,7 +237,7 @@ Deno.test("daemon: an empty daemon shows an empty workspace, not a crash", async
   const d = fakeDaemon((c) => c.url === "/api/v1/workspace" ? Response.json({ cursor: 0, projects: [], config_versions: [], investigations: [], proposals: [], records: [] }) : undefined);
   const store = new Store(daemon(d.opts)), ctl = new Controller(store, { user: "james", now: () => "10:46" });
   await store.start();
-  assertEquals(ctl.view().main.crumb, [{ label: "No projects yet" }]);
+  assertEquals(ctl.view().main.crumb, [{ label: "Getting started" }]);
   ctl.handle({ kind: "select", id: "anything" });
 });
 
@@ -272,7 +272,7 @@ Deno.test("daemon: no outlook retains all proposed settings read-only and makes 
   const store = new Store(daemon(d.opts)), ctl = new Controller(store, { user: "james", now: () => "10:46" });
   await store.start();
   ctl.handle({ kind: "select", id: "inv_1/prop/prop_1" });
-  assertStringIncludes(JSON.stringify(ctl.view().details), "No outlook grid recorded");
+  assertStringIncludes(JSON.stringify(ctl.view().details), "This proposal has no outlook grid");
   assertStringIncludes(JSON.stringify(ctl.view().details), "frequency");
   assertStringIncludes(JSON.stringify(ctl.view().main), "Sine 0.4 Hz");
   ctl.handle({ kind: "select", id: "inv_1/fit-1" });
@@ -380,4 +380,26 @@ Deno.test("daemon: SSE auth failure probes the cookie, reauthenticates once and 
   await store.refreshPairings();
   assertEquals(reauth, 1, "overlapping failed calls cannot create a reload storm");
   store.close();
+});
+
+Deno.test("daemon: a registered project remains visible before its first configuration", async () => {
+  const d = fakeDaemon((c) => c.url === "/api/v1/workspace" ? Response.json({ cursor: 0, projects: [{ id: "new-project", name: "New simulator" }], config_versions: [], investigations: [], proposals: [], records: [] }) : undefined);
+  const store = new Store(daemon(d.opts)), ctl = new Controller(store, { user: "reviewer", now: () => "10:46" });
+  await store.start();
+  assertEquals(ctl.view().sidebar.switcher.kind, "single");
+  assertEquals(ctl.view().sidebar.switcher.options[0].label, "New simulator");
+  assertEquals(ctl.view().main.body.kind, "onboarding");
+  assertStringIncludes(JSON.stringify(ctl.view().details), "This project is registered");
+});
+
+Deno.test("daemon: first investigation refreshes a registered project's missing configuration", async () => {
+  let loads = 0;
+  const d = fakeDaemon((c) => c.url === "/api/v1/workspace" && loads++ === 0 ? Response.json({ cursor: 0, projects: [{ id: "p_bench", name: "Bench" }], config_versions: [], records: [] }) : undefined);
+  const store = new Store(daemon(d.opts)), ctl = new Controller(store, { user: "reviewer", now: () => "10:46" });
+  await store.start();
+  assertEquals(ctl.view().main.body.kind, "onboarding");
+  for (const fire of d.streams[0].fire.record) fire({ data: JSON.stringify(d.ws.records[0]), lastEventId: "1" });
+  await settle(); await settle();
+  assertEquals(store.snapshot()!.workspace.projects[0].investigations.length, 1);
+  assertEquals(ctl.view().sidebar.nodes.length, 1);
 });

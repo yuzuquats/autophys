@@ -12,8 +12,8 @@ next experiment the agent proposes, and validation. The user approves, edits or 
 proposal.
 
 Status: runs in tento-cookbook-js's shell against the daemon's `/api/v1/workspace` and
-resumable record stream, with approval/edit/reject and device pairing. It falls back to
-the deterministic fixture when the daemon cannot load; `?source=fixtures` forces the demo.
+resumable record stream, with approval/edit/reject and device pairing. It shows a recoverable connection error when the daemon cannot load;
+`?source=fixtures` explicitly selects the deterministic demo.
 The sidebar status line names the active source. Same-origin requests carry the daemon's
 HttpOnly session cookie; a host-injected callback renews expired sessions by reloading
 the document, guarded to once per 30 seconds per tab. Missing SDK chart data stays explicitly
@@ -42,7 +42,8 @@ routes/       the composition root: index.root.ts (+ index.anon.html, content.ts
 
 - **`ui/` is view-only** (operator decision). It draws a fully derived view model and reports
   raw intents. It has no state, derivations, validation or maths beyond pixel mapping. Its
-  only dependency is tento-ui's tree list.
+  browser adapter uses tento-ui's tree list, EmptyState, Skeleton, SelectInput, Button and icons.
+  The dependency boundary lists the exact allowed modules; pure markup tests do not load DOM components.
 - **`client/` holds all the logic and never draws.** No DOM, storage or network outside
   `api.ts`. Data arrives through a `Source`: `daemon()` reads the real API and `fixtures()` replays the demo.
 - **`client/derive` does not simulate.** Fit curves, gain/phase, previews, landscapes,
@@ -58,19 +59,19 @@ routes/       the composition root: index.root.ts (+ index.anon.html, content.ts
 
 ## The view model (what a port must deliver to `ui/`)
 
-- **Sidebar.** `switcher {label, value, options[]}`, a `pinned` row, a `section {label, count,
+- **Sidebar.** `switcher {kind, label, value, options[]}`, a `pinned` row, a `section {label, count,
   add?}`, and `nodes: TreeNode[]`. Each node is `{id, label, icon, trail?: {text?, tone?,
   spinner?, badge?}, dim?, selectable, children}`. Also `selectedId` and `expandedIds`.
 - **Main.** `crumb: {label, id?}[]`, `meta`, `actions[]`, `credit`, and `body`. The body is
-  either `{kind: "empty", text}` or `{kind: "panels", panels: {title?, charts[]}[], columns?}`.
-  A chart is one of four kinds:
+  one of `loading`, `onboarding`, `unavailable`, `missing`, a waiting message, or `{kind: "panels", panels: {title?, charts[]}[], columns?}`.
+  A chart is one of the following kinds (or an explicit `missing` placeholder):
   - `xy`: axes, layers (dots, line, dashed line, hband, hline, vline), and an optional legend
   - `heatmap`: cell opacities plus an optional trail
   - `bars`
   - `ranges`
 - **Details.** `{icon, title, cardName?, status {text, tone?}, sections: {heading, blocks[]}[],
   decision?: [Action, Action], actions?}`. A block is one of `facts`, `table`, `bars`,
-  `meters`, `fields`, `links` or `text`.
+  `meters`, `fields`, `links` `text` or a `missing` placeholder.
 - **Intents** (`ui/intent.ts`): `select {id}`, `toggle {id, open}`, `switch {value}`,
   `action {name}`, and `field {name, raw, commit}`.
 
@@ -148,5 +149,5 @@ The tests cover:
   (8 values) × frequency (14, including 0.44 Hz) × duration (6) at the proposal's rate,
   using the fact that a linear system's information scales with A². Rate has no axis, so a
   rate edit is refused. Adding a fourth axis would exceed E-1's limit of three.
-- **UI-4, the new-investigation button.** The sidebar's "+" is drawn disabled, because
-  investigations start from the SDK.
+- **UI-4, investigations start from the SDK.** The empty state now supplies an SDK recipe
+  instead of drawing a disabled "+". The UI still cannot start an investigation.

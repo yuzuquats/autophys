@@ -61,13 +61,14 @@ export function investigationNode(project: Project, inv: Investigation): TreeNod
 }
 
 export function sidebarModel(s: State): SidebarModel {
-  const project = projectOf(s), latest = latestConfig(project);
+  const project = projectOf(s), latest = project.configs.length ? latestConfig(project) : null;
   return {
-    switcher: { label: "Project", value: project.id, options: s.ws.projects.map((p) => ({ value: p.id, label: p.name })) },
+    switcher: { kind: s.ws.projects.length === 1 ? "single" : "select", label: "Project", value: project.id, options: s.ws.projects.map((p) => ({ value: p.id, label: p.name })) },
     pinned: { id: ids.config(project), label: "Configuration", icon: "config", selectable: true, children: null,
       // Devices waiting to pair are approved from the Configuration panel (O-3).
-      trail: s.pairings?.length ? { badge: String(s.pairings.length) } : { text: `v${latest.version}` } },
-    section: { label: "Investigations", count: String(project.investigations.length), add: { name: "new-investigation", label: "New investigation", disabled: true, title: "Investigations start from the SDK" } },
+      trail: s.pairings?.length ? { badge: `${s.pairings.length} pending` } : { text: latest ? `v${latest.version}` : "Awaiting config" } },
+    notice: project.investigations.length ? undefined : { kind: "no-investigations", title: "No investigations yet", description: "Start one from the Python SDK. New records appear live here." },
+    section: { label: project.investigations.length ? "Investigations" : "", count: project.investigations.length ? String(project.investigations.length) : "" },
     nodes: project.investigations.map((inv) => investigationNode(project, inv)),
     treeLabel: `${project.name} investigations`,
     selectedId: s.selected[project.id] ?? null,

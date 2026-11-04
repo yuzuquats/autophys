@@ -88,7 +88,7 @@ Deno.test("sidebar: tree nodes carry the given labels, glyphs, dim and trails, b
 });
 
 const sidebar: SidebarModel = {
-  switcher: { label: "Project", value: "p2", options: [{ value: "p1", label: "Bench oscillators" }, { value: "p2", label: "Cell <pulse> tests" }] },
+  switcher: { kind: "select", label: "Project", value: "p2", options: [{ value: "p1", label: "Bench oscillators" }, { value: "p2", label: "Cell <pulse> tests" }] },
   pinned: { id: "cfg", label: "Configuration", icon: "config", selectable: true, children: null },
   section: { label: "Investigations", count: "2", add: { name: "new", label: "New investigation", disabled: true } },
   nodes: tree, treeLabel: "Investigations", selectedId: "a", expandedIds: ["a"],
@@ -96,8 +96,8 @@ const sidebar: SidebarModel = {
 
 Deno.test("sidebar: the switcher and section head", () => {
   const sw = switcherMarkup(sidebar);
-  assertStringIncludes(sw, `<option value="p2" selected>Cell &lt;pulse&gt; tests</option>`);
-  assertStringIncludes(sw, `data-ap="switch"`);
+  assertStringIncludes(sw, `Cell &lt;pulse&gt; tests`);
+  assertStringIncludes(sw, `data-ap-switcher`);
   const head = sectionMarkup(sidebar);
   assertStringIncludes(head, `Investigations<span class="ap-count">2</span>`);
   assertStringIncludes(head, `data-ap="action" data-ap-name="new"`);

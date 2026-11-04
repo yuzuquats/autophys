@@ -6,7 +6,7 @@
 import { approvalsPath, type Snapshot } from "./api.ts";
 import type { Investigation, Project, Workspace } from "./domain.ts";
 import { latestFit, proposalLabel, statusText } from "./derive/shared.ts";
-import { ancestors, covers, defaultExpanded, defaultSelection, derive, displayedFields, draftKey, parseSel, type Selection, type View } from "./derive/index.ts";
+import { ancestors, covers, defaultExpanded, defaultSelection, derive, connectionFailure, displayedFields, draftKey, parseSel, type Selection, type View } from "./derive/index.ts";
 import { sig } from "./derive/fmt.ts";
 import { type Decision, parseField } from "./proposal.ts";
 import type { Store } from "./store.ts";
@@ -43,6 +43,8 @@ export function reduce(sel: Selection, snap: Snapshot, intent: Intent, env: Env)
     const pairing = /^pair-(approve|deny):(.+)$/.exec(intent.name);
     if (pairing && snap.pairings?.some((p) => p.code === pairing[2])) return { selection: sel, effects: [{ kind: "pairing", code: pairing[2], approve: pairing[1] === "approve" }] };
   }
+  if (intent.kind === "action" && (intent.name === "sdk-copied" || intent.name === "sdk-select")) return none({ ...sel, copyStatus: intent.name === "sdk-copied" ? "copied" : "select" });
+  if (sel.copyStatus && (intent.kind === "switch" || intent.kind === "select")) sel = without(sel, ["copyStatus"]) as Selection;
   if (!project) return none(sel);
   const at = parseSel(project, sel.selected[project.id] ?? "");
   switch (intent.kind) {
@@ -134,11 +136,7 @@ export class Controller {
     const snap = this.store.snapshot(), sel = this.selection;
     const view = derive(snap, sel ?? { projectId: "", selected: {}, expanded: {}, drafts: {}, edits: {} }, this.store.source.name);
     const error = this.store.error;
-    if (!error) return view;
-    return { ...view,
-      main: snap ? view.main : { ...view.main, crumb: [{ label: "Connection error" }], body: { kind: "empty", text: error } },
-      details: { ...view.details, sections: [{ heading: "Connection error", blocks: [{ kind: "text", text: error, tone: "danger" }] }, ...view.details.sections] },
-    };
+    return error ? connectionFailure(view, error, !!snap) : view;
   }
 
   exportDocument(): unknown {

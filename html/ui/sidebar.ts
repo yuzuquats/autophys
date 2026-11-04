@@ -6,6 +6,8 @@
  */
 import "@tento-ui/components/tree-list/tree-list";
 import { TreeList } from "@tento-ui/components/tree-list/tree-list";
+import { hydrateComponents, chevronIcon } from "./components.ts";
+import { emptyMarkup, skeletonMarkup } from "./state-markup.ts";
 import { ICONS } from "./icons.ts";
 import { intentOf, type IntentHandler } from "./intent.ts";
 import { listNodes, type RowFactories, sectionMarkup, switcherMarkup, treeKey } from "./sidebar-markup.ts";
@@ -19,8 +21,10 @@ const factories: RowFactories = {
   lead: (svg, dim) => {
     const el = document.createElement("span");
     el.className = "ap-lead";
+    el.style.cssText = "display:inline-flex;width:14px;height:14px;flex:none";
     el.style.color = dim ? "var(--ap-ter)" : "currentColor";
     el.innerHTML = svg;
+    hydrateComponents(el, () => {});
     return el;
   },
   trail: (html, tone) => {
@@ -56,13 +60,16 @@ export class AutophysSidebar {
   }
 
   render(model: SidebarModel): void {
-    const head = JSON.stringify([model.switcher, model.section]);
+    const head = JSON.stringify([model.switcher, model.section, model.notice]);
     if (head !== this.keys.head) {
       this.keys.head = head;
       this.head.innerHTML = switcherMarkup(model);
-      this.section.innerHTML = sectionMarkup(model);
+      this.section.innerHTML = sectionMarkup(model) + (model.notice ? `<div class="ap-side-notice"${model.notice.kind === "loading" ? ' aria-busy="true"' : ""}>${emptyMarkup(model.notice.title, model.notice.description)}${model.notice.kind === "loading" ? skeletonMarkup() : ""}</div>` : "");
+      hydrateComponents(this.head, this.onIntent);
+      hydrateComponents(this.section, this.onIntent);
     }
-    const twisty = { icon: ICONS.chevron };
+    this.pinned.hidden = model.switcher.kind === "loading" || model.switcher.kind === "unavailable";
+    const twisty = { icon: chevronIcon };
     const pinnedSelected = model.selectedId === model.pinned.id ? model.pinned.id : null;
     const pk = treeKey([model.pinned], pinnedSelected, []);
     if (pk !== this.keys.pinned) {

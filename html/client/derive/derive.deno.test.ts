@@ -5,7 +5,7 @@ import { initialSelection } from "../controller.ts";
 import { fixtures, replay } from "../fixtures/source.ts";
 import type { TreeNode } from "../../ui/view-model.ts";
 import { detailsModel } from "./details.ts";
-import { derive, interpolate, outlookAt, parseSel, viewsOf } from "./index.ts";
+import { derive, connectionFailure, interpolate, outlookAt, parseSel, viewsOf } from "./index.ts";
 import { mainModel, rankingBars } from "./main.ts";
 import { draftKey } from "./shared.ts";
 import { sidebarModel } from "./tree.ts";
@@ -110,8 +110,38 @@ Deno.test("derive: main views: crumb, panels, credit; derive() before load shows
   assert(edges.body.kind === "panels" && edges.body.columns === 2 && edges.body.panels.length === 4);
   const freq = mainModel(at("bench-oscillators", "bench-b/fit-2/frequency"));
   assert(freq.body.kind === "panels" && freq.body.panels[0].charts.length === 2);
-  assertEquals(mainModel(at("bench-oscillators", "bench-a/validate")).body, { kind: "empty", text: "Needs a held-out measurement" });
+  assertEquals(mainModel(at("bench-oscillators", "bench-a/validate")).body, { kind: "missing", title: "Not recorded yet", description: "Needs a held-out measurement" });
   assertEquals(parseSel(ws.projects[0], "bench-a/fit-1/frequency"), null);
-  assertEquals(derive(null, s0).main.body.kind, "empty");
+  assertEquals(derive(null, s0).main.body.kind, "loading");
   assertEquals(derive({ ...snap, workspace: ws }, s0).sidebar.nodes.length, 2);
+});
+
+Deno.test("derive: empty, loading, project-only and demo states have explicit kinds and next steps", () => {
+  const loading = derive(null, s0);
+  assertEquals(loading.sidebar.switcher.kind, "loading");
+  assertEquals(loading.main.body.kind, "loading");
+  const empty = derive({ ...snap, source: "daemon", workspace: { user: "reviewer", projects: [] }, pairings: [] }, s0);
+  assertEquals(empty.sidebar.switcher.kind, "none");
+  assertEquals(empty.sidebar.notice?.kind, "no-projects");
+  assertEquals(empty.sidebar.section.label, "");
+  assertEquals(empty.main.body.kind, "onboarding");
+  assertStringIncludes(JSON.stringify(empty.details), "daemon URL");
+  const project = { ...ws.projects[0], investigations: [] };
+  const one = derive({ ...snap, workspace: { ...ws, projects: [project] } }, initialSelection({ ...ws, projects: [project] }));
+  assertEquals(one.sidebar.switcher.kind, "single");
+  assertEquals(one.sidebar.notice?.kind, "no-investigations");
+  assert(one.main.body.kind === "onboarding");
+  assertStringIncludes(one.main.body.snippet, `ap.Project(${JSON.stringify(project.name)}, simulator)`);
+  assertStringIncludes(one.main.body.snippet, "wb.investigate(measurements, ap.ProposalRunner()");
+  assertEquals(one.main.source, "demo");
+  const failed = connectionFailure(loading, "401 session_expired", false);
+  assertEquals(failed.main.body.kind, "unavailable");
+  assertEquals(failed.sidebar.switcher.kind, "unavailable");
+  assertStringIncludes(failed.main.connectionError!, "401");
+});
+
+Deno.test("derive: clipboard acknowledgement is a view-model label", () => {
+  const copied = derive({ ...snap, workspace: { ...ws, projects: [] } }, { ...s0, copyStatus: "copied" });
+  assert(copied.main.body.kind === "onboarding");
+  assertEquals(copied.main.body.copyLabel, "Copied Python");
 });

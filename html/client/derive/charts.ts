@@ -65,12 +65,13 @@ const RUN_LEGEND: LegendItem[] = [{ label: "measured", mark: "dot", tone: "measu
 /** Whether the source sent the fit's curve on this measurement (the daemon records none yet). */
 const hasCurve = (fit: Fit, m: Measurement) => !!fit.curves[m.id];
 const NO_CURVE = "fit curve not recorded";
+const missing = (description: string): Chart => ({ kind: "missing", title: "Not recorded yet", description });
 
 export function fitPanels(ctx: Ctx, fit: Fit): ChartPanel[] {
   const { config, inv } = ctx, running = fit.state === "running";
   return fit.measurements.map((id) => {
     const m = measurementOf(inv, id);
-    if (!hasCurve(fit, m)) return { title: `${m.id} · ${NO_CURVE}`, charts: [...(m.inputRecorded === false ? [] : [inputStrip(config, m)]), outputChart(config, m, [], [{ label: "measured", mark: "dot", tone: "measured" }])] };
+    if (!hasCurve(fit, m)) return { title: `${m.id} · ${NO_CURVE}`, charts: [...(m.inputRecorded === false ? [] : [inputStrip(config, m)]), outputChart(config, m, [], [{ label: "measured", mark: "dot", tone: "measured" }]), missing("The SDK has not recorded a fitted curve for this measurement. Measured samples are shown above.")] };
     return {
       title: m.id,
       charts: [...(m.inputRecorded === false ? [] : [inputStrip(config, m)]), outputChart(config, m, [
@@ -86,10 +87,10 @@ export function residualPanels(ctx: Ctx, fit: Fit): ChartPanel[] {
   return fit.measurements.map((id): ChartPanel | null => {
     if (!hasCurve(fit, measurementOf(inv, id))) return null;
     const m = measurementOf(inv, id), f = curve(fit, m, "fit"), r = m.output.map((y, i) => y - f[i]);
-    const rho = fit.lag1[id] ?? 0, structured = Math.abs(rho) > 0.3;
+    const rho = fit.lag1[id], structured = Math.abs(rho) > 0.3;
     const unit = specOf(config, m.experiment).output.unit;
     return {
-      title: `${m.id} · ${structured ? `structured, ρ₁ ${rho.toFixed(2)}` : `white, ρ₁ ${rho.toFixed(2)}`}`,
+      title: `${m.id} · ${rho == null ? "residual quality not recorded" : structured ? `structured, ρ₁ ${rho.toFixed(2)}` : `white, ρ₁ ${rho.toFixed(2)}`}`,
       charts: [{
         kind: "xy", height: 140, x: timeAxis(m.t), y: axisAround(r, { symmetric: true, include: [3 * sigma, -3 * sigma], count: 4 }),
         label: `residual · ${unit}`,
@@ -221,8 +222,8 @@ export function validationPanels(ctx: Ctx, fit: Fit, testId: string, predicted: 
 export function proposalPanels(ctx: Ctx, p: Proposal, ranking: BarRow[], edited: boolean): ChartPanel[] {
   const { config } = ctx, t = p.preview.t;
   const asProposed = p.fields.map((f) => `${sig(f.original, 3)} ${f.unit}`.trim()).join(" · ");
-  const bars: ChartPanel = { charts: [{ kind: "bars", rows: ranking, label: ranking.length ? "ranked against · weakest-direction score" : "no ranking recorded" }] };
-  if (!t.length) return [{ title: `${asProposed ? `${edited ? "as proposed: " : ""}${asProposed} · ` : ""}preview not recorded`, charts: [] }, bars];
+  const bars: ChartPanel = { title: "Experiment ranking", charts: ranking.length ? [{ kind: "bars", rows: ranking, label: "ranked against · weakest-direction score" }] : [missing("No experiment ranking has been recorded. Rankings will appear when uploaded by the SDK.")] };
+  if (!t.length) return [{ title: `${asProposed ? `${edited ? "as proposed: " : ""}${asProposed} · ` : ""}preview not recorded`, charts: [missing("The SDK has not recorded preview drive or predicted-response series for this proposal. You can still review its recorded settings.")] }, bars];
   const drive = { experiment: p.experiment, t, input: p.preview.input };
   const out = specOf(config, p.experiment).output;
   const charts: Chart[] = [inputStrip(config, drive, 70), {

@@ -3,6 +3,7 @@
  * The main surface: a crumb with a meta line and buttons, the viewer (panels of charts) and
  * one credit line. Charts are drawn at the host's width and redrawn when it changes.
  */
+import { emptyMarkup, skeletonMarkup, componentButton, recoveryMarkup } from "./state-markup.ts";
 import { chartMarkup } from "./charts.ts";
 import { ATTR, escapeHtml as esc, intentOf, type IntentHandler } from "./intent.ts";
 import { actionAttrs } from "./sidebar-markup.ts";
@@ -29,6 +30,13 @@ export function mainMarkup(model: MainModel, width: number, classes: MainClasses
   let body: string;
   if (model.body.kind === "empty") {
     body = `<div class="ap-viewer ap-empty"><p>${esc(model.body.text)}</p></div>`;
+  } else if (model.body.kind === "onboarding") {
+    const b = model.body;
+    body = `<section class="ap-viewer ap-onboarding"><h2>${esc(b.title)}</h2><p class="ap-intro">${esc(b.description)}</p><div class="ap-code-head"><b>Python SDK</b>${componentButton("copy-sdk", b.copyLabel)}</div><pre class="ap-code" tabindex="0" aria-label="Python SDK getting started example"><code>${esc(b.snippet)}</code></pre><p class="ap-help">${esc(b.note)}</p><p class="ap-demo-link"><a href="?source=fixtures">View demo data</a><span>Explore a recorded calibration</span></p></section>`;
+  } else if (model.body.kind === "loading") {
+    body = `<section class="ap-viewer ap-state" aria-busy="true" role="status">${emptyMarkup(model.body.title, model.body.description)}${skeletonMarkup()}</section>`;
+  } else if (model.body.kind === "missing" || model.body.kind === "unavailable") {
+    body = `<section class="ap-viewer ap-state">${emptyMarkup(model.body.title, model.body.description)}</section>`;
   } else {
     const cols = Math.max(1, model.body.columns ?? 1);
     const inner = Math.max(120, width - 24);
@@ -38,7 +46,9 @@ export function mainMarkup(model: MainModel, width: number, classes: MainClasses
         `<div class="ap-chart">${chartMarkup(c, colWidth, `${i}-${j}`)}</div>`).join("")}</section>`).join("");
     body = `<div class="ap-viewer" style="--ap-cols:${cols}">${panels}</div>`;
   }
-  return `${toolbar}${body}<p class="ap-credit" id="ap-credit">${esc(model.credit)}</p>`;
+  const source = model.source === "demo" ? `<div class="ap-source"><span>Demo data</span><a href="?source=daemon">Back to live data</a></div>` : "";
+  const error = model.connectionError ? `<aside class="ap-connection" role="alert"><b>Connection unavailable</b><p>${esc(model.connectionError)}</p>${recoveryMarkup()}</aside>` : "";
+  return `${toolbar}${source}${error}${body}<p class="ap-credit" id="ap-credit">${esc(model.credit)}</p>`;
 }
 
 export class AutophysMain {
@@ -47,7 +57,7 @@ export class AutophysMain {
   private width = 0;
   private observer: ResizeObserver | null = null;
 
-  constructor(private host: HTMLElement, onIntent: IntentHandler, private classes: MainClasses = {}) {
+  constructor(private host: HTMLElement, onIntent: IntentHandler, private classes: MainClasses = {}, private hydrate: (host: HTMLElement) => void = () => {}) {
     host.addEventListener("click", (e) => {
       const el = (e.target as Element).closest?.<HTMLElement>(`[${ATTR.role}]`);
       const intent = el && host.contains(el) ? intentOf(el as HTMLButtonElement, "click") : null;
@@ -74,6 +84,7 @@ export class AutophysMain {
     const fresh = [...next.content.children] as HTMLElement[], kept = [...this.host.children] as HTMLElement[];
     if (kept.length !== fresh.length || kept.some((el, i) => el.tagName !== fresh[i].tagName)) {
       this.host.replaceChildren(...fresh);
+      this.hydrate(this.host);
       return;
     }
     kept.forEach((el, i) => {
@@ -81,6 +92,7 @@ export class AutophysMain {
       for (const a of [...fresh[i].attributes]) el.setAttribute(a.name, a.value);
       el.innerHTML = fresh[i].innerHTML;
     });
+    this.hydrate(this.host);
   }
 
   destroy(): void {

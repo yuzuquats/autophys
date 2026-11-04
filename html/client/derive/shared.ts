@@ -21,6 +21,7 @@ export type Selection = {
   edits: Record<string, number>;
   /** The last refused write, shown in details until the next pick or decision. */
   notice?: string;
+  copyStatus?: "copied" | "select";
 };
 
 /** A selection over a loaded workspace: what every derivation reads. */

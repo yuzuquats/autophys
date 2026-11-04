@@ -174,6 +174,8 @@ await withHeadless(async (browser) => {
   await settle(page);
   check(await text(page, ".ap-crumb b") === rows[2][1], "third row");
   check((await text(page, ".ck-status")).startsWith("Fixture data"), "status line names the fixture source");
+  check(await text(page, ".ap-source > span") === "Demo data", "demo has an explicit indicator");
+  check(await page.$eval('.ap-source a', (a) => a.getAttribute("href")) === "?source=daemon", "demo links back to live data");
 
   begin("details");
   const mainBefore = await page.$eval(".ck-main", (el) => el.getBoundingClientRect().width);

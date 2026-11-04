@@ -35,9 +35,10 @@ export type Action = { name: string; label: string; variant?: "primary" | "secon
 
 export type SidebarModel = {
   /** The switcher at the top: one option per project. */
-  switcher: { label: string; value: string; options: { value: string; label: string }[] };
+  switcher: { kind: "none" | "loading" | "single" | "select" | "unavailable"; label: string; value: string; options: { value: string; label: string }[] };
   /** The pinned row above the section (a single tree row). */
   pinned: TreeNode;
+  notice?: { kind: "no-projects" | "no-investigations" | "loading" | "unavailable"; title: string; description: string };
   section: { label: string; count: string; add?: Action };
   nodes: TreeNode[];
   /** The tree's accessible name. */
@@ -85,7 +86,8 @@ export type BarsChart = { kind: "bars"; rows: BarRow[]; label?: string };
 export type RangeRow = { label: string; unit?: string; lo: string; hi: string; at: number; tag?: Tag };
 export type RangesChart = { kind: "ranges"; rows: RangeRow[]; label?: string };
 
-export type Chart = XYChart | HeatmapChart | BarsChart | RangesChart;
+export type Missing = { kind: "missing"; title: string; description: string };
+export type Chart = XYChart | HeatmapChart | BarsChart | RangesChart | Missing;
 
 /** Charts stacked in one block, sharing its width (an input strip over its output). */
 export type ChartPanel = { title?: string; charts: Chart[] };
@@ -97,9 +99,15 @@ export type Crumb = { label: string; id?: string };
 
 export type MainBody =
   | { kind: "empty"; text: string }
+  | Missing
+  | { kind: "loading"; title: string; description: string }
+  | { kind: "unavailable"; title: string; description: string }
+  | { kind: "onboarding"; title: string; description: string; snippet: string; copyLabel: string; note: string }
   | { kind: "panels"; panels: ChartPanel[]; columns?: number };
 
 export type MainModel = {
+  source?: "demo" | "live";
+  connectionError?: string;
   crumb: Crumb[];
   meta: string;
   actions: Action[];
@@ -121,6 +129,7 @@ export type Field = { name: string; label: string; value: string; unit?: string;
 export type Link = { label: string; id: string };
 
 export type Block =
+  | Missing
   | { kind: "facts"; rows: Fact[] }
   | { kind: "table"; rows: TableRow[] }
   | { kind: "bars"; rows: BarRow[] }
