@@ -70,3 +70,13 @@ this record I81f7837f7c0ee007ff06.
 | batch | Confirmed as built: AP-3 (port 4794), AP-4 (`Restart=on-failure`), AP-8 (cookbook through the vendored alias), AX-8, AX-11, AX-12, AX-13, AX-14, AX-15, AX-16, R-1 to R-8. | — | built |
 | B-1 | Operator direction: `./autophys` ships as one file per platform with the web app embedded as a ZIP, so no folder travels with it; one binary for every OS is not needed. Linux appends the ZIP with a footer; macOS puts it in a Mach-O section. | `--web-root` folder beside the binary | implemented: embedded ZIP locator, safe atomic hydration, pack/build-web and serve; Linux round-trip, concurrency and socket tests pass; tento_sh command tree implemented; macOS section/link path untested on Linux |
 ```
+
+## Operator review, 2026-11-04 (`/open-questions`, second round)
+
+```review-table
+| Id | Decision (operator, 2026-11-04) | Reason | Implementation |
+| --- | --- | --- | --- |
+| RS-CURSOR-1 | Confirmed: the unscoped stream keeps a per-project cursor vector (`prj_…:<gseq>,…`); no global server sequence | no writes across workbook files and no server index to recover; scoped streams keep integers | built (phase 1) |
+| B1-M1 | Confirmed: macOS `pack` keeps relinking with `-sectcreate`; **add a real macOS check** (section present, signature valid, `serve` hydrates) before relying on it | the linker signs the result; a build-time link stage adds a step for no current gain | built; macOS check not yet run |
+| CVE-MERGE | Confirmed (workspace project `cve-2026-98432`, commit 550026e8): the additive merge of the 148-line history and the 2026-11-03 status and monitoring section stands | it changes none of the owner's text | committed locally on rwc-dev-01 workspace master, not pushed |
+```

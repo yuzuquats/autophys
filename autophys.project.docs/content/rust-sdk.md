@@ -358,7 +358,7 @@ separate key database, blobs schema, per-workbook / collection cursors, and
 the common projection fold demonstrated against all three Python workbooks.
 The existing `tests/vectors/chain.json` stays in place.
 
-Agent choice RS-CURSOR-1, **pending operator review**: an unscoped stream uses a
+Agent choice RS-CURSOR-1, **confirmed by the operator, 2026-11-04**: an unscoped stream uses a
 vector of per-project cursors rather than a server-owned global sequence.
 This requires no cross-file writes or extra workbook tables; an alternative
 global server sequence requires server indexing/recovery and persisted state.
@@ -457,7 +457,7 @@ SDK reports `Unsupported` for Remote, so those calls fail clearly until its
 Remote client is implemented. CLI routing does not substitute a local
 collection for a URL.
 
-B1-M1 (**agent-chosen, pending operator review**): macOS packaging relinks from
+B1-M1 (**agent-chosen, confirmed by the operator 2026-11-04; macOS check still owed**): macOS packaging relinks from
 the source checkout with `-sectcreate`, preserving the compiled release guard
 and commit stamp; `AUTOPHYS_PROJECT_ROOT` can select that checkout. This keeps
 the native linker's signature valid. The alternative is an explicit build-time
