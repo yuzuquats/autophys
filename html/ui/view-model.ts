@@ -144,7 +144,8 @@ export type Block =
   | { kind: "links"; links: Link[] }
   | { kind: "text"; text: string; tone?: Tone; link?: Link };
 
-export type Section = { heading: string; blocks: Block[] };
+/** `caption` is one line under the heading; renderers without a caption slot ignore it. */
+export type Section = { heading: string; caption?: string; blocks: Block[] };
 
 export type DetailsModel = {
   icon: IconName;

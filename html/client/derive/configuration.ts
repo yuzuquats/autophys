@@ -13,8 +13,8 @@ const settingUnit = (s: SettingSpec) => s.unit || ({ current: "A", duration: "s"
 export function experimentSections(c: ProjectConfig): Section[] {
   return c.catalog.map((e) => ({
     heading: e.label,
+    caption: [e.input ? `${channel(e.input)} → ${channel(e.output)}` : `Measures ${channel(e.output)}`, e.maxRuns == null ? "" : `up to ${e.maxRuns} runs`].filter(Boolean).join(" · "),
     blocks: [
-      { kind: "text", text: [e.input ? `${channel(e.input)} → ${channel(e.output)}` : `Measures ${channel(e.output)}`, e.maxRuns == null ? "" : `up to ${e.maxRuns} runs`].filter(Boolean).join(" · ") },
       ...(e.settings.length ? [{ kind: "table" as const, rows: [
         { dim: true, cells: [{ text: "Setting" }, { text: "Default", end: true }, { text: "Allowed", end: true }] },
         ...e.settings.map((s) => ({ cells: [{ text: cap(s.label) }, { text: engineering(s.default, settingUnit(s)), end: true },
@@ -32,9 +32,9 @@ export function configurationSections(c: ProjectConfig): Section[] {
         { label: e.label, value: e.maxRuns == null ? "" : `Up to ${e.maxRuns} runs` },
         ...e.settings.map((setting) => ({ label: cap(setting.label), value: engineering(setting.default, settingUnit(setting)) })),
       ] })) },
-      { heading: "Noise", blocks: [{ kind: "facts", rows: Object.entries(c.noise.sigma).map(([k, v]) => ({ label: `σ ${k}`, value: `${sig(v, 2)} ${specOutput(c, k)}` })) },
+      { heading: "Noise", caption: "Measurement error assumed per output", blocks: [{ kind: "facts", rows: Object.entries(c.noise.sigma).map(([k, v]) => ({ label: `σ ${k}`, value: `${sig(v, 2)} ${specOutput(c, k)}` })) },
         { kind: "text", text: `Scale estimation ${c.noise.estimate ? "on" : "off"} · sensor bias ${c.noise.bias}` }] },
-      { heading: "Run limits", blocks: [{ kind: "facts", rows: [{ label: "Agent steps", value: String(c.budgets.maxSteps) }, { label: "Simulations", value: int(c.budgets.maxSimulations) },
+      { heading: "Run limits", caption: "What one investigation may spend", blocks: [{ kind: "facts", rows: [{ label: "Agent steps", value: String(c.budgets.maxSteps) }, { label: "Simulations", value: int(c.budgets.maxSimulations) },
         { label: "Total experiments", value: String(c.budgets.maxExperiments) }] }, { kind: "text", text: `Policy: ${c.policy.label}` }] },
   ];
 }

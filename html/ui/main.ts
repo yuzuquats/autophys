@@ -38,11 +38,7 @@ export function mainMarkup(model: MainModel, width: number, classes: MainClasses
     // Each card's header is a list cell: the title with its caption under it (hydrated to std-list-cell-layout).
     const card = (cls: string, title: string, caption: string, inner: string) =>
       `<section class="ap-card ${cls}"><std-round floating bg="var(--ap-card-bg)" border="var(--ap-line)" radius="10"></std-round><header class="ap-card-head" data-ap-cell><h3>${esc(title)}</h3>${caption ? `<p>${esc(caption)}</p>` : ""}</header>${inner}</section>`;
-    // An experiment's first block is its caption text (channels and run limit).
-    const section = (cls: string) => (s: Section) => {
-      const [first, ...rest] = s.blocks, caption = cls === "ap-config-exp" && first?.kind === "text" ? first.text : "";
-      return card(cls, s.heading, caption, (caption ? rest : s.blocks).map(blockMarkup).join(""));
-    };
+    const section = (cls: string) => (s: Section) => card(cls, s.heading, s.caption ?? "", s.blocks.map(blockMarkup).join(""));
     // A scale or tag every parameter shares moves to the caption instead of repeating on each row.
     const rows = model.body.parameters.rows, shared = <T,>(f: (r: typeof rows[number]) => T) => rows.length > 0 && rows.every((r) => f(r) === f(rows[0])) ? f(rows[0]) : undefined;
     const scale = shared((r) => r.scale), tag = shared((r) => r.tag?.text);

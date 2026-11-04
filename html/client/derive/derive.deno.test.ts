@@ -256,7 +256,8 @@ Deno.test("configuration: ranges have SI bounds, labelled scales and initial val
   ]);
   assertEquals(body.sections.map((s) => s.heading), ["Noise", "Run limits"]);
   assertEquals(body.experiments.map((s) => s.heading), project.configs[0].catalog.map((e) => e.label));
-  const captions = body.experiments.map((s) => s.blocks[0].kind === "text" ? s.blocks[0].text : "");
+  const captions = body.experiments.map((s) => s.caption ?? "");
+  assert(body.sections.every((s) => s.caption), "Noise and Run limits carry a one-line description");
   assert(captions.every((t, i) => project.configs[0].catalog[i].maxRuns == null || t.endsWith(` · up to ${project.configs[0].catalog[i].maxRuns} runs`)), captions.join("; "));
   const settings = body.experiments.flatMap((s) => s.blocks.flatMap((b) => b.kind === "table" ? b.rows.slice(1) : []));
   assertEquals(settings.length, project.configs[0].catalog.reduce((n, e) => n + e.settings.length, 0), "every setting is shown, with its default and allowed range");

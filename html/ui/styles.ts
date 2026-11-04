@@ -187,7 +187,7 @@ ${w} .ap-configuration { --ap-card-bg:#fff; }
 ${w} .ap-card { isolation:isolate;box-sizing:border-box;padding:12px; }
 ${w} .ap-card-head { display:block;margin-bottom:8px; }
 ${w} .ap-card-head h3 { margin:0;font:600 13px/18px var(--ap-font);color:var(--ap-ink); }
-${w} .ap-card-head p { margin:2px 0 0;font:12px/16px var(--ap-font);color:var(--ap-sec); }
+${w} .ap-card-head p { margin:0;font:12px/15px var(--ap-font);color:var(--ap-ter); }
 ${w} .ap-card .ap-text { color:var(--ap-sec);font:12px/16px var(--ap-font); }
 ${w} .ap-card .ap-facts { grid-template-columns:minmax(0,1fr) auto;gap:3px 16px;font:12.5px/18px var(--ap-font); }
 ${w} .ap-card .ap-facts + .ap-text { margin-top:6px; }
