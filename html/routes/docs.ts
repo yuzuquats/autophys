@@ -184,12 +184,17 @@ The examples below use \`./target/release/autophys\` for the daemon and \`.venv/
 ### Daemon CLI
 
 \`\`\`sh
+./target/release/autophys serve --collection ./autophys-demo   # open http://127.0.0.1:4794
+\`\`\`
+
+\`serve\` keeps running. In another terminal, run any of these on their own, replacing the investigation and proposal IDs with ones from your workbook:
+
+\`\`\`sh
 D=./target/release/autophys
-$D serve --collection ~/autophys                          # http://127.0.0.1:4794
-$D investigations --target ~/autophys --project heated-block
-$D records inv_fe6a6d95a665b172 --kind proposal --json
-$D approve inv_fe6a6d95a665b172 prop_bd8b605925d9 --by james --settings '{"freq": 0.5}'
-$D verify --target ~/autophys --json
+$D investigations --target ./autophys-demo
+$D records inv_fe6a6d95a665b172 --target ./autophys-demo --kind proposal --json
+$D approve inv_fe6a6d95a665b172 prop_bd8b605925d9 --target ./autophys-demo --by james
+$D verify --target ./autophys-demo --json
 \`\`\`
 
 \`--help\` lists the commands, \`--help --json\` prints the command tree as JSON, and \`--version\` prints the version and build commit. Every command accepts \`--json\`. The exit status is 0 on success, 1 on a failure (including a \`verify\` that finds a problem), and 2 for a usage error.
@@ -262,7 +267,7 @@ $P mcp --project mypkg.module:project --workbook ~/autophys
 - Investigation policy: \`--policy reason|scripted|fake-reasoner\` (default \`reason\`), \`--model\` (default \`muse-spark-1.3\`), \`--route meta|baseten|lane\`, \`--effort\`, \`--replay FILE\`, \`--record FILE\`.
 - Researcher: \`--researcher api|muse\` (default \`api\`), \`--researcher-model\` (default \`muse-wonder-1.0\`), \`--researcher-route meta|baseten\`, \`--researcher-effort\`, \`--researcher-replay FILE\`, \`--researcher-record FILE\`. With \`muse\`, also \`--muse-binary\` (default \`muse\`), \`--timeout\` (seconds, default 300) and \`--max-model-steps\`.
 - Replays: the policy and the researcher each need their own replay (\`--replay\` and \`--researcher-replay\`) unless live calls are allowed.
-- Output: the directory holds \`summary.json\` and \`iterations.json\`, a \`scores.json\` for each evaluation, one workbook per case and seed, and every candidate playbook's \`SKILL.md\`. The input playbook is never overwritten.
+- Output: the directory holds \`summary.json\` and \`iterations.json\`, a \`scores.json\` for each evaluation, one workbook per case and seed, and each candidate playbook as \`playbook-NNN.md\` with a matching \`.sha256\` file. The input playbook is never overwritten.
 
 **Environment**
 
@@ -273,7 +278,8 @@ $P mcp --project mypkg.module:project --workbook ~/autophys
 | \`AUTOPHYS_SERVER\` | The daemon \`whoami\` uses once this device has credentials. |
 | \`AUTOPHYS_ALLOW_LIVE_REASON\` | Set it to \`1\` to let \`bench\` and \`research\` make live model calls. Without it, they need a replay. SDK reasoners you build yourself are not gated. |
 | \`AUTOPHYS_REASON_REPLAY\`, \`AUTOPHYS_REASON_RECORD\` | Replay or record the policy model's replies as a JSONL cassette. |
-| \`AUTOPHYS_REASON_ROUTE\`, \`AUTOPHYS_REASON_MODEL\`, \`AUTOPHYS_REASON_URL\` | Configure \`ap.reasoner_from_env()\`. The route is \`meta\` (the default; key in \`MODEL_API_KEY\`), \`baseten\` (key in \`BASETEN_API_KEY\`; set the model too) or \`lane\` (set the URL). The CLI ignores these; pass \`--route\` and \`--model\` instead. |
+| \`AUTOPHYS_REASON_ROUTE\`, \`AUTOPHYS_REASON_MODEL\` | Configure \`ap.reasoner_from_env()\`. The route is \`meta\` (the default; key in \`MODEL_API_KEY\`), \`baseten\` (key in \`BASETEN_API_KEY\`; set the model too) or \`lane\`. The CLI ignores these; pass \`--route\` and \`--model\` instead. |
+| \`AUTOPHYS_REASON_URL\` | Overrides the model endpoint, for the SDK and the CLI alike. The \`lane\` route requires it. |
 
 ### Python SDK
 
@@ -296,7 +302,7 @@ outcome = inv.run()
 print(outcome.status, outcome.investigation, outcome.proposal_id)   # awaiting_data inv_… prop_…
 \`\`\`
 
-To continue, approve the proposal in the workbench (or with the daemon's \`approve\`), then run \`inv.wait_for_approval()\`, \`inv.attach_data(outcome.proposal_id, measured)\` and \`inv.run()\` again.
+Run it from the repository root with \`.venv/bin/python\`; the workbook lands in \`./autophys-demo\`. To review it, start \`./target/release/autophys serve --collection ./autophys-demo\` in another terminal and open \`http://127.0.0.1:4794\`, or use the daemon's \`approve\` with \`--target ./autophys-demo\` and the printed IDs. Then call \`inv.wait_for_approval()\`, \`inv.attach_data(outcome.proposal_id, measured)\` and \`inv.run()\` again.
 
 **Connections and workbooks**
 
@@ -304,7 +310,7 @@ To continue, approve the proposal in the workbench (or with the daemon's \`appro
 | --- | --- |
 | \`ap.connect(target=None, *, api_key=None)\` | A \`LocalClient\` for a directory or a \`.ap-workbook\` file, or a \`RemoteClient\` for an \`http(s)://\` daemon URL. |
 | \`client.projects()\` | \`[{id, name}]\`, plus \`path\` locally. |
-| \`client.project(project)\` | Pass a \`Project\` to create or open its workbook and run investigations. Pass a name to open an existing workbook for listing and verification; a missing one raises \`WorkbookError\`. |
+| \`client.project(project)\` | Pass a \`Project\` to create or open its workbook and run investigations. Pass a name to open an existing workbook for listing and verification; a missing one raises \`WorkbookError\` locally, or \`StoreError\` from a daemon. |
 | \`wb.investigate(dataset, runner, policy=…)\` | Start a recorded \`Investigation\`. Needs a workbook opened with the \`Project\`. |
 | \`wb.investigation(id, runner=None, policy=…)\` | Resume an investigation from its records. Needs the same \`Project\` (simulator and configuration) it was started with. |
 | \`wb.investigations()\` | One row per investigation: id, status, budget used, overrides. |
@@ -316,7 +322,7 @@ To continue, approve the proposal in the workbench (or with the daemon's \`appro
 | --- | --- |
 | \`inv.run() -> Outcome\` | Run the loop until it stops, a budget runs out, or it proposes an experiment (status \`awaiting_data\`). |
 | \`Outcome\` | \`status\`, \`reasons\`, \`estimate\`, \`identified\`, \`non_identified\`, \`non_identifiable_combinations\`, \`investigation\`, \`proposal_id\`, \`summary\`; \`to_dict()\` for JSON. |
-| \`inv.wait_for_approval(*, timeout=3600, interval=5) -> dict\` | Block until the pending proposal is approved, edited or rejected, and return its state. Check \`status\` before attaching data. Raises \`TimeoutError\` when the time runs out. |
+| \`inv.wait_for_approval(*, timeout=3600, interval=5) -> dict\` | Block until the pending proposal leaves \`proposed\`, then return its state. Attach data only when \`status\` is \`approved\` or \`edited\`; at \`data_attached\`, another writer has already attached it and the handle picks that up. Raises \`TimeoutError\` when the time runs out. |
 | \`inv.attach_data(proposal_id, observation)\` | Attach the measured result of an approved experiment, then call \`inv.run()\` again. |
 | \`inv.approve(proposal_id, *, by="user", settings=None)\`, \`inv.reject(proposal_id, *, by="user", reason="")\` | Decide a proposal from code; reviewers normally do this in the workbench. |
 | \`inv.records(kind=None)\`, \`inv.proposal(proposal_id)\` | The investigation's records; one proposal's current state. |
