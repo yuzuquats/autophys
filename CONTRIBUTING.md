@@ -51,8 +51,23 @@ binaries on the first build. A cold build needs network access or a preseeded
 cache. To refuse network use after acquisition, use `cargo --offline` and
 `deno --cached-only` on the relevant subcommands. `vendor/` contains local
 Tento source and patched crates, not every registry/npm/JSR dependency. There
-is currently no product-owned CI workflow or Deno dependency lock; cached
-checks do not prove a reproducible cold dependency download.
+is currently no product-owned CI workflow. `html/deno.lock` records checksums
+and versions for frontend checks, optional browser drivers and the build worker.
+`html/deno.json` selects frozen resolution; the Rust bundler explicitly passes
+that config even though its worker runs under `vendor/`. Builds fail rather than
+rewrite the lock. To prefetch the build/driver graph before offline use:
+
+```sh
+deno cache --config html/deno.json html/routes/index.root.ts \
+  vendor/tento/tento-web/src/client/bundler-rpc.deno.ts \
+  vendor/tento/tento-headless-js/mod.ts html/e2e/*.ts
+```
+
+The normal Deno tests acquire their own locked graph. A deliberate dependency
+update uses `deno cache --frozen=false --config html/deno.json` with the affected
+entrypoints, then commits the reviewed lock together with the config/import
+change. esbuild's platform executable is downloaded on its first build; its
+version is fixed by the integrity-checked esbuild module.
 
 For isolated development, create a fresh writable state directory and start
 the loopback daemon (this builds and watches `html/`):

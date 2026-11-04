@@ -17,7 +17,10 @@
   "unstable": [
     "sloppy-imports"
   ],
-  "lock": false,
+  "lock": {
+    "path": "./deno.lock",
+    "frozen": true
+  },
   "compilerOptions": {
     "types": [
       "../vendor/tento/tento-ui-js/types/option.d.ts",
@@ -46,5 +49,6 @@
     "noImplicitAny": false,
     "noImplicitOverride": false,
     "experimentalDecorators": true
-  }
+  },
+  "nodeModulesDir": "none"
 }

@@ -900,12 +900,27 @@ pub struct EsbuildClient {
 
 impl EsbuildClient {
   pub fn new(tento_web: Arc<TentoWeb>) -> anyhow::Result<Self> {
+    Self::spawn(tento_web, None)
+  }
+
+  /// Use the application's committed Deno resolution for the worker, even
+  /// though it runs from this library's client directory. Frozen mode rejects
+  /// missing/stale lock entries rather than updating source during a build.
+  pub fn with_deno_config(tento_web: Arc<TentoWeb>, config: PathBuf) -> anyhow::Result<Self> {
+    Self::spawn(tento_web, Some(config))
+  }
+
+  fn spawn(tento_web: Arc<TentoWeb>, config: Option<PathBuf>) -> anyhow::Result<Self> {
     let client_dir = tento_web.path("src/client")?;
     Ok(EsbuildClient {
       subprocess: SubprocessRpc::new("Bundler".to_string(), move || {
         let mut c = tokio::process::Command::new("deno");
+        c.arg("run");
+        if let Some(config) = &config {
+          c.arg("--config").arg(config);
+          c.args(["--frozen", "--node-modules-dir=none"]);
+        }
         c.args([
-          "run",
           "--allow-sys",
           "--allow-read",
           "--allow-env",

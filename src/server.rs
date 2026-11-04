@@ -248,7 +248,15 @@ fn bundler(project_root: &Path) -> Result<Bundler> {
         })
         .context("locate tento-web; set TENTO_WEB if it is not at the project root's TENTO path")?;
     let tento_web = Arc::new(TentoWeb(tento_web_root));
-    let esbuild = Arc::new(EsbuildClient::new(tento_web.clone()).context("start esbuild")?);
+    // The worker runs inside vendor/, so select the product's frozen graph
+    // explicitly instead of inheriting the vendored workspace's unlocked one.
+    let deno_config = project_root
+        .join("html/deno.json")
+        .canonicalize()
+        .context("locate product Deno configuration")?;
+    let esbuild = Arc::new(
+        EsbuildClient::with_deno_config(tento_web.clone(), deno_config).context("start esbuild")?,
+    );
     Ok(Bundler::new(esbuild, tento_web))
 }
 
