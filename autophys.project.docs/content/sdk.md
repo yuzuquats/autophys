@@ -211,6 +211,15 @@ writes them:
   records stay valid. `images [{sha256, media_type, caption}]` (bytes in
   `blobs`, never inline); `replayed: true` for cassette replies.
 - outcome: `usage_total {calls, input_tokens, output_tokens, cost_usd}`.
+- blobs over HTTP (agreed with autophys/rs 2026-11-04; daemon a70b0ec):
+  `PUT /api/v1/projects/{pid}/blobs/{sha256}` with a bare lowercase 64-hex
+  path, the raw body and a required `Content-Type` (its media type), at
+  most 16 MiB (413). The server hashes the body: 422 `hash_mismatch` on a
+  mismatch, 422 with path `Content-Type` when it is missing; 201 on create,
+  200 when the same bytes exist. `GET` on the path returns the bytes with
+  the stored media type, or 404. Clients PUT every blob before the record
+  that references it. `HttpStore.put_blob`/`get_blob` implement it; every
+  local store has the same pair.
 - projections: unchanged in v1 (they are fixed SQL columns). Read APIs derive
   `playbook` from the seq-0 record and `usage_total` from the outcome.
 
@@ -304,28 +313,41 @@ crate's working tree (read only, in progress), and those say so.
 ## Validation
 
 On rwc-dev-01 (Python 3.12.3, NumPy 2.5.4, SciPy 1.18.1, venv
-`~/.cache/autophys/venv`):
-`PYTHONDONTWRITEBYTECODE=1 ~/.cache/autophys/venv/bin/python -m pytest -q`
-gives 65 passed, 1 skipped (the opt-in live reason-lane smoke). The 55 tests
-from the source all still pass, and 10 are new: 3 for E-1 and 7 for the
-`/api/v1` stream, the fallback and the parser. The benchmark (`bench --seeds 5`)
-reproduces the source table's statuses, maximum errors and requests:
-oscillator-free-only inconclusive 5/5, 1.52 %; oscillator validated 5/5,
-0.19 %, sine_0.44Hz; thermal-short-only inconclusive 5/5, 0.45 %; thermal
-validated 5/5, 0.04 %, pulse. Simulation counts differ by a few calls
-between aarch64 and x86_64. The rename-only tree and the retargeted tree
-give identical benchmark rows on the same host.
+`~/.cache/autophys/venv`), 2026-11-04 after the review fixes:
+
+- `PYTHONDONTWRITEBYTECODE=1 ~/.cache/autophys/venv/bin/python -m pytest -q`:
+  471 passed, 6 skipped (the opt-in real-daemon tests and the live
+  reason-lane smoke).
+- With `AUTOPHYS_RUST_BIN` set to a daemon built from current master: 476
+  passed, 1 skipped (the live smoke). A deployed bundle carries its web app;
+  a bare `cargo build` binary also needs `AUTOPHYS_RUST_WEB_ROOT` (a built
+  web tree), or the daemon exits at startup and the cross-writer tests error. This covers cross-writer appends, blob
+  routes, approval waits across keep-alives and a daemon restart.
+- `bench --seeds 5`: oscillator-free-only inconclusive, 308 simulations, RMSE
+  0.1939; oscillator validated, 644; thermal-short-only inconclusive, 133;
+  thermal validated, 336. Diagnosis is correct in every run. `--jobs 1` and
+  `--jobs 4` give identical rows except wall time.
+- Offline replay of `tests/conformance/reasoner/spark-oscillator.jsonl`: 8
+  calls, 800 input and 320 output tokens, $0.002360. It is a recorded
+  fixture, not a Muse run; no live model call has been made (MQ-2).
+- Two independent Opus reviews of this range found 20 defects, and a
+  Python↔Rust alignment check found 10 divergences. All 20 defects and the
+  material divergences are fixed (Python in this project, Rust in 0b03671 and a70b0ec).
+  Still open: image input in Python (M-4); the step `error` text is
+  formatted differently in the two SDKs (free text, not validated);
+  `HttpStore.create_investigation` sends a random Idempotency-Key, so a
+  retried create is not idempotent; and the fold of a stored
+  `overrides: null`, which no writer produces. Each SDK verifies the
+  other's goldens and the 21 numerics cases.
 
 ## Remaining work
 
-- Question 8 is settled: the Python suite checks the shared vectors
-  (`tests/vectors/chain.json`), and the Rust crate is to verify
-  `tests/conformance/python/` and write `tests/conformance/rust/`.
-- Run `HttpStore` and `RemoteClient` against the real daemon (it serves
-  `/api/v1` since d82deaa), and settle the open contract questions.
-- SDK withdraw (question 7): the store accepts `withdrawn`, but there is no
-  `inv.withdraw` yet.
-- Phase 2 of autophys-rs (AX-2 revised): numeric golden cases in
-  `tests/conformance/numerics/`, format to be drafted in `rust-sdk.md`.
-- Retire the yuzuquats original and `~/.cache/modellab/venv`, once the
-  operator approves.
+- Battery case suite (MQ-5, owned here): cases, an experiment catalog costed
+  in test hours, a short-data case, goldens and the experiment-cost budget.
+- M-4 image input (the Rust reasoner already accepts `images`).
+- First live Spark/Wonder runs, once the operator approves a token budget
+  (MQ-2); until then no result may be labelled Muse.
+- Muse Code to MCP dispatch is still unverified (the echo provider does not
+  start MCP servers).
+- Retire the yuzuquats original and `~/.cache/modellab/venv` once the
+  operator agrees.

@@ -111,7 +111,7 @@ way. The payload is the client's meta with `project_id`, `config_version` and
 
 | Kind | Rule |
 | --- | --- |
-| any | payload is a JSON object |
+| any | payload is a JSON object; every integer at any depth is within -2^63 .. 2^64-1 (what serde_json stores as i64/u64), so a record one SDK writes the other can verify |
 | `investigation` | `project_id`, `config_version` non-empty strings |
 | `measurement` | `observation` is an object |
 | `outcome` | `status` non-empty string |
