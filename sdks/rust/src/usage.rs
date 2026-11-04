@@ -14,17 +14,25 @@ pub fn price_for(model: &str) -> Option<Value> {
 }
 pub fn normalize_usage(reply: &ReasonReply) -> Value {
     let raw = &reply.usage;
-    let inp = raw["prompt_tokens"].as_u64().unwrap_or(0);
-    let out = raw["completion_tokens"].as_u64().unwrap_or(0);
+    // A count is a nonnegative integer; null, a float or a missing count is
+    // recorded as 0 and makes the cost unknown (as Python).
+    let count = |v: Option<&Value>| v.and_then(Value::as_u64);
+    let pick = |a: &str, b: &str| raw.get(a).or_else(|| raw.get(b));
+    let (inp, out) = (
+        count(pick("prompt_tokens", "input_tokens")),
+        count(pick("completion_tokens", "output_tokens")),
+    );
+    let known = inp.is_some() && out.is_some();
+    let (inp, out) = (inp.unwrap_or(0), out.unwrap_or(0));
     let price = reply.model.as_deref().and_then(price_for);
-    let cost = price.map(|p| {
+    let cost = price.filter(|_| known).map(|p| {
         (inp as f64 * p["input_per_mtok"].as_f64().unwrap()
             + out as f64 * p["output_per_mtok"].as_f64().unwrap())
             / 1e6
     });
     let mut value = json!({"route":reply.route.as_deref().filter(|s| !s.is_empty()).unwrap_or("unknown"),
         "model":reply.model.as_deref().filter(|s| !s.is_empty()).unwrap_or("unknown"),
-        "input_tokens":inp,"output_tokens":out,"total_tokens":raw.get("total_tokens").cloned().unwrap_or(json!(inp+out)),
+        "input_tokens":inp,"output_tokens":out,"total_tokens":count(raw.get("total_tokens")).unwrap_or(inp + out),
         "latency_ms":reply.elapsed_ms.unwrap_or(0.),"cost_usd":cost});
     for (source, key, target) in [
         (
@@ -38,8 +46,8 @@ pub fn normalize_usage(reply: &ReasonReply) -> Value {
             "cached_input_tokens",
         ),
     ] {
-        if let Some(v) = raw[source].get(key) {
-            value[target] = v.clone();
+        if let Some(v) = count(raw[source].get(key)) {
+            value[target] = json!(v);
         }
     }
     value
@@ -65,6 +73,49 @@ pub fn usage_total<'a>(steps: impl IntoIterator<Item = &'a Value>) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn an_unknown_count_means_an_unknown_cost() {
+        let reply = |usage: Value| ReasonReply {
+            content: json!(""),
+            model: Some(crate::reasoner::MUSE_SPARK.into()),
+            usage,
+            route: Some("meta".into()),
+            elapsed_ms: Some(1.),
+            replayed: false,
+        };
+        let full = normalize_usage(&reply(
+            json!({"prompt_tokens": 1000, "completion_tokens": 100,
+            "completion_tokens_details": {"reasoning_tokens": 7}}),
+        ));
+        assert!(full["cost_usd"].as_f64().unwrap() > 0.);
+        assert_eq!(full["reasoning_tokens"], 7);
+        for bad in [json!(null), json!(12.5), json!(-3), json!("12")] {
+            let u = normalize_usage(&reply(
+                json!({"prompt_tokens": bad, "completion_tokens": 100}),
+            ));
+            assert_eq!(
+                (u["input_tokens"].clone(), u["output_tokens"].clone()),
+                (json!(0), json!(100))
+            );
+            assert!(u["cost_usd"].is_null(), "{u}");
+        }
+        let missing = normalize_usage(&reply(json!({"prompt_tokens": 10})));
+        assert!(missing["cost_usd"].is_null());
+        assert_eq!(missing["total_tokens"], 10);
+        let named = normalize_usage(&reply(
+            json!({"input_tokens": 3, "output_tokens": 4, "total_tokens": 2.5,
+            "prompt_tokens_details": {"cached_tokens": null},
+            "completion_tokens_details": {"reasoning_tokens": 1.5}}),
+        ));
+        assert_eq!(
+            (named["input_tokens"].clone(), named["total_tokens"].clone()),
+            (json!(3), json!(7))
+        );
+        assert!(named["cost_usd"].is_number());
+        assert!(
+            named.get("cached_input_tokens").is_none() && named.get("reasoning_tokens").is_none()
+        );
+    }
     #[test]
     fn prices_equal_shared_fixture() {
         let shared = std::fs::read_to_string(concat!(

@@ -31,6 +31,10 @@ pub enum Error {
     /// `wait_for_approval` gave up.
     #[error("{0}")]
     Timeout(String),
+    /// 402 `budget_error`: the model provider refused the call for billing
+    /// (MQ-6). Retrying or continuing cannot help.
+    #[error("{0}")]
+    Budget(String),
     /// A target this build does not support yet (an `http(s)` URL).
     #[error("{0}")]
     Unsupported(String),
@@ -67,6 +71,7 @@ impl Error {
             Error::NotFound(_) => 404,
             Error::Conflict { .. } => 409,
             Error::TooLarge(_) => 413,
+            Error::Budget(_) => 402,
             Error::Invalid { .. } | Error::HashMismatch => 422,
             Error::Unsupported(_) => 501,
             Error::Timeout(_) => 504,
@@ -85,6 +90,7 @@ impl Error {
             Error::HashMismatch => "hash_mismatch",
             Error::Format(_) => "invalid_workbook",
             Error::Timeout(_) => "timeout",
+            Error::Budget(_) => "budget_error",
             Error::Unsupported(_) => "not_implemented",
             Error::Db(_) | Error::Io(_) | Error::Internal(_) => "internal",
         }

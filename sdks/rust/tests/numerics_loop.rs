@@ -319,6 +319,76 @@ fn wait_uses_explicit_older_proposal_among_two_pending() {
 }
 
 #[test]
+fn a_402_ends_the_investigation_on_the_first_call() {
+    use autophys::{
+        agent::ReasonLanePolicy,
+        reasoner::{MUSE_SPARK, ModelSpec, ReasonOptions, ReasonReply, Reasoner},
+        simulator::SimulationError,
+    };
+    struct Unbilled(std::sync::Arc<std::sync::atomic::AtomicUsize>);
+    impl Reasoner for Unbilled {
+        fn complete(
+            &mut self,
+            _: &[Value],
+            _: &ReasonOptions,
+        ) -> autophys::simulator::Result<ReasonReply> {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Err(SimulationError::BudgetError(
+                "chat completions: HTTP 402 (billing_not_configured)".into(),
+            ))
+        }
+    }
+    let temp = tempfile::tempdir().unwrap();
+    let client = autophys::connect(Some(temp.path().to_str().unwrap())).unwrap();
+    let (p, ds, _) = input();
+    let wb = client.project_with(p).unwrap();
+    let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let policy = ReasonLanePolicy::new(Unbilled(calls.clone()))
+        .with_model_spec(ModelSpec::new("policy", "meta", MUSE_SPARK).unwrap())
+        .unwrap();
+    let mut inv = wb.investigate(ds, ProposalRunner, policy).unwrap();
+    let err = inv.run().unwrap_err();
+    assert!(matches!(err, autophys::Error::Budget(_)), "{err:?}");
+    assert_eq!(err.status(), 402);
+    assert_eq!(
+        calls.load(std::sync::atomic::Ordering::SeqCst),
+        1,
+        "no second call"
+    );
+    let steps = inv.records(Some("step")).unwrap();
+    assert_eq!(steps.len(), 1);
+    assert_eq!(steps[0].payload["valid"], false);
+    assert!(
+        steps[0].payload["error"]
+            .as_str()
+            .unwrap()
+            .starts_with("BudgetError: ")
+    );
+    let outcome = inv.records(Some("outcome")).unwrap().remove(0);
+    assert_eq!(outcome.payload["status"], "failed");
+    assert_eq!(
+        outcome.payload["reasons"],
+        json!(["billing: provider refused the call (HTTP 402)"])
+    );
+}
+#[test]
+fn a_bad_playbook_hash_reports_its_own_path() {
+    let temp = tempfile::tempdir().unwrap();
+    let client = autophys::connect(Some(temp.path().to_str().unwrap())).unwrap();
+    let (p, _, _) = input();
+    let wb = client.project_with(p).unwrap();
+    let version = wb.config_versions().unwrap().remove(0).version;
+    let meta = json!({"config_version": version, "playbook": {"name": "d", "version": "1", "sha256": "not-hex"}});
+    match wb.create_investigation(meta, None) {
+        Err(autophys::Error::Invalid { path, .. }) => assert_eq!(path, "payload.playbook.sha256"),
+        other => panic!("{:?}", other.map(|_| ())),
+    }
+    match wb.create_investigation(json!({}), None) {
+        Err(autophys::Error::Invalid { path, .. }) => assert_eq!(path, "project_id"),
+        other => panic!("{:?}", other.map(|_| ())),
+    }
+}
+#[test]
 fn muse_policy_pins_playbook_and_retains_usage_on_invalid_replies_and_resume() {
     use autophys::{
         agent::ReasonLanePolicy,

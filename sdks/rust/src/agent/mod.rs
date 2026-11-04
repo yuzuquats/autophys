@@ -832,6 +832,23 @@ impl Investigation {
                             step.as_object_mut().unwrap().extend(m.clone());
                         }
                     }
+                    if let SimulationError::BudgetError(message) = &e {
+                        // MQ-6: billing is not configured; retrying or
+                        // continuing cannot help. Record the step, end the
+                        // investigation and return the error.
+                        self.last_error = format!("BudgetError: {message}");
+                        step["valid"] = json!(false);
+                        step["error"] = json!(self.last_error);
+                        self.write("step", step)?;
+                        self.finish(
+                            "failed",
+                            vec!["billing: provider refused the call (HTTP 402)".into()],
+                            None,
+                            "",
+                            t,
+                        )?;
+                        return Err(crate::Error::Budget(message.clone()));
+                    }
                     failures += 1;
                     self.last_error = e.to_string();
                     step["valid"] = json!(false);

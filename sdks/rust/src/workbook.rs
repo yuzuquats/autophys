@@ -323,11 +323,18 @@ impl Workbook {
             Some(_) => return Err(Error::NotFound("project")),
         }
         let payload = Value::Object(payload);
-        validate::payload_shape(Kind::Investigation, &payload).map_err(|_| {
-            Error::invalid(
-                "project_id",
-                "project_id and config_version are required strings",
-            )
+        // A missing pin reads as the request's own field; anything else (a
+        // bad `playbook.sha256`, say) keeps the validator's path, as Python.
+        validate::payload_shape(Kind::Investigation, &payload).map_err(|e| match e {
+            Error::Invalid { ref path, .. }
+                if path == "payload.project_id" || path == "payload.config_version" =>
+            {
+                Error::invalid(
+                    "project_id",
+                    "project_id and config_version are required strings",
+                )
+            }
+            e => e,
         })?;
         let text = canonical(&payload);
         if text.len() > validate::MAX_PAYLOAD_BYTES {

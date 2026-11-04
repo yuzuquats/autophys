@@ -31,6 +31,7 @@ pub struct ChatReasoner {
     api_key: String,
     pub timeout: Duration,
     sleep: Box<dyn Fn(Duration) + Send>,
+    jitter: Box<dyn Fn() -> f64 + Send>,
 }
 impl std::fmt::Debug for ChatReasoner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -108,11 +109,46 @@ fn reason_key(route: &str, explicit: Option<String>) -> Result<String> {
         .ok(),
     )
 }
-fn retry_delay(value: Option<&str>, attempt: u32) -> Duration {
-    let v = value
-        .and_then(|s| s.trim().parse::<f64>().ok())
+/// Statuses worth another attempt, as in Python: rate limits and the
+/// transient server errors. Other 5xx (501, 505, ...) will not change.
+fn retryable(status: u16) -> bool {
+    matches!(status, 429 | 500 | 502 | 503 | 504)
+}
+/// Connection-level failures (Python's OSError): retried like a 503.
+fn transient(error: &ureq::Error) -> bool {
+    matches!(
+        error,
+        ureq::Error::Io(_)
+            | ureq::Error::Timeout(_)
+            | ureq::Error::HostNotFound
+            | ureq::Error::ConnectionFailed
+            | ureq::Error::BodyStalled
+    )
+}
+/// A uniform value in [0, 1) for backoff jitter.
+fn random_unit() -> f64 {
+    let mut bytes = [0u8; 8];
+    match getrandom::getrandom(&mut bytes) {
+        Ok(()) => (u64::from_le_bytes(bytes) >> 11) as f64 / (1u64 << 53) as f64,
+        Err(_) => 0.5,
+    }
+}
+/// Retry-After as seconds or an HTTP-date, else jittered exponential
+/// backoff `2^attempt * (0.5 + jitter)`; always capped at 30 seconds.
+fn retry_delay(value: Option<&str>, attempt: u32, jitter: f64) -> Duration {
+    let after = value.map(str::trim).and_then(|s| {
+        s.parse::<f64>().ok().or_else(|| {
+            let at = httpdate::parse_http_date(s).ok()?;
+            Some(match at.duration_since(std::time::SystemTime::now()) {
+                Ok(ahead) => ahead.as_secs_f64(),
+                Err(_) => 0.,
+            })
+        })
+    });
+    let v = after
         .filter(|v| v.is_finite())
-        .unwrap_or(2_f64.powi(attempt as i32));
+        .map(|v| v.max(0.))
+        .unwrap_or_else(|| 2_f64.powi(attempt as i32) * (0.5 + jitter));
     Duration::from_secs_f64(v.clamp(0., 30.))
 }
 impl ChatReasoner {
@@ -144,9 +180,14 @@ impl ChatReasoner {
             ),
             timeout: config.timeout,
             sleep: Box::new(std::thread::sleep),
+            jitter: Box::new(random_unit),
         })
     }
     /// Inject a sleeper to test rate-limit handling without wall-clock delays.
+    pub fn with_jitter(mut self, jitter: impl Fn() -> f64 + Send + 'static) -> Self {
+        self.jitter = Box::new(jitter);
+        self
+    }
     pub fn with_sleep(mut self, sleep: impl Fn(Duration) + Send + 'static) -> Self {
         self.sleep = Box::new(sleep);
         self
@@ -213,19 +254,27 @@ impl Reasoner for ChatReasoner {
             .build();
         let agent = ureq::Agent::new_with_config(config);
         for attempt in 0..4 {
-            let mut response = agent
+            let sent = agent
                 .post(&self.url)
                 .header("Authorization", format!("Bearer {}", self.api_key))
-                .send_json(&body)
-                .map_err(|_| invalid("chat completions request failed"))?;
+                .send_json(&body);
+            let mut response = match sent {
+                Ok(response) => response,
+                Err(e) if transient(&e) && attempt < 3 => {
+                    (self.sleep)(retry_delay(None, attempt, (self.jitter)()));
+                    continue;
+                }
+                Err(_) => return Err(invalid("chat completions request failed")),
+            };
             let status = response.status().as_u16();
-            if (status == 429 || (500..600).contains(&status)) && attempt < 3 {
+            if retryable(status) && attempt < 3 {
                 (self.sleep)(retry_delay(
                     response
                         .headers()
                         .get("Retry-After")
                         .and_then(|v| v.to_str().ok()),
                     attempt,
+                    (self.jitter)(),
                 ));
                 continue;
             }
@@ -335,6 +384,7 @@ mod tests {
         let capture = sleeps.clone();
         let mut r = ChatReasoner::new(config("meta", url))
             .unwrap()
+            .with_jitter(|| 0.5)
             .with_sleep(move |d| capture.lock().unwrap().push(d));
         let options = ReasonOptions {
             max_tokens: Some(8),
@@ -417,8 +467,55 @@ mod tests {
             r.complete(&[json!({"content":[]})], &Default::default())
                 .is_err()
         );
-        assert_eq!(retry_delay(Some("NaN"), 0), Duration::from_secs(1));
-        assert_eq!(retry_delay(Some("-5"), 0), Duration::ZERO);
+        assert_eq!(retry_delay(Some("NaN"), 0, 0.5), Duration::from_secs(1));
+        assert_eq!(retry_delay(Some("-5"), 0, 0.5), Duration::ZERO);
+        assert_eq!(
+            retry_delay(None, 2, 0.),
+            Duration::from_secs(2),
+            "4 * (0.5 + 0)"
+        );
+        assert_eq!(retry_delay(None, 9, 0.9), Duration::from_secs(30), "capped");
+        let past = "Wed, 21 Oct 2015 07:28:00 GMT";
+        assert_eq!(
+            retry_delay(Some(past), 0, 0.5),
+            Duration::ZERO,
+            "an elapsed date"
+        );
+        let soon = httpdate::fmt_http_date(std::time::SystemTime::now() + Duration::from_secs(20));
+        let d = retry_delay(Some(&soon), 0, 0.5);
+        assert!(
+            d > Duration::from_secs(17) && d <= Duration::from_secs(20),
+            "{d:?}"
+        );
+        let j = random_unit();
+        assert!((0.0..1.0).contains(&j));
+    }
+    #[test]
+    fn transport_errors_retry_and_permanent_statuses_do_not() {
+        // Nothing listens on this port: connect fails, as Python's OSError.
+        let closed = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/v1", closed.local_addr().unwrap());
+        drop(closed);
+        let sleeps = Arc::new(Mutex::new(vec![]));
+        let capture = sleeps.clone();
+        let mut r = ChatReasoner::new(config("meta", url))
+            .unwrap()
+            .with_jitter(|| 0.5)
+            .with_sleep(move |d| capture.lock().unwrap().push(d));
+        let err = r
+            .complete(&[json!({"content":"hi"})], &Default::default())
+            .unwrap_err();
+        assert!(err.to_string().contains("request failed"), "{err}");
+        assert_eq!(sleeps.lock().unwrap().len(), 3, "four attempts");
+        let (url, server) = serve(vec![(501, "", json!({}))]);
+        let mut r = ChatReasoner::new(config("meta", url))
+            .unwrap()
+            .with_sleep(|_| panic!("no retry"));
+        let err = r
+            .complete(&[json!({"content":"hi"})], &Default::default())
+            .unwrap_err();
+        assert!(err.to_string().contains("HTTP 501"), "{err}");
+        assert_eq!(server.join().unwrap().len(), 1);
     }
     #[test]
     fn muse_roles_images_and_server_backoff() {
@@ -435,6 +532,7 @@ mod tests {
         let captured = sleeps.clone();
         let mut r = ChatReasoner::new(cfg)
             .unwrap()
+            .with_jitter(|| 0.5)
             .with_sleep(move |d| captured.lock().unwrap().push(d));
         let messages = vec![json!({"role":"user", "content":"explain"})];
         r.complete(
