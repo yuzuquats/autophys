@@ -130,15 +130,15 @@ ${w} .ap-bar-fill { display:block;height:100%;min-width:2px;border-radius:0 4px 
 ${w} .ap-bar-fill.ap-t-warn { background:var(--ap-warn); } ${w} .ap-bar-fill.ap-t-ok { background:var(--ap-ok); }
 ${w} .ap-bar-fill.ap-t-muted { background:#bdbdbd; } ${w} .ap-bar-fill.ap-t-run { background:var(--ap-run); }
 ${w} .ap-bar-value { text-align:right;color:var(--ap-sec);font-variant-numeric:tabular-nums; }
-${w} .ap-ranges { display:flex;flex-direction:column;gap:12px; }
-${w} .ap-range { min-width:0;font:12px/18px var(--ap-font);font-variant-numeric:tabular-nums; }
+${w} .ap-ranges { display:flex;flex-direction:column;gap:32px; }
+${w} .ap-range { min-width:0;font:13px/20px var(--ap-font);font-variant-numeric:tabular-nums; }
 ${w} .ap-range-head { display:flex;align-items:center;gap:10px; }
-${w} .ap-range-head b { font-size:14px;font-weight:600; }
+${w} .ap-range-head b { font:600 15px/22px var(--ap-font); }
 ${w} .ap-range-scale { margin-left:auto;color:var(--ap-sec); }
-${w} .ap-range-track { position:relative;height:5px;margin-top:24px;border-radius:3px;background:var(--ck-n300); }
-${w} .ap-range-track i { position:absolute;top:-4px;width:2px;height:13px;margin-left:-1px;background:var(--ap-ink); }
-${w} .ap-range-initial { position:absolute;bottom:12px;transform:translateX(-50%);white-space:nowrap;color:var(--ap-ink);font-size:12px; }
-${w} .ap-range-bounds { display:flex;justify-content:space-between;gap:12px;margin-top:6px;color:var(--ap-sec); }
+${w} .ap-range-track { position:relative;height:6px;margin-top:36px;border-radius:3px;background:var(--ck-n300); }
+${w} .ap-range-track i { position:absolute;top:-5px;width:2px;height:16px;margin-left:-1px;background:var(--ap-ink); }
+${w} .ap-range-initial { position:absolute;bottom:16px;transform:translateX(-50%);white-space:nowrap;color:var(--ap-ink);font-size:13px; }
+${w} .ap-range-bounds { display:flex;justify-content:space-between;gap:12px;margin-top:10px;color:var(--ap-sec); }
 
 /* ---- details ---- */
 ${w} .ap-dname { display:flex;align-items:center;gap:8px; }
@@ -181,17 +181,18 @@ ${w} .ap-text { margin:0;font:12px/17px var(--ap-font);color:var(--ap-ink); }
 ${w} .ap-decision, ${w} .ap-actions { display:flex;gap:6px;margin-top:14px; }
 ${w} .ap-decision > button, ${w} .ap-actions > button { flex:1 1 0;min-width:0; }
 /* Configuration is a document in the main pane, with compact supporting sections. */
-${w} .ap-viewer.ap-configuration { display:block;flex:1 1 auto;min-height:0;padding:24px;background:var(--ck-n100); }
-${w} .ap-configuration h2 { margin:0 0 10px;font:600 16px/22px var(--ap-font);letter-spacing:-.015em; }
-${w} .ap-config-params > .ap-help { margin-bottom:16px; }
-${w} .ap-config-sections { display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:24px 32px;margin-top:16px;padding-top:16px;border-top:1px solid var(--ap-line); }
-${w} .ap-config-sections > section:first-child { grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:16px 24px; }
+${w} .ap-viewer.ap-configuration { display:block;flex:1 1 auto;min-height:0;overflow:auto;padding:32px 32px 40px;background:var(--ck-n100); }
+${w} .ap-configuration h2 { margin:0 0 8px;font:600 18px/26px var(--ap-font);letter-spacing:-.015em; }
+${w} .ap-config-params > .ap-help { margin-bottom:28px;font:13px/20px var(--ap-font); }
+${w} .ap-config-sections { display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:40px 48px;margin-top:40px;padding-top:32px;border-top:1px solid var(--ap-line); }
+${w} .ap-config-sections > section:first-child { grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:20px 40px; }
 ${w} .ap-config-sections > section:first-child > h2 { grid-column:1/-1;margin-bottom:0; }
 ${w} .ap-config-sections > section:first-child .ap-facts { align-content:start; }
-${w} .ap-config-sections > section:first-child .ap-facts > div:first-child dt { font-weight:600;color:var(--ap-ink);grid-column:1/-1;margin-bottom:4px; }
+${w} .ap-config-sections > section:first-child .ap-facts > div:first-child dt { font:600 14px/20px var(--ap-font);color:var(--ap-ink);grid-column:1/-1; }
+${w} .ap-config-sections > section:first-child .ap-facts > div:first-child dd { grid-column:1/-1;margin-bottom:2px;text-align:left;font-weight:400;color:var(--ap-sec); }
 ${w} .ap-config-sections > section:first-child .ap-facts > div:first-child dd:empty { display:none; }
 ${w} .ap-config-sections .ap-facts + .ap-facts { margin:0; }
-${w} .ap-config-sections .ap-facts { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+${w} .ap-config-sections .ap-facts { grid-template-columns:minmax(0,1fr) auto;gap:6px 16px;max-width:440px;font:13px/20px var(--ap-font); }
 ${w} .ap-facts dt, ${w} .ap-facts dd { overflow-wrap:anywhere; }
 ${w} .ap-dname { margin:0 0 8px;font:600 16px/22px var(--ap-font); }
 ${w} .ap-status { margin:0 0 20px;font:12px/18px var(--ap-font);color:var(--ap-sec); }
