@@ -1,6 +1,7 @@
 import { h, reducedMotion } from "./dom.ts";
 import { createDeck } from "./deck.ts";
 import type { DeckSlide } from "./deck-data.ts";
+import { createDocs, docsCss, type DocsPage } from "./docs.ts";
 import { installDrawer } from "./drawer.ts";
 import { createHeader } from "./header.ts";
 import type { Stage } from "./model.ts";
@@ -13,6 +14,8 @@ import type { CookbookApp, CookbookClasses, CookbookHost, CookbookShell } from "
 export type ShellOptions = {
   /** The pitch deck for an app; default: placeholderDeck(app.title). */
   deck?: (app: CookbookApp) => readonly DeckSlide[];
+  /** One page of documentation, drawn below the deck and above the footer; default none. */
+  docs?: (app: CookbookApp) => DocsPage;
   /** Tutorial steps; default: shellSteps, which point only at shell pieces. */
   tutorial?: readonly TutorialStep[];
   /** Path prefix of the open app (default /app). The server must answer it with index.html. */
@@ -98,7 +101,7 @@ export function mountHost(options: ShellOptions = {}): CookbookHost {
       if (!document.querySelector("style[data-cookbook]")) {
         const style = document.createElement("style");
         style.dataset.cookbook = "";
-        style.textContent = cookbookCss;
+        style.textContent = cookbookCss + docsCss;
         document.head.append(style);
       }
       if (!document.title) document.title = app.title;
@@ -149,6 +152,8 @@ export function mountHost(options: ShellOptions = {}): CookbookHost {
       let slotsNow = panels.freshSlots();
       const tutorial = createTutorial(options.tutorial ?? shellSteps);
       const deck = createDeck(options.deck?.(app) ?? placeholderDeck(app.title, appPath));
+      const docsPage = options.docs?.(app);
+      const docs = docsPage ? createDocs(docsPage) : undefined;
       const backToTop = h("button", "ck-footer-link", { type: "button" }, "Back to top");
       backToTop.addEventListener("click", () => {
         window.scrollTo({ top: 0, behavior: reducedMotion() ? "instant" : "smooth" });
@@ -165,6 +170,7 @@ export function mountHost(options: ShellOptions = {}): CookbookHost {
         root,
         header,
         deck,
+        docs,
         footer,
         panels,
         tutorial,

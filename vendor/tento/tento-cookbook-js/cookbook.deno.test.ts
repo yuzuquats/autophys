@@ -8,6 +8,7 @@ import { invert } from "./src/flip.ts";
 import { cookbookClasses, placeholderDeck } from "./src/shell.ts";
 import { shellSteps } from "./src/tutorial.ts";
 import { cookbookCss } from "./src/styles.ts";
+import { docsCss, inline } from "./src/docs.ts";
 import source0 from "./src/cookbook.ts" with { type: "text" };
 import source1 from "./src/deck-data.ts" with { type: "text" };
 import source2 from "./src/deck.ts" with { type: "text" };
@@ -27,6 +28,7 @@ import source15 from "./src/types.ts" with { type: "text" };
 import source16 from "./src/view.ts" with { type: "text" };
 import source17 from "./demo/placeholder-app.ts" with { type: "text" };
 import source18 from "./demo/routes/index.root.ts" with { type: "text" };
+import source19 from "./src/docs.ts" with { type: "text" };
 
 Deno.test("routes: landing and app paths round-trip under any base", () => {
   assertEquals(readRoute("/"), { app: false });
@@ -180,6 +182,7 @@ Deno.test("classes: every assigned shell class has a stylesheet selector", () =>
     ["src/view.ts", source16],
     ["demo/placeholder-app.ts", source17],
     ["demo/routes/index.root.ts", source18],
+    ["src/docs.ts", source19],
   ];
   const intentional: Record<string, string> = {
     "ck-stat": "Grouping hook for ck-stat-value and ck-stat-label; uses block flow.",
@@ -191,7 +194,7 @@ Deno.test("classes: every assigned shell class has a stylesheet selector", () =>
     "ph-facts": "Demo-local facts recipe installed by PlaceholderApp.mount.",
     "ph-label": "Demo text-update and settleIn hook; inherits the stage typography.",
   };
-  const selectors = new Set([...cookbookCss.matchAll(/\.([a-zA-Z_][\w-]*)/g)].map((m) => m[1]));
+  const selectors = new Set([...(cookbookCss + docsCss).matchAll(/\.([a-zA-Z_][\w-]*)/g)].map((m) => m[1]));
   const missing: string[] = [];
   const assigned = new Set<string>();
   for (const [file, raw] of sources) {
@@ -322,4 +325,9 @@ Deno.test("deck: Hacks endpoint pulls are symmetric and bounded at 22 percent / 
     assertEquals(first.offset > 0 && first.offset <= .22, true);
     assertEquals(first.scale >= .95 && first.scale < 1, true);
   }
+});
+
+Deno.test("docs: prose without a matched backtick pair stays one literal string", () => {
+  assertEquals(inline("plain prose"), ["plain prose"]);
+  assertEquals(inline("one ` stray backtick"), ["one ` stray backtick"]);
 });
