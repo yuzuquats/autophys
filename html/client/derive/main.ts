@@ -7,7 +7,7 @@ import {
 } from "./charts.ts";
 import { truthPanels } from "./truth.ts";
 import { configurationSections, experimentSections, knownSection } from "./configuration.ts";
-import { simulatorLabel } from "../config.ts";
+import { simulatorLabel, specOf } from "../config.ts";
 import { engineering, int, shortHash, sig } from "./fmt.ts";
 import { displayedFields, outlookAt } from "./outlook.ts";
 import { configFor, investigationLabel, defaultSelection, experimentsUsed, ids, latestConfig, latestFit, parseSel, projectOf, proposalLabel, rankOf, type State, statusText } from "./shared.ts";
@@ -52,21 +52,44 @@ function candidatesSection(s: State, c: ProjectConfig, inv: Investigation, p: Pr
 }
 
 const actionTitle = (action: string) => (action.charAt(0).toUpperCase() + action.slice(1)).replace(/_/g, " ");
+const listed = (xs: string[]) => xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
 
-/** The agent's steps that led to the proposal: one line each, the proposing step with its evidence and expectation. */
-function reasoningSection(c: ProjectConfig, p: Proposal): Section {
-  const trace = p.trace ?? [];
+/**
+ * The experiment in one paragraph: what it applies (drive settings), what it records and for how long
+ * (sampling settings), the agent's reason, and what it expects. Built from the manifest's roles and the
+ * recorded hypothesis and expectation; nothing product-specific.
+ */
+export function experimentSummary(s: State, c: ProjectConfig, inv: Investigation, p: Proposal): string {
+  const spec = specOf(c, p.experiment), shown = displayedFields(s, inv, p);
+  const values: Record<string, number> = { ...p.fixedSettings, ...Object.fromEntries(shown.map((f) => [f.name, f.value])) };
+  const ch = (x: { label: string; unit: string }) => `${x.label}${x.unit ? ` (${x.unit})` : ""}`;
+  const declared = spec.settings.some((x) => x.role);
+  const drive = spec.settings.filter((x) => (declared ? x.role === "drive" : true) && Number.isFinite(values[x.name] ?? x.default))
+    .map((x) => `${x.label.toLowerCase()} ${engineering(values[x.name] ?? x.default, x.unit)}`);
+  const sampling = spec.settings.filter((x) => x.role === "sampling");
+  const duration = sampling.find((x) => x.unit === "s"), rate = sampling.find((x) => x.unit === "Hz");
+  const span = `${duration ? ` for ${engineering(values[duration.name] ?? duration.default, "s")}` : ""}${rate ? ` at ${engineering(values[rate.name] ?? rate.default, "Hz")}` : ""}`;
+  const name = proposalLabel({ ...p, fields: shown });
+  const what = spec.input
+    ? `${name} applies ${ch(spec.input)}${drive.length ? ` (${listed(drive)})` : ""} and records ${ch(spec.output)}${span}.`
+    : `${name} records ${ch(spec.output)}${drive.length ? ` (${listed(drive)})` : ""}${span}.`;
+  const expected = p.trace?.at(-1)?.expected;
+  return [what, p.hypothesis, expected ? `Expected: ${expected}.` : ""].filter(Boolean).join(" ");
+}
+
+/** The experiment summarised in prose, then the agent's steps that led to it on a stepper: one line each, the proposing step with its evidence and expectation. */
+function reasoningSection(s: State, c: ProjectConfig, inv: Investigation, p: Proposal): Section {
+  const trace = p.trace ?? [], lead = { kind: "text" as const, text: experimentSummary(s, c, inv, p), lead: true };
   if (!trace.length) {
-    return { heading: "Reasoning", caption: "The agent's steps were not recorded for this proposal", blocks: p.hypothesis
-      ? [{ kind: "text", text: p.hypothesis }]
-      : [{ kind: "missing", title: "Not recorded yet", description: "Neither a hypothesis nor the agent's steps were recorded for this proposal." }] };
+    return { heading: "Reasoning", caption: "The agent's steps were not recorded for this proposal", blocks: [lead] };
   }
   const steps: TraceRow[] = trace.map((t, i) => {
     const current = i === trace.length - 1;
-    return { title: actionTitle(t.action), meta: `step ${t.n}${current ? " · this proposal" : ""}`, text: t.error || t.hypothesis || undefined,
+    return { title: actionTitle(t.action), marker: String(t.n), ...(current ? { meta: "this proposal" } : {}),
+      text: t.error || (current ? undefined : t.hypothesis || undefined),
       ...(t.error ? { tone: "danger" as const } : {}), ...(current ? { current, evidence: t.evidence, expected: t.expected || undefined } : {}) };
   });
-  return { heading: "Reasoning", caption: `${trace.length} agent step${trace.length === 1 ? "" : "s"} since the last proposal · ${c.policy.label}`, blocks: [{ kind: "trace", steps }] };
+  return { heading: "Reasoning", caption: `${trace.length} agent step${trace.length === 1 ? "" : "s"} since the last proposal · ${c.policy.label}`, blocks: [lead, { kind: "trace", steps }] };
 }
 
 export function mainModel(s: State): MainModel {
@@ -137,7 +160,7 @@ function selectedMain(s: State): MainModel {
     case "proposal": {
       const c = configFor(project, sel.inv), p = sel.proposal;
       return { crumb: [invCrumb(sel.inv), { label: proposalLabel({ ...p, fields: displayedFields(s, sel.inv, p) }) }], meta: `${p.status} · ${experimentsUsed(sel.inv) + (p.status === "proposed" ? 1 : 0)} / ${c.budgets.maxExperiments} experiments`, actions: [],
-        body: { kind: "decision", cards: [candidatesSection(s, c, sel.inv, p), reasoningSection(c, p)] }, credit: "" };
+        body: { kind: "decision", cards: [candidatesSection(s, c, sel.inv, p), reasoningSection(s, c, sel.inv, p)] }, credit: "" };
     }
     case "truth": return { crumb: [invCrumb(sel.inv), { label: "Ground truth" }], meta: "Revealed after outcome", actions: [],
       body: { kind: "panels", panels: truthPanels(sel.inv.reveal!) }, credit: "Synthetic: truth was hidden from the agent until the outcome." };

@@ -185,11 +185,15 @@ Deno.test("derive: the proposal main view is the candidates table and the agent'
   assertEquals([rows[0].strong, rows[0].cells[0].text, rows[0].cells.at(-1)!.text], [true, "Sine 0.44 Hz", rows[0].cells.at(-1)!.text]);
   assertEquals(rows.filter((r) => r.strong).length, 1);
   assertEquals(rows.at(-1)!.cells.at(-1)!.text, "≈ 0");
-  const trace = reasoning.blocks[0];
+  const [summary, trace] = reasoning.blocks;
+  assert(summary.kind === "text" && summary.lead);
+  assertStringIncludes(summary.text, "Sine 0.44 Hz applies Force (N) (amplitude 2 N and frequency 440 mHz) and records Displacement (m) for 10 s at 100 Hz.");
+  assertStringIncludes(summary.text, "Driving near resonance separates m.");
+  assertStringIncludes(summary.text, "Expected: m, c and k each identified to well under 1%.");
   assert(trace.kind === "trace");
-  assertEquals(trace.steps.map((x) => x.title), ["Inspect data", "Optimize parameters", "Analyze sensitivity", "Rank experiments", "Propose experiment"]);
+  assertEquals(trace.steps.map((x) => [x.marker, x.title]), [["1", "Inspect data"], ["2", "Optimize parameters"], ["3", "Analyze sensitivity"], ["4", "Rank experiments"], ["5", "Propose experiment"]]);
   const last = trace.steps.at(-1)!;
-  assertEquals([last.current, last.evidence?.length, Boolean(last.expected)], [true, 3, true]);
+  assertEquals([last.current, last.text, last.evidence?.length, Boolean(last.expected)], [true, undefined, 3, true], "the hypothesis is in the summary, not repeated on the step");
   assertEquals(m.credit, "", "provenance moved to the Details footnote");
 });
 

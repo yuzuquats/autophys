@@ -27,9 +27,10 @@ export function blockMarkup(b: Block): string {
     case "wave":
       return waveMarkup(b.t, b.y, b.label, b.caption);
     case "trace":
-      return `<ol class="ap-trace">${b.steps.map((s) => `<li class="${s.current ? "ap-cur" : ""}${s.tone ? ` ap-t-${s.tone}` : ""}"><div class="ap-trace-head"><b>${esc(s.title)}</b>${s.meta ? `<span>${esc(s.meta)}</span>` : ""}</div>${s.text ? `<p>${esc(s.text)}</p>` : ""}${s.evidence?.length ? `<ul>${s.evidence.map((e) => `<li>${esc(e)}</li>`).join("")}</ul>` : ""}${s.expected ? `<p class="ap-trace-exp">Expected: <b>${esc(s.expected)}</b></p>` : ""}</li>`).join("")}</ol>`;
+      // Hydrated to tento-ui's std-stepper (components.ts); the rows travel as derived text only.
+      return `<div class="ap-steps" data-ap-steps="${esc(JSON.stringify(b.steps))}"></div>`;
     case "text":
-      return `<p class="ap-text${tone(b.tone)}">${esc(b.text)}${b.link ? ` <button type="button" class="ap-link" ${ATTR.role}="select" ${ATTR.id}="${esc(b.link.id)}">${esc(b.link.label)}</button>` : ""}</p>`;
+      return `<p class="ap-text${b.lead ? " ap-prose" : ""}${tone(b.tone)}">${esc(b.text)}${b.link ? ` <button type="button" class="ap-link" ${ATTR.role}="select" ${ATTR.id}="${esc(b.link.id)}">${esc(b.link.label)}</button>` : ""}</p>`;
   }
 }
 
