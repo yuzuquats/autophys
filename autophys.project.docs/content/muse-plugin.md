@@ -161,7 +161,9 @@ from the hash-checked snapshot before canonical source lands. The plugin’s
 `calibrate` command maps conceptual playbook actions to MCP tool names; it
 does not maintain a second strategy or replace the guardrail.
 
-The Python owner retains the canonical playbook, numerics, battery case
+The M-2 loader itself is still the Python owner’s uncommitted work at this
+receipt; the committed plugin works independently through the compatibility
+reader. The Python owner retains the canonical playbook, numerics, battery case
 suite and evaluator. This integration owns the MCP package and native bundle.
 Rust, daemon and browser UI retain their owners.
 
@@ -182,9 +184,12 @@ small-residual yet non-identified case, independent validation, and bundle
 generation with correct venv and SSH quoting, and pinning without M-2’s loader.
 
 An initial full SDK run passed 350 tests with 2 opt-in skips in 93.45 s.
-After the builder checks and concurrent SDK additions, the final full suite
-passed 357 tests with 2 skips in 93.46 s. The integration subset passed 12
-in 5.98 s.
+After the compatibility check and concurrent SDK additions, the final shared
+suite passed 358 tests with 2 skips in 93.45 s. The integration subset passed
+13 in 5.90 s. A clean `git archive` snapshot of committed HEAD (9b6b854), with
+no M-2 working-tree files, passed its entire Python suite: 324 passed, 2
+skipped in 84.19 s. Its bundle also rebuilt from the canonical snapshot with
+byte-identical skill contents. No branch or Git worktree was created.
 The full suite's skips are live reason-lane and opt-in Rust cross-writer
 integration, as documented in the SDK README.
 
@@ -192,7 +197,9 @@ Muse commands were run on the laptop at `~/.local/bin/muse`. Apart from
 help/version, every command set all three XDG roots to temporary directories
 under `/tmp/autophys-muse-check.uallNI`: config, data and cache. No plugin
 was installed into the user's real configuration. The copies and temporary
-install are deleted after verification.
+install were deleted after verification, including their XDG configuration,
+data, cache and logs. The remote bridge/probe and clean archive were removed
+after their checks.
 
 The exact discovery commands were:
 
@@ -231,6 +238,8 @@ With that prefix before `~/.local/bin/muse`, the commands and results were:
 | plugins inspect autophys --json (after approval) | MCP trusted_enabled |
 | plugins validate /tmp/autophys-muse-check.uallNI/generated --json | configured local variant valid, diagnostics empty |
 | plugins validate /tmp/autophys-muse-check.uallNI/final-generated --json | generated SSH variant valid, diagnostics empty |
+| plugins validate /tmp/autophys-muse-check.uallNI/bundle --json (after explicit skill pin) | final source variant valid, diagnostics empty |
+| plugins validate /tmp/autophys-muse-check.uallNI/final-local --json | final configured variant preserves venv path; valid, diagnostics empty |
 ```
 
 The exact echo command (same prefix) was:
