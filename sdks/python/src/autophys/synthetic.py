@@ -132,6 +132,57 @@ class Evaluator:
     def diagnosis_correct(self, non_identified: set[str]) -> bool:
         return set(non_identified) == set(self.expected_non_identified)
 
+    def reveal(self, investigation):
+        """Harness-only publication, after outcome; never called by the agent.
+
+        Delta method: g_j = exponent_j for log parameters, otherwise
+        exponent_j * parameter_scale_j / estimate_j. With final sensitivity
+        J=U diag(s) V^T, sigma_ratio=abs(estimate/truth)*sqrt(sum((V_i.g/s_i)^2)).
+        A structural direction with |V_i.g| > 1e-8, missing/stale analysis,
+        missing fit or nonfinite uncertainty yields null. Known measurement
+        sigma (including the analysis noise scale), no residual rescaling.
+        """
+        out = investigation.outcome
+        if out is None:
+            raise ValueError("reveal requires an outcome")
+        estimate = dict(out.estimate)
+        quantities = []
+        report = investigation.sens if investigation.sens_fit == investigation.fit_id else None
+        for name, powers in self.combos.items():
+            if not all(p in estimate for p in powers):
+                continue
+            truth = self.combo_value(self.truth, name)
+            value = self.combo_value(estimate, name)
+            ratio = value / truth
+            sigma = None
+            if report is not None and investigation.fit is not None:
+                gradient = {}
+                for p in report.params:
+                    spec = investigation.sim.params[p]
+                    exponent = powers.get(p, 0.0)
+                    gradient[p] = (0.0 if exponent == 0 else exponent if spec.log else
+                                   exponent * spec.scale / estimate[p] if estimate[p] else float("nan"))
+                variance = 0.0
+                for direction in report.directions:
+                    projection = sum(gradient[p] * direction.vector[p] for p in report.params)
+                    if (direction.kind == "structural" and abs(projection) > 1e-8
+                            or direction.singular_value <= 0 and abs(projection) > 1e-8):
+                        variance = float("nan")
+                        break
+                    if direction.singular_value > 0:
+                        variance += (projection / direction.singular_value) ** 2
+                candidate = abs(ratio) * float(np.sqrt(variance))
+                if np.isfinite(candidate):
+                    sigma = candidate
+            quantities.append({"name": name, "truth": truth, "estimate": value,
+                               "ratio": ratio, "sigma_ratio": sigma,
+                               "within": abs(ratio - 1.0) <= 0.10,
+                               "identifiable": name not in self.expected_non_identified})
+        return investigation.store.append(investigation.id, "reveal", {
+            "source": "synthetic", "tolerance": 0.10, "truth": dict(self.truth),
+            "estimate": estimate, "quantities": quantities,
+            "fit_id": investigation.fit_id if investigation.fit is not None else None})
+
     def save(self, path: str | Path) -> None:
         Path(path).write_text(
             json.dumps(

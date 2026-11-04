@@ -149,6 +149,7 @@ def run_case(case: str, policy: str, seed: int, store: Store | None = None, **re
     t0 = time.perf_counter()
     out = inv.run()
     wall = time.perf_counter() - t0
+    evaluator.reveal(inv)
     est = out.estimate
     rel = evaluator.relative_errors(est) if est else {}
     physical = set(view.simulator.param_names)

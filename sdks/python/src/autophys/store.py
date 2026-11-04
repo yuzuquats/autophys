@@ -41,7 +41,7 @@ from typing import Any
 
 import numpy as np
 
-KINDS = ("investigation", "measurement", "run", "step", "proposal", "outcome")
+KINDS = ("investigation", "measurement", "run", "step", "proposal", "outcome", "reveal")
 PROPOSAL_EVENTS = ("proposed", "approved", "edited", "rejected", "withdrawn", "data_attached")
 GENESIS = "0" * 64
 
@@ -170,7 +170,7 @@ class Store(ABC):
         return rid, payload, None
 
     def _prepare_append(self, investigation: str, kind: str, payload: dict, record_id: str | None, pending=()):
-        from .workbook import WorkbookError, append_payload, check_transition
+        from .workbook import WorkbookError, append_payload, check_transition, check_reveal
 
         rid, payload, text = append_payload(kind, payload, record_id)
         old = next((r for r in pending if r.id == rid), None) or self._find_record(rid)
@@ -180,6 +180,8 @@ class Store(ABC):
             raise WorkbookError("idempotency_conflict", f"record id {rid} was already used for a different record")
         if investigation not in {i["id"] for i in self.investigations()}:
             raise WorkbookError("not_found", f"unknown investigation {investigation}")
+        if kind == "reveal":
+            check_reveal(r.kind for r in [*self.records(investigation), *pending])
         if kind == "proposal":
             events = [r.payload for r in [*self.records(investigation, "proposal"), *(r for r in pending if r.kind == "proposal")]
                       if r.payload["proposal_id"] == payload["proposal_id"]]

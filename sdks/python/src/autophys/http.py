@@ -256,7 +256,7 @@ def whoami(creds: Credentials) -> dict:
 # --------------------------------------------------------------------------
 # HttpStore
 
-_ENDPOINT = {"measurement": "measurements", "run": "runs", "step": "steps", "outcome": "outcome"}
+_ENDPOINT = {"measurement": "measurements", "run": "runs", "step": "steps", "outcome": "outcome", "reveal": "reveal"}
 
 
 class HttpStore(Store):
@@ -283,6 +283,7 @@ class HttpStore(Store):
         self.last_wait: str | None = None
         self._project_id: str | None = None
         self._display_warned = False
+        self._reveal_warned = False
 
     def _see(self, investigation: str, rec: dict) -> dict:
         g = rec.get("gseq")
@@ -403,7 +404,7 @@ class HttpStore(Store):
         self._see(j["id"], j)
         return j["id"]
 
-    def append(self, investigation, kind, payload, *, record_id=None) -> Record:
+    def append(self, investigation, kind, payload, *, record_id=None) -> Record | None:
         from .workbook import canonical_payload
         payload, _ = canonical_payload(payload)
         rid = record_id if record_id is not None else uuid.uuid4().hex
@@ -424,7 +425,15 @@ class HttpStore(Store):
             path = f"/investigations/{inv}/{_ENDPOINT[kind]}"
         else:
             raise StoreError(f"kind {kind!r} is not uploaded through HttpStore")
-        j = self._req("POST", path, envelope, headers={"Idempotency-Key": rid})
+        try:
+            j = self._req("POST", path, envelope, headers={"Idempotency-Key": rid})
+        except HttpError as error:
+            if kind != "reveal" or error.status not in (404, 405):
+                raise
+            if not self._reveal_warned:
+                warnings.warn("daemon does not support reveal; skipping ground truth record", RuntimeWarning, stacklevel=2)
+                self._reveal_warned = True
+            return None
         self._see(investigation, j)
         return _to_record(j["record"])
 

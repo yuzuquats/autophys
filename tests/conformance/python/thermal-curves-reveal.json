@@ -1,0 +1,37 @@
+{
+ "format": {
+  "application_id": 1095784258,
+  "user_version": 1
+ },
+ "heads": {
+  "inv_4b70ae5b72aab1a4": {
+   "hash": "2c600f1162c57eb734cd720d72c348fd7aade53e7b43abb3ffb6699bee18486d",
+   "seq": 15
+  }
+ },
+ "kinds": {
+  "investigation": 1,
+  "measurement": 3,
+  "outcome": 1,
+  "reveal": 1,
+  "run": 2,
+  "step": 8
+ },
+ "project": "thermal",
+ "projections": {
+  "investigations": [
+   {
+    "budget_used": 3,
+    "config_version": "sha256:5376c25da7a34ac8f0e34e5ba2e6b0447674c73126819ed144fde43ed313b561",
+    "created": 1793821875.962467,
+    "id": "inv_4b70ae5b72aab1a4",
+    "overrides": "{\"fixed\":{},\"free\":[\"C\",\"R\"]}",
+    "project": "prj_3e45f326a8199f91",
+    "status": "validated",
+    "updated": 1793821876.315564
+   }
+  ],
+  "proposals": []
+ },
+ "records": 16
+}

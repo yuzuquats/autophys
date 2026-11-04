@@ -24,7 +24,7 @@ from urllib.parse import parse_qs, urlparse
 
 from autophys.store import GENESIS, canonical, chain_hash
 from autophys.workbook import (WorkbookError, append_payload, check_id, check_transition,
-                               investigation_payload)
+                               investigation_payload, check_reveal)
 
 PREFIX = "/api/v1"
 
@@ -100,6 +100,8 @@ class FakeAutophys:
         if inv not in self.records:
             raise WorkbookError("not_found", "unknown investigation")
         log = self.records[inv]
+        if kind == "reveal":
+            check_reveal(r["kind"] for r in log)
         if kind == "proposal":
             events = [r["payload"] for r in log if r["kind"] == "proposal" and r["payload"]["proposal_id"] == payload["proposal_id"]]
             check_transition(events[-1]["event"] if events else None, events[0] if events else None, payload)
@@ -362,7 +364,7 @@ class FakeAutophys:
                         return self._err(404, "not_found")
                     kind = query.get("kind", [None])[0]
                     return self._send(200, {"records": [fake._wire(r) for r in fake.records[inv] if kind is None or r["kind"] == kind]})
-                kinds = {"measurements": "measurement", "runs": "run", "steps": "step", "outcome": "outcome"}
+                kinds = {"measurements": "measurement", "runs": "run", "steps": "step", "outcome": "outcome", "reveal": "reveal"}
                 if rest in kinds and method == "POST":
                     return self._record(inv, body, kinds[rest])
                 if rest == "proposals" and method == "POST":

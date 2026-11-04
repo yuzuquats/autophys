@@ -1,8 +1,13 @@
 # Show the calibrated model, its residuals and the ground truth
 
-Status: rev 1 (2026-11-04), by autophys/design. **Agent-chosen, pending
-operator review** (FC-1 and GT-1 in [decisions.md](decisions.md)).
-Nothing is implemented yet.
+Status: rev 2 (2026-11-04). **Agent-chosen, pending operator review**
+(FC-1 and GT-1 in [decisions.md](decisions.md)). Step 1 (Python SDK) is
+implemented (I8c41e7a95d2f03b6c1e8). The goldens for Rust are under
+`tests/conformance/python/`: `thermal-curves-reveal.ap-workbook` with its
+`.json` expectation, and `thermal-curves-fit.json` and
+`thermal-curves-initial.json`. Rev 2 fixes the rules in "Rules both SDKs
+follow (rev 2)" and replaces rev 1's byte-identical curves with a tolerance
+comparison.
 
 ## What the operator asked for
 
@@ -52,8 +57,9 @@ parameters, so it records the curves.
   with more than 2,000 samples is downsampled to 2,000 evenly spaced
   indices, and `t` is included. A fit's payload stays under 256 KiB.
 - **Agents never read it.** The agent's state summary is unchanged.
-- **Both SDKs:** Python is the reference (AX-2). Rust emits byte-identical
-  curves for the bench goldens.
+- **Both SDKs:** Python is the reference (AX-2). Rust matches its curves
+  within numerics tolerances (rev 2): two independently solved ODEs cannot
+  agree byte for byte.
 
 Once curves exist, the UI changes are:
 - **Fit tab:** two charts per measurement. First, the measured dots with
@@ -111,6 +117,53 @@ truth"), a ratio plot (estimate ÷ truth per quantity, with ±1σ whiskers,
 on a band from 0.9 to 1.1), and a table with the columns *quantity ·
 truth · recovered · error · within ±10%*. It is marked "Synthetic: truth
 was hidden from the agent until the outcome."
+
+## Rules both SDKs follow (rev 2)
+
+Step 1 settled these; Rust copies them.
+
+- **Curves:**
+  - Keys are measurement record ids, for every `train` and `validation`
+    measurement recorded when the fit is adopted.
+  - Each is simulated on the measurement's full time grid at its settings,
+    with `rtol=1e-11`, `atol=1e-13` (`TRUTH_OPTIONS`), uncounted. Only output
+    channels are stored, never inputs.
+  - `initial` is the lowest-loss multistart's `x0`, transformed to
+    parameters; the first start wins ties.
+  - Output values are rounded to 6 significant figures
+    (`float(f"{x:.6g}")`); times keep full precision.
+- **Downsampling and size:** start with a limit of 2,000 points per
+  measurement and keep indices `rint(linspace(0, n-1, min(n, limit)))`
+  (ties to even), always resampling the original arrays. `t` is present
+  only when points were dropped. While the whole run payload, canonically
+  encoded as UTF-8, exceeds 256 KiB, halve the shared limit (integer floor,
+  minimum 1). If one point per measurement is still too big, the SDK raises
+  an error. The workbook's 1 MiB payload check still applies.
+- **Validation (`run`):** when `curves` is present, it is an object of
+  objects. Each has `fit` and `initial` objects of finite-number arrays,
+  every array in an entry has the same length, and `t` is checked with them
+  when present.
+- **Reveal ordering:** a `reveal` needs an existing `outcome`. A retry with
+  the same record id and payload succeeds; a second distinct reveal is
+  refused. Stores check both, and `Investigation.resume`, `run`, `approve`
+  and `attach_data` refuse an investigation that has a reveal. Replay
+  skips the kind.
+- **Reveal payload:** exactly the fields in the example, validated as
+  finite numbers, booleans and strings. `sigma_ratio` may be null.
+  Quantities are `Evaluator.combos`, with combinations whose parameters
+  have no estimate omitted. `within` is `|ratio − 1| ≤ 0.10`, and
+  `identifiable` means the combination is not in the evaluator's expected
+  non-identified set.
+- **`sigma_ratio`:** the delta method on the final sensitivity analysis
+  (`J = U diag(s) Vᵀ`): `|ratio| · sqrt(Σᵢ ((Vᵢ·g)/sᵢ)²)`. Here `g_j` is the
+  combination exponent for a log-scaled parameter, otherwise
+  `exponent · scale / estimate`. It uses the known measurement sigma with no
+  residual rescaling. It is null when the analysis is missing or stale,
+  when a structural or zero-singular direction projects above `1e-8`, or
+  when the result is not finite.
+- **Who writes it:** only `Evaluator.reveal`, which the bench (and so the
+  research loop) calls after `inv.run()`. When a daemon has no route yet
+  (404/405), `HttpStore` warns once per store and skips the record.
 
 ## Phases
 

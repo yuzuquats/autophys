@@ -93,8 +93,15 @@ def _reason_replayed(store: WorkbookStore) -> None:
                                              "caption": "Synthetic format fixture"}]})
 
 
+
+def _thermal_curves_reveal(store: WorkbookStore) -> None:
+    from autophys.bench import run_case
+    run_case("thermal", "scripted", 0, store=store)
+
+
 CASES = {"thermal-validated": _thermal_validated, "oscillator-edited": _oscillator_edited,
-         "events-and-values": _events_and_values, "reason-replayed": _reason_replayed}
+         "events-and-values": _events_and_values, "reason-replayed": _reason_replayed,
+         "thermal-curves-reveal": _thermal_curves_reveal}
 
 
 def expected(store: WorkbookStore) -> dict:
@@ -107,6 +114,27 @@ def expected(store: WorkbookStore) -> dict:
         "heads": store.heads(),
         "projections": projection_rows(store._conn),
     }
+
+
+
+def _write_curve_expectations(store, out):
+    """Plain simulate inputs/expect rules accepted by numerics_cases.execute/compare."""
+    from autophys.fit import FitResult
+    from autophys.models.thermal import thermal_rc
+    inv = store.investigations()[0]["id"]
+    record = store.records(inv, "measurement")[0]
+    run = store.records(inv, "run")[0].payload
+    obs = record.payload["observation"]
+    result = FitResult.from_dict({k: v for k, v in run.items() if k not in ("fit_id", "model", "simulator")})
+    initial = thermal_rc.from_x(np.asarray(min(result.starts, key=lambda start: start.loss).x0))
+    for label, params in (("fit", result.params), ("initial", initial)):
+        case = {"format": 1, "written_by": "autophys 0.1.0 (python)", "model": "thermal", "op": "simulate",
+                "inputs": {"params": {k: {"unit": p.unit, "lo": p.lo, "hi": p.hi}
+                                      for k, p in thermal_rc.params.items()},
+                           "theta": params, "settings": obs["settings"], "t": obs["t"],
+                           "options": {"rtol": 1e-11, "atol": 1e-13}},
+                "expect": {"y": {"value": run["curves"][record.id][label], "rtol": 1e-5, "atol": 1e-8}}}
+        (out / f"thermal-curves-{label}.json").write_text(json.dumps(case, indent=1, sort_keys=True) + "\n")
 
 
 def write(out: Path, names=None) -> list[Path]:
@@ -122,6 +150,8 @@ def write(out: Path, names=None) -> list[Path]:
             build(store)
             assert store.check()["ok"]
             exp = expected(store)
+            if name == "thermal-curves-reveal":
+                _write_curve_expectations(store, out)
         c = sqlite3.connect(path)  # a single self-contained file in the repository
         c.execute("PRAGMA journal_mode = DELETE")
         c.execute("VACUUM")

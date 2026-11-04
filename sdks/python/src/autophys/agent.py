@@ -297,6 +297,8 @@ class Investigation:
         recs = store.records(investigation_id)
         if not recs or recs[0].kind != "investigation":
             raise StoreError(f"unknown investigation {investigation_id}")
+        if any(r.kind == "reveal" for r in recs):
+            raise StoreError("cannot resume an investigation after ground truth reveal")
         head = recs[0].payload
         if head.get("config_version") != project.config_version:
             raise StoreError(f"{investigation_id} is pinned to config version {head.get('config_version')}; "
@@ -332,6 +334,8 @@ class Investigation:
                 count(unclaimed.pop().experiment)  # a runner's direct measurement
 
         for r in recs:
+            if r.kind == "reveal":
+                continue
             p = r.payload
             if r.kind == "measurement":
                 settle()
@@ -567,7 +571,9 @@ class Investigation:
     def _adopt_fit(self, r: FitResult, model: str) -> None:
         self.fit, self.fit_model = r, model
         self.fit_id += 1
-        self._record("run", {"fit_id": self.fit_id, "model": model, "simulator": self.variants[model].name, **r.to_dict()})
+        from .curves import run_payload
+        payload = {"fit_id": self.fit_id, "model": model, "simulator": self.variants[model].name, **r.to_dict()}
+        self._record("run", run_payload(self.variants[model], r, self.records("measurement"), payload))
 
     def _need_fit(self) -> FitResult:
         if self.fit is None or self.fit_model != self.model:
@@ -720,6 +726,7 @@ class Investigation:
 
     # --- proposals --------------------------------------------------------
     def approve(self, proposal_id: str, *, by: str = "user", settings: dict | None = None) -> None:
+        self._check_unrevealed()
         self._require_pending(proposal_id)
         ev = "edited" if settings is not None else "approved"
         payload = {"proposal_id": proposal_id, "event": ev, **self._decision_actor(by)}
@@ -749,6 +756,7 @@ class Investigation:
         self.history.append(f"proposal {proposal_id} withdrawn: {reason}")
 
     def attach_data(self, proposal_id: str, observation: Observation) -> None:
+        self._check_unrevealed()
         self._require_pending(proposal_id)
         status = self.store.proposal_status(self.id, proposal_id)["status"]
         observation.split = "train"
@@ -830,8 +838,13 @@ class Investigation:
         if self.pending != proposal_id:
             raise ToolError(f"{proposal_id} is not the pending proposal")
 
+    def _check_unrevealed(self) -> None:
+        if self.records("reveal"):
+            raise StoreError("cannot continue an investigation after ground truth reveal")
+
     # --- loop -------------------------------------------------------------
     def run(self) -> Outcome:
+        self._check_unrevealed()
         if self.pending:
             raise ToolError(f"awaiting data for proposal {self.pending}")
         for sim in self.variants.values():

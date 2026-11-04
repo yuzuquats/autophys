@@ -41,7 +41,7 @@ SUFFIX = ".ap-workbook"
 MAX_PAYLOAD_BYTES = 1 << 20
 MAX_ID_LEN = 128
 MAX_OUTLOOK_AXES = 3
-KINDS = ("investigation", "measurement", "run", "step", "proposal", "outcome")
+KINDS = ("investigation", "measurement", "run", "step", "proposal", "outcome", "reveal")
 EVENTS = ("proposed", "approved", "edited", "rejected", "withdrawn", "data_attached")
 _ID = re.compile(r"[A-Za-z0-9_.:-]+")
 
@@ -281,6 +281,70 @@ def check_integer_range(value: Any, path: str = "payload") -> None:
             check_integer_range(item, f"{path}[{index}]")
 
 
+
+def curves_shape(curves):
+    if not isinstance(curves, dict):
+        raise _invalid("payload.curves", "must be an object")
+    for rid, entry in curves.items():
+        at = f"payload.curves.{rid}"
+        if not isinstance(entry, dict):
+            raise _invalid(at, "must be an object")
+        lengths = []
+        for label in ("fit", "initial"):
+            channels = entry.get(label)
+            if not isinstance(channels, dict):
+                raise _invalid(f"{at}.{label}", "required object")
+            lengths.extend(_finite_array(v, f"{at}.{label}.{ch}") for ch, v in channels.items())
+        if "t" in entry:
+            lengths.append(_finite_array(entry["t"], f"{at}.t"))
+        if len(set(lengths)) > 1:
+            raise _invalid(at, "curve arrays must have equal length")
+
+
+def reveal_shape(payload):
+    fields = {"source", "tolerance", "truth", "estimate", "quantities", "fit_id"}
+    if set(payload) != fields:
+        raise _invalid("payload", "reveal requires exactly source,tolerance,truth,estimate,quantities,fit_id")
+    def number(value, at):
+        n = _number(value)
+        if n is None or not math.isfinite(n):
+            raise _invalid(at, "must be a finite number")
+    if not isinstance(payload["source"], str):
+        raise _invalid("payload.source", "must be a string")
+    number(payload["tolerance"], "payload.tolerance")
+    for key in ("truth", "estimate"):
+        if not isinstance(payload[key], dict):
+            raise _invalid(f"payload.{key}", "must be an object")
+        for name, value in payload[key].items():
+            number(value, f"payload.{key}.{name}")
+    if payload["fit_id"] is not None and type(payload["fit_id"]) is not int:
+        raise _invalid("payload.fit_id", "must be an integer or null")
+    if not isinstance(payload["quantities"], list):
+        raise _invalid("payload.quantities", "must be an array")
+    for i, q in enumerate(payload["quantities"]):
+        at = f"payload.quantities[{i}]"
+        if not isinstance(q, dict) or set(q) != {"name", "truth", "estimate", "ratio", "sigma_ratio", "within", "identifiable"}:
+            raise _invalid(at, "invalid quantity fields")
+        if not isinstance(q["name"], str):
+            raise _invalid(at + ".name", "must be a string")
+        for key in ("truth", "estimate", "ratio", "sigma_ratio"):
+            if key == "sigma_ratio" and q[key] is None:
+                continue
+            number(q[key], at + "." + key)
+        for key in ("within", "identifiable"):
+            if type(q[key]) is not bool:
+                raise _invalid(at + "." + key, "must be a boolean")
+
+
+def check_reveal(kinds):
+    """Replay by record id precedes this check; a second distinct reveal fails."""
+    kinds = set(kinds)
+    if "outcome" not in kinds:
+        raise WorkbookError("conflict", "reveal requires an outcome")
+    if "reveal" in kinds:
+        raise WorkbookError("conflict", "investigation already has a reveal")
+
+
 def payload_shape(kind: str, payload: Any) -> None:
     """Validate a payload for its kind (only what projections read, plus E-1's outlook)."""
     if kind not in KINDS:
@@ -292,6 +356,10 @@ def payload_shape(kind: str, payload: Any) -> None:
     if kind == "investigation":
         _string(payload, "payload", "project_id")
         _string(payload, "payload", "config_version")
+    elif kind == "run" and "curves" in payload:
+        curves_shape(payload["curves"])
+    elif kind == "reveal":
+        reveal_shape(payload)
     elif kind == "measurement":
         if not isinstance(payload.get("observation"), dict):
             raise _invalid("payload.observation", "required object")
@@ -652,6 +720,8 @@ class WorkbookStore(Store):
             raise WorkbookError("idempotency_conflict", f"record id {rid} was already used for a different record")
         if not c.execute("SELECT 1 FROM investigations WHERE id = ?", (investigation,)).fetchone():
             raise WorkbookError("not_found", f"unknown investigation {investigation}")
+        if kind == "reveal":
+            check_reveal(r[0] for r in c.execute("SELECT kind FROM records WHERE investigation = ?", (investigation,)))
         if kind == "proposal":
             self._check_transition(c, investigation, payload)
         return self._insert(c, investigation, rid, kind, payload, text)
