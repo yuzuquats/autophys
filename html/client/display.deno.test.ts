@@ -34,7 +34,9 @@ Deno.test("display: the manifest supplies channels, labels, units, roles, views 
     ["rate", "Rate", "Hz", "sampling"], ["capacity_ah", "Capacity", "Ah", "known"], ["kind", "kind", "", "other"],
   ]);
   assertEquals([pulse.viewHints, pulse.unsupportedViews, pulse.description, pulse.preview], [["zoom:edges"], ["phase-portrait"], "Square pulses with rests.", { t: [0, 1, 2, 3], u: [0, 2, 2, 0] }]);
-  assertEquals([rest.label, rest.description, rest.preview], ["Rest", undefined, undefined], "an experiment the manifest omits keeps its generic label");
+  assertEquals([rest.label, rest.description, rest.preview, rest.input], ["Rest", undefined, undefined, null], "an experiment the manifest omits keeps its generic label and drives nothing");
+  const free = applyDisplay(mapConfig(config, 1, "h"), { ...display, experiments: { pulse_train: { label: "Free", views: [], preview: { t: [0, 1], u: { i: [0, 0] } } } } }).catalog[0];
+  assertEquals([free.input, free.preview], [null, null], "an all-zero preview means the experiment applies no input");
   assertEquals(c.params.map((p) => [p.name, p.label, p.description]), [["R0", "R₀", "ohmic resistance"], ["Q", undefined, undefined]]);
   assertEquals([c.hash, c.params[0].lo, pulse.settings[0].lo, pulse.settings[0].hi], ["h", 0.001, 0.5, 10], "presentation never changes values, ranges or identity");
 });

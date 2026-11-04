@@ -65,7 +65,7 @@ const OSC_DISPLAY: FixtureDisplay = {
   experiments: {
     free_response: { label: "Free response", description: "Released from the initial displacement and left to ring down.", views: ["envelope"] },
     impulse: { label: "Impulse", description: "A short force pulse; its width sets the momentum delivered.", views: ["envelope"], span: 1 },
-    step: { label: "Step force", views: [], span: 10 },
+    step: { label: "Step force", description: "A constant force from the start of the record.", views: [] },
     sine: { label: "Sine force", views: ["spectrum"], span: 5 },
   },
 };

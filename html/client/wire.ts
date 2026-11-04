@@ -80,11 +80,12 @@ export function applyDisplay(c: ProjectConfig, display: unknown): ProjectConfig 
     }),
     catalog: c.catalog.map((e) => {
       const m = obj(experiments[e.id]), declared = e.id in experiments, views = strs(m.views), preview = obj(m.preview);
-      const u = inputName ? nums(obj(preview.u)[inputName]) : [], t = nums(preview.t);
+      // An experiment drives the input channel when its preview of that channel is not all zero (free decay records zeros).
+      const u = inputName ? nums(obj(preview.u)[inputName]) : [], t = nums(preview.t), drives = u.length > 1 && u.length === t.length && u.some((v) => v !== 0);
       return {
         ...e,
         label: str(m.label) || e.label,
-        input: inputName ? channel(inputName, { name: inputName, label: inputName, unit: "" }) : e.input,
+        input: inputName && drives ? channel(inputName, { name: inputName, label: inputName, unit: "" }) : e.input && channel(e.input.name, e.input),
         output: channel(e.output.name, e.output),
         settings: e.settings.map((s) => {
           const sd = obj(settings[s.name]), role = str(sd.role);
@@ -96,7 +97,7 @@ export function applyDisplay(c: ProjectConfig, display: unknown): ProjectConfig 
           viewHints: views.filter((v) => v in VIEWS).map((v) => VIEWS[v]),
           unsupportedViews: views.filter((v) => !(v in VIEWS)),
           description: str(m.description),
-          preview: u.length > 1 && u.length === t.length ? { t, u } : null,
+          preview: drives ? { t, u } : null,
         } : {}),
       };
     }),
