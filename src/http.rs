@@ -23,6 +23,7 @@
 pub mod auth;
 mod display;
 mod sse;
+mod workbench;
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -59,6 +60,7 @@ pub struct Api {
     pub keys: Arc<KeyStore>,
     pub sessions: auth::BrowserSessions,
     wake: broadcast::Sender<String>,
+    workbench: workbench::Jobs,
 }
 
 impl std::fmt::Debug for Api {
@@ -78,6 +80,7 @@ impl Api {
             keys: Arc::new(keys),
             sessions: auth::BrowserSessions::default(),
             wake,
+            workbench: workbench::Jobs::default(),
         }
     }
 
@@ -142,6 +145,8 @@ pub fn scope(api: Api) -> actix_web::Scope {
         )
         .route("/pairings/{user_code}/deny", web::post().to(pairing_deny))
         .route("/whoami", web::get().to(whoami))
+        .route("/workbench/projects", web::post().to(workbench::create))
+        .route("/workbench/projects/{pid}/investigations", web::post().to(workbench::start))
         .route("/workspace", web::get().to(workspace))
         .route("/stream", web::get().to(sse::stream))
         .route("/projects", web::get().to(projects))
