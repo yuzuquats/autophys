@@ -21,6 +21,7 @@ import { deck, tutorial } from "./content.ts";
 import { landingDocs } from "./docs.ts";
 import { quietLoading, signedOutView } from "../client/derive/signed-out.ts";
 import { signInInPlace } from "./sign-in-in-place.ts";
+import { mountAccount } from "./account-header.ts";
 import "./brand.ts";
 import "./light-only.ts";
 import "./tour-ring.ts";
@@ -134,6 +135,7 @@ const app: Cookbook.App = {
 
 const docs = landingDocs();
 Cookbook.mount({ deck, onStage: docs.onStage, tutorial: [...Cookbook.Tutorial.shellSteps, ...tutorial], status: null, labels: { sidebar: "Workspace" } }).run(app);
+mountAccount();
 docs.mount();
 
 // Remove the unused hard-coded shell control before the first app open too.

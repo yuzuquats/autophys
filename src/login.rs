@@ -422,42 +422,69 @@ async fn badge_fragment(api: web::Data<Api>, req: HttpRequest) -> Result<HttpRes
     }
 }
 
-/// The account badge the app document carries while signed in: the email and
-/// a sign-out button, pinned over the right end of the cookbook header (which
-/// this app leaves empty). Fixed and on top, so no app layer covers it.
+/// The account control's stylesheet, scoped to `#ap-account`. Until the page
+/// script moves the control into the cookbook header (`account-header.ts`) it
+/// is pinned where the header's right end is.
+const ACCOUNT_STYLE: &str = "<style>\
+#ap-account{position:fixed;top:22px;right:24px;z-index:2147483000;\
+font:13px/1.3 system-ui,-apple-system,sans-serif;color:#141414}\
+.ck-nav-links #ap-account{position:relative;top:auto;right:auto;z-index:auto;margin-left:12px}\
+#ap-account .ap-acct-btn,#ap-account.ap-acct-btn{display:grid;place-items:center;width:36px;height:36px;padding:0;border:0;\
+border-radius:50%;background:transparent;color:inherit;cursor:pointer;text-decoration:none}\
+#ap-account .ap-acct-btn:hover,#ap-account .ap-acct-btn:focus-visible,#ap-account.ap-acct-btn:hover,#ap-account.ap-acct-btn:focus-visible{background:rgb(0 0 0/8%)}\
+#ap-account .ap-acct-btn:focus-visible,#ap-account.ap-acct-btn:focus-visible{outline:2px solid #141414;outline-offset:1px}\
+#ap-account svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;\
+stroke-linecap:round;stroke-linejoin:round}\
+#ap-account .ap-acct-avatar{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;\
+background:#141414;color:#fff;font-size:12px;font-weight:600}\
+#ap-account .ap-acct-tip{position:absolute;right:0;top:100%;padding-top:8px;min-width:200px;\
+opacity:0;visibility:hidden;transform:translateY(-4px);\
+transition:opacity .14s ease,transform .14s ease,visibility 0s linear .14s}\
+#ap-account:hover .ap-acct-tip,#ap-account:focus-within .ap-acct-tip{opacity:1;visibility:visible;\
+transform:none;transition-delay:0s}\
+#ap-account .ap-acct-card{background:#fff;border-radius:10px;padding:10px 12px;\
+box-shadow:0 8px 24px rgb(0 0 0/12%),0 0 0 1px rgb(0 0 0/5%);display:grid;gap:8px}\
+#ap-account .ap-acct-email{color:#5b5b5b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px}\
+#ap-account .ap-acct-card form{margin:0}\
+#ap-account .ap-acct-card button{width:100%;border:0;border-radius:7px;background:#f1f1f1;color:#141414;\
+font:600 13px/1 inherit;font-family:inherit;padding:8px 10px;cursor:pointer;text-align:left}\
+#ap-account .ap-acct-card button:hover{background:#e6e6e6}\
+@media (prefers-reduced-motion:reduce){#ap-account .ap-acct-tip{transition:none}}\
+</style>";
+
+/// The account control the app document carries while signed in: an avatar
+/// icon in the header; hovering or focusing it shows the email and Sign out.
 pub fn badge(user: &User) -> String {
+    let email = escape(&user.email);
+    let initial = escape(
+        &user
+            .email
+            .chars()
+            .next()
+            .unwrap_or('?')
+            .to_uppercase()
+            .to_string(),
+    );
     format!(
-        "<div id=\"ap-account\" style=\"position:fixed;top:23px;right:24px;z-index:2147483000;\
-         display:flex;align-items:center;gap:8px;font:13px/1.2 system-ui,-apple-system,sans-serif;\
-         color:#141414;background:#efefef;border-radius:8px;padding:4px 4px 4px 6px\">\
-         <span title=\"Signed in\" style=\"display:inline-flex;align-items:center;gap:6px\">\
-         <span aria-hidden=\"true\" style=\"width:22px;height:22px;border-radius:50%;background:#141414;\
-         color:#fff;display:inline-grid;place-items:center;font-size:11px;font-weight:600\">{initial}</span>\
-         <span>{email}</span></span>\
-         <form method=\"post\" action=\"/api/auth/logout\" style=\"margin:0\">\
-         <button type=\"submit\" style=\"border:0;border-radius:6px;background:#fff;color:#141414;\
-         font:inherit;padding:5px 9px;cursor:pointer\">Sign out</button></form></div>",
-        initial = escape(
-            &user
-                .email
-                .chars()
-                .next()
-                .unwrap_or('?')
-                .to_uppercase()
-                .to_string()
-        ),
-        email = escape(&user.email),
+        "<div id=\"ap-account\" data-signed-in=\"true\">\
+         <button type=\"button\" class=\"ap-acct-btn\" aria-label=\"Account: {email}\" aria-haspopup=\"true\">\
+         <span class=\"ap-acct-avatar\" aria-hidden=\"true\">{initial}</span></button>\
+         <div class=\"ap-acct-tip\"><div class=\"ap-acct-card\">\
+         <span class=\"ap-acct-email\" title=\"{email}\">{email}</span>\
+         <form method=\"post\" action=\"/api/auth/logout\"><button type=\"submit\">Sign out</button></form>\
+         </div></div></div>{ACCOUNT_STYLE}"
     )
 }
 
-/// What a signed-out visitor sees on the public pages (`serve --login`),
-/// where the account badge would be: one Sign in button.
+/// What a signed-out visitor sees where the account control goes
+/// (`serve --login`): an icon-only Sign in button.
 pub fn anonymous_badge() -> String {
-    "<a id=\"ap-account\" data-signed-in=\"false\" href=\"/login?next=/app\" \
-     title=\"Sign in to open the live workbench\" style=\"position:fixed;top:24px;right:24px;\
-     z-index:2147483000;font:600 13px/1 system-ui,-apple-system,sans-serif;color:#fff;\
-     background:#141414;border-radius:8px;padding:9px 14px;text-decoration:none\">Sign in</a>"
-        .to_string()
+    format!(
+        "<a id=\"ap-account\" data-signed-in=\"false\" class=\"ap-acct-btn\" href=\"/login?next=/app\" \
+         aria-label=\"Sign in\" title=\"Sign in\">\
+         <svg viewBox=\"0 0 20 20\" aria-hidden=\"true\"><circle cx=\"10\" cy=\"7\" r=\"3.25\"/>\
+         <path d=\"M3.75 16.5c.9-3 3.3-4.5 6.25-4.5s5.35 1.5 6.25 4.5\"/></svg></a>{ACCOUNT_STYLE}"
+    )
 }
 
 #[cfg(test)]
