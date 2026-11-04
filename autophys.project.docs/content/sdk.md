@@ -128,7 +128,7 @@ low cost unless stated.
 | ML-11 | `/api/v1` contract shape | Confirmed: per-kind POST routes, client-chosen record ids as `Idempotency-Key`, server-assigned `seq` and hash chain, config versions PUT by the hash of their exact bytes. | Operator, 2026-11-04. The daemon, the Rust plan and `HttpStore` are built on it. | implemented |
 | ML-12 | Project configuration defaults | Confirmed: sensor bias `compare` (offset variants adopted only by BIC), declared or observed sigma with an opt-in `estimate`, catalog `max_runs`, fixed parameters need `initial`. | Operator, 2026-11-04. | implemented |
 | ML-13 | The data's name | Confirmed: "measurements" (record kind `measurement`); the Python classes stay `Dataset` and `Observation`. | Operator, 2026-11-04. | implemented |
-| ML-14 | Benchmark constants | Open: the question was interrupted. | — | implemented as before |
+| ML-14 | Benchmark constants | Confirmed: keep the oscillator and thermal truths and settings; add cases rather than change these. | Operator, 2026-11-04. They also seed the Rust numeric goldens. | implemented |
 ```
 
 ## Workbooks in the SDK (rev 2)
