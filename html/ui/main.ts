@@ -7,7 +7,7 @@ import { emptyMarkup, skeletonMarkup, componentButton, recoveryMarkup } from "./
 import { chartMarkup } from "./charts.ts";
 import { ATTR, escapeHtml as esc, intentOf, type IntentHandler } from "./intent.ts";
 import { buttonMarkup } from "./actions.ts";
-import { newProjectMarkup } from "./new-project.ts";
+import { newProjectFocusTarget, newProjectMarkup } from "./new-project.ts";
 import { blockMarkup } from "./blocks.ts";
 import { breadcrumbText } from "./breadcrumb.ts";
 import type { MainModel, Section } from "./view-model.ts";
@@ -75,6 +75,7 @@ export class AutophysMain {
   private abort = new AbortController();
   private model: MainModel | null = null;
   private width = 0;
+  private setupStep = -1;
   private observer: ResizeObserver | null = null;
 
   constructor(private host: HTMLElement, onIntent: IntentHandler, private classes: MainClasses = {}, private hydrate: (host: HTMLElement) => void = () => {}) {
@@ -104,12 +105,30 @@ export class AutophysMain {
   render(model: MainModel): void {
     const focused = document.activeElement;
     const input = focused instanceof HTMLInputElement && this.host.contains(focused) ? focused : null;
-    const focus = input ? { id: input.id, start: input.selectionStart, end: input.selectionEnd } : null;
+    const setupControl = focused instanceof HTMLElement && focused.closest(".ap-project-setup") && this.host.contains(focused) ? focused : null;
+    const focus = input || setupControl;
+    const caret = input ? { start: input.selectionStart, end: input.selectionEnd } : null;
+    const setup = model.body.kind === "project-setup" ? model.body : null;
+    const step = setup?.steps.findIndex(step => step.current) ?? -1;
+    if (!setup) this.setupStep = -1;
+    // std-button keeps its native focus target in shadow DOM. The app owns
+    // navigation; focusing it must not scroll the first completed rows away.
+    const focusControl = (el: HTMLElement) => (el.shadowRoot?.querySelector<HTMLElement>("button") ?? el).focus({ preventScroll: true });
     const restoreFocus = () => {
-      if (!focus) return;
-      const next = this.host.querySelector<HTMLInputElement>(`[id="${focus.id}"]`);
-      next?.focus({ preventScroll: true });
-      if (focus.start !== null && focus.end !== null) next?.setSelectionRange(focus.start, focus.end);
+      if (focus?.id) {
+        const next = this.host.querySelector<HTMLElement>(`[id="${CSS.escape(focus.id)}"]`);
+        if (next && !next.hasAttribute("disabled")) {
+          focusControl(next);
+          if (next instanceof HTMLInputElement && caret?.start != null && caret.end != null) next.setSelectionRange(caret.start, caret.end);
+        }
+      }
+      if (!setup || step === this.setupStep) return;
+      const id = newProjectFocusTarget(setup);
+      const target = id && this.host.querySelector<HTMLElement>(`[id="${CSS.escape(id)}"]`);
+      if (!target) return; // A save may render the next step before its action is enabled.
+      focusControl(target);
+      this.host.querySelector<HTMLElement>(".ap-project-setup")!.scrollTop = 0;
+      this.setupStep = step;
     };
     this.model = model;
     this.width = Math.round(this.host.clientWidth) || 640;

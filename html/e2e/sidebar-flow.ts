@@ -15,6 +15,23 @@ async function screenshot(page: Page, label: string, width: number, height: numb
   await settle(page); const name = label + "-" + width + "x" + height + ".png";
   await page.screenshot({ path: out + "/" + name }); shots.push(name);
 }
+async function expectFocus(page: Page, id: string, label: string) {
+  await page.waitForFunction(id => document.activeElement?.id === id, {}, id);
+  check(await page.evaluate(id => {
+    const el = document.activeElement;
+    return el?.id === id && (el instanceof HTMLInputElement || el.shadowRoot?.activeElement?.tagName === "BUTTON");
+  }, id), label);
+}
+async function orientation(page: Page, width: number) {
+  await settle(page);
+  check(await page.$eval(".ap-project-setup", el => {
+    const viewport = el.getBoundingClientRect(), heading = el.querySelector("h2")!.getBoundingClientRect();
+    const current = el.querySelector("std-stepper")!.shadowRoot!.querySelector("[aria-current=step]")!;
+    const previous = current.previousElementSibling?.querySelector(".step-head")?.getBoundingClientRect();
+    const head = current.querySelector(".step-head")!.getBoundingClientRect();
+    return heading.top >= viewport.top && heading.bottom <= viewport.bottom && !!previous && previous.top >= viewport.top && previous.bottom <= head.top && head.bottom <= viewport.bottom;
+  }), width + ": wizard heading and completed step remain visible above current header");
+}
 async function panel(page: Page, name: "sidebar" | "details") {
   if (await page.evaluate(() => matchMedia("(max-width:639px)").matches)) {
     if (await page.$eval(".ck-panels", (el, n) => (el as HTMLElement).dataset.mobile !== n, name)) await page.click(".ck-" + name + "-toggle");
@@ -68,9 +85,30 @@ await withHeadless(async (browser: Browser) => {
     await fill(page,"name",name);
     await screenshot(page,"new-project-model",width,height);
     await page.click("#ap-action-setup-next"); await page.waitForSelector('[data-ap-name="setup:c"]');
+    await expectFocus(page, "ap-setup:c", width + ": Continue focuses first parameter, not Back");
+    await orientation(page, width);
+    check(await page.$$eval(".ap-setup-label", labels => labels.length === 4 && labels.every(label => {
+      const range = document.createRange(); range.selectNodeContents(label.firstChild!);
+      const text = range.getBoundingClientRect(), unit = label.querySelector(".ap-setup-unit")!;
+      return Math.abs(text.top - unit.getBoundingClientRect().top) < 1 && getComputedStyle(unit).color !== getComputedStyle(label).color;
+    })), width + ": all units sit beside labels in secondary colour");
+    check(await page.$eval("std-stepper", el => getComputedStyle(el.shadowRoot!.querySelector("[aria-current=step] .step-head")!).backgroundColor === "rgba(0, 0, 0, 0.05)"), width + ": current header has translucent five-percent band");
+    check(await page.$eval("std-stepper", el => {
+      const done = el.shadowRoot!.querySelector(".step-item")!;
+      return done.querySelector(".step-marker")!.textContent === "✓" && !done.classList.contains("muted") && !done.querySelector(".step-meta") && getComputedStyle(done, "::before").backgroundColor !== "rgba(0, 0, 0, 0)";
+    }), width + ": completed step keeps plain checkmark, normal title and visible rail");
+    await screenshot(page,"new-project-advanced",width,height);
+    await page.click("#ap-action-setup-back");
+    await expectFocus(page, "ap-setup:name", width + ": Back focuses project name");
+    await page.$eval("#ap-action-setup-next", el => (el.shadowRoot!.querySelector("button") as HTMLButtonElement).focus());
+    await page.keyboard.press("Enter");
+    await expectFocus(page, "ap-setup:c", width + ": keyboard Continue focuses first field");
+    check(await page.$eval('[id="ap-setup:c"]', el => el.matches(":focus-visible") && getComputedStyle(el).outlineStyle !== "none"), width + ": keyboard field focus stays visible");
     await fill(page,"c","450"); await fill(page,"r","1.8"); await fill(page,"power","12"); await fill(page,"duration","800");
     await screenshot(page,"new-project-config",width,height);
-    await page.click("#ap-action-setup-create"); await page.waitForSelector("#ap-action-setup-start");
+    await page.click("#ap-action-setup-create"); await page.waitForSelector("#ap-action-setup-start:not([disabled])");
+    await expectFocus(page, "ap-action-setup-start", width + ": Create project focuses Start investigation");
+    await orientation(page, width);
     await screenshot(page,"new-project-ready",width,height);
     const saved = await page.evaluate(async (name) => {
       const ws = await (await fetch("/api/v1/workspace")).json();
