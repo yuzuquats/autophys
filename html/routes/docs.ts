@@ -473,6 +473,22 @@ const TOKENS = `
   --fg-syntax-operator: #0184bc; --fg-syntax-variable: #383a42;
 `;
 
+/** Inside std-documentation's shadow root. A signature in a table's first column is one card
+ * with a hanging indent instead of a chip sliced across lines, and inline code keeps colour
+ * only for names and strings: punctuation, operators and literals read as text at this size.
+ * Code blocks keep their full colouring (they are std-code, with their own styles). */
+const INLINE_CODE_CSS = `
+  td:first-child code {
+    display: inline-block;
+    white-space: pre-wrap;
+    overflow-wrap: normal;
+    padding: 3px 6px 3px 2.6ch;
+    text-indent: -2ch;
+    line-height: 1.5;
+  }
+  code .tok-punctuation, code .tok-operator, code .tok-number { color: inherit; }
+`;
+
 const CSS = `
 .ap-landing-docs { ${TOKENS} padding: 96px 20px 112px; background: #fff; border-top: 1px solid var(--ck-line, #d9d9d9); }
 @media (min-width: 640px) { .ap-landing-docs { padding-inline: 24px; } }
@@ -542,6 +558,9 @@ export function landingDocs(): { onStage(stage: Cookbook.Stage): void; mount(): 
       style.textContent = CSS;
       document.head.append(style);
       const doc = Documentation.make();
+      const inlineCode = new CSSStyleSheet();
+      inlineCode.replaceSync(INLINE_CODE_CSS);
+      doc.addStyle("ap-inline-code", inlineCode);
       section.append(doc);
       const footer = document.querySelector(".ck-footer");
       if (footer) footer.before(section);
