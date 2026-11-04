@@ -181,6 +181,13 @@ pub fn browser(req: &HttpRequest, api: &Api) -> Result<(), ApiError> {
             return Err(ApiError::Unauthorized);
         }
     }
+    // `serve --login`: the persistent sign-in cookie (checked by the caller)
+    // authorizes the browser; writes still pass the Origin check above. The
+    // process-local document session is not required, so a daemon restart
+    // (every deploy) does not knock signed-in tabs out.
+    if api.options().login {
+        return Ok(());
+    }
     api.sessions
         .accepts(req)
         .then_some(())

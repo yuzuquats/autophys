@@ -339,19 +339,25 @@ pub fn badge(user: &User) -> String {
     )
 }
 
-/// The badge a signed-out visitor sees on the public pages (`serve --login`):
-/// a read-only note and a way to sign in, where the account badge would be.
-pub fn anonymous_badge(label: &str) -> String {
-    format!(
-        "<div id=\"ap-account\" data-signed-in=\"false\" style=\"position:fixed;top:23px;right:24px;\
-         z-index:2147483000;display:flex;align-items:center;gap:8px;\
-         font:13px/1.2 system-ui,-apple-system,sans-serif;color:#141414;background:#efefef;\
-         border-radius:8px;padding:4px 4px 4px 10px\">\
-         <span title=\"Not signed in: the live workbench needs an account\">{}</span>\
-         <a href=\"/login?next=/app\" style=\"border-radius:6px;background:#141414;color:#fff;\
-         text-decoration:none;padding:5px 9px\">Sign in</a></div>",
-        escape(label)
-    )
+/// Carried by the signed-in app document: when the API answers 401 (the
+/// session ended: signed out elsewhere, expired, or the account removed),
+/// go to the sign-in page and come back here, rather than showing the app's
+/// connection error.
+pub const SIGNED_OUT_GUARD: &str = "<script>(function(){var f=window.fetch;\
+window.fetch=function(i){return f.apply(this,arguments).then(function(r){\
+var u=typeof i==='string'?i:(i&&i.url)||'';\
+if(r.status===401&&u.indexOf('/api/v1/')!==-1){\
+location.assign('/login?next='+encodeURIComponent(location.pathname+location.search));}\
+return r;});};})();</script>";
+
+/// What a signed-out visitor sees on the public pages (`serve --login`),
+/// where the account badge would be: one Sign in button.
+pub fn anonymous_badge() -> String {
+    "<a id=\"ap-account\" data-signed-in=\"false\" href=\"/login?next=/app\" \
+     title=\"Sign in to open the live workbench\" style=\"position:fixed;top:24px;right:24px;\
+     z-index:2147483000;font:600 13px/1 system-ui,-apple-system,sans-serif;color:#fff;\
+     background:#141414;border-radius:8px;padding:9px 14px;text-decoration:none\">Sign in</a>"
+        .to_string()
 }
 
 #[cfg(test)]

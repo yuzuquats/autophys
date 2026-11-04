@@ -133,9 +133,9 @@ async fn sign_in_gates_the_app_and_the_browser_api() {
     // Signed out, the landing page and the recorded demo are public and say
     // so; the live workbench is not, and the fixtures flag is matched exactly.
     for (uri, label) in [
-        ("/", "Not signed in"),
-        ("/app?source=fixtures", "Read-only demo"),
-        ("/app/inv_1?x=1&source=fixtures", "Read-only demo"),
+        ("/", "data-signed-in=\"false\""),
+        ("/app?source=fixtures", "data-signed-in=\"false\""),
+        ("/app/inv_1?x=1&source=fixtures", "data-signed-in=\"false\""),
     ] {
         let (s, _, _, page) = send(&app, public(test::TestRequest::get().uri(uri)), "x").await;
         assert!(
@@ -270,12 +270,30 @@ async fn sign_in_gates_the_app_and_the_browser_api() {
         (s, me["user"]["email"].as_str()),
         (200, Some("ada@lab.org"))
     );
-    // The sign-in cookie alone (no document session) is not enough for the API.
-    let only_login = public(get("/workspace", None)).cookie(actix_web::cookie::Cookie::new(
-        "autophys_login",
-        login.clone(),
-    ));
-    assert_eq!(call(&app, only_login.to_request()).await.0, 401);
+    assert!(
+        page.contains("/login?next="),
+        "the document goes to sign-in on a 401"
+    );
+    // The sign-in cookie alone is enough, so a daemon restart (which drops the
+    // process-local document sessions) does not sign anyone out.
+    let only_login = |req: test::TestRequest| {
+        public(req).cookie(actix_web::cookie::Cookie::new(
+            "autophys_login",
+            login.clone(),
+        ))
+    };
+    assert_eq!(
+        call(&app, only_login(get("/workspace", None)).to_request())
+            .await
+            .0,
+        200
+    );
+    // Writes still need one of the daemon's own origins.
+    let foreign = only_login(test::TestRequest::post().uri("/api/v1/pairings/ABCD-1234/approve"))
+        .insert_header(("origin", "https://evil.example"))
+        .insert_header(("content-type", "application/json"))
+        .set_payload("{}");
+    assert_eq!(call(&app, foreign.to_request()).await.0, 403);
 
     // Password sign-in.
     let (s, _, _, _) = send(

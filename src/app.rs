@@ -159,12 +159,16 @@ async fn app_document(
     let mut demo = false;
     if let Some(api) = api.filter(|a| a.options().login) {
         match crate::http::auth::signed_in(&api, &req).await? {
-            Some(user) => badge = Some(crate::login::badge(&user)),
-            None if req.path() == "/" => {
-                badge = Some(crate::login::anonymous_badge("Not signed in"))
+            Some(user) => {
+                badge = Some(format!(
+                    "{}{}",
+                    crate::login::badge(&user),
+                    crate::login::SIGNED_OUT_GUARD
+                ))
             }
+            None if req.path() == "/" => badge = Some(crate::login::anonymous_badge()),
             None if demo_requested(&req) => {
-                badge = Some(crate::login::anonymous_badge("Read-only demo"));
+                badge = Some(crate::login::anonymous_badge());
                 demo = true;
             }
             // The cookbook drops `?source=fixtures` from the address once the
