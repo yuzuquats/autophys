@@ -42,7 +42,7 @@ from .reasoner import Reasoner, ReasonerError, parse_json_content
 from .sensitivity import SensitivityReport, jacobian, report_from_jacobian
 from .project import Project, policy_from_config
 from .simulator import CallBudget, SimulationBudgetExceeded, SimulationError, Simulator
-from .store import MemoryStore, Store
+from .store import MemoryStore, Store, StoreError
 
 LOSSES = ("linear", "soft_l1", "huber", "cauchy", "arctan")
 
@@ -214,12 +214,32 @@ class Investigation:
         seed: int = 0,
         title: str = "",
     ) -> None:
+        self._setup(project, dataset, runner, policy=policy, reasoner=reasoner, free=free, store=store, seed=seed)
+        self.project_id = self.store.ensure_project(project.name)
+        self.config_version = self.store.put_config_version(self.project_id, project.config_version, project.config())
+        meta = {
+            "project_id": self.project_id,
+            "config_version": self.config_version,
+            "title": title,
+            "overrides": {"free": self.free, "fixed": self.fixed},
+            "policy": getattr(self.policy, "name", type(self.policy).__name__),
+            "seed": seed,
+            "variants": {k: v.source_hash for k, v in self.variants.items()},
+        }
+        meta.update(getattr(self.policy, "meta", lambda: {})())
+        self.id = self.store.create_investigation(meta)
+        for obs in dataset:
+            self._record_measurement(obs)
+
+    def _setup(self, project: Project, dataset: Dataset, runner: Any, *, policy: Policy | None,
+               reasoner: Reasoner | None, free: list[str] | None, store: Store | None, seed: int) -> None:
+        """State shared by a new and a resumed investigation; writes nothing."""
         self.project = project
         self.dataset = dataset
         self.runner = runner
         self.policy = policy or policy_from_config(project.policy, reasoner)
         self.budgets = project.budgets
-        self.store = store or MemoryStore()
+        self.store = store if store is not None else MemoryStore()
         self.rule = project.stop.rule
         self.n_starts = project.n_starts
         self.validation_threshold = project.stop.validation_threshold
@@ -253,21 +273,102 @@ class Investigation:
         self.pending_experiment: str | None = None
         self.wall = 0.0
         self.outcome: Outcome | None = None
-        self.project_id = self.store.ensure_project(project.name)
-        self.config_version = self.store.put_config_version(self.project_id, project.config_version, project.config())
-        meta = {
-            "project_id": self.project_id,
-            "config_version": self.config_version,
-            "title": title,
-            "overrides": {"free": self.free, "fixed": self.fixed},
-            "policy": getattr(self.policy, "name", type(self.policy).__name__),
-            "seed": seed,
-            "variants": {k: v.source_hash for k, v in self.variants.items()},
-        }
-        meta.update(getattr(self.policy, "meta", lambda: {})())
-        self.id = self.store.create_investigation(meta)
-        for obs in dataset:
-            self._record_measurement(obs)
+
+    # --- resuming from records ----------------------------------------------
+    @classmethod
+    def resume(cls, project: Project, store: Store, investigation_id: str, runner: Any = None, *,
+               policy: Policy | None = None, reasoner: Reasoner | None = None) -> "Investigation":
+        """Rebuild an investigation from its records, in any process.
+
+        The project must be the one the investigation is pinned to (same config
+        version, so the same simulator source). Restored: the measurements, the
+        step, simulation and experiment counts, the adopted model variant, the
+        pending proposal and the last outcome. Fits, sensitivities and rankings
+        are not restored; the policy recomputes them on the next ``run()``.
+        ``runner`` defaults to a :class:`ProposalRunner`.
+        """
+        recs = store.records(investigation_id)
+        if not recs or recs[0].kind != "investigation":
+            raise StoreError(f"unknown investigation {investigation_id}")
+        head = recs[0].payload
+        if head.get("config_version") != project.config_version:
+            raise StoreError(f"{investigation_id} is pinned to config version {head.get('config_version')}; "
+                             f"this project is {project.config_version}")
+        i = 1
+        while i < len(recs) and recs[i].kind == "measurement":
+            i += 1
+        initial = Dataset(Observation.from_dict(r.payload["observation"]) for r in recs[1:i])
+        self = cls.__new__(cls)
+        overrides = head.get("overrides") or {}
+        self._setup(project, initial, runner if runner is not None else ProposalRunner(), policy=policy,
+                    reasoner=reasoner, free=overrides.get("free"), store=store, seed=int(head.get("seed", 0)))
+        self.id = investigation_id
+        self.project_id = head["project_id"]
+        self.config_version = head["config_version"]
+        self._replay(recs[i:])
+        return self
+
+    def _replay(self, recs: list) -> None:
+        proposals: dict[str, dict] = {}
+        unclaimed: list[Observation] = []  # a measurement not yet tied to a proposal
+
+        def count(name: str) -> None:
+            self.experiments_used += 1
+            self.runs_per_experiment[name] = self.runs_per_experiment.get(name, 0) + 1
+
+        def settle() -> None:
+            while unclaimed:
+                count(unclaimed.pop().experiment)  # a runner's direct measurement
+
+        for r in recs:
+            p = r.payload
+            if r.kind == "measurement":
+                settle()
+                obs = Observation.from_dict(p["observation"])
+                self.dataset.add(obs)
+                unclaimed.append(obs)
+                continue
+            if r.kind == "proposal" and p.get("event") == "data_attached":
+                unclaimed.clear()
+                count(proposals.get(p["proposal_id"], {}).get("experiment") or "")
+                self.outcome = None  # as attach_data does
+            else:
+                settle()
+            if r.kind == "proposal":
+                st = proposals.setdefault(p["proposal_id"], {})
+                st["status"] = p["event"]
+                if p["event"] == "proposed":
+                    st["experiment"] = p.get("experiment")
+                    self.ranking_criterion = p.get("criterion") or self.ranking_criterion
+            elif r.kind == "run":
+                self.fit_id = max(self.fit_id, int(p.get("fit_id", 0)))
+            elif r.kind == "step":
+                self.outcome = None  # a later run superseded the last outcome
+                self.steps += 1
+                self.call_budget.used += int(p.get("simulations", 0))
+                d = p.get("decision") or {}
+                res = p.get("result") or {}
+                if d.get("action") == "compare_models":
+                    self.compared = True
+                    if res.get("adopted") and res.get("best") in self.variants:
+                        self.model = res["best"]
+                if d.get("action"):
+                    self.history.append(f"{d['action']}: " + (f"error {res['error']}" if "error" in res else "ok"))
+            elif r.kind == "outcome":
+                self.outcome = Outcome(**p)
+                self.wall = float(p.get("wall_s", 0.0))
+        settle()
+        for pid, st in proposals.items():
+            if st.get("status") in ("proposed", "approved", "edited"):
+                self.pending, self.pending_experiment = pid, st.get("experiment")
+
+    def records(self, kind: str | None = None) -> list:
+        """This investigation's records, in order (optionally one kind)."""
+        return self.store.records(self.id, kind)
+
+    def proposal(self, proposal_id: str) -> dict:
+        """A proposal's folded state: ``status``, ``experiment``, ``settings``, ``events``."""
+        return self.store.proposal_status(self.id, proposal_id)
 
     # --- setup ------------------------------------------------------------
     def _variants(self, sim: Simulator, bias: str) -> dict[str, Simulator]:
