@@ -137,32 +137,23 @@ autophys has two loops. They are nested, not concurrent: the outer loop calls th
 Each research step waits for all of its investigations before it decides. The investigations within a step are independent and run in parallel with \`--jobs\`.
 
 \`\`\`review-flow
-flowchart TB
-  B["baseline: evaluate the starting playbook<br/>on the train seeds"] --> INC["incumbent playbook<br/>and its training report"]
-  INC --> LIM{"iterations left?"}
-  LIM -->|yes| RS["researcher proposes an edit<br/>from the playbook and training report"]
-  RS --> VAL{"edit valid?"}
-  VAL -->|no: logged, iteration used| LIM
-  VAL -->|yes| EV["evaluate the candidate:<br/>one investigation per case and train seed"]
-  EV --> IMP{"score improves?<br/>correct first, then error, then cost"}
-  IMP -->|yes: becomes the incumbent| INC
-  IMP -->|no: incumbent kept| LIM
-  LIM -->|no| HO["held-out seeds: starting vs final playbook<br/>summary.json"]
+flowchart TD
+  B["1. score the starting playbook on the train seeds"] --> RS["2. the researcher proposes an edit to the playbook"]
+  RS --> EV["3. run one investigation (the loop below)<br/>per case and train seed, with the edited playbook"]
+  EV --> K["4. keep the edit only if the score improves<br/>then repeat from 2, for N iterations"]
+  K --> HO["5. compare the starting and final playbooks on held-out seeds"]
 \`\`\`
 
-The score is lexicographic: the number of runs whose status and diagnosis are correct, then the mean log parameter error, then cost. The held-out seeds are kept apart from the start and only used at the end.
+The score is lexicographic: the number of runs whose status and diagnosis are correct, then the mean log parameter error, then cost. The held-out seeds are kept apart from the start and only used at the end. An edit that fails validation is logged and skipped, and still uses up an iteration.
 
-Inside each evaluation, an investigation is not a fixed cycle. At every step the policy picks one action until it stops or a budget runs out, so the order depends on the policy. This is the scripted policy's usual order:
+Inside each evaluation, an investigation is not a fixed cycle. At every step the policy picks one action until it stops or a budget runs out, so the order depends on the policy. This is the scripted policy's usual order; it also compares a sensor-bias variant of the model when the fit is poor:
 
 \`\`\`review-flow
-flowchart LR
-  I["inspect_data<br/>(optional)"] -.-> F
-  F["optimize_parameters"] --> M["compare_models<br/>base vs sensor-bias variants by BIC"]
-  M --> S
-  F --> S["analyze_sensitivity<br/>log-Jacobian SVD"] --> R["rank_experiments<br/>Fisher information"]
-  R --> Q["request_experiment<br/>within budget"]
-  Q -->|new train data| F
-  S --> V["validate_predictions"] --> X["stop<br/>the code checks the claim"]
+flowchart TD
+  F["fit the model to the train data"] --> S["check identifiability (SVD)"]
+  S --> R["rank candidate experiments by Fisher information"]
+  R --> Q["request one experiment, then refit<br/>repeat until identified or out of budget"]
+  Q --> V["validate and stop: the code checks the claim"]
 \`\`\`
 
 | Mode | What runs | Where new data comes from |
