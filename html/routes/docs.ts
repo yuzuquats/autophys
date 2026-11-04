@@ -453,8 +453,8 @@ The modules \`simulator\`, \`models\`, \`data\`, \`fit\`, \`sensitivity\`, \`des
 /** std-documentation sizes type with Lona's cap-height scale, which tento apps get from
  * theme-base.css's :root block. That sheet also styles bare h1-h7, buttons and labels, which
  * would restyle the cookbook, so only its tokens are carried here, scoped to this section, and
- * the colours resolve to the cookbook's. Code colours are tento-ui's light syntax palette
- * (brand/tokens/color/loaf.ts), which Lona apps otherwise get from colors.css. */
+ * the colours resolve to the cookbook's. The syntax colours here are GitHub Light's, for inline
+ * code on light chips; code blocks are dark (GitHub Dark Dimmed, DARK_CODE below). */
 const TOKENS = `
   --text-8px: 0.5rem; --text-9px: 0.5625rem; --text-10px: 0.625rem; --text-11px: 0.6875rem;
   --text-12px: 0.75rem; --text-13px: 0.8125rem; --text-14px: 0.875rem; --text-15px: 0.9375rem;
@@ -468,9 +468,9 @@ const TOKENS = `
   --text-pri: var(--ck-ink, #141414); --text-sec: var(--ck-secondary, #424242); --text-ter: var(--ck-n600, #5c5c5c);
   --divider: var(--ck-line, #d9d9d9); --bg: #fff; --bg-surface: var(--ck-n100, #f7f7f7); --code-bg: var(--ck-n100, #f7f7f7);
   font-family: var(--ck-font, system-ui, sans-serif); color: var(--text-pri);
-  --fg-syntax-keyword: #a626a4; --fg-syntax-function: #4078f2; --fg-syntax-string: #50a14f;
-  --fg-syntax-number: #986801; --fg-syntax-comment: #a0a1a7; --fg-syntax-punctuation: #696c77;
-  --fg-syntax-operator: #0184bc; --fg-syntax-variable: #383a42;
+  --fg-syntax-keyword: #cf222e; --fg-syntax-function: #8250df; --fg-syntax-string: #0a3069;
+  --fg-syntax-number: #0550ae; --fg-syntax-comment: #6e7781; --fg-syntax-punctuation: #1f2328;
+  --fg-syntax-operator: #0550ae; --fg-syntax-variable: #1f2328;
 `;
 
 /** Inside std-documentation's shadow root. A signature in a table's first column is one card
@@ -503,6 +503,17 @@ Code.registerLanguage(["toml"], tomlTokenizer);
 Code.registerLanguage(["autophys-inline"], inlineCodeTokenizer);
 
 /** std-documentation's code block view, drawing with Code's static, tokenizer-coloured path. */
+/** Code blocks are dark on the white page: GitHub Dark Dimmed's palette, set on each block's
+ * host (Code reads --code-bg, --text-pri and the --fg-syntax-* roles there). Inline code keeps
+ * the light chips and GitHub Light's colours from TOKENS, the same family in light. */
+const DARK_CODE: Record<string, string> = {
+  "--code-bg": "#22272e", "--text-pri": "#adbac7",
+  "--fg-syntax-keyword": "#f47067", "--fg-syntax-function": "#dcbdfb",
+  "--fg-syntax-string": "#96d0ff", "--fg-syntax-number": "#6cb6ff",
+  "--fg-syntax-comment": "#768390", "--fg-syntax-punctuation": "#adbac7",
+  "--fg-syntax-operator": "#6cb6ff", "--fg-syntax-variable": "#adbac7",
+};
+
 class StaticCodeBlockView {
   dom: Code;
   constructor(node: ProseMirrorEditor.ProseMirrorNode) {
@@ -511,7 +522,8 @@ class StaticCodeBlockView {
     // Windows is a full-width grey bar with arrow buttons. A thin, faint one suits the page.
     // Inline, because the host sits in std-documentation's shadow root, beyond this sheet.
     this.dom.style.scrollbarWidth = "thin";
-    this.dom.style.scrollbarColor = "rgb(0 0 0 / 0.18) transparent";
+    this.dom.style.scrollbarColor = "rgb(255 255 255 / 0.22) transparent";
+    for (const [name, value] of Object.entries(DARK_CODE)) this.dom.style.setProperty(name, value);
     this.draw(node);
   }
   private draw(node: ProseMirrorEditor.ProseMirrorNode): void {
