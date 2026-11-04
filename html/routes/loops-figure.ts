@@ -117,7 +117,7 @@ const LABEL = "Nested loops. Start by scoring the starting playbook on the train
 const HTML = `<style>${CSS}</style><div class="ap-loops" role="img" aria-label="${LABEL}"><div class="ap-canvas">` +
   lines(
     `<rect class="ap-ring out" x="120" y="132" width="476" height="384" rx="40"/>` +
-      arrow("M154 72 V94", "out") + arrow("M392 132 H422", "out") + arrow("M596 170 V194", "out") +
+      arrow("M154 72 V94", "out") + arrow("M392 132 H422", "out") +
       arrow("M520 516 H490", "out") + arrow("M120 394 V364", "out") + arrow("M246 542 V570", "exit"),
   ) +
   step({ x: 40, y: 16, w: 228, h: 56 }, "Score the starting playbook", ["on the train seeds"]) +
@@ -127,23 +127,23 @@ const HTML = `<style>${CSS}</style><div class="ap-loops" role="img" aria-label="
   note(258, 547, "after the last iteration") +
   step({ x: 96, y: 572, w: 300, h: 48 }, "Held-out check", ["starting vs final playbook"]) +
   // Offset sheets stand for the parallel investigations, not extra steps.
-  step({ x: 346, y: 206, w: 416, h: 300 }, "", [], "sheet") +
-  step({ x: 341, y: 201, w: 416, h: 300 }, "", [], "sheet") +
-  step({ x: 336, y: 196, w: 416, h: 300 }, "", [], "panel") +
-  heading(358, 216, "In parallel", "Evaluate the playbook") + note(358, 262, "one per case and train seed") +
-  step({ x: 552, y: 212, w: 190, h: 66 }, "Stop", ["identified, or out of budget", "the code checks the claim"], "stop") +
+  step({ x: 346, y: 170, w: 416, h: 300 }, "", [], "sheet") +
+  step({ x: 341, y: 165, w: 416, h: 300 }, "", [], "sheet") +
+  step({ x: 336, y: 160, w: 416, h: 300 }, "", [], "panel") +
+  heading(358, 180, "In parallel", "Evaluate the playbook") + note(358, 226, "one per case and train seed") +
+  step({ x: 552, y: 176, w: 190, h: 66 }, "Stop", ["identified, or out of budget", "the code checks the claim"], "stop") +
   lines(
-    `<rect class="ap-ring in" x="410" y="330" width="270" height="118" rx="30"/>` +
-      arrow("M444 330 H466", "in") + arrow("M680 354 V368", "in") + arrow("M652 448 H641", "in") +
-      arrow("M410 420 V410", "in") + arrow("M600 313 C600 297 647 300 647 280", "exit"),
+    `<rect class="ap-ring in" x="410" y="294" width="270" height="118" rx="30"/>` +
+      arrow("M444 294 H466", "in") + arrow("M680 318 V332", "in") + arrow("M652 412 H641", "in") +
+      arrow("M410 384 V374", "in") + arrow("M600 277 C600 261 647 264 647 244", "exit"),
     false,
   ) +
-  step({ x: 475, y: 313, w: 150, h: 34 }, "Identifiability") +
-  step({ x: 618, y: 372, w: 124, h: 34 }, "Rank (Fisher)") +
-  step({ x: 453, y: 431, w: 184, h: 34 }, "Request an experiment") +
-  step({ x: 362, y: 372, w: 96, h: 34 }, "Fit / refit") +
-  heading(545, 391, "Inner loop", "One investigation", true) +
-  agent(298, 100, 64) + agent(414, 334, 48) +
+  step({ x: 475, y: 277, w: 150, h: 34 }, "Identifiability") +
+  step({ x: 618, y: 336, w: 124, h: 34 }, "Rank (Fisher)") +
+  step({ x: 453, y: 395, w: 184, h: 34 }, "Request an experiment") +
+  step({ x: 362, y: 336, w: 96, h: 34 }, "Fit / refit") +
+  heading(545, 355, "Inner loop", "One investigation", true) +
+  agent(298, 100, 64) + agent(414, 298, 48) +
   `</div></div>`;
 
 /** A read-only node view; the fence body is ignored. */
