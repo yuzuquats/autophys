@@ -72,7 +72,7 @@ def validate_edit(original, proposed):
     return proposed
 
 
-def proposal_prompt(playbook_text, report):
+def proposal_prompt(playbook_text, report, history=None):
     # Remove volatile record identities/timing from cassette request keys.
     def stable(value):
         volatile = {"investigation", "project_id", "id", "ts", "hash", "prev_hash", "wall_s", "elapsed_ms", "latency_ms", "reasoner", "plot_artifacts"}
@@ -87,7 +87,10 @@ def proposal_prompt(playbook_text, report):
             "The JSON/action/identified-claim contract is fixed in Python and cannot be edited. "
             "Return the complete SKILL.md, without Markdown fences. Improve training results.\n\n"
             + playbook_text + "\n\nTraining report and failing transcripts:\n"
-            + json.dumps(stable(report), sort_keys=True))
+            + json.dumps(stable(report), sort_keys=True)
+            # Only autoloop passes history; without it the prompt (and cassette keys) are unchanged.
+            + ("\n\nPrevious proposals and their training scores; do not repeat a rejected edit:\n"
+               + json.dumps(stable(history), sort_keys=True) if history else ""))
 
 
 def report_images(report, spec):
@@ -114,10 +117,10 @@ class APIResearcher:
         self.reasoner = reasoner or reasoner_for(self.spec, replay=replay, record=record)
         self.last_usage = None
 
-    def propose(self, playbook_text, report):
+    def propose(self, playbook_text, report, history=None):
         images = report_images(report, self.spec)
         options = {"images": [{"media_type": i["media_type"], "data": i["data"]} for i in images]} if images else {}
-        reply = self.reasoner.complete([{"role": "user", "content": proposal_prompt(playbook_text, report)}],
+        reply = self.reasoner.complete([{"role": "user", "content": proposal_prompt(playbook_text, report, history)}],
                                        effort=self.spec.effort, max_tokens=self.spec.max_tokens, **options)
         from .usage import normalize_usage
         self.last_usage = normalize_usage(reply)
@@ -136,7 +139,7 @@ class ScriptedResearcher:
         self.last_usage = None
         self.last_events = None
 
-    def propose(self, playbook_text, report):
+    def propose(self, playbook_text, report, history=None):
         if not self.edits:
             raise ReasonerError("scripted researcher has no edits left; pass one --edit per iteration")
         return self.edits.pop(0)
@@ -196,9 +199,9 @@ class MuseCLIResearcher:
         self.max_model_steps, self.replay, self.record = max_model_steps, replay, record
         self.last_events = None
 
-    def propose(self, playbook_text, report):
+    def propose(self, playbook_text, report, history=None):
         # CLI replay is local: Muse has no documented replay flag.
-        prompt_text = proposal_prompt(playbook_text, report)
+        prompt_text = proposal_prompt(playbook_text, report, history)
         from .store import canonical
         images = report_images(report, self.spec)
         identity = {"model": self.spec.model, "effort": self.spec.effort,

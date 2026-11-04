@@ -655,6 +655,46 @@ What it proves is the outer loop's mechanics with a strategy that really changes
 behaviour. It does not show that a model proposes good edits or follows them;
 that needs a recorded or live run with real models (MQ-2).
 
+### The autoloop (implemented 2026-11-04)
+
+`autophys autoloop` (`autoloop.py`) runs the research loop unattended until a
+stop condition. Each iteration asks the researcher for one playbook edit, scores
+it on the training seeds, and keeps it only if it beats the incumbent
+(`research.improves`). Held-out seeds are scored once, at the end, and are never
+shown to the researcher.
+
+- **Journal (AR-1).** `journal.jsonl` has one entry per iteration. Each records
+  the hypothesis and prediction (when the researcher states them), the unified
+  diff, the training score before and after, whether the edit was kept and why,
+  and the researcher's usage. The last 20 entries are passed to the next
+  proposal. The API and Muse researchers add them to their prompt only when
+  there are any, so existing cassettes keep their keys.
+- **Stop conditions and resume (AR-6).** It stops on `--max-iterations`, on
+  `--patience` rejections in a row, on `--max-usd` (researcher plus policy
+  spend), on `--max-wall-s`, when a `STOP` file appears in the run directory, or
+  when the researcher has no further proposal. `state.json`, the numbered
+  playbooks and the training reports make `--resume` continue a run without
+  re-scoring its baseline.
+- **Researchers.** `api` and `muse` are the model researchers; live calls stay
+  gated by MQ-2. `scripted` replays given edits. `heuristic` is an offline
+  stand-in, like the fake reasoner. It diagnoses failing transcripts and edits
+  the typed settings (`compare_variants`, `experiments`) with a stated
+  hypothesis, or proposes nothing.
+
+Verified offline, with no model or network. From the never-compare playbook,
+over all six benchmark cases plus `battery-biased` (train seeds 0-2, held-out
+3-4, `--jobs 4`, 41 s), the heuristic researcher saw three failing runs ending
+on the base model at chi2/N 6.3-6.5 with an uncompared sensor-bias variant. It
+proposed `compare_variants: on_misfit`, which was kept. Training went from 18 to
+21 of 21 correct and held-out from 12 to 14 of 14, and then it stopped with
+nothing further to propose. `tests/test_autoloop.py` covers that run, the CLI,
+patience, invalid edits, the stop file, the budget, history and resume.
+
+The closed offline loop proves the machinery, not research skill. The heuristic
+researcher only knows two failure patterns. Whether a model researcher finds
+fixes nobody planted is the next question, and it needs live or recorded runs
+(MQ-2).
+
 ### Proposed extensions (agent-proposed, not built, pending operator review)
 
 ```review-flow
@@ -670,12 +710,12 @@ flowchart TB
 ```review-table
 | Id | Proposal | Loop | Why | Cost to try |
 | -- | -------- | ---- | --- | ----------- |
-| AR-1 | Extend the existing `iterations.json` sidecar with each edit's hypothesis and predicted effect, and feed that history into later proposals | outer | the researcher receives the incumbent playbook, per-run training results, the aggregate score and failing transcripts (`proposal_prompt`), but no history of rejected edits, so it can propose them again | small: sidecar fields and a prompt section |
+| AR-1 | Extend the existing `iterations.json` sidecar with each edit's hypothesis and predicted effect, and feed that history into later proposals (**implemented as the autoloop journal**) | outer | the researcher receives the incumbent playbook, per-run training results, the aggregate score and failing transcripts (`proposal_prompt`), but no history of rejected edits, so it can propose them again | small: sidecar fields and a prompt section |
 | AR-2 | Extend the fixed cases with sampled truths, structural mismatch (truth 2RC, model 1RC) and more demanding cost trade-offs, building on the battery suite planned in MQ-5 | both | the leading MQ-4 component, the correctness count, has only one more possible value than there are training investigations (cases times train seeds). Whether greedy Fisher ranking is hard to beat on the current well-specified cases is a hypothesis to test | moderate: `synthetic.py` and goldens |
 | AR-3 | Paired, repeated evaluation with a bootstrap acceptance rule | outer | `improves` accepts any lexicographic gain, which a single noisy reasoner run can produce | small in code, multiplies reasoner cost |
 | AR-4 | Typed strategy settings the researcher may edit alongside the prose: stop thresholds and cost weighting (criterion and fit starts are already per-action arguments) | outer | the prose strategy (M-2) already allows departures from the Fisher ranking; typed settings would make chosen behaviour explicit, reproducible and directly searchable | moderate: the contract and validators |
 | AR-5 | Model discovery: propose rival structures and rank discriminating experiments when validation fails | inner | `compare_models` today compares the base model with generated sensor-bias variants; proposing and evaluating rival physical structures would extend it, and is the part only a model can add | large: numerics in both SDKs |
-| AR-6 | `research --forever` with dollar and test-hour caps, a stop file and resumable state | outer | needed to run unattended once MQ-2 allows live calls | moderate |
+| AR-6 | `research --forever` with dollar and test-hour caps, a stop file and resumable state (**implemented as `autophys autoloop`; dollar and wall-time caps, no test-hour cap yet**) | outer | needed to run unattended once MQ-2 allows live calls | moderate |
 ```
 
 None of these changes the workbook format. AR-5 and further live runs need
