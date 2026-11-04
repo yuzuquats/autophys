@@ -17,6 +17,7 @@ import { AutophysSidebar } from "../ui/sidebar.ts";
 import { autophysStyles } from "../ui/styles.ts";
 import { deck, tutorial } from "./content.ts";
 import { landingDocs } from "./docs.ts";
+import "./brand.ts";
 
 const USER = "james";
 /** How often the open app re-reads the devices waiting to pair (pairings have no stream). */
