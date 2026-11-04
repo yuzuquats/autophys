@@ -42,10 +42,10 @@ Deno.test("controller: edit, refused values, approve (posted as edited), withdra
   assertEquals([v.details.decision, v.details.actions!.map((a) => a.label)], [undefined, ["Withdraw approval"]]);
   const waiting = find(v.sidebar.nodes, "bench-a/data/sine_044@1")!;
   assertEquals([waiting.dim, waiting.trail], [true, { text: "awaiting" }]);
-  assertEquals(v.sidebar.nodes[0].trail, { text: "waiting", tone: "muted" }, "the badge is gone");
+  assertEquals(find(v.sidebar.nodes, "bench-a")!.trail, { text: "waiting", tone: "muted" }, "the badge is gone");
   ctl.handle({ kind: "action", name: "withdraw" });
   await settle();
-  assertEquals(ctl.view().sidebar.nodes[0].trail, { badge: "1" });
+  assertEquals(find(ctl.view().sidebar.nodes, "bench-a")!.trail, { badge: "Approve", tone: "warn" });
   ctl.handle({ kind: "action", name: "reject" });
   await settle();
   v = ctl.view();

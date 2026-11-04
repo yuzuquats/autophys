@@ -101,7 +101,10 @@ Deno.test("sidebar: tree nodes carry the given labels, glyphs, dim and trails, b
   assertEquals(made[1], ["trail", "<span>χ² 1.02</span>", "ok"]);
   assertEquals((made[2] as string[])[2], "run");
   assertStringIncludes((made[2] as string[])[1], "ap-spin");
-  assertEquals(trailMarkup({ badge: "1" }), `<span class="ap-badge">1</span>`);
+  assertStringIncludes(trailMarkup({ badge: "1" }), `class="ap-badge ap-badge-muted"`);
+  const pending = trailMarkup({ badge: "1", tone: "danger", label: "1 device waiting to approve" });
+  assertStringIncludes(pending, `aria-label="1 device waiting to approve"`);
+  assertStringIncludes(pending, `background:var(--ap-danger)`);
   assertEquals(listNodes([{ ...tree[1], trail: {} }], { lead: () => 0, trail: () => 0 })[0].$trail, null, "an empty trail draws nothing");
 });
 
@@ -114,8 +117,7 @@ const sidebar: SidebarModel = {
 
 Deno.test("sidebar: the switcher and section head", () => {
   const sw = switcherMarkup(sidebar);
-  assertStringIncludes(sw, `Cell &lt;pulse&gt; tests`);
-  assertStringIncludes(sw, `data-ap-switcher`);
+  assertEquals(sw, "", "projects are tree roots; the dropdown is removed");
   const head = sectionMarkup(sidebar);
   assertStringIncludes(head, `Investigations<span class="ap-count">2</span>`);
   assertStringIncludes(head, `data-ap="action" data-ap-name="new"`);

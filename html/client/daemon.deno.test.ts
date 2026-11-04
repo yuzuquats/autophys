@@ -132,8 +132,9 @@ Deno.test("daemon: the workbench renders the seeded investigation, with gaps sai
   const d = fakeDaemon(), store = new Store(daemon(d.opts)), ctl = new Controller(store, { user: "james", now: () => "10:46" });
   await store.start();
   const side = ctl.view().sidebar;
-  assertEquals(side.nodes[0].label, "bench A");
-  assertEquals(side.nodes[0].children!.map((n) => n.label), ["Measurements", "Fit #1", "Sensitivity", "Sine 0.4 Hz", "Validate"]);
+  assertEquals(side.nodes[0].label, "Bench");
+  assertStringIncludes(side.nodes[0].children![1].label, "Investigation 1");
+  assertEquals(side.nodes[0].children![1].children!.map((n) => n.label), ["Data", "Fit #1", "Sensitivity", "Sine 0.4 Hz", "Validate"]);
   ctl.handle({ kind: "select", id: "inv_1/fit-1/fit" });
   assertStringIncludes(JSON.stringify(ctl.view().main.body), "fit curve not recorded");
   ctl.handle({ kind: "select", id: "inv_1/fit-1/residuals" });
@@ -239,15 +240,15 @@ Deno.test("daemon: pairings are listed and approved from the configuration panel
   await store.start();
   await settle();
   assertEquals(store.snapshot()!.pairings, [{ code: "WXYZ-1234", device: "laptop", client: "autophys-py 0.1", expires: "2026-11-04T10:10:00Z" }]);
-  assertEquals(ctl.view().sidebar.pinned.trail, { badge: "1 pending" });
-  ctl.handle({ kind: "select", id: "config:p_bench" });
+  assertEquals(ctl.view().sidebar.pinned.trail, { badge: "1", tone: "danger", label: "1 device waiting to approve" });
+  ctl.handle({ kind: "select", id: ctl.view().sidebar.nodes[0].children![0].id });
   assertEquals(ctl.view().details.sections.flatMap((s) => s.blocks.flatMap((b) => b.kind === "pairing" ? b.decision.map((a) => a.name) : [])), ["pair-approve:WXYZ-1234", "pair-deny:WXYZ-1234"]);
   ctl.handle({ kind: "action", name: "pair-approve:WXYZ-1234" });
   await settle(); await settle(); await settle();
   const post = d.calls.find((c) => c.url.endsWith("/approve"))!;
   assertEquals([post.init.method, (post.init.headers as Record<string, string>)["content-type"], post.init.body], ["POST", "application/json", "{}"]);
   assertEquals(store.snapshot()!.pairings, []);
-  assertEquals(ctl.view().details.actions, undefined);
+  assertEquals(ctl.view().details.actions?.length ?? 0, 0);
 });
 
 Deno.test("firstOf: the daemon when it answers, the fixture when it does not", async () => {
@@ -412,8 +413,8 @@ Deno.test("daemon: a registered project remains visible before its first configu
   const d = fakeDaemon((c) => c.url === "/api/v1/workspace" ? Response.json({ cursor: 0, projects: [{ id: "new-project", name: "New simulator" }], config_versions: [], investigations: [], proposals: [], records: [] }) : undefined);
   const store = new Store(daemon(d.opts)), ctl = new Controller(store, { user: "reviewer", now: () => "10:46" });
   await store.start();
-  assertEquals(ctl.view().sidebar.switcher.kind, "single");
-  assertEquals(ctl.view().sidebar.switcher.options[0].label, "New simulator");
+  assertEquals(ctl.view().sidebar.switcher.kind, "none");
+  assertEquals(ctl.view().sidebar.nodes[0].label, "New simulator");
   assertEquals(ctl.view().main.body.kind, "onboarding");
   assertStringIncludes(JSON.stringify(ctl.view().details), "This project is registered");
 });

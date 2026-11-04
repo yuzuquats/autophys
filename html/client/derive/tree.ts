@@ -14,6 +14,7 @@ import type {
   TreeNode,
 } from "../../ui/view-model.ts";
 import { type View, VIEW_LABEL, viewsOf } from "./charts.ts";
+import { groundTruthNode } from "./truth.ts";
 import { int, pct } from "./fmt.ts";
 import {
   configFor,
@@ -179,6 +180,8 @@ export function investigationNode(
         tone: v.state === "passed" ? "ok" : "warn",
       },
   });
+  const truth = groundTruthNode(inv);
+  if (truth) children.push(truth);
   return {
     id: ids.inv(inv),
     label: investigationName(project, inv),

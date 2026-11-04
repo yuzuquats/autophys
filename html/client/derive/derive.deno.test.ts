@@ -126,21 +126,22 @@ Deno.test("derive: view hints decide the leaves under each fit", () => {
 
 Deno.test("derive: investigation trails: badge, spinner, ± and the rows under bench A", () => {
   const side = sidebarModel(s0);
-  assertEquals(side.switcher.options.map((o) => o.label), ["Bench oscillators", "Cell pulse tests", "Lab heaters"]);
-  assertEquals(side.pinned, { id: "config:bench-oscillators", label: "Configuration", icon: "config", selectable: true, children: null, trail: { text: "v2" } });
-  const a = side.nodes[0];
-  assertEquals(a.trail, { badge: "1" });
-  assertEquals(a.children!.map((c) => c.label), ["Measurements", "Fit #1", "Sensitivity", "Sine 0.44 Hz", "Validate"]);
+  assertEquals(side.nodes.map((o) => o.label), ["Bench oscillators", "Cell pulse tests", "Lab heaters"]);
+  assertEquals(side.pinned, { id: "devices", label: "Devices", icon: "device", selectable: true, children: null, trail: undefined });
+  assertEquals(side.nodes[0].children![0].trail, { text: "v2" });
+  const a = find(side.nodes, "bench-a")!;
+  assertEquals(a.trail, { badge: "Approve", tone: "warn" });
+  assertEquals(a.children!.map((c) => c.label), ["Data", "Fit #1", "Sensitivity", "Sine 0.44 Hz", "Validate"]);
   assertEquals(find(side.nodes, "bench-a/data/free_response@1")!.trail, { text: "1,000" });
   assertEquals(find(side.nodes, "bench-a/fit-1")!.trail!.tone, "ok");
   assertEquals(find(side.nodes, "bench-a/fit-1")!.children!.map((c) => c.id), ["bench-a/fit-1/fit", "bench-a/fit-1/residuals", "bench-a/fit-1/landscape", "bench-a/fit-1/envelope"]);
   assertEquals(find(side.nodes, "bench-a/sens")!.trail, { text: "rank 2/3", tone: "warn" });
-  assertEquals(find(side.nodes, "bench-a/prop/p1")!.trail, { text: "proposed" });
+  assertEquals(find(side.nodes, "bench-a/prop/p1")!.trail, { badge: "proposed", tone: "warn" });
   assertEquals(find(side.nodes, "bench-b/prop/p1")!.trail, { text: "data in", tone: "ok" }, "the replayed approval");
   const v = find(side.nodes, "bench-a/validate")!;
   assertEquals([v.dim, v.trail], [true, { text: "needs data" }]);
-  assert(side.nodes[1].trail!.text!.startsWith("±") && side.nodes[1].trail!.tone === "ok");
-  const cell = sidebarModel({ ...s0, projectId: "cell-pulse-tests" }).nodes[0];
+  assert(find(side.nodes, "bench-b")!.trail!.text!.startsWith("±") && find(side.nodes, "bench-b")!.trail!.tone === "ok");
+  const cell = find(sidebarModel({ ...s0, projectId: "cell-pulse-tests" }).nodes, "cell-a")!;
   assertEquals(cell.trail, { spinner: true, text: "12/40", tone: "run" });
   const running = find([cell], "cell-a/fit-2")!;
   assertEquals([running.trail!.spinner, running.trail!.tone, running.children], [true, "run", null]);
@@ -208,7 +209,7 @@ Deno.test("derive: main views: crumb, panels, credit; derive() before load shows
   assertEquals(mainModel(at("bench-oscillators", "bench-a/validate")).body, { kind: "missing", title: "Not recorded yet", description: "Needs a held-out measurement" });
   assertEquals(parseSel(ws.projects[0], "bench-a/fit-1/frequency"), null);
   assertEquals(derive(null, s0).main.body.kind, "loading");
-  assertEquals(derive({ ...snap, workspace: ws }, s0).sidebar.nodes.length, 2);
+  assertEquals(derive({ ...snap, workspace: ws }, s0).sidebar.nodes.length, 3);
 });
 
 Deno.test("derive: empty, loading, project-only and demo states have explicit kinds and next steps", () => {
@@ -223,8 +224,8 @@ Deno.test("derive: empty, loading, project-only and demo states have explicit ki
   assertStringIncludes(JSON.stringify(empty.details), "daemon URL");
   const project = { ...ws.projects[0], investigations: [] };
   const one = derive({ ...snap, workspace: { ...ws, projects: [project] } }, initialSelection({ ...ws, projects: [project] }));
-  assertEquals(one.sidebar.switcher.kind, "single");
-  assertEquals(one.sidebar.notice?.kind, "no-investigations");
+  assertEquals(one.sidebar.switcher.kind, "none");
+  assertEquals(one.sidebar.notice, undefined);
   assertEquals(one.main.body.kind, "configuration");
   assertEquals(one.main.source, "demo");
   const failed = connectionFailure(loading, "401 session_expired", false);
@@ -234,7 +235,7 @@ Deno.test("derive: empty, loading, project-only and demo states have explicit ki
 });
 
 Deno.test("derive: clipboard acknowledgement is a view-model label", () => {
-  const copied = derive({ ...snap, workspace: { ...ws, projects: [] } }, { ...s0, copyStatus: "copied" });
+  const copied = derive({ ...snap, workspace: { ...ws, projects: [{ ...ws.projects[0], configs: [], investigations: [] }] } }, { ...s0, copyStatus: "copied" });
   assert(copied.main.body.kind === "onboarding");
   assertEquals(copied.main.body.copyLabel, "Copied Python");
 });
