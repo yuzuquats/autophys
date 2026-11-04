@@ -74,7 +74,7 @@ def test_usage_reasoning_not_double_counted():
     assert normalize_usage(reply)["cost_usd"] is None
 
 
-def test_legacy_usage_is_skipped_and_cost_unknown(tmp_path):
+def test_persisted_legacy_usage_is_skipped_on_read(tmp_path):
     # Real persisted old-style step; no provider-key normalization on read.
     with WorkbookStore(tmp_path / "old.ap-workbook") as store:
         pid = store.ensure_project("legacy")
@@ -85,7 +85,7 @@ def test_legacy_usage_is_skipped_and_cost_unknown(tmp_path):
         store.append(inv, "step", {"usage": {"prompt_tokens": 999, "completion_tokens": 888}})
         store.append(inv, "step", {"usage": {"input_tokens": 10, "output_tokens": 5, "cost_usd": 0.1}})
         assert usage_total(r.payload for r in store.records(inv, "step")) == {
-            "calls": 1, "input_tokens": 10, "output_tokens": 5, "cost_usd": None}
+            "calls": 1, "input_tokens": 10, "output_tokens": 5, "cost_usd": 0.1}
     assert usage_total([{"usage": {"input_tokens": 1, "output_tokens": 2}}])["cost_usd"] is None
 
 
@@ -255,3 +255,14 @@ def test_recording_configured_reasoner_uses_effective_defaults(monkeypatch, tmp_
     RecordingReasoner(inner, path).complete([])
     assert json.loads(path.read_text())["key"] == hashlib.sha256(canonical(sent[0]).encode()).hexdigest()
     assert sent[0]["max_tokens"] == 2700 and sent[0]["reasoning_effort"] == "high"
+
+
+def test_legacy_usage_is_skipped_entirely_in_totals():
+    """workbook-format.md: readers skip raw dicts without input_tokens; only a
+    counted call with an unknown cost nulls the total (matches Rust 47a810b)."""
+    legacy = {"usage": {"prompt_tokens": 10, "completion_tokens": 5}}
+    priced = {"usage": {"input_tokens": 100, "output_tokens": 20, "cost_usd": 0.5}}
+    unpriced = {"usage": {"input_tokens": 1, "output_tokens": 2, "cost_usd": None}}
+    assert usage_total([legacy, priced]) == {"calls": 1, "input_tokens": 100, "output_tokens": 20, "cost_usd": 0.5}
+    assert usage_total([legacy]) == {"calls": 0, "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0}
+    assert usage_total([legacy, priced, unpriced])["cost_usd"] is None

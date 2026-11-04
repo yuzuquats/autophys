@@ -32,10 +32,10 @@ def usage_total(steps):
         usage = step.get("usage")
         if not isinstance(usage, dict):
             continue
+        if "input_tokens" not in usage:
+            continue  # legacy raw provider dict: skipped entirely, including its cost
         if usage.get("cost_usd") is None:
             total["cost_usd"] = None
-        if "input_tokens" not in usage:
-            continue
         total["calls"] += 1
         total["input_tokens"] += usage["input_tokens"]
         total["output_tokens"] += usage.get("output_tokens", 0)
