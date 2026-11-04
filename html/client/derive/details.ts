@@ -1,4 +1,5 @@
 /** Details: one panel per node type, with the proposal's decision row. */
+import { finished, pageProposal } from "./rounds.ts";
 import { simulatorLabel, specOf } from "../config.ts";
 import type { Fit, Investigation, Measurement, Project, ProjectConfig, Proposal, SensitivityResult } from "../domain.ts";
 import { awaiting, type Decision, delivered, edited, expectedMeasurement, stateOf } from "../proposal.ts";
@@ -43,7 +44,7 @@ function whereItStands(c: ProjectConfig, fit: Fit | null): Section {
   return { heading: "Where it stands", blocks: [{ kind: "facts", rows }] };
 }
 
-function paramsTable(c: ProjectConfig, fit: Fit): TableRow[] {
+export function paramsTable(c: ProjectConfig, fit: Fit): TableRow[] {
   const s = fit.sensitivity;
   const rows: TableRow[] = c.params.map((p) => {
     const value = { text: sig(fit.params[p.name], 3), end: true };
@@ -70,18 +71,22 @@ export function detailsModel(s: State): DetailsModel {
 function selectedDetails(s: State): DetailsModel {
   const project = projectOf(s);
   const sel = parseSel(project, s.selected[project.id] ?? "") ?? parseSel(project, defaultSelection(project))!;
+  if (sel.kind !== "config") {
+    const p = pageProposal(sel.inv), base = investigationDetails(project, sel.inv);
+    if (p) {
+      const decision = proposalDetails(s, project, sel.inv, p);
+      return { ...decision, sections: [...decision.sections, { ...base.sections[0], heading: "So far" }] };
+    }
+    const fit = latestFit(sel.inv), c = configFor(project, sel.inv);
+    return { ...base, sections: [
+      ...(fit ? [{ heading: finished(sel.inv) ? "Result" : "Parameters", blocks: [{ kind: "table" as const, rows: paramsTable(c, fit) }] }] : []),
+      { ...base.sections[0], heading: finished(sel.inv) ? "Budget used" : "Budget" },
+      { heading: "Data", blocks: [{ kind: "facts", rows: sel.inv.measurements.map(m => ({ label: m.id, value: m.split === "test" ? "held out" : "train" })) }] },
+    ], footnote: `${simulatorLabel(c)} · seed ${Number.isFinite(sel.inv.seed) ? sel.inv.seed : "not recorded"} · config v${c.version} · ${shortHash(c.hash)}` };
+  }
   switch (sel.kind) {
     case "config": return configDetails(s, project);
-    case "investigation": return investigationDetails(project, sel.inv);
-    case "measurement": return measurementDetails(project, sel.inv, sel.m);
-    case "awaiting": return awaitingDetails(project, sel.inv, sel.proposal, sel.id);
-    case "fit": return fitDetails(project, sel.inv, sel.fit);
-    case "sensitivity": return sensitivityDetails(project, sel.inv, sel.fit);
-    case "proposal": return proposalDetails(s, project, sel.inv, sel.proposal);
-    case "truth": return { icon: "validate", title: "Ground truth", status: { text: "Revealed after outcome" },
-      sections: [{ heading: "Source", blocks: [{ kind: "text", text: "Synthetic: truth was hidden from the agent until the outcome." },
-        { kind: "facts", rows: [{ label: "Source", value: sel.inv.reveal!.source }, { label: "Fit", value: `#${sel.inv.reveal!.fit_id}` }] }] }] };
-    case "validate": return validateDetails(project, sel.inv);
+
   }
 }
 
@@ -187,7 +192,7 @@ function fitDetails(project: Project, inv: Investigation, fit: Fit): DetailsMode
   };
 }
 
-function sensitivityDetails(project: Project, inv: Investigation, fit: Fit): DetailsModel {
+export function sensitivityDetails(project: Project, inv: Investigation, fit: Fit): DetailsModel {
   if (!fit.sensitivity && fit.identification) {
     const id = fit.identification, n = id.identified.length + id.nonIdentified.length;
     return {

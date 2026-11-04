@@ -1,3 +1,4 @@
+import { pageProposal } from "./derive/rounds.ts";
 /**
  * Intent → the next selection plus effects: post a decision, save a file, tell the shell a
  * pick happened. `reduce` is pure; `Controller` holds the selection, runs the effects against
@@ -121,7 +122,9 @@ export function reduce(
     sel.copyStatus && (intent.kind === "switch" || intent.kind === "select")
   ) sel = without(sel, ["copyStatus"]) as Selection;
   if (!project) return none(sel);
-  const at = parseSel(project, sel.selected[project.id] ?? "");
+  const selected = parseSel(project, sel.selected[project.id] ?? "");
+  const decision = selected && "inv" in selected ? pageProposal(selected.inv) : undefined;
+  const at = selected && "inv" in selected && decision ? { kind: "proposal" as const, inv: selected.inv, proposal: decision } : selected;
   switch (intent.kind) {
     case "select": {
       if (!parseSel(project, intent.id)) return none(sel);

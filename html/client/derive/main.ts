@@ -1,6 +1,9 @@
+import { awaiting, expectedMeasurement } from "../proposal.ts";
 /** The main column: crumb, meta, the viewer's panels and one credit line. */
 import type { Investigation, Project, ProjectConfig, Proposal } from "../domain.ts";
-import type { BarRow, MainModel, RangesChart, Section, TableRow, TraceRow } from "../../ui/view-model.ts";
+import { investigationAnchor, investigationRounds, sectionId, finished, pageProposal } from "./rounds.ts";
+import { paramsTable, sensitivityDetails, directionText } from "./details.ts";
+import type { InvestigationCard, InvestigationBody, ChartPanel, BarRow, MainModel, RangesChart, Section, TableRow, TraceRow } from "../../ui/view-model.ts";
 import {
   configPanels, edgePanels, envelopePanels, fitPanels, frequencyPanels, landscapeChart, measurementPanels, residualPanels, sensitivityPanels,
   validationPanels, VIEW_LABEL,
@@ -10,7 +13,7 @@ import { configurationSections, experimentSections, knownSection } from "./confi
 import { simulatorLabel, specOf } from "../config.ts";
 import { engineering, int, shortHash, sig, pct } from "./fmt.ts";
 import { displayedFields, outlookAt } from "./outlook.ts";
-import { configFor, investigationLabel, defaultSelection, experimentsUsed, ids, latestConfig, latestFit, parseSel, projectOf, proposalLabel, rankOf, type State, statusText } from "./shared.ts";
+import { configFor, investigationLabel, defaultSelection, experimentsUsed, ids, latestConfig, latestFit, parseSel, projectOf, proposalLabel, rankOf, type State, type Sel, statusText } from "./shared.ts";
 
 
 
@@ -84,13 +87,15 @@ export function experimentSummary(s: State, c: ProjectConfig, inv: Investigation
 }
 
 /** The experiment in prose, first on the page: what it does, why, and what it should settle. */
-function summarySection(s: State, c: ProjectConfig, inv: Investigation, p: Proposal): Section {
+export function summarySection(s: State, c: ProjectConfig, inv: Investigation, p: Proposal): Section {
   const status = p.status === "proposed" ? "awaiting approval" : p.status;
-  return { heading: "Summary", caption: `Proposed at Fit #${p.atFit} · ${status}`, blocks: [{ kind: "text", text: experimentSummary(s, c, inv, p), lead: true }] };
+  const fit = inv.fits.find(f => f.n === p.atFit), sensitivity = fit?.sensitivity;
+  const diagnosis = fit ? `Fit #${fit.n} has χ²/N ${sig(fit.chi2N, 3)}. ${sensitivity ? sensitivity.nonIdentified.length ? `The data pins ${sensitivity.combos.map(x => `${x.name} (${pct(x.logStd)})`).join(" and ") || sensitivity.identified.join(", ") || "no individual parameters"}; ${sensitivity.nonIdentified.join(", ")} remain on a ridge. ` : `All ${sensitivity.identified.length} parameters are identified. ` : ""}` : "";
+  return { heading: "Summary", caption: `Proposed at Fit #${p.atFit} · ${status}`, blocks: [{ kind: "text", text: diagnosis + experimentSummary(s, c, inv, p), lead: true }] };
 }
 
 /** The agent's steps that led to the proposal on a stepper: one line each, the proposing step with its evidence and expectation. */
-function reasoningSection(c: ProjectConfig, p: Proposal): Section {
+export function reasoningSection(c: ProjectConfig, p: Proposal): Section {
   const trace = p.trace ?? [];
   if (!trace.length) {
     return { heading: "Reasoning", caption: "The agent's steps that led here", blocks: [{ kind: "missing", title: "Not recorded yet", description: "The SDK recorded no agent steps for this proposal." }] };
@@ -105,7 +110,8 @@ function reasoningSection(c: ProjectConfig, p: Proposal): Section {
 }
 
 export function mainModel(s: State): MainModel {
-  const model = selectedMain(s);
+  const project = projectOf(s), sel = parseSel(project, s.selected[project.id] ?? "") ?? parseSel(project, defaultSelection(project))!;
+  const model = sel.kind === "config" ? selectedMain(s) : investigationMain(s, project, sel);
   if (model.body.kind !== "panels") return model;
   const gap = (description: string) => ({ kind: "missing" as const, title: "Not recorded yet", description });
   if (!model.body.panels.length) return { ...model, body: gap("No chart data has been recorded for this view. Upload the corresponding series from the SDK; new records appear live.") };
@@ -132,6 +138,7 @@ function selectedMain(s: State): MainModel {
       return { crumb: [{ label: investigationLabel(project, sel.inv) }], meta: fit ? `Fit #${fit.n} · χ²/N ${fit.chi2N.toFixed(2)}` : statusText(sel.inv).text, actions: [],
         body: panels.length ? { kind: "panels", panels } : { kind: "missing", title: "Not recorded yet", description: "No measurements or fits have arrived. Run the investigation from the SDK; records appear live here." }, credit: credit(c, sel.inv, fit?.measurements ?? sel.inv.measurements.map((m) => m.id), fit ? ` · fit #${fit.n}` : "") };
     }
+    case "data": return { crumb: [], meta: "", actions: [], body: { kind: "panels", panels: sel.inv.measurements.flatMap(m => measurementPanels(configFor(project, sel.inv), m)) }, credit: "" };
     case "measurement": {
       const c = configFor(project, sel.inv), m = sel.m;
       return { crumb: [invCrumb(sel.inv), { label: "Measurements" }, { label: m.id }], meta: `${int(m.output.length)} samples · ${sig(m.rate, 3)} Hz`, actions: [],
@@ -193,4 +200,69 @@ function selectedMain(s: State): MainModel {
         body: { kind: "panels", panels: validationPanels({ config: c, inv: sel.inv }, fit, v.measurement, v.predicted) }, credit: credit(c, sel.inv, [v.measurement], ` · fit #${fit.n}`) };
     }
   }
+}
+
+/** Compose the established section/panel builders; no fitting or simulator work happens here. */
+function investigationMain(s: State, project: Project, sel: Exclude<Sel, { kind: "config" }>): MainModel {
+  const inv = sel.inv, c = configFor(project, inv), fit = latestFit(inv), done = finished(inv);
+  const rounds = investigationRounds(inv), id = (name: string) => sectionId(inv, name);
+  const gap = (description: string) => ({ kind: "missing" as const, title: "Not recorded yet", description });
+  const card = (name: string, heading: string, panels: ChartPanel[] = [], blocks: Section["blocks"] = [], caption = ""): InvestigationCard =>
+    ({ id: id(name), heading, caption, panels, blocks: panels.length || blocks.length ? blocks : [gap(`No ${heading.toLowerCase()} data has been recorded.`)] });
+  const pending = pageProposal(inv), v = inv.validation;
+  let summary: InvestigationCard;
+  if (!done && pending) summary = { ...summarySection(s, c, inv, pending), id: id("summary") };
+  else {
+    const check = v.state === "needs-data" ? "No held-out check recorded." : `Held-out check ${v.state === "passed" || v.state === "summary" && v.passed ? "passed" : "failed"}: χ²/N ${sig(v.chi2N, 3)} (≤ ${sig(v.threshold, 3)}).`;
+    summary = card("summary", "Summary", [], [
+      { kind: "text", lead: true, text: `${done ? (inv.state === "validated" ? "Validated" : "Inconclusive") : "Investigation in progress"}. ${check}`, tone: done ? statusText(inv).tone : undefined },
+      ...(fit ? [{ kind: "table" as const, rows: paramsTable(c, fit) }] : []),
+    ], `${rounds.length} round${rounds.length === 1 ? "" : "s"} · ${experimentsUsed(inv)} / ${c.budgets.maxExperiments} experiments`);
+  }
+  const validation = selectedMain({ ...s, selected: { ...s.selected, [project.id]: ids.validate(inv) } }).body;
+  const outcome = [card("validate", "Validate", validation.kind === "panels" ? validation.panels : [],
+    validation.kind === "missing" ? [validation] : [], v.state === "needs-data" ? "Awaiting held-out check" : `χ²/N ${sig(v.chi2N, 3)} · threshold ${sig(v.threshold, 3)}`),
+    ...(inv.reveal ? [card("truth", "Ground truth", truthPanels(inv.reveal), [], "Revealed after outcome · estimate ÷ truth ±1σ")] : [])];
+  const anchor = investigationAnchor(sel);
+  const viewRounds: InvestigationBody["rounds"] = [...rounds].reverse().map((r, index) => {
+    const rows: InvestigationCard[][] = [];
+    const data = inv.measurements.filter(m => r.fits.some(f => f.measurements.includes(m.id)) || index === 0 && !inv.fits.some(f => f.measurements.includes(m.id)));
+    rows.push([card(`data-round-${r.n}`, "Data", [], data.length ? data.map(m => ({ kind: "text" as const, text: `${m.id} · ${m.split === "test" ? "held out" : "train"} · ${int(m.output.length)} samples`, link: { label: "View measurement", id: ids.measurement(inv, m.id) } })) : [{ kind: "text", text: "No measurements recorded for this round.", tone: "muted" }])]);
+    // A measurement has one canonical card (the newest round that uses it), so old addresses are unambiguous.
+    for (const m of data.filter(m => !rounds.slice(r.n).some(next => next.fits.some(f => f.measurements.includes(m.id))))) rows.push([{ ...card(`data-${m.id}`, m.id, measurementPanels(c, m), [], m.split === "test" ? "Held out" : "Training measurement"), collapsed: true }]);
+    for (const f of r.fits) {
+      const ctx = { config: c, inv }, sens = f.sensitivity, residuals = residualPanels(ctx, f);
+      const fitCard = card(`fit-${f.n}`, `Fit #${f.n}`, fitPanels(ctx, f), [], `${f.state} · χ²/N ${sig(f.chi2N, 3)} · ${int(f.evals)} evals`);
+      // Fit panels already include the normalized residual strip. Retain the old residual address as an alias.
+      fitCard.aliases = [id(`fit-${f.n}-residuals`)];
+      const quality = Object.entries(f.lag1).map(([measurement, lag]) => `${measurement}: ${Math.abs(lag) > .3 ? "structured" : "white"} residuals (ρ₁ ${sig(lag, 2)})`).join(" · ");
+      if (quality) fitCard.blocks.push({ kind: "text", text: quality });
+      if (!residuals.length) fitCard.blocks.push(gap("Residuals need the fit curve, which is not recorded for this fit."));
+      rows.push([fitCard, card(`parameters-${f.n}`, "Parameters", [], [{ kind: "table", rows: paramsTable(c, f) }], `At Fit #${f.n}`)]);
+      const identification = sens ? sensitivityPanels(f) : [];
+      const evidence = sens?.vectors.length ? [{ kind: "text" as const, text: `Weakest direction: ${directionText(sens, sens.vectors.length - 1)}` }] : f.identification ? sensitivityDetails(project, inv, f).sections.flatMap(section => section.blocks) : [gap("Singular values and directions are not recorded.")];
+      const landscape = landscapeChart(c, f);
+      rows.push([card(`identifiability-${f.n}`, "Identifiability", identification, evidence, sens ? `Rank ${rankOf(sens)} of ${sens.names.length} · at Fit #${f.n}` : `At Fit #${f.n}`), card(`fit-${f.n}-landscape`, "Landscape", landscape ? [{ charts: [landscape] }] : [], [], landscape?.label ?? `At Fit #${f.n}`)]);
+      // Retain experiment-specific views on this same page and their existing addresses.
+      for (const [view, label, panels] of [["envelope", "Envelope", envelopePanels(ctx, f)], ["frequency", "Frequency", frequencyPanels(ctx, f)], ["zoom:edges", "Edges", edgePanels(ctx, f)]] as const) if (panels.length) rows.push([card(`fit-${f.n}-${view}`, label, panels)]);
+    }
+    for (const p of r.proposals) {
+      const candidates = candidatesSection(s, c, inv, p), reasoning = reasoningSection(c, p);
+      rows.push([card(`proposal-${p.id}`, `Proposal · ${proposalLabel(p)}`, [], [
+        ...candidates.blocks, { kind: "text", text: `${reasoning.heading} · ${reasoning.caption}` }, ...reasoning.blocks,
+      ], `${p.status}${p.decidedBy ? ` by ${p.decidedBy}` : ""} · ${candidates.caption}`)]);
+
+    }
+    if (index === 0) for (const p of awaiting(inv)) {
+      const mid = expectedMeasurement(inv, p);
+      rows.push([card(`data-${mid}`, "Awaiting data", [], [{ kind: "text", text: `Waiting for ${mid} from ${p.dataFrom}. Attach the measurement through the SDK to continue.` }])]);
+    }
+    const last = r.fits.at(-1), proposal = r.proposals.at(-1);
+    return { id: id(`round-${r.n}`), heading: `Round ${r.n}`, caption: [last && `Fit #${last.n} · χ²/N ${sig(last.chi2N, 3)}`, proposal && `${proposalLabel(proposal)} ${proposal.status}`].filter(Boolean).join(" → "), open: index === 0, rows };
+  });
+  const jumps = [{ label: "Summary", anchor: id("summary") }, ...(done ? [{ label: "Outcome", anchor: id("outcome") }] : []),
+    ...viewRounds.flatMap(r => [{ label: r.heading, anchor: r.id }, ...(!done ? r.rows.flat().filter(c => /^Fit #|^Identifiability$|^Proposal/.test(c.heading)).map(c => ({ label: c.heading.startsWith("Proposal") ? "Proposal" : c.heading, anchor: c.id })) : [])])];
+  return { crumb: [{ label: project.name }, { label: investigationLabel(project, inv) }], meta: statusText(inv).text, actions: [],
+    body: { kind: "investigation", pageId: inv.id, selectionId: s.selected[project.id] ?? inv.id, anchor, jumps, summary, outcome: done ? outcome : outcome.filter(c => c.id === anchor), rounds: viewRounds },
+    credit: credit(c, inv, inv.measurements.map(m => m.id)), creditLabel: `${simulatorLabel(c)} · config v${c.version} · ${shortHash(c.hash)}` };
 }

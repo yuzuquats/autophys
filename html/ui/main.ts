@@ -10,7 +10,7 @@ import { buttonMarkup } from "./actions.ts";
 import { newProjectFocusTarget, newProjectMarkup } from "./new-project.ts";
 import { blockMarkup } from "./blocks.ts";
 import { breadcrumbText } from "./breadcrumb.ts";
-import type { MainModel, Section } from "./view-model.ts";
+import type { InvestigationCard, MainModel, Section } from "./view-model.ts";
 
 /** Class names the host page styles these elements with (its toolbar and button recipes). */
 export type MainClasses = { toolbar?: string; button?: string; primary?: string };
@@ -45,6 +45,17 @@ export function mainMarkup(model: MainModel, width: number, classes: MainClasses
     body = `<section class="ap-viewer ap-signin-wrap"><form class="ap-signin" method="post" action="/api/auth/login"><std-round floating bg="#fff" radius="14" shadow="0 10px 30px rgba(0,0,0,0.10)"></std-round><h2>${esc(model.body.title)}</h2><p>${esc(model.body.description)}</p><input type="hidden" name="next" value="/app"><label>Email<input name="email" type="email" autocomplete="username" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><button type="submit">Sign in</button>${model.body.demo ? `<button type="submit" class="ap-signin-demo" formaction="/api/auth/demo" formnovalidate>Continue as demo</button>` : ""}</form></section>`;
   } else if (model.body.kind === "missing" || model.body.kind === "unavailable") {
     body = `<section class="ap-viewer ap-state">${emptyMarkup(model.body.title, model.body.description)}</section>`;
+  } else if (model.body.kind === "investigation") {
+    const b = model.body;
+    const renderCard = (c: InvestigationCard, columns = 1) => {
+      const chartWidth = Math.max(160, (width - 64 - (columns - 1) * 10) / columns - 24);
+      const panels = (c.panels ?? []).map((p, i) => `<div class="ap-investigation-panel"${p.id && i === (c.panels ?? []).findIndex(x => x.id === p.id) ? ` id="${esc(p.id)}"` : ""}>${p.title ? `<h4 class="ap-panel-title">${esc(p.title)}</h4>` : ""}${p.charts.map((chart, j) => chartMarkup(chart, chartWidth, `${c.id}-${i}-${j}`)).join("")}${(p.blocks ?? []).map(blockMarkup).join("")}</div>`).join("");
+      const content = (c.aliases ?? []).map(id => `<span id="${esc(id)}" class="ap-anchor-alias"></span>`).join("") + cardMarkup("ap-dcard", c.heading, c.caption ?? "", panels + c.blocks.map(blockMarkup).join(""));
+      return c.collapsed ? `<details id="${esc(c.id)}" class="ap-measurement"><summary>Data · ${esc(c.heading)} <span>${esc(c.caption ?? "")}</span></summary>${content}</details>` : `<div id="${esc(c.id)}" class="ap-section-target">${content}</div>`;
+    };
+    const row = (cards: InvestigationCard[]) => `<div class="ap-investigation-row" data-ap-grid="300">${cards.map(c => renderCard(c, width >= 670 ? cards.length : 1)).join("")}</div>`;
+    const nav = `<nav class="ap-jumps" aria-label="Investigation sections">${b.jumps.map(j => `<a href="#${esc(j.anchor)}" data-ap-jump="${esc(j.anchor)}">${esc(j.label)}</a>`).join("")}</nav>`;
+    body = `${nav}<div class="ap-viewer ap-decision-view ap-investigation" data-ap-page="${esc(b.pageId)}">${renderCard(b.summary)}${b.outcome.length ? `<div id="${esc(b.summary.id.replace(/summary$/, "outcome"))}">${row(b.outcome)}</div>` : ""}${b.rounds.map(r => `<details class="ap-round" id="${esc(r.id)}"${r.open ? " open" : ""}><summary><b>${esc(r.heading)}</b><span>${esc(r.caption)}</span></summary><div class="ap-round-body">${r.rows.map(row).join("")}</div></details>`).join("")}</div>`;
   } else if (model.body.kind === "decision") {
     body = `<div class="ap-viewer ap-decision-view">${model.body.cards.map((s) => cardMarkup("ap-dcard", s.heading, s.caption ?? "", s.blocks.map(blockMarkup).join(""))).join("")}</div>`;
   } else if (model.body.kind === "configuration") {
@@ -76,10 +87,45 @@ export class AutophysMain {
   private model: MainModel | null = null;
   private width = 0;
   private setupStep = -1;
+  private pageId = "";
+  private selectionId = "";
+  private openRounds = new Map<string, boolean>();
+
+  private jump(anchor: string): void {
+    const target = this.host.querySelector<HTMLElement>(`[id="${CSS.escape(anchor)}"]`);
+    if (!target) return;
+    let parent: Element | null = target;
+    while (parent && parent !== this.host) {
+      if (parent instanceof HTMLDetailsElement) parent.open = true;
+      parent = parent.parentElement;
+    }
+    const viewer = this.host.querySelector<HTMLElement>(".ap-investigation");
+    if (viewer) viewer.scrollTop += target.getBoundingClientRect().top - viewer.getBoundingClientRect().top - 8;
+    this.highlight();
+  }
+
+  private highlight(): void {
+    const viewer = this.host.querySelector<HTMLElement>(".ap-investigation");
+    if (!viewer) return;
+    const links = [...this.host.querySelectorAll<HTMLAnchorElement>("[data-ap-jump]")];
+    let current = links[0];
+    const top = viewer.getBoundingClientRect().top + 32;
+    for (const link of links) {
+      const target = this.host.querySelector<HTMLElement>(`[id="${CSS.escape(link.dataset.apJump!)}"]`);
+      if (target?.getClientRects().length && target.getBoundingClientRect().top <= top) current = link;
+    }
+    for (const link of links) {
+      if (link === current) link.setAttribute("aria-current", "location");
+      else link.removeAttribute("aria-current");
+    }
+  }
   private observer: ResizeObserver | null = null;
 
   constructor(private host: HTMLElement, onIntent: IntentHandler, private classes: MainClasses = {}, private hydrate: (host: HTMLElement) => void = () => {}) {
+    host.addEventListener("scroll", () => this.highlight(), { capture: true, signal: this.abort.signal });
     host.addEventListener("click", (e) => {
+      const link = (e.target as Element).closest?.<HTMLElement>("[data-ap-jump]");
+      if (link?.dataset?.apJump && host.contains(link)) { e.preventDefault(); this.jump(link.dataset.apJump!); return; }
       const el = (e.target as Element).closest?.<HTMLElement>(`[${ATTR.role}]`);
       const intent = el && host.contains(el) ? intentOf(el as HTMLButtonElement, "click") : null;
       if (intent) onIntent(intent);
@@ -103,6 +149,22 @@ export class AutophysMain {
    * contents and attributes change, so a shell that FLIPs the host's children can move them.
    */
   render(model: MainModel): void {
+    const page = model.body.kind === "investigation" ? model.body : null;
+    const samePage = page?.pageId === this.pageId;
+    const selectionChanged = !samePage || page?.selectionId !== this.selectionId;
+    const scrollTop = samePage ? this.host.querySelector<HTMLElement>(".ap-viewer")?.scrollTop ?? 0 : 0;
+    if (samePage) for (const round of this.host.querySelectorAll<HTMLDetailsElement>("details.ap-round")) this.openRounds.set(round.id, round.open);
+    else this.openRounds.clear();
+    const restorePage = () => {
+      this.pageId = page?.pageId ?? "";
+      this.selectionId = page?.selectionId ?? "";
+      if (!page) return;
+      for (const round of this.host.querySelectorAll<HTMLDetailsElement>("details.ap-round")) if (this.openRounds.has(round.id)) round.open = this.openRounds.get(round.id)!;
+      const viewer = this.host.querySelector<HTMLElement>(".ap-viewer");
+      if (viewer) viewer.scrollTop = scrollTop;
+      if (selectionChanged) this.jump(page.anchor);
+      this.highlight();
+    };
     const focused = document.activeElement;
     const input = focused instanceof HTMLInputElement && this.host.contains(focused) ? focused : null;
     const setupControl = focused instanceof HTMLElement && focused.closest(".ap-project-setup") && this.host.contains(focused) ? focused : null;
@@ -139,6 +201,7 @@ export class AutophysMain {
       this.host.replaceChildren(...fresh);
       this.hydrate(this.host);
       restoreFocus();
+      restorePage();
       return;
     }
     kept.forEach((el, i) => {
@@ -148,6 +211,7 @@ export class AutophysMain {
     });
     this.hydrate(this.host);
     restoreFocus();
+    restorePage();
   }
 
   destroy(): void {

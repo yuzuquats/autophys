@@ -94,14 +94,23 @@ export type Missing = { kind: "missing"; title: string; description: string };
 export type Chart = XYChart | HeatmapChart | BarsChart | RangesChart | Missing;
 
 /** Charts stacked in one block, sharing its width (an input strip over its output). */
-export type ChartPanel = { title?: string; charts: Chart[]; blocks?: Block[] };
+export type ChartPanel = { id?: string; title?: string; charts: Chart[]; blocks?: Block[] };
 
 // ------------------------------------------------------------------------------------ main
 
 /** A crumb segment; with an `id` it is a link that selects that node. */
 export type Crumb = { label: string; id?: string };
 
+export type InvestigationCard = Section & { id: string; aliases?: string[]; collapsed?: boolean; panels?: ChartPanel[]; tone?: Tone };
+export type InvestigationBody = {
+  kind: "investigation"; pageId: string; selectionId: string; anchor: string;
+  jumps: { label: string; anchor: string }[];
+  summary: InvestigationCard; outcome: InvestigationCard[];
+  rounds: { id: string; heading: string; caption: string; open: boolean; rows: InvestigationCard[][] }[];
+};
+
 export type MainBody =
+  | InvestigationBody
   | ProjectSetupBody
   | { kind: "empty"; text: string }
   | Missing

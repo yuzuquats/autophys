@@ -38,6 +38,7 @@ export const draftKey = (inv: Investigation, p: Proposal, field: string) => `${i
 export type Sel =
   | { kind: "config"; project: Project }
   | { kind: "investigation"; inv: Investigation }
+  | { kind: "data"; inv: Investigation }
   | { kind: "measurement"; inv: Investigation; m: Measurement }
   | { kind: "awaiting"; inv: Investigation; proposal: Proposal; id: string }
   | { kind: "fit"; inv: Investigation; fit: Fit; view: View | null }
@@ -83,6 +84,7 @@ export function parseSel(project: Project, id: string): Sel | null {
     const proposal = awaiting(inv).find((p) => expectedMeasurement(inv, p) === mid);
     return proposal ? { kind: "awaiting", inv, proposal, id: mid } : null;
   }
+  if (part === "data") return { kind: "data", inv };
   const fitMatch = /^fit-(\d+)$/.exec(part);
   if (fitMatch) {
     const fit = inv.fits.find((f) => f.n === Number(fitMatch[1]));

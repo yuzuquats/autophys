@@ -166,13 +166,13 @@ await withHeadless(async (browser) => {
   await snap(page, "sidebar-select-moving");
   await settle(page);
   check(await text(page, ".ap-crumb b") === rows[1][1], "main shows the selection");
-  check(await text(page, ".ck-details-slot h3") === rows[1][1], "details show the selection");
+  check(await text(page, ".ck-details-slot h3") === "Sine force", "investigation details show its decision");
   check(await text(page, ".ck-crumb-current") === rows[1][1], "breadcrumb follows");
   check(await page.$eval(`pierce/[role=treeitem][data-id="${rows[1][0]}"]`, (b) => b.getAttribute("aria-selected")) === "true", "aria-selected moves");
   await snap(page, "sidebar-row-2");
   await page.click(`pierce/[role=treeitem][data-id="${rows[2][0]}"] > .line`);
   await settle(page);
-  check(await text(page, ".ap-crumb b") === rows[2][1], "third row");
+  check(await text(page, ".ap-crumb b") === rows[1][1] && await has(page, "#ap-bench-a-fit-1"), "third row opens the fit section on its investigation");
   check((await text(page, ".ck-status")).startsWith("Fixture data"), "status line names the fixture source");
   check(!(await has(page, ".ap-source")), "no demo-data strip in the main pane");
 
@@ -229,7 +229,7 @@ await withHeadless(async (browser) => {
   await page.waitForSelector(".ck-panels[data-ready]");
   await settle(page);
   check(await stage(page) === "tour" && path(page) === "/app", "Back reopens the app");
-  check(await text(page, ".ap-crumb b") === rows[2][1], "remount keeps the app's selection");
+  check(await text(page, ".ap-crumb b") === rows[1][1], "remount keeps the investigation page");
   await page.keyboard.press("ArrowDown");
   await settle(page);
   check(await stage(page) === "app", "ArrowDown lowers the tutorial");

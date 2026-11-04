@@ -62,9 +62,7 @@ Deno.test("derive: Ground truth is conditional and formats payload ratios, toler
   const state = { ...s0, ws: { ...ws, projects: [project] }, projectId: project.id, selected: { [project.id]: inv.id + "/truth" } };
   assertEquals(parseSel(project, inv.id + "/truth")?.kind, "truth");
   const model = mainModel(state);
-  assert(model.body.kind === "panels");
-  assertStringIncludes(model.body.panels[0].title!, "2 of 3 within ±20%");
-  assertStringIncludes(model.credit, "truth was hidden from the agent");
+  assertStringIncludes(cardOf(model, "Ground truth").panels![0].title!, "2 of 3 within ±20%");
   const chart = truthPanels(inv.reveal)[0].charts[0];
   assert(chart.kind === "xy");
   assertEquals(chart.layers[0], { kind: "vband", from: .8, to: 1.2, tone: "muted" });
@@ -86,9 +84,8 @@ Deno.test("derive: held-out curves populate Validation without re-scoring its su
   inv.validation = { state: "summary", passed: true, chi2N: 1.23, threshold: 2, measurements: [test.id] };
   const state = { ...s0, ws: { ...ws, projects: [project] }, projectId: project.id, selected: { [project.id]: inv.id + "/validate" } };
   const model = mainModel(state);
-  assert(model.body.kind === "panels");
-  assertStringIncludes(model.meta, "1.23");
-  const chart = model.body.panels[0].charts.at(-1)!;
+  assertStringIncludes(cardOf(model, "Validate").caption!, "1.23");
+  const chart = cardOf(model, "Validate").panels![0].charts.at(-1)!;
   assert(chart.kind === "xy");
   const line = chart.layers.find((l) => l.kind === "line")!;
   assert(line.kind === "line");
@@ -101,7 +98,9 @@ import { fixtures, replay } from "../fixtures/source.ts";
 import type { TreeNode } from "../../ui/view-model.ts";
 import { detailsModel } from "./details.ts";
 import { derive, connectionFailure, interpolate, outlookAt, parseSel, viewsOf } from "./index.ts";
-import { mainModel, rankingBars } from "./main.ts";
+import { mainModel, rankingBars, candidatesSection, reasoningSection } from "./main.ts";
+import { paramsTable } from "./details.ts";
+import type { InvestigationCard, MainModel } from "../../ui/view-model.ts";
 import { draftKey } from "./shared.ts";
 import { sidebarModel } from "./tree.ts";
 
@@ -111,6 +110,12 @@ const s0 = { ...initialSelection(ws), ws };
 const at = (projectId: string, id: string) => ({ ...s0, projectId, selected: { ...s0.selected, [projectId]: id } });
 const find = (nodes: TreeNode[], id: string): TreeNode | undefined => {
   for (const n of nodes) { if (n.id === id) return n; const hit = n.children && find(n.children, id); if (hit) return hit; }
+};
+
+const cardOf = (model: MainModel, heading: string): InvestigationCard => {
+  assert(model.body.kind === "investigation");
+  const card = [...model.body.outcome, ...model.body.rounds.flatMap(r => r.rows.flat())].find(c => c.heading === heading);
+  assert(card, `missing card ${heading}`); return card;
 };
 
 Deno.test("derive: view hints decide the leaves under each fit", () => {
@@ -148,21 +153,20 @@ Deno.test("derive: investigation trails: badge, spinner, ± and the rows under b
 });
 
 Deno.test("derive: a fit on a ridge greys its raw parameters and tags the combinations it pins", () => {
-  const table = detailsModel(at("bench-oscillators", "bench-a/fit-1")).sections[0].blocks[0];
+  const table = cardOf(mainModel(at("bench-oscillators", "bench-a/fit-1")), "Parameters").blocks[0];
   assert(table.kind === "table");
   assertEquals(table.rows.map((r) => [r.cells[0].text, !!r.dim, r.cells[2].tag?.text.startsWith("±") ? "±" : r.cells[2].tag?.text]), [
     ["m", true, "ridge"], ["c", true, "ridge"], ["k", true, "ridge"], ["k/m", false, "±"], ["c/m", false, "±"],
   ]);
-  const quality = detailsModel(at("lab-heaters", "heater-1/fit-1")).sections[1].blocks[0];
-  assert(quality.kind === "facts");
-  assertEquals(quality.rows.find((r) => r.label === "Residuals"), { label: "Residuals", value: "structured", tone: "warn" });
+  const fit = cardOf(mainModel(at("lab-heaters", "heater-1/fit-1")), "Fit #1");
+  assertStringIncludes(JSON.stringify(fit.blocks), "structured residuals");
 });
 
 Deno.test("derive: the proposal details carry previews, settings, the decision row and provenance; the ranking lives in main", () => {
   const d = detailsModel(at("bench-oscillators", "bench-a/prop/p1"));
   assertEquals([d.title, d.cardName, d.status.text], ["Sine force", true, "Awaiting approval"]);
   assertEquals(d.decision!.map((a) => a.name), ["approve", "reject"]);
-  assertEquals(d.sections.map((x) => x.heading), ["Preview", "Experiment", "Expected"]);
+  assertEquals(d.sections.map((x) => x.heading), ["Preview", "Experiment", "Expected", "So far"]);
   assertEquals(d.sections[0].blocks.map((b) => b.kind === "wave" ? b.caption : b.kind), ["Input · Force (N)", "Predicted · Displacement (m) at Fit #1"]);
   const fields = d.sections[1].blocks[0];
   assert(fields.kind === "fields");
@@ -176,8 +180,13 @@ Deno.test("derive: the proposal details carry previews, settings, the decision r
 
 Deno.test("derive: the proposal main view is the candidates table and the agent's reasoning", () => {
   const m = mainModel(at("bench-oscillators", "bench-a/prop/p1"));
-  assert(m.body.kind === "decision");
-  const [summaryCard, candidates, reasoning] = m.body.cards;
+  assert(m.body.kind === "investigation");
+  const summaryCard = m.body.summary, proposal = cardOf(m, "Proposal · Sine 0.44 Hz");
+  const inv = ws.projects[0].investigations[0], c = ws.projects[0].configs.find(c => c.version === inv.configVersion)!;
+  const state = at("bench-oscillators", "bench-a/prop/p1");
+  const candidates = candidatesSection(state, c, inv, inv.proposals[0]), reasoning = reasoningSection(c, inv.proposals[0]);
+  assertEquals(proposal.blocks[0], candidates.blocks[0]);
+  assertEquals(proposal.blocks.at(-1), reasoning.blocks[0]);
   assertEquals([summaryCard.heading, candidates.heading, reasoning.heading], ["Summary", "Candidates", "Reasoning"]);
   const table = candidates.blocks[0];
   assert(table.kind === "table");
@@ -195,7 +204,7 @@ Deno.test("derive: the proposal main view is the candidates table and the agent'
   assertEquals(trace.steps.map((x) => [x.marker, x.title]), [["1", "Inspect data"], ["2", "Optimize parameters"], ["3", "Analyze sensitivity"], ["4", "Rank experiments"], ["5", "Propose experiment"]]);
   const last = trace.steps.at(-1)!;
   assertEquals([last.current, last.text, last.evidence?.length, Boolean(last.expected)], [true, undefined, 3, true], "the hypothesis is in the summary, not repeated on the step");
-  assertEquals(m.credit, "", "provenance moved to the Details footnote");
+  assertStringIncludes(m.credit, "seed 42");
 });
 
 Deno.test("derive: interpolation returns a grid node's own value exactly, and is multilinear between nodes", () => {
@@ -224,17 +233,16 @@ Deno.test("derive: a smaller edited amplitude scores lower and widens the expect
 
 Deno.test("derive: main views: crumb, panels, credit; derive() before load shows loading", () => {
   const land = mainModel(s0);
-  assertEquals(land.crumb, [{ label: "bench A", id: "bench-a" }, { label: "Fit #1", id: "bench-a/fit-1" }, { label: "Landscape" }]);
-  assert(land.body.kind === "panels" && land.body.panels[0].charts[0].kind === "heatmap");
+  assertEquals(land.crumb, [{ label: "Bench oscillators" }, { label: "bench A" }]);
+  assertEquals(cardOf(land, "Landscape").panels![0].charts[0].kind, "heatmap");
   assertStringIncludes(land.credit, "oscillator v0.1 · free_response@1 · seed 42");
-  const fit = mainModel(at("bench-oscillators", "bench-b/fit-2/fit"));
-  assert(fit.body.kind === "panels");
-  assertEquals(fit.body.panels.map((p) => [p.title, p.charts.map((c) => c.kind)]), [["free_response@1", ["xy", "xy", "xy"]], ["sine_044@1", ["xy", "xy", "xy"]]]);
-  const edges = mainModel(at("cell-pulse-tests", "cell-a/fit-1/zoom:edges"));
-  assert(edges.body.kind === "panels" && edges.body.columns === 2 && edges.body.panels.length === 4);
-  const freq = mainModel(at("bench-oscillators", "bench-b/fit-2/frequency"));
-  assert(freq.body.kind === "panels" && freq.body.panels[0].charts.length === 2);
-  assertEquals(mainModel(at("bench-oscillators", "bench-a/validate")).body, { kind: "missing", title: "Not recorded yet", description: "Needs a held-out measurement" });
+  const fit = cardOf(mainModel(at("bench-oscillators", "bench-b/fit-2/fit")), "Fit #2");
+  assertEquals(fit.panels!.map(p => [p.title, p.charts.map(c => c.kind)]), [["free_response@1", ["xy", "xy", "xy"]], ["sine_044@1", ["xy", "xy", "xy"]]]);
+  const edges = cardOf(mainModel(at("cell-pulse-tests", "cell-a/fit-1/zoom:edges")), "Edges");
+  assertEquals(edges.panels!.length, 4);
+  const freq = cardOf(mainModel(at("bench-oscillators", "bench-b/fit-2/frequency")), "Frequency");
+  assertEquals(freq.panels![0].charts.length, 2);
+  assertStringIncludes(JSON.stringify(cardOf(mainModel(at("bench-oscillators", "bench-a/validate")), "Validate")), "Needs a held-out measurement");
   assertEquals(parseSel(ws.projects[0], "bench-a/fit-1/frequency"), null);
   assertEquals(derive(null, s0).main.body.kind, "loading");
   assertEquals(derive({ ...snap, workspace: ws }, s0).sidebar.nodes.length, 3);
