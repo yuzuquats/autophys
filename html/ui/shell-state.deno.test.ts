@@ -2,17 +2,13 @@ import { assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
 import { mainMarkup } from "./main.ts";
 import { detailsMarkup } from "./details.ts";
 import { breadcrumbText } from "./breadcrumb.ts";
-import { derive, connectionFailure } from "../client/derive/index.ts";
-import { initialSelection } from "../client/controller.ts";
-import { fixtures } from "../client/fixtures/source.ts";
+import type { MainModel } from "./view-model.ts";
 import { autophysStyles } from "./styles.ts";
 
-Deno.test("shell: reconnect notice appears once above retained content with one live region", async () => {
-  const snap = await fixtures([]).load(), selection = initialSelection(snap.workspace);
-  for (const loaded of [false, true]) {
-    const view = connectionFailure(derive(loaded ? snap : null, selection), "Lost connection <offline>", loaded);
-    const main = mainMarkup(view.main, 640);
-    const html = main + detailsMarkup(view.details);
+Deno.test("shell: reconnect notice appears once above retained content with one live region", () => {
+  for (const body of [{ kind: "unavailable", title: "Workspace", description: "No records loaded" }, { kind: "empty", text: "Last loaded records" }] satisfies MainModel["body"][]) {
+    const main = mainMarkup({ crumb: [], meta: "", actions: [], credit: "", body, connectionError: "Lost connection <offline>" }, 640);
+    const html = main + detailsMarkup({ icon: "workspace", title: "Workspace", status: { text: "Last loaded records" }, sections: [] });
     assertEquals((html.match(/Connection unavailable/g) ?? []).length, 1);
     assertEquals((html.match(/Lost connection/g) ?? []).length, 1);
     assertEquals((main.match(/role="status"/g) ?? []).length, 1);

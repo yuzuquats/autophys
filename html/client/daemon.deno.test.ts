@@ -387,7 +387,7 @@ Deno.test("daemon: a 401 POST asks for reauth and preserves the recorded proposa
   ctl.handle({ kind: "action", name: "approve" });
   await settle(); await settle();
   assertEquals(reauth, 1);
-  assertStringIncludes(JSON.stringify(ctl.view().details), "Browser session expired");
+  assertStringIncludes(ctl.view().main.connectionError!, "Browser session expired");
   assertEquals(store.snapshot()!.workspace.projects[0].investigations[0].proposals[0].status, "proposed");
   store.close();
 });

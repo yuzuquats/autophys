@@ -135,7 +135,7 @@ Deno.test("main: crumb links, meta, buttons, panels in columns and one credit li
   const html = mainMarkup(main, 824, { toolbar: "viewer-toolbar", button: "workbench-button" });
   assertStringIncludes(html, `class="viewer-toolbar ap-toolbar"`);
   assertStringIncludes(html, `data-ap="select" data-ap-id="a/fit-1">Fit #1</button>`);
-  assertStringIncludes(html, `<b>Landscape</b>`);
+  assertStringIncludes(html, `<b title="Landscape" aria-current="page">Landscape</b>`);
   assertStringIncludes(html, `class="workbench-button ap-btn ap-btn-ghost" data-ap="action" data-ap-name="export"`);
   assertEquals(count(html, `<section class="ap-panel">`), 2);
   assertEquals(count(html, `<svg`), 3);
