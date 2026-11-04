@@ -66,9 +66,8 @@ export function mainMarkup(model: MainModel, width: number, classes: MainClasses
         `<div class="ap-chart">${chartMarkup(c, colWidth, `${i}-${j}`)}</div>`).join("")}${(p.blocks ?? []).map(blockMarkup).join("")}</section>`).join("");
     body = `<div class="ap-viewer" style="--ap-cols:${cols}">${panels}</div>`;
   }
-  const source = model.source === "demo" ? `<div class="ap-source"><span>Demo data</span><a href="?source=daemon">Back to live data</a></div>` : "";
   const error = model.connectionError ? `<aside class="ap-connection" role="alert"><b>Connection unavailable</b><p>${esc(model.connectionError)}</p>${recoveryMarkup()}</aside>` : "";
-  return `${toolbar}${source}${error}${body}<div class="ap-credit" id="ap-credit">${model.creditLabel ? `<details><summary>${esc(model.creditLabel)}</summary><p>${esc(model.credit)}</p><span data-ap-copy="${esc(model.credit)}"><button type="button">Copy provenance</button></span></details>` : esc(model.credit)}</div>`;
+  return `${toolbar}${error}${body}<div class="ap-credit" id="ap-credit">${model.creditLabel ? `<details><summary>${esc(model.creditLabel)}</summary><p>${esc(model.credit)}</p><span data-ap-copy="${esc(model.credit)}"><button type="button">Copy provenance</button></span></details>` : esc(model.credit)}</div>`;
 }
 
 export class AutophysMain {

@@ -127,7 +127,7 @@ const channel: string = config.simulator.outputs[0];
   const fx = await browser.newPage();
   watch(fx, "fixtures");
   await openApp(fx, "?source=fixtures");
-  await until(fx, "demo indicator", async () => (await text(fx, ".ap-source > span")) === "Demo data");
+  await until(fx, "demo tree", async () => Boolean(await fx.$("pierce/[role=treeitem]")));
   check(await fx.$(".ck-export") === null, "the shell header has no Export action");
   await clickStill(await treeRow(fx, "Sine 0.44"));
   await fx.waitForSelector("pierce/#ap-action-approve");

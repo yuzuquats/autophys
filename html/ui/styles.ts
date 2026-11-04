@@ -36,8 +36,6 @@ ${w} .ap-demo-link { display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px
 ${w} .ap-demo-link span { color:var(--ap-sec);font-size:12px; }
 ${w} a { color:var(--ap-ink);text-underline-offset:3px; }
 ${w} a:hover { text-decoration-thickness:2px; }
-${w} .ap-source { display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;padding:4px 0;font:12px/18px var(--ap-font);color:var(--ap-sec); }
-${w} .ap-source > span { padding:1px 7px;border:1px solid var(--ap-line);border-radius:6px; }
 ${w} .ap-connection { padding:16px;border-radius:8px;background:var(--ck-wash);font:13px/20px var(--ap-font); }
 ${w} .ap-connection p { margin:4px 0 12px;overflow-wrap:anywhere;color:var(--ap-sec); }
 ${w} .ap-recovery { display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:12px;font:13px/20px var(--ap-font); }
