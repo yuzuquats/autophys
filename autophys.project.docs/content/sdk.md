@@ -172,7 +172,7 @@ comes from a Meta model yet, and the system prompt hard-codes the
 | M-9 | Outer loop `autophys research`: frozen train / held-out split, scalar score (diagnosis and status correct first, then error, cost as tiebreak), propose an edit, re-evaluate on train, keep only on improvement, report held-out. Researcher protocol with an API adapter (`ChatReasoner` on Wonder). | implemented (Python batch 2; offline tests) |
 | M-5 | Muse Code CLI researcher adapter: workspace with the skill and failed transcripts, prompt file, `muse exec --json --model muse-wonder-1.0 --workspace DIR`, JSONL events parsed, edited SKILL.md read back and validated. Tested with a fake `muse`. | implemented (Python batch 2; offline tests) |
 | M-8 | `autophys export-trajectories`: JSONL of each decision's contract hash, playbook hash, prompt, raw response, parsed decision, validity and the run's evaluator score. Export only. | implemented (Python batch 2; offline tests) |
-| M-4 | Image input: fit and residual plots rendered (optional `plots` extra), stored as blobs, referenced by hash; attached for Wonder (researcher) and for the policy only if the model is image-capable. The hacks reason lane stays text-only. | 2.5 h |
+| M-4 | Image input: fit and residual plots rendered, stored as blobs, referenced by hash; attached for Wonder (researcher) and for the policy only if the model is image-capable. The hacks reason lane stays text-only. | implemented (I5b9e2d7c0a4f18e3b6d2; see "M-4 image input") |
 ```
 
 Order: M-1, M-2, M-3, M-6 first (they unblock a first Spark number),
@@ -385,10 +385,8 @@ On rwc-dev-01 (Python 3.12.3, NumPy 2.5.4, SciPy 1.18.1, venv
 - Two independent Opus reviews of this range found 20 defects, and a
   Python↔Rust alignment check found 10 divergences. All 20 defects and the
   material divergences are fixed (Python in this project, Rust in 0b03671 and a70b0ec).
-  Still open: image input in Python (M-4); the step `error` text is
-  formatted differently in the two SDKs (free text, not validated);
-  `HttpStore.create_investigation` sends a random Idempotency-Key, so a
-  retried create is not idempotent; and the fold of a stored
+  Still open: the step `error` text is formatted differently in the two
+  SDKs (free text, not validated; see "M-4 image input"); and the fold of a stored
   `overrides: null`, which no writer produces. Each SDK verifies the
   other's goldens and the 21 numerics cases.
 
@@ -404,7 +402,6 @@ rwc-dev-01.
 
 ## Remaining work
 
-- M-4 image input (the Rust reasoner already accepts `images`).
 - First live Spark/Wonder runs, once the operator approves a token budget
   (MQ-2); until then no result may be labelled Muse.
 - The plugin builder emits `["sh", "mcp-stdio.sh"]`, which Muse cannot
@@ -412,6 +409,41 @@ rwc-dev-01.
   `plugins/muse-autophys/build.py`.
 - Retire the yuzuquats original and `~/.cache/modellab/venv` once the
   operator agrees.
+
+## M-4 image input (Python), 2026-11-04
+
+- **Opt-in only:** `ModelSpec(images=True)`, `bench --images`,
+  `research --images` (policy) and `--researcher-images`. Without it every
+  request is byte-identical to before, so cassettes and hashes are
+  unchanged. Opting in asserts that the model accepts images: whether Muse
+  Spark and Wonder do is not verified. Known text-only models and the
+  `lane` route never receive images. The investigation's `model` field
+  carries `images: true` only when opted in; Rust's validator must accept
+  that key.
+- **Plots:** after each adopted fit, one PNG per measurement and output
+  channel, combining the fit (measured dots, fitted curve, dashed initial
+  guess, from the run's `curves`) and the normalized residuals with a ±1
+  band. `plots.py` renders them with numpy and zlib only: 640×400 indexed
+  colour, filter 0, zlib level 9, deterministic bytes (2.4–5.0 KB on the
+  benches). Each PNG is a blob written before the step that references it
+  in `images [{sha256, media_type, caption}]`. Rendering costs no
+  simulations and adds no facts text. Rust has to accept and store these
+  images, but it doesn't have to produce identical bytes.
+- **Requests:** images are `image_url` data-URI parts on the last user
+  message, encoded exactly as `sdks/rust/src/reasoner/cassette.rs`, so the
+  cassette keys agree. Both researcher adapters receive the plots.
+- **Create idempotency:** `HttpStore.create_investigation(meta,
+  idempotency_key=...)` reuses one key across retries of one logical
+  create. Without a key, each call creates a new investigation, as in the
+  daemon and Rust.
+- **Step `error` text (left as is):** Python prefixes an unusable decision
+  with the exception class (`ReasonerError: `, `DecisionError: `); Rust
+  writes the bare message. It is free text and not validated, so neither
+  SDK changes it.
+- **Validation:** 603 passed, 6 skipped on a clean export of the commit.
+  The bench is unchanged (308/644/133/336/204/481, 60/60 diagnoses) and
+  identical at 1 and 4 jobs. The replay still costs $0.002360. The 46
+  existing conformance files are unchanged.
 
 ## First live Muse smoke (MQ-8, MQ-9), 2026-11-04
 

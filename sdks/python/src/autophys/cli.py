@@ -80,7 +80,7 @@ def cmd_bench(args, out=sys.stdout) -> int:
         if not args.model:
             print("reason benchmark requires --model", file=out)
             return 2
-        options = dict(model_spec=ModelSpec("policy", args.route, args.model, args.effort),
+        options = dict(model_spec=ModelSpec("policy", args.route, args.model, args.effort, images=args.images),
                        playbook=args.playbook, replay=args.replay, record=args.record)
     try:
         rows = run_benchmark(cases=args.case or None, policies=args.policy or None, seeds=args.seeds, jobs=args.jobs, **options)
@@ -95,7 +95,7 @@ def cmd_research(args, out=sys.stdout):
     from .research import APIResearcher, MuseCLIResearcher, research
     from .reasoner import ModelSpec, MUSE_SPARK, MUSE_WONDER, ReasonerError
     try:
-        spec = ModelSpec("researcher", args.researcher_route, args.researcher_model, args.researcher_effort)
+        spec = ModelSpec("researcher", args.researcher_route, args.researcher_model, args.researcher_effort, images=args.researcher_images)
         if args.researcher == "muse":
             researcher = MuseCLIResearcher(binary=args.muse_binary, spec=spec, timeout=args.timeout,
                                            max_model_steps=args.max_model_steps, replay=args.researcher_replay,
@@ -105,7 +105,7 @@ def cmd_research(args, out=sys.stdout):
         result = research(researcher=researcher, output_dir=args.output_dir, playbook=args.playbook,
                           cases=args.case, train_seeds=args.train_seeds, heldout_seeds=args.heldout_seeds,
                           iterations=args.iterations, policy=args.policy, jobs=args.jobs,
-                          model_spec=ModelSpec("policy", args.route, args.model, args.effort),
+                          model_spec=ModelSpec("policy", args.route, args.model, args.effort, images=args.images),
                           replay=args.replay, record=args.record)
     except (ReasonerError, ValueError, OSError) as error:
         print(str(error), file=out)
@@ -148,6 +148,7 @@ def build_parser() -> argparse.ArgumentParser:
     pb.add_argument("--model")
     pb.add_argument("--route", choices=("meta", "baseten", "lane"), default="meta")
     pb.add_argument("--effort")
+    pb.add_argument("--images", action="store_true", help="assert model image capability and attach fit/residual plots; lane stays text-only")
     pb.add_argument("--playbook")
     pb.add_argument("--replay")
     pb.add_argument("--record")
@@ -162,12 +163,14 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--model", default="muse-spark-1.3")
     pr.add_argument("--route", choices=("meta", "baseten", "lane"), default="meta")
     pr.add_argument("--effort")
+    pr.add_argument("--images", action="store_true", help="opt policy into plot images (asserts model capability)")
     pr.add_argument("--replay")
     pr.add_argument("--record")
     pr.add_argument("--researcher", choices=("api", "muse"), default="api")
     pr.add_argument("--researcher-model", default="muse-wonder-1.0")
     pr.add_argument("--researcher-route", choices=("meta", "baseten"), default="meta")
     pr.add_argument("--researcher-effort")
+    pr.add_argument("--researcher-images", action="store_true", help="opt researcher into plot images (Muse capability is unverified)")
     pr.add_argument("--researcher-replay")
     pr.add_argument("--researcher-record")
     pr.add_argument("--muse-binary", default="muse")

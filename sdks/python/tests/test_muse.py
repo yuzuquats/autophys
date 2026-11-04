@@ -209,7 +209,9 @@ def test_replayed_golden_metadata_blobs_and_totals(tmp_path):
         playbook = load_playbook()
         assert meta["playbook"] == {"name": playbook.name, "version": playbook.version, "sha256": playbook.sha256}
         assert store.get_blob("sha256:" + playbook.sha256) == (playbook.data, "text/markdown")
-        assert meta["model"] == asdict(SPEC)
+        expected_model = asdict(SPEC)
+        expected_model.pop("images")  # absent optional opt-in in the frozen pre-M-4 golden
+        assert meta["model"] == expected_model
         assert meta["price"]["model"] == MUSE_SPARK
         steps = [r.payload for r in records if r.kind == "step" and "usage" in r.payload]
         assert all(s["replayed"] is True and "elapsed_ms" in s for s in steps)

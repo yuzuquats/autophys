@@ -395,12 +395,16 @@ class HttpStore(Store):
     def projects(self) -> list[dict]:
         return self._req("GET", "/projects")["projects"]
 
-    def create_investigation(self, meta: dict) -> str:
+    def create_investigation(self, meta: dict, *, idempotency_key: str | None = None) -> str:
+        """Reuse an explicit key across retries of one logical create.
+
+        As in Rust/daemon, no key means a new investigation, even for equal meta.
+        """
         from .workbook import canonical_payload
         meta, _ = canonical_payload(meta)
         body = {"project_id": meta.get("project_id"), "config_version": meta.get("config_version"),
                 "overrides": meta.get("overrides", {}), "meta": meta}
-        j = self._req("POST", "/investigations", body, headers={"Idempotency-Key": uuid.uuid4().hex})
+        j = self._req("POST", "/investigations", body, headers={"Idempotency-Key": uuid.uuid4().hex if idempotency_key is None else idempotency_key})
         self._see(j["id"], j)
         return j["id"]
 

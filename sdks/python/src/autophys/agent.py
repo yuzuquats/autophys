@@ -263,6 +263,9 @@ class Investigation:
         self.fit: FitResult | None = None
         self.fit_id = 0
         self.fit_model = None
+        self.plot_images = []
+        self.plot_refs = []
+        self._step_images = []
         self.sens: SensitivityReport | None = None
         self.sens_fit = -1
         self.jac: np.ndarray | None = None
@@ -319,6 +322,14 @@ class Investigation:
         self.project_id = head["project_id"]
         self.config_version = head["config_version"]
         self._replay(recs[i:])
+        if getattr(self.policy, "images_enabled", False):
+            import base64
+            self.plot_refs = next((r.payload["images"] for r in reversed(recs)
+                                   if r.kind == "step" and r.payload.get("images")), [])
+            self.plot_images = [{"media_type": ref["media_type"],
+                                 "data": base64.b64encode(store.get_blob(ref["sha256"])[0]).decode("ascii")}
+                                for ref in self.plot_refs]
+            self.policy.plot_refs, self.policy.plot_images = self.plot_refs, self.plot_images
         return self
 
     def _replay(self, recs: list) -> None:
@@ -573,7 +584,21 @@ class Investigation:
         self.fit_id += 1
         from .curves import run_payload
         payload = {"fit_id": self.fit_id, "model": model, "simulator": self.variants[model].name, **r.to_dict()}
-        self._record("run", run_payload(self.variants[model], r, self.records("measurement"), payload))
+        measurements = self.records("measurement")
+        payload = run_payload(self.variants[model], r, measurements, payload)
+        self._record("run", payload)
+        if getattr(self.policy, "images_enabled", False) or getattr(self.policy, "render_images", False):
+            import base64
+            from .plots import render_plots
+            refs, images = [], []
+            for caption, data in render_plots(measurements, payload["curves"]):
+                key = self.store.put_blob(data, "image/png")
+                refs.append({"sha256": key, "media_type": "image/png", "caption": caption})
+                images.append({"media_type": "image/png", "data": base64.b64encode(data).decode("ascii")})
+            self.plot_refs, self.plot_images = refs, images
+            self._step_images.extend(refs)
+            if getattr(self.policy, "images_enabled", False):
+                self.policy.plot_images, self.policy.plot_refs = images, refs
 
     def _need_fit(self) -> FitResult:
         if self.fit is None or self.fit_model != self.model:
@@ -886,6 +911,7 @@ class Investigation:
                     self._record("step", step)
                     a = decision.arguments
                     return self._finish(a["status"], [], t0, claimed=a.get("identified"), summary=a.get("summary", ""))
+                self._step_images = []
                 sims0 = self.simulations
                 try:
                     result = self._dispatch(decision)
@@ -899,6 +925,8 @@ class Investigation:
                     step.update({"result": {"error": str(e)}, "simulations": self.simulations - sims0})
                     self._record("step", step)
                     return self._finish("budget_exhausted", [str(e)], t0)
+                if self._step_images:
+                    step["images"] = self._step_images
                 step.update({"result": result, "simulations": self.simulations - sims0})
                 self._record("step", step)
                 if self.pending:
@@ -1120,6 +1148,9 @@ class ReasonLanePolicy:
     def __init__(self, reasoner: Reasoner, *, playbook=None, model_spec=None, effort: str | None = "low", max_tokens: int = 2400) -> None:
         self.reasoner = reasoner
         self.model_spec = model_spec
+        from .reasoner import images_enabled
+        self.images_enabled = images_enabled(model_spec) and getattr(reasoner, "route", None) != "lane"
+        self.plot_images, self.plot_refs = [], []
         self.playbook = playbook if isinstance(playbook, Playbook) else load_playbook(playbook or "default")
         self.effort = model_spec.effort if model_spec is not None else effort
         self.max_tokens = model_spec.max_tokens if model_spec is not None else max_tokens
@@ -1131,6 +1162,8 @@ class ReasonLanePolicy:
                 "playbook": {"name": self.playbook.name, "version": self.playbook.version, "sha256": self.playbook.sha256}}
         if self.model_spec is not None:
             meta["model"] = asdict(self.model_spec)
+            if not self.model_spec.images:
+                meta["model"].pop("images")
             price = price_for(self.model_spec.model)
             if price:
                 meta["price"] = price
@@ -1140,7 +1173,11 @@ class ReasonLanePolicy:
         text = render_facts(f)
         messages = [{"role": "developer", "content": self._system}, {"role": "user", "content": text}]
         trace: dict[str, Any] = {"evidence_text": text}
-        reply = self.reasoner.complete(messages, response_schema=DECISION_SCHEMA, effort=self.effort, max_tokens=self.max_tokens)
+        options = {}
+        if self.images_enabled and self.plot_images:
+            options["images"] = self.plot_images
+            trace["images"] = self.plot_refs
+        reply = self.reasoner.complete(messages, response_schema=DECISION_SCHEMA, effort=self.effort, max_tokens=self.max_tokens, **options)
         trace.update({"raw_output": reply.content, "model": reply.model, "usage": normalize_usage(reply), "elapsed_ms": reply.elapsed_ms})
         if reply.replayed:
             trace["replayed"] = True

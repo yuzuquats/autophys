@@ -52,8 +52,11 @@ class ModelSpec:
     model: str
     effort: str | None = None
     max_tokens: int | None = None
+    images: bool = False
 
     def __post_init__(self):
+        if type(self.images) is not bool:
+            raise ValueError("images must be a boolean")
         if self.role not in ("policy", "researcher"):
             raise ValueError("role must be policy or researcher")
         if self.route not in ("meta", "baseten", "lane"):
@@ -64,11 +67,41 @@ class ModelSpec:
             raise ValueError("max_tokens must be a nonnegative integer")
 
 
-def request_body(route, model, messages, *, response_schema=None, effort=None, max_tokens=None):
+# Muse support is unverified. An explicit opt-in asserts capability for an
+# unknown model; known text-only models and lane can never opt in.
+IMAGE_CAPABILITIES = {
+    MUSE_SPARK: None, MUSE_WONDER: None,
+    "gpt-4o": True, "gpt-4o-mini": True,
+    "deepseek-ai/DeepSeek-R1": False,
+    "meta-llama/Llama-3.3-70B-Instruct": False,
+}
+
+
+def images_enabled(spec):
+    return bool(spec and spec.images and spec.route != "lane"
+                and IMAGE_CAPABILITIES.get(spec.model) is not False)
+
+
+def request_body(route, model, messages, *, response_schema=None, effort=None, max_tokens=None, images=None):
     """The exact POST body, also the cassette identity (never includes auth)."""
     budget = MIN_TOKENS if max_tokens is None else int(max_tokens)
     if route in ("meta", "lane") or model in (MUSE_SPARK, MUSE_WONDER):
         budget = max(MIN_TOKENS, budget)
+    if images:
+        if route == "lane":
+            raise ReasonerError("the reason lane is text-only")
+        messages = [dict(m) for m in messages]
+        user = next((m for m in reversed(messages) if m.get("role") == "user"), None)
+        if user is None:
+            raise ReasonerError("images require a user message")
+        parts = [{"type": "text", "text": user["content"]}]
+        for image in images:
+            media = image["media_type"]
+            if not media.startswith("image/") or any(c in media for c in "\n\r;,"):
+                raise ReasonerError("invalid image media_type")
+            parts.append({"type": "image_url", "image_url": {
+                "url": f"data:{media};base64,{image['data']}"}})
+        user["content"] = parts
     body = {"messages": messages, "max_tokens": budget}
     if route != "lane":
         body["model"] = model
@@ -100,6 +133,7 @@ class Reasoner(Protocol):
         response_schema: dict | None = None,
         effort: str | None = None,
         max_tokens: int | None = None,
+        images: list[dict] | None = None,
     ) -> ReasonReply: ...
 
 
@@ -119,12 +153,12 @@ class HttpReasoner:
     def __repr__(self) -> str:
         return f"HttpReasoner(route={self.route!r}, model={self.model!r})"
 
-    def complete(self, messages, *, response_schema=None, effort=None, max_tokens=None) -> ReasonReply:
+    def complete(self, messages, *, response_schema=None, effort=None, max_tokens=None, images=None) -> ReasonReply:
         for m in messages:
             c = m.get("content")
             if not (isinstance(c, str) or (isinstance(c, list) and all(p.get("type") == "text" for p in c))):
                 raise ReasonerError("the reason lane is text-only")
-        body = request_body("lane", None, messages, response_schema=response_schema, effort=effort, max_tokens=max_tokens)
+        body = request_body("lane", None, messages, response_schema=response_schema, effort=effort, max_tokens=max_tokens, images=images)
         j = _request_with_retry(self, body, "reason lane")
         if j.get("content") is None:
             raise ReasonerError("reason lane returned no content (completion budget exhausted?)")
@@ -200,7 +234,7 @@ def _request_with_retry(reasoner, body, label):
 
 
 class ChatReasoner:
-    """Text-only Meta/Baseten chat completions using stdlib HTTP.
+    """Meta/Baseten chat completions using stdlib HTTP.
 
     Explicit configuration wins over route defaults; keys resolve from the
     argument, route environment variable, then private ``reason.json``.
@@ -248,10 +282,11 @@ class ChatReasoner:
         response_schema: dict | None = None,
         effort: str | None = None,
         max_tokens: int | None = None,
+        images: list[dict] | None = None,
     ) -> ReasonReply:
         if any(not isinstance(m.get("content"), str) for m in messages):
             raise ReasonerError("chat completions are text-only; message content must be a string")
-        body = request_body(self.route, self.model, messages, response_schema=response_schema, effort=effort, max_tokens=max_tokens)
+        body = request_body(self.route, self.model, messages, response_schema=response_schema, effort=effort, max_tokens=max_tokens, images=images)
         started = time.perf_counter()
         reply = _request_with_retry(self, body, "chat completions")
         try:
@@ -354,7 +389,7 @@ def reasoner_for(spec: ModelSpec, **kw) -> Reasoner:
         inner = RecordingReasoner(inner, record)
         inner.route, inner.model = spec.route, spec.model
     # Preserve the public factory's existing concrete types for unset defaults.
-    if spec.effort is not None or spec.max_tokens is not None:
+    if spec.effort is not None or spec.max_tokens is not None or spec.images:
         return _ConfiguredReasoner(inner, spec)
     return inner
 
@@ -379,10 +414,14 @@ class FakeReasoner:
         self.model = model
         self.calls: list[dict] = []
 
-    def complete(self, messages, *, response_schema=None, effort=None, max_tokens=None) -> ReasonReply:
+    def complete(self, messages, *, response_schema=None, effort=None, max_tokens=None, images=None) -> ReasonReply:
         t0 = time.perf_counter()
         out = self.responder(messages)
-        self.calls.append({"messages": messages, "response_schema": response_schema, "max_tokens": max_tokens})
+        call = {"messages": messages, "response_schema": response_schema, "max_tokens": max_tokens}
+        if images:
+            request_body("fake", self.model, messages, images=images)
+            call["images"] = images
+        self.calls.append(call)
         return ReasonReply(out, self.model, {"prompt_tokens": sum(len(str(m["content"])) // 4 for m in messages)},
                            "fake", (time.perf_counter() - t0) * 1e3)
 

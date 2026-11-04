@@ -136,6 +136,7 @@ def run_case(case: str, policy: str, seed: int, store: Store | None = None, **re
         from .workbook import WorkbookStore
         with WorkbookStore(workbook_path) as workbook:
             return run_case(case, policy, seed, store=workbook, **reason_options)
+    render_images = reason_options.pop("render_images", False)
     view, evaluator = CASES[case](seed)
     project = case_project(view)
     if policy == "reason":
@@ -144,6 +145,7 @@ def run_case(case: str, policy: str, seed: int, store: Store | None = None, **re
         selected_policy = ReasonLanePolicy(FakeReasoner(heuristic_responder), playbook=reason_options["playbook"])
     else:
         selected_policy = POLICIES[policy]()
+    selected_policy.render_images = render_images
     inv = Investigation(project, view.dataset, view.runner, policy=selected_policy, store=store or MemoryStore(), seed=seed,
                         title=f"bench {case} seed {seed}")
     t0 = time.perf_counter()

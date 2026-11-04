@@ -12,7 +12,7 @@ import tempfile
 
 from .bench import run_units
 from .playbook import load_playbook
-from .reasoner import BudgetError, ModelSpec, MUSE_WONDER, ReasonerError, reasoner_for
+from .reasoner import BudgetError, ModelSpec, MUSE_WONDER, ReasonerError, reasoner_for, images_enabled
 from .synthetic import CASES
 
 
@@ -75,7 +75,7 @@ def validate_edit(original, proposed):
 def proposal_prompt(playbook_text, report):
     # Remove volatile record identities/timing from cassette request keys.
     def stable(value):
-        volatile = {"investigation", "project_id", "id", "ts", "hash", "prev_hash", "wall_s", "elapsed_ms", "latency_ms", "reasoner"}
+        volatile = {"investigation", "project_id", "id", "ts", "hash", "prev_hash", "wall_s", "elapsed_ms", "latency_ms", "reasoner", "plot_artifacts"}
         if isinstance(value, dict):
             return {k: stable(v) for k, v in value.items() if k not in volatile}
         if isinstance(value, (list, tuple)):
@@ -90,6 +90,22 @@ def proposal_prompt(playbook_text, report):
             + json.dumps(stable(report), sort_keys=True))
 
 
+def report_images(report, spec):
+    """Load latest fit plots from workbook blobs, never from transcript text."""
+    if not images_enabled(spec):
+        return []
+    import base64
+    from .workbook import WorkbookStore
+    images = []
+    for artifact in report.get("plot_artifacts", []):
+        with WorkbookStore(artifact["workbook"], readonly=True) as store:
+            for ref in artifact["images"]:
+                data, media_type = store.get_blob(ref["sha256"])
+                images.append({"media_type": media_type, "data": base64.b64encode(data).decode("ascii"),
+                               "caption": ref["caption"], "sha256": ref["sha256"]})
+    return images
+
+
 class APIResearcher:
     def __init__(self, spec=None, *, replay=None, record=None, reasoner=None):
         if reasoner is None:
@@ -99,8 +115,10 @@ class APIResearcher:
         self.last_usage = None
 
     def propose(self, playbook_text, report):
+        images = report_images(report, self.spec)
+        options = {"images": [{"media_type": i["media_type"], "data": i["data"]} for i in images]} if images else {}
         reply = self.reasoner.complete([{"role": "user", "content": proposal_prompt(playbook_text, report)}],
-                                       effort=self.spec.effort, max_tokens=self.spec.max_tokens)
+                                       effort=self.spec.effort, max_tokens=self.spec.max_tokens, **options)
         from .usage import normalize_usage
         self.last_usage = normalize_usage(reply)
         return validate_edit(playbook_text, reply.content)
@@ -164,8 +182,13 @@ class MuseCLIResearcher:
         # CLI replay is local: Muse has no documented replay flag.
         prompt_text = proposal_prompt(playbook_text, report)
         from .store import canonical
-        key = hashlib.sha256(canonical({"model": self.spec.model, "effort": self.spec.effort,
-                                       "max_model_steps": self.max_model_steps, "prompt": prompt_text}).encode()).hexdigest()
+        images = report_images(report, self.spec)
+        identity = {"model": self.spec.model, "effort": self.spec.effort,
+                    "max_model_steps": self.max_model_steps, "prompt": prompt_text}
+        if images:
+            identity["images"] = [i["sha256"] for i in images]
+            prompt_text += "\nInspect the PNG fit/residual plots listed in plot-images.json in your workspace."
+        key = hashlib.sha256(canonical(identity).encode()).hexdigest()
         if self.replay:
             recorded = Path(self.replay).read_text(encoding="utf-8")
             if recorded.startswith("---"):
@@ -182,6 +205,14 @@ class MuseCLIResearcher:
             skill = root / "SKILL.md"
             skill.write_text(playbook_text, encoding="utf-8")
             (root / "failing-transcripts.json").write_text(json.dumps(report), encoding="utf-8")
+            if images:
+                import base64
+                index = []
+                for n, image in enumerate(images):
+                    name = f"plot-{n:04d}.png"
+                    (root / name).write_bytes(base64.b64decode(image["data"]))
+                    index.append({"file": name, "caption": image["caption"], "sha256": image["sha256"]})
+                (root / "plot-images.json").write_text(json.dumps(index), encoding="utf-8")
             prompt = root / "prompt.txt"
             prompt.write_text(prompt_text, encoding="utf-8")
             argv = [self.binary, "exec", "--json", "--provider", "meta", "--model", self.spec.model,
@@ -237,13 +268,18 @@ def evaluate(playbook, cases, seeds, policy, directory, *, jobs=1, **options):
             units.append((case, policy, seed, {**options, "playbook": str(playbook),
                           "workbook_path": str(directory / f"{case}-{seed}.ap-workbook")}))
     rows = run_units(units, jobs)
-    runs, failures = [], []
+    runs, failures, artifacts = [], [], []
     from .workbook import WorkbookStore
     for row in rows:
         path = directory / f"{row.case}-{row.seed}.ap-workbook"
         with WorkbookStore(path, readonly=True) as store:
             inv = store.investigations()[0]["id"]
             records = store.records(inv)
+            if options.get("render_images"):
+                refs = next((r.payload["images"] for r in reversed(records)
+                             if r.kind == "step" and r.payload.get("images")), [])
+                if refs:
+                    artifacts.append({"workbook": str(path.resolve()), "images": refs})
             # Exact ratios are recovered from the fitted physical values using
             # the evaluator's identifiable monomials, never absolute rel_errors.
             evaluator = CASES[row.case](row.seed)[1]
@@ -259,6 +295,8 @@ def evaluate(playbook, cases, seeds, policy, directory, *, jobs=1, **options):
             if not component["correct"]:
                 failures.append({"investigation": inv, "records": [asdict(r) for r in records]})
     report = {"runs": runs, "score": score(runs), "failing_transcripts": failures}
+    if artifacts:
+        report["plot_artifacts"] = artifacts
     _write_json(directory / "scores.json", report)
     return report
 
@@ -276,6 +314,8 @@ def research(*, researcher, output_dir, playbook="default", cases=None, train_se
         raise ValueError("unknown case or negative seed")
     if policy == "reason":
         require_replay(options.get("replay"))
+    if images_enabled(getattr(researcher, "spec", None)):
+        options["render_images"] = True
     text = load_playbook(playbook).data.decode("utf-8")
     root = Path(output_dir)
     root.mkdir(parents=True, exist_ok=False)
