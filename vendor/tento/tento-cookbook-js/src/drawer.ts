@@ -10,6 +10,8 @@ export type Drawer = {
   readonly stage: Stage;
   open(): void;
   close(): void;
+  /** Show the tutorial from its first step: opens the app from the deck, or lowers the surface back to the tour. */
+  tour(): void;
 };
 
 /**
@@ -205,5 +207,10 @@ export function installDrawer(parts: {
     },
     open: () => open(),
     close: () => close(),
+    tour() {
+      if (stage === "landing") open();
+      else if (stage === "tour") tutorial.start();
+      else void setStage("tour");
+    },
   };
 }

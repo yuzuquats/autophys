@@ -47,6 +47,8 @@ export interface CookbookShell {
   setCrumb?(text: string): void;
   /** Cookbook extension: run a layout change in the main slot with FLIP motion. */
   reflow?(change: () => void): void;
+  /** Cookbook extension: show the tutorial from its first step (a "Take the tour" entry). */
+  startTour?(): void;
 }
 
 export interface CookbookApp {
