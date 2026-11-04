@@ -1,6 +1,8 @@
 # Autophys contributors should need one checkout, not a fleet host
 
-Status: **independent review requested R1–R4 repairs; repair verification is in progress.**
+Status: **R1–R4 repairs verified, independent re-review pending.**
+Assessed code: `256360ebe01278a89bf632cd1e267b2bc7f74d18`; this receipt is a later
+documentation-only commit. No completion or production-readiness verdict is claimed.
 The original checked code revision was 189a4ddd12f618882bcea00417dad8c9a026ffe5.
 The repair round is bounded to the four findings and installed Python packaging;
 it does not start the five-judge campaign.
@@ -144,9 +146,9 @@ follow-up; changing its launcher was outside this layout batch.
 Release still needs the owner's license decision and complete vendored rights,
 notices and upstream provenance. Rust says UNLICENSED while Python says
 Apache-2.0; the vendor inventory has 32 named Cargo packages without a license
-field. Deno has no dependency lock, so cold acquisition/version reproducibility
-also remains unqualified. Python wheel creation remains an environment-blocked
-check; local import/contract tests do not replace it.
+field. At the original revision, Deno had no dependency lock and Python wheel creation
+was environment-blocked. R4 and the installed-wheel proof below supersede those
+two gaps; local import tests alone were not treated as distribution proof.
 
 Peer staging was protected with private indexes for scoped commits. A later
 training-loop draft arrived in src/train.rs during the reserved batch and was
@@ -167,7 +169,7 @@ by this executor.
 The task-owned external Cargo target was removed after verifying no executable callers.
 The peer root target, dependency caches, exact review export and evidence were retained.
 
-## Review 1 repairs are being verified against committed source
+## Review 1 repairs have bounded, committed verification
 
 Independent review identified executable coupling that the original inventory
 understated: DomainConfig unconditionally registers the upstream `/_` admin and
@@ -192,6 +194,80 @@ data migration. The existing upstream constructor and vendor pin are retained.
 
 The executor acquired declared public dependencies into external task-owned
 caches and a new Python environment, preserving peer SDK environments. The
-initial focused checks passed; final code identity and complete affected checks
-will be recorded here before the parent starts independent re-review. Raw
+affected checks below passed on the frozen committed revision; the parent can
+now obtain independent re-review. Raw
 receipts stay in the existing external evidence directory, `repair-round-1/`.
+
+
+## Repair evidence for independent re-review
+
+The executor's product commits are `b0c8ee2` (R1–R3), `2de1989` (R4), and
+`3c5ea52` (driver type correction and repair record), with stable Change-Ids
+I547929a86ef84cff9f669a6f6c56d277, Ia1f7582d02dd46d9895ff3fe3e6af14a,
+and Ica24722c8a9744daab50d49dc9375ebd. Fleet commit
+`cb84775b7fb0d788b7e370812df54b71ca1f08b6`
+(I7d2d36393047403e84bb582c8ff10a51) adds patch 0016 and its generated vendor.lock.
+The patch uses the owner-approved sync mechanism; no upstream API was pruned or
+vendor pin changed. The pitch owner then committed its own seven 0015 vendor
+files as `256360e`, producing the coherent assessed code revision above.
+Its newer tutorial/style working drafts and prospective patch 0017 are excluded.
+
+The read-only Git export contains **2,854 files**. Its full source/config/test/
+runtime-input manifest SHA-256 is
+`1a790e8a6c55c03c879e468410f7521bd44950cae20514a0ffbbac54f8c38621`,
+identical before and after checks. Vendor tree:
+`efc09d18037db61c694e8ea01a733c27413c1117`.
+The Deno lock SHA-256 is
+`99a44081d5e3fd006f6eb60a87bbae12fbd8e2ed2c92b881a66cbe88ac6dd362`,
+unchanged through acquisition, frontend checks and the actual worker build.
+Frozen fleet generator inputs have their own supplemental manifest at the fleet
+revision above. Evidence, commands, return codes, tool/environment versions and
+failed intermediate attempts remain under the existing external `repair-round-1/`.
+
+```review-table
+| Finding/check | Decisive result and boundary |
+| --- | --- |
+| R1: inherited system namespace | Packed HTTP smoke: 35 paths × 7 methods × 2 login modes = 490 product JSON 404s, plus hostname variants. Includes every current SystemRouter admin/harness/app endpoint, the bare prefix, encoded characters, duplicate/trailing slashes and queries. No redirects, Lona pages or missing-app-data responses. Future /_ routes are reserved too |
+| R1: product behavior | Source-free packed executable with Deno absent serves /, /app, /login, /index.root.js, health and workspace API. With --login, /app redirects to product /login and workspace returns 401. Product auth/me returns its deliberate 401. Document resources are only /favicon.svg and /index.root.js. Both children terminated |
+| R2: deploy root | python3 ops/test_deploy.py passes the legacy default, normal custom absolute root and 12 invalid character cases, including spaces, backslash, percent, both quote forms and controls. Invalid roots invoke no build/service command and preserve current/unit bytes. systemd-analyze verify exits 0 on the literal rendered template. All deployment commands are stand-ins |
+| R3: installed Muse bundles | Native Muse 1.4.14-R7309.1 validates/installs/inspects local and SSH bundles in isolated profiles; ./mcp-stdio.sh is its package executable source. Relocated local bundle launches the installed wheel from a separate lab cwd, loads a lab module, writes the relative workbook in that lab and exposes nine MCP tools. Relocated SSH bundle records exact quoted remote argv through a stand-in; no real SSH/provider call. Canonical playbook bytes unchanged |
+| R4: public acquisition | Frozen committed resolution acquired from an empty home and empty DENO_DIR via public JSR/npm/deno.land sources. No sibling/private source or existing Deno cache. esbuild 0.24.0 platform executable acquired in the isolated home; exact binary hash recorded |
+| R4: actual worker | Real build-web returns status: ok and emitter_status: ok. Captured worker argv explicitly names the product config with --frozen and --node-modules-dir=none. Wrapper enforces --cached-only and --deny-net using the newly acquired public cache; lock identity unchanged |
+| R4: snapshot reproduction | Frozen fleet sync.sh --check: matches rev 56389ac9d80c + 15 patches; vendor.lock current. The check uses committed generator inputs, excluding any later peer patch |
+| Core regression | cargo test --offline --locked -p autophys-cli --test system_boundary --test http --test login --test embedded: 20 passed, 0 failed, 1 opt-in ignored. Native cargo build --offline --locked --bin autophys exits 0. Existing dead-code warnings remain |
+| Frontend and browser-driver types | deno test --cached-only --allow-read --config html/deno.json html/: 106 passed, 0 failed. deno check --cached-only --config html/deno.json on the root and all five html/e2e drivers exits 0. No browser was launched |
+| Python core | Focused workbook, conformance, MCP and Muse pytest files: 75 passed, no skips, 23.54 seconds in a new isolated environment |
+| Wheel distribution | Public setuptools 84.2.1 builds autophys-0.1.0-py3-none-any.whl with pip wheel --no-deps --no-build-isolation --no-index. Installed outside source, with no PYTHONPATH: console --help exits 0, import comes from site-packages, prices.json and the canonical playbook match source hashes. Wheel contents inspected. SDK/plugin/ops Git trees are identical between the initial installed proof and final assessed revision |
+| Packaging/ops regression | Real strip + pack and source-free HTTP proof pass. Separate stand-ins confirm package build/strip/pack ordering, no service calls, existing-output refusal and dirty-source refusal. Shell syntax and owned Rust formatting checks pass |
+```
+
+The additional attempt to run the repository's opt-in packed-serving test exited
+101 **before spawning a server**: `127.0.0.1:4799` was already in use. That listener
+was left untouched. This is retained as an environment-blocked check, not a pass;
+the independent packed HTTP driver above uses ephemeral ports and covers both
+login modes. The first broader driver type-check exposed a pre-existing generic
+`Element.title` error; the small getAttribute correction is in `3c5ea52` and the
+final root/all-driver check passes. Two external harness mistakes (relative
+vendor patch paths and counting a Deno version probe as a worker) were corrected
+before final verification; their failed receipts are retained. No peer history
+was rewritten, and no transient failed identity is assessed.
+
+Acquisition used Python 3.12.3 / pip 24.0, setuptools 84.2.1, NumPy 2.5.4,
+SciPy 1.18.1, pytest 9.2.0 and MCP 1.30.0; full transitive versions are retained
+in the external environment receipt. Deno is 2.9.8; Rust/Cargo are 1.98 nightly.
+The committed lock pins the full Deno graph, including std/path 1.1.6,
+std/fs 1.0.24 and std/dotenv 0.225.8. No global toolchain or peer environment was
+changed. Public dependency acquisition is qualified here; cold Cargo acquisition,
+native macOS packaging, full workspace/platform batteries, real-browser behavior
+and provider/training execution remain unverified by this bounded task.
+
+All source work and scoped commits were on the owner master over SSH. Private
+indexes preserved peer staging; the peer train usage hunk in src/server.rs was
+not adopted. The raw source export and review evidence are retained for re-review;
+the task-owned Cargo scratch target is reclaimed after checking for live callers.
+The task-board CLI still lacks task support, so the existing external tasks.json
+fallback is reconciled: repairs and verification done, root awaiting independent
+review. The board was not updated. The five-judge productionize campaign remains
+unstarted. License/provenance decisions and OSS-1/OSS-2/OSS-3 operator review are
+still open; there was no push, publication, real deployment, provider call, GPU
+or training run.
