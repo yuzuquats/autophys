@@ -4,6 +4,8 @@
  * (`--text-pri`, `--text-sec`, `--text-ter`, `--divider`, `--wb-stage`, `--wb-accepted`,
  * `--hx-font`), with the ModelLab mock values as fallbacks.
  */
+import { newProjectStyles } from "./new-project-styles.ts";
+
 export function autophysStyles(scope: string): string {
   const w = scope;
   return `
@@ -244,5 +246,6 @@ ${w} :focus-visible { outline:2px solid var(--ck-focus);outline-offset:3px; }
   ${w} .ap-crumb { overflow-wrap:anywhere; }
 }
 
+${newProjectStyles(w)}
 `;
 }

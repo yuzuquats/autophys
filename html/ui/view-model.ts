@@ -7,6 +7,7 @@
 
 /** Colour roles. The renderer maps each to a CSS variable; it never picks one itself. */
 import type { SidebarExtras } from "./sidebar-model.ts";
+import type { ProjectSetupBody } from "./new-project.ts";
 
 export type Tone = "default" | "muted" | "ok" | "warn" | "run" | "danger";
 
@@ -101,6 +102,7 @@ export type ChartPanel = { title?: string; charts: Chart[]; blocks?: Block[] };
 export type Crumb = { label: string; id?: string };
 
 export type MainBody =
+  | ProjectSetupBody
   | { kind: "empty"; text: string }
   | Missing
   | { kind: "loading"; title: string; description: string }

@@ -8,6 +8,8 @@ import { applyRecord } from "./records.ts";
 
 export class Store {
   private snap: Snapshot | null = null;
+  private refreshing: Promise<void> | null = null;
+  private closed = false;
   private stop: (() => void) | null = null;
   private starting: Promise<void> | null = null;
   private subs = new Set<() => void>();
@@ -34,6 +36,28 @@ export class Store {
       this.notify();
       throw error;
     });
+  }
+
+  /** A project can register before it emits an investigation record. Pause this
+   * store's own stream while replacing its snapshot, then resume from that
+   * snapshot's opaque collection cursor; failed reads retain the last records. */
+  refreshWorkspace(): Promise<void> {
+    if (this.closed) return Promise.resolve();
+    return this.refreshing ??= (async () => {
+      this.stop?.(); this.stop = null;
+      try {
+        const next = await this.source.load();
+        if (this.closed) return;
+        this.snap = { ...next, pairings: this.snap?.pairings ?? next.pairings };
+        this.error = null;
+        this.starting = Promise.resolve();
+      } catch (error) {
+        this.error = String((error as Error)?.message ?? error);
+      } finally {
+        if (!this.closed && this.snap) this.stop = this.source.stream(this.snap.gseq, (r) => this.apply(r));
+        if (!this.closed) this.notify();
+      }
+    })().finally(() => { this.refreshing = null; });
   }
 
   snapshot(): Snapshot | null {
@@ -93,6 +117,7 @@ export class Store {
   }
 
   close(): void {
+    this.closed = true;
     this.stop?.();
     this.stop = null;
     this.stopErrors?.();

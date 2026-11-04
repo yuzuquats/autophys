@@ -7,6 +7,7 @@ import { emptyMarkup, skeletonMarkup, componentButton, recoveryMarkup } from "./
 import { chartMarkup } from "./charts.ts";
 import { ATTR, escapeHtml as esc, intentOf, type IntentHandler } from "./intent.ts";
 import { buttonMarkup } from "./actions.ts";
+import { newProjectMarkup } from "./new-project.ts";
 import { blockMarkup } from "./blocks.ts";
 import type { MainModel, Section } from "./view-model.ts";
 
@@ -29,7 +30,9 @@ export function mainMarkup(model: MainModel, width: number, classes: MainClasses
   }).join(sep);
   const toolbar = `<div class="${esc([classes.toolbar ?? "", "ap-toolbar"].filter(Boolean).join(" "))}"><nav class="ap-crumb" aria-label="Selection">${crumb}</nav><div class="ap-right"><span class="ap-meta" id="ap-meta">${esc(model.meta)}</span>${model.actions.map((a) => buttonMarkup(a, classes)).join("")}</div></div>`;
   let body: string;
-  if (model.body.kind === "empty") {
+  if (model.body.kind === "project-setup") {
+    body = newProjectMarkup(model.body);
+  } else if (model.body.kind === "empty") {
     body = `<div class="ap-viewer ap-empty"><p>${esc(model.body.text)}</p></div>`;
   } else if (model.body.kind === "onboarding") {
     const b = model.body;
@@ -80,6 +83,11 @@ export class AutophysMain {
       const intent = el && host.contains(el) ? intentOf(el as HTMLButtonElement, "click") : null;
       if (intent) onIntent(intent);
     }, { signal: this.abort.signal });
+    for (const event of ["input", "change"] as const) host.addEventListener(event, (e) => {
+      const el = (e.target as Element).closest?.<HTMLInputElement>('[data-ap="field"]');
+      const intent = el && host.contains(el) ? intentOf(el, event) : null;
+      if (intent) onIntent(intent);
+    }, { signal: this.abort.signal });
     if (typeof ResizeObserver !== "undefined") {
       this.observer = new ResizeObserver(() => {
         const w = Math.round(this.host.clientWidth);
@@ -94,6 +102,15 @@ export class AutophysMain {
    * contents and attributes change, so a shell that FLIPs the host's children can move them.
    */
   render(model: MainModel): void {
+    const focused = document.activeElement;
+    const input = focused instanceof HTMLInputElement && this.host.contains(focused) ? focused : null;
+    const focus = input ? { id: input.id, start: input.selectionStart, end: input.selectionEnd } : null;
+    const restoreFocus = () => {
+      if (!focus) return;
+      const next = this.host.querySelector<HTMLInputElement>(`[id="${focus.id}"]`);
+      next?.focus({ preventScroll: true });
+      if (focus.start !== null && focus.end !== null) next?.setSelectionRange(focus.start, focus.end);
+    };
     this.model = model;
     this.width = Math.round(this.host.clientWidth) || 640;
     const next = document.createElement("template");
@@ -102,6 +119,7 @@ export class AutophysMain {
     if (kept.length !== fresh.length || kept.some((el, i) => el.tagName !== fresh[i].tagName)) {
       this.host.replaceChildren(...fresh);
       this.hydrate(this.host);
+      restoreFocus();
       return;
     }
     kept.forEach((el, i) => {
@@ -110,6 +128,7 @@ export class AutophysMain {
       el.innerHTML = fresh[i].innerHTML;
     });
     this.hydrate(this.host);
+    restoreFocus();
   }
 
   destroy(): void {

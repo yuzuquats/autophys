@@ -389,3 +389,42 @@ sessions' staged changes remain outside this sidebar commit. The one project-cou
 expectation in the existing untracked `project-setup.deno.test.ts` was updated and
 left uncommitted with that file's owner. Scratch daemons use ports 47981–47983 and
 external web output; they are stopped after verification. No browser was left running.
+
+
+### New project wizard adoption — UI-27, 2026-11-04
+
+**Agent-chosen, pending operator review: wizard vs SDK stepper vs both.**
+The built-in Thermal experiment wizard is committed as-is: name/model,
+parameters/experiment, then create and start the daemon's simulated investigation.
+This completes the drafts already reached by the artifacts sidebar instead of
+leaving HEAD dependent on untracked files. It does not settle the product choice.
+The strongest alternative is the SDK-device stepper (or offering both); that
+supports operator-owned devices but requires a separate setup flow and a choice
+of entry points. UI-22/UI-23's earlier five-step SDK draft is historical; the
+committed wizard has three steps and runs through the existing workbench API.
+
+New project has no Details panel; the existing aligned panel header bands and
+New project → Devices → divider → PROJECTS → tree order remain authoritative.
+The integration includes API calls, controller/draft state, snapshot refresh,
+MainBody/renderer, stepper hydration and styles. Snapshot refresh preserves pairing
+approvals that complete during a read and ignores read completion after close.
+The two races have regression tests. Boundary assertions still prohibit network,
+storage and application timers in view components; Stepper is an explicit allowed
+presentation dependency.
+
+Reversal: replace the setup model/controller/renderer and its root hydration with
+an SDK flow, or add a chooser and keep this wizard alongside it. Restore the
+onboarding empty-state action if removing the wizard entirely. This is local
+browser code and test work; no data migration or server rollback is needed.
+Projects already created remain ordinary persisted projects, and the workbench
+API can remain available independently. Expected cost: a small UI workstream,
+before investing in device-specific steps. Do not remove the MainBody variant
+while the renderer or root still tests for it.
+
+Qualification uses a clean Git archive plus only the adopted files/hunks, followed
+by a clean archive of the resulting HEAD: root type-check, deployment Deno test
+command and build-web. Desktop 1280×800 and phone 390×844 browser-flow captures
+and logs live at `rwc-dev-01:~/workspace/fleet/evidence/autophys/new-project-stepper-20261104/`.
+The installed task-board CLI is unavailable on PATH; task state is retained in the
+workstream cache, with no direct task-database edits. Remaining work is the
+operator's wizard/SDK/both decision; this commit does not redesign that choice.

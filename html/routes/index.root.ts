@@ -12,6 +12,7 @@ import { fixtures } from "../client/fixtures/source.ts";
 import { Store } from "../client/store.ts";
 import { hydrateComponents } from "../ui/components.ts";
 import { AutophysDetails } from "../ui/details.ts";
+import { hydrateProjectSetup } from "../ui/new-project-components.ts";
 import { AutophysMain } from "../ui/main.ts";
 import { AutophysSidebar } from "../ui/sidebar.ts";
 import { autophysStyles } from "../ui/styles.ts";
@@ -96,7 +97,7 @@ const app: Cookbook.App = {
       }
       ctl.handle(intent);
     };
-    const hydrate = (host: HTMLElement) => hydrateComponents(host, handle);
+    const hydrate = (host: HTMLElement) => { hydrateProjectSetup(host); hydrateComponents(host, handle); };
     const views = [
       Cookbook.View.mount(shell, new AutophysSidebar(shell.slots.queue, handle), () => ctl.view().sidebar),
       Cookbook.View.mount(shell, new AutophysMain(shell.slots.main, handle, shell.classes, hydrate), () => ctl.view().main),
@@ -117,7 +118,7 @@ const app: Cookbook.App = {
     redraw();
     let poll: ReturnType<typeof setInterval> | undefined;
     // Store exposes the failure through the view.
-    const start = () => { void ctl.store.start().catch(() => {}); poll = setInterval(() => void ctl.store.refreshPairings(), PAIRING_POLL_MS); };
+    const start = () => { void ctl.store.start().catch(() => {}); poll = setInterval(() => { void ctl.store.refreshPairings(); void ctl.refresh(); }, PAIRING_POLL_MS); };
     // Signed out: the card signs in without a page load, then the workspace starts in place.
     let stopSignIn: (() => void) | undefined;
     if (SIGNED_OUT) stopSignIn = signInInPlace(() => { SIGNED_OUT = false; start(); redraw(); });

@@ -6,7 +6,7 @@ import { detailsModel, devices } from "./details.ts";
 import { mainModel } from "./main.ts";
 import { onboarding } from "./onboarding.ts";
 import type { Selection } from "./shared.ts";
-import { sidebarModel } from "./tree.ts";
+import { sidebarModel, devicesNode } from "./tree.ts";
 
 export type View = { sidebar: SidebarModel; main: MainModel; details: DetailsModel };
 
@@ -14,10 +14,9 @@ export function empty(source: string, pairings?: Pairing[], notice?: string): Vi
   const base = loading(source), dev = devices({ pairings: pairings ?? [] });
   return {
     sidebar: { ...base.sidebar, switcher: { ...base.sidebar.switcher, kind: "none" },
-      notice: { kind: "no-projects", title: "No projects yet", description: "A project is one simulator and its declared configuration." },
-      section: { label: "", count: "" }, pinned: { id: "devices", label: "Devices", icon: "config", selectable: true, children: null,
-        trail: pairings?.length ? { badge: `${pairings.length} pending` } : { text: "Pair SDK" } } },
-    main: { crumb: [{ label: "Getting started" }], meta: "", actions: [], body: onboarding(), credit: "" },
+      notice: { kind: "no-projects", title: "No projects yet", description: pairings?.length ? "Choose New project to run a built-in simulator, or approve a waiting SDK device." : "Choose New project to configure a built-in simulator and run an investigation here." },
+      section: { label: "", count: "" }, pinned: devicesNode(pairings?.length ?? 0) },
+    main: { crumb: [{ label: "Getting started" }], meta: "", actions: [{ name: "new-project", label: "New project", variant: "primary" }], body: { kind: "empty", text: "Create a thermal project and run a simulated investigation entirely in this workbench. Choose New project to begin." }, credit: "" },
     details: { icon: "device", title: "Devices", status: { text: pairings?.length ? "Connection approval needed" : "Connect your SDK" },
       sections: [...(notice ? [{ heading: "Not saved", blocks: [{ kind: "text" as const, text: notice, tone: "danger" as const }] }] : []), ...(dev ? [dev.section] : [])], actions: dev?.actions },
   };
@@ -27,7 +26,7 @@ export function loading(_source: string): View {
   const description = "Reading projects and investigations from the daemon. This may take a moment.";
   return {
     sidebar: { switcher: { kind: "loading", label: "Project", value: "", options: [] },
-      pinned: { id: "loading", label: "Connecting", icon: "config", selectable: false, children: null, dim: true },
+      pinned: devicesNode(0),
       notice: { kind: "loading", title: "Connecting to autophys", description: "Loading your workspace…" },
       section: { label: "", count: "" }, nodes: [], treeLabel: "Investigations", selectedId: null, expandedIds: [] },
     main: { crumb: [{ label: "Workspace" }], meta: "", actions: [], body: { kind: "loading", title: "Connecting to autophys", description }, credit: "" },

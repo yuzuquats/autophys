@@ -243,7 +243,8 @@ Deno.test("derive: empty, loading, project-only and demo states have explicit ki
   assertEquals(empty.sidebar.switcher.kind, "none");
   assertEquals(empty.sidebar.notice?.kind, "no-projects");
   assertEquals(empty.sidebar.section.label, "");
-  assertEquals(empty.main.body.kind, "onboarding");
+  assertEquals(empty.main.body.kind, "empty");
+  assertEquals(empty.main.actions[0].name, "new-project");
   assertStringIncludes(JSON.stringify(empty.details), "daemon URL");
   const project = { ...ws.projects[0], investigations: [] };
   const one = derive({ ...snap, workspace: { ...ws, projects: [project] } }, initialSelection({ ...ws, projects: [project] }));

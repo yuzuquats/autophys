@@ -36,8 +36,12 @@ export type Snapshot = {
   pairings?: Pairing[];
 };
 
+export type ProjectSetup = { name: string; model: string; c: number; r: number; power: number; duration: number };
+export type CreatedProject = { project_id: string; config_version: string };
+
 export interface Source {
   readonly name: string;
+  readonly projects?: { create(setup: ProjectSetup): Promise<CreatedProject>; start(projectId: string, version: string): Promise<{ id: string }> };
   /** Source-wide failures, including a refused browser session. No host APIs here. */
   readonly onError?: (on: (error: Error) => void) => () => void;
   /** GET /api/v1/workspace. */
@@ -221,6 +225,10 @@ export function daemon(opts: DaemonOptions = {}): Source {
       const out = await call<{ record: WireRecord; gseq: number }>("POST", path, { id, kind: "proposal", payload }, { "idempotency-key": id });
       return recOf(out.gseq, out.record);
     },
+    projects: {
+      create: (setup) => call("POST", "/workbench/projects", setup),
+      start: (pid, config_version) => call("POST", `/workbench/projects/${encodeURIComponent(pid)}/investigations`, { config_version }),
+    },
     pairings: {
       async list() {
         const out = await call<{ pairings: WirePairing[] }>("GET", "/pairings");
@@ -270,5 +278,6 @@ export function firstOf(...sources: Source[]): Source & { readonly chosen: Promi
     post: (path, body) => need().post(path, body),
     get fold() { return active?.fold; },
     get pairings() { return active?.pairings; },
+    get projects() { return active?.projects; },
   };
 }
