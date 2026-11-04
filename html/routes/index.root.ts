@@ -15,6 +15,7 @@ import { AutophysDetails } from "../ui/details.ts";
 import { AutophysMain } from "../ui/main.ts";
 import { AutophysSidebar } from "../ui/sidebar.ts";
 import { autophysStyles } from "../ui/styles.ts";
+import { placeholderStyles } from "../ui/placeholder-styles.ts";
 import { deck, tutorial } from "./content.ts";
 import { landingDocs } from "./docs.ts";
 import { signedOutView } from "../client/derive/signed-out.ts";
@@ -56,7 +57,7 @@ const app: Cookbook.App = {
   mount(shell) {
     ctl.shell = { download: (name, type, data) => shell.download(name, type, data), picked: () => shell.onSelect() };
     document.querySelector(".ck-header .ck-export")?.remove();
-    const removeStyles = shell.addStyles(autophysStyles(shell.scope));
+    const removeStyles = shell.addStyles(autophysStyles(shell.scope) + placeholderStyles(shell.scope));
     const handle: typeof ctl.handle = (intent) => {
       if (intent.kind === "select" && intent.id === "devices") {
         ctl.handle(intent);

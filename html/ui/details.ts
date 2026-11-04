@@ -4,6 +4,7 @@
  * meters, fields and links, an optional decision row of exactly two buttons and an optional
  * row of other buttons. Fields report raw text; the caller validates it.
  */
+import { skeletonMarkup } from "./state-markup.ts";
 import { blockMarkup } from "./blocks.ts";
 import { ICONS } from "./icons.ts";
 import { ATTR, escapeHtml as esc, intentOf, type IntentHandler } from "./intent.ts";
@@ -14,6 +15,7 @@ import type { Block, DetailsModel, Tag } from "./view-model.ts";
 export type DetailsClasses = { name?: string; status?: string; decision?: string; button?: string; primary?: string; cardNameAttribute?: string };
 
 export function detailsMarkup(model: DetailsModel, classes: DetailsClasses = {}): string {
+  if (model.placeholder) return skeletonMarkup("details");
   const name = [classes.name ?? "", "ap-dname"].filter(Boolean).join(" ");
   const status = [classes.status ?? "", "ap-status", model.status.tone ? `ap-t-${model.status.tone}` : ""].filter(Boolean).join(" ");
   const card = model.cardName ? ` ${classes.cardNameAttribute ?? "data-card-name"}` : "";

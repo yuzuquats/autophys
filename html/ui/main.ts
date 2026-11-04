@@ -32,6 +32,9 @@ export function mainMarkup(model: MainModel, width: number, classes: MainClasses
     body = `<section class="ap-viewer ap-onboarding"><h2>${esc(b.title)}</h2><p class="ap-intro">${esc(b.description)}</p><div class="ap-code-head"><b>Python SDK</b>${componentButton("copy-sdk", b.copyLabel)}</div><pre class="ap-code" tabindex="0" aria-label="Python SDK getting started example"><code>${esc(b.snippet)}</code></pre><p class="ap-help">${esc(b.note)}</p><p class="ap-demo-link"><a href="?source=fixtures">View demo data</a><span>Explore a recorded calibration</span></p></section>`;
   } else if (model.body.kind === "loading") {
     body = `<section class="ap-viewer ap-state" aria-busy="true" role="status">${emptyMarkup(model.body.title, model.body.description)}${skeletonMarkup()}</section>`;
+  } else if (model.body.kind === "signed-out") {
+    // `serve --login`, signed out: the pane is the sign-in card (the same form as /login).
+    body = `<section class="ap-viewer ap-signin-wrap"><form class="ap-signin" method="post" action="/api/auth/login"><h2>${esc(model.body.title)}</h2><p>${esc(model.body.description)}</p><input type="hidden" name="next" value="/app"><label>Email<input name="email" type="email" autocomplete="username" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><button type="submit">Sign in</button><p class="ap-signin-alt">No account? <a href="?source=fixtures">View the recorded demo</a> (read-only).</p></form></section>`;
   } else if (model.body.kind === "missing" || model.body.kind === "unavailable") {
     body = `<section class="ap-viewer ap-state">${emptyMarkup(model.body.title, model.body.description)}</section>`;
   } else if (model.body.kind === "configuration") {

@@ -105,6 +105,8 @@ export type MainBody =
   | Missing
   | { kind: "loading"; title: string; description: string }
   | { kind: "unavailable"; title: string; description: string }
+  /** `serve --login`, signed out: the one place that asks to sign in. */
+  | { kind: "signed-out"; title: string; description: string }
   | { kind: "onboarding"; title: string; description: string; snippet: string; copyLabel: string; note: string }
   | { kind: "configuration"; parameters: RangesChart; experiments: Section[]; sections: Section[] }
   | { kind: "panels"; panels: ChartPanel[]; columns?: number };
@@ -156,6 +158,8 @@ export type DetailsModel = {
   title: string;
   /** Marks the title as the name a mirrored review card shows. */
   cardName?: boolean;
+  /** Draw placeholder blocks instead of the header and sections (signed out, nothing to show). */
+  placeholder?: boolean;
   status: { text: string; tone?: Tone };
   sections: Section[];
   /** The decision row: exactly two buttons. */

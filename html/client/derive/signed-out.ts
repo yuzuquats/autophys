@@ -5,9 +5,8 @@
  */
 import type { View } from "./index.ts";
 
-export const SIGN_IN_TITLE = "Sign in to open the workbench";
-export const SIGN_IN_DESCRIPTION =
-  "Your projects and investigations belong to your account. Without one, you can look around the recorded demo.";
+export const SIGN_IN_TITLE = "Sign in to Autophys";
+export const SIGN_IN_DESCRIPTION = "Use the email you were invited with.";
 
 export function signedOutView(view: View): View {
   return {
@@ -15,6 +14,6 @@ export function signedOutView(view: View): View {
       notice: { kind: "loading", title: "", description: "" }, nodes: [], selectedId: null, expandedIds: [] },
     main: { crumb: [{ label: "Workspace" }], meta: "", actions: [],
       body: { kind: "signed-out", title: SIGN_IN_TITLE, description: SIGN_IN_DESCRIPTION }, credit: "" },
-    details: { icon: "workspace", title: "Workspace", status: { text: "" }, sections: [] },
+    details: { icon: "workspace", title: "Workspace", status: { text: "" }, sections: [], placeholder: true },
   };
 }
