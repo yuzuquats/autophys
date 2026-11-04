@@ -111,6 +111,9 @@ def request_body(route, model, messages, *, response_schema=None, effort=None, m
     body = {"messages": messages, "max_tokens": budget}
     if route != "lane":
         body["model"] = model
+    if route == "muse":
+        # Never sent over HTTP: it keys muse cassettes apart from Meta ones with the same request.
+        body["route"] = "muse"
     if response_schema is not None:
         if route == "lane":
             body["response_schema"] = response_schema
@@ -312,6 +315,10 @@ class ChatReasoner:
         return _retry_delay(error, attempt, self._jitter)
 
 
+# Terminal states that may be named in an error; anything else is provider text.
+_MUSE_TERMINALS = {"failed", "cancelled", "canceled", "interrupted", "timeout", "timed_out", "error", None}
+
+
 class MuseExecReasoner:
     """Route ``muse``: one headless ``muse exec`` per completion, on the coding plan.
 
@@ -377,7 +384,8 @@ class MuseExecReasoner:
             raise ReasonerError(f"muse exec exited with status {result.returncode}")
         events = parse_muse_events(result.stdout)
         if events["terminal"] != "completed":
-            raise ReasonerError(f"muse exec run ended {events['terminal']}")
+            terminal = events["terminal"] if events["terminal"] in _MUSE_TERMINALS else "unexpectedly"
+            raise ReasonerError(f"muse exec run ended {terminal}")
         if not isinstance(events["message"], str) or not events["message"].strip():
             raise ReasonerError("muse exec returned no text")
         used = events["usage"] or {}
@@ -429,6 +437,9 @@ class ReplayReasoner:
         key = _cassette_key(request_body(self.route, self.model, messages, **kw))
         if key not in self.replies:
             raise ReasonerError(f"replay miss: {key}")
+        recorded = self.replies[key].get("route")
+        if "muse" in (recorded, self.route) and recorded != self.route:
+            raise ReasonerError(f"replay route mismatch: recorded {recorded!r}, requested {self.route!r}")
         return ReasonReply(**self.replies[key], replayed=True)
 
 

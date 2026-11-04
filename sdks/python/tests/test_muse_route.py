@@ -125,3 +125,23 @@ def test_autoloop_end_to_end_through_the_muse_route(tmp_path, monkeypatch):
     assert summary["train_final"]["cost_usd"] is None
     report = json.loads((tmp_path / "run/train/001/report.json").read_text())
     assert all(r["row"]["policy"] for r in report["runs"])
+
+
+def test_muse_and_meta_cassettes_never_share_keys(tmp_path):
+    from autophys.reasoner import ReplayReasoner, _cassette_key, request_body
+    messages = [{"role": "user", "content": "x"}]
+    meta, muse = (_cassette_key(request_body(route, MUSE_SPARK, messages)) for route in ("meta", "muse"))
+    assert meta != muse
+    cassette = tmp_path / "c.jsonl"
+    reply = {"content": "{}", "model": MUSE_SPARK, "usage": {}, "route": "meta", "elapsed_ms": 1}
+    cassette.write_text(json.dumps({"key": meta, "reply": reply}) + "\n" + json.dumps({"key": muse, "reply": reply}) + "\n")
+    with pytest.raises(ReasonerError, match="route mismatch"):
+        ReplayReasoner(cassette, route="muse", model=MUSE_SPARK).complete(messages)
+    assert ReplayReasoner(cassette, route="meta", model=MUSE_SPARK).complete(messages).route == "meta"
+
+
+def test_unknown_terminal_text_is_not_echoed(tmp_path):
+    body = 'ev("run.terminal.credential-sentinel", {"terminal": "credential-sentinel"})'
+    with pytest.raises(ReasonerError, match="ended unexpectedly") as info:
+        MuseExecReasoner(binary=fake_muse(tmp_path, body)).complete([{"role": "user", "content": "x"}])
+    assert "sentinel" not in str(info.value)

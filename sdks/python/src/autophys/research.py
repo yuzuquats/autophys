@@ -321,7 +321,9 @@ class MuseCLIResearcher:
                 raise ReasonerError(f"Muse researcher exited with status {result.returncode}")
             self.last_events = parse_muse_events(result.stdout)
             if self.last_events["terminal"] != "completed":
-                raise ReasonerError(f"Muse researcher run ended {self.last_events['terminal']}")
+                from .reasoner import _MUSE_TERMINALS
+                terminal = self.last_events["terminal"]
+                raise ReasonerError(f"Muse researcher run ended {terminal if terminal in _MUSE_TERMINALS else 'unexpectedly'}")
             written = skill.read_text(encoding="utf-8")
             reply = (self.last_events.get("message") or "").strip()
             if written == playbook_text and reply.startswith("---"):

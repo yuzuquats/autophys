@@ -704,8 +704,11 @@ shown to the researcher.
   recorded go to `journal.orphaned.jsonl` and their iteration is redone. A
   `reason` run keeps its policy model (`model_spec`): resume refuses a different
   one, and refuses runs that do not record one. Every charge is appended to
-  `spend.jsonl` when it is incurred and resume recomputes spend from it, so a
-  crash loses no spend. `--max-usd` is checked before each proposal, so one
+  `spend.jsonl` when it is incurred (each repeat as it completes) and resume
+  recomputes spend from it. A partial evaluation directory is charged for the
+  priced calls in its workbooks before it is moved aside, and a run from before
+  the ledger starts it with its recorded total, so a crash or upgrade loses no
+  spend. `--max-usd` is checked before each proposal, so one
   iteration's researcher call and candidate evaluation, and the closing held-out
   evaluations, can take spending past it.
 - **Acceptance (AR-3).** `--acceptance lexicographic` keeps any MQ-4 gain
@@ -751,8 +754,11 @@ web tools and approval prompts off and at most two model steps. No API key is
 passed and `MODEL_API_KEY` is removed from its environment, so a call cannot
 fall back to metered tokens. Usage records Muse's token counts with
 `cost_usd: null`, because plan usage is not priced per token; `--max-usd` does
-not see it. `--record`/`--replay` cassettes work as for the other routes; the
-route is text-only. One live decision took 6.8 s and about 24k input tokens,
+not see it. `--record`/`--replay` cassettes work as for the other routes; muse
+cassette keys include the route, so they never match a Meta recording of the
+same request, and replay refuses a recording from the other route. Error
+messages name only known terminal states, never provider text. The route is
+text-only. One live decision took 6.8 s and about 24k input tokens,
 most of them Muse's own system prompt.
 
 `tests/test_muse_route.py` checks the CLI arguments, environment and prompt with

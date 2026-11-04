@@ -436,3 +436,48 @@ def test_repeated_interruptions_in_one_second_do_not_collide(tmp_path):
         autoloop(researcher=Proposer([]), output_dir=tmp_path / "run", resume=True, evaluate_fn=evaluate)
     autoloop(researcher=Proposer([]), output_dir=tmp_path / "run", resume=True, evaluate_fn=evaluate)
     assert len(list((tmp_path / "run/train").glob("000.interrupted-*"))) == 2
+
+
+# --- review round 3: per-repeat charges, pre-ledger runs, partial evaluations ------
+
+def test_a_completed_repeat_is_charged_even_if_the_next_is_interrupted(tmp_path):
+    evaluate = Costly(fail_at=2)  # baseline repeat r0 completes, r1 is interrupted
+    with pytest.raises(KeyboardInterrupt):
+        _run(tmp_path, Proposer([]), evaluate_fn=evaluate, repeats=2, max_iterations=0)
+    summary = autoloop(researcher=Proposer([]), output_dir=tmp_path / "run", resume=True, max_iterations=0,
+                       evaluate_fn=evaluate)
+    # r0 before the interruption, then the redone baseline (2) and the held-out evaluation (2).
+    assert summary["spent_usd"] == pytest.approx(5.0)
+
+
+def test_a_run_from_before_the_ledger_keeps_its_spend(tmp_path):
+    evaluate = Costly(fail_at=0)
+    _run(tmp_path, Proposer([]), evaluate_fn=evaluate, max_iterations=0)
+    (tmp_path / "run/spend.jsonl").unlink()  # as written before the ledger existed; state says $2
+    resume = dict(researcher=Proposer([]), output_dir=tmp_path / "run", resume=True, max_iterations=0,
+                  evaluate_fn=evaluate)
+    assert autoloop(**resume)["spent_usd"] == pytest.approx(3.0)
+    assert autoloop(**resume)["spent_usd"] == pytest.approx(4.0)
+
+
+def test_spend_in_an_interrupted_evaluations_workbooks_is_charged(tmp_path, monkeypatch):
+    import autophys.autoloop as module
+    monkeypatch.setattr(module, "_workbook_cost", lambda path: 2.5)
+
+    class Partial(Interrupting):
+        def __call__(self, path, cases, seeds, policy, directory, **kw):
+            self.n += 1
+            directory.mkdir(parents=True, exist_ok=False)
+            if self.n == self.fail_at:
+                (directory / "thermal-0.ap-workbook").write_bytes(b"")  # one unit finished before the crash
+                raise KeyboardInterrupt
+            return FakeEval()(path, cases, seeds, policy, directory)
+
+    evaluate = Partial(fail_at=1)
+    with pytest.raises(KeyboardInterrupt):
+        _run(tmp_path, Proposer([]), evaluate_fn=evaluate, max_iterations=0)
+    summary = autoloop(researcher=Proposer([]), output_dir=tmp_path / "run", resume=True, max_iterations=0,
+                       evaluate_fn=evaluate)
+    ledger = [json.loads(l) for l in (tmp_path / "run/spend.jsonl").read_text().splitlines()]
+    assert [e["what"] for e in ledger] == ["train/000 (interrupted: thermal-0.ap-workbook)"]
+    assert summary["spent_usd"] == pytest.approx(2.5)

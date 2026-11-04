@@ -162,13 +162,11 @@ def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_se
         options["render_images"] = True
     takes_history = "history" in inspect.signature(researcher.propose).parameters
 
-    def fresh(directory):
-        # An interrupted evaluation leaves a partial directory; keep it aside and redo it.
-        if directory.exists():
-            import uuid
-            stamp = time.strftime('%Y%m%dT%H%M%S', time.gmtime())
-            directory.rename(directory.with_name(f"{directory.name}.interrupted-{stamp}-{uuid.uuid4().hex[:8]}"))
-        return directory
+    def ledger():
+        path = root / "spend.jsonl"
+        if not path.exists():
+            return []
+        return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
     def charge(what, usd):
         # Appended when incurred, so spend survives any crash before state.json is saved.
@@ -177,23 +175,40 @@ def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_se
                 stream.write(json.dumps({"at": _now(), "what": what, "usd": usd}) + "\n")
             state["spent_usd"] += usd
 
-    def scored(path, seeds, directory):
-        result = _scored(path, seeds, fresh(directory))
+    def fresh(directory, label):
+        # An interrupted evaluation leaves a partial directory. Charge the spend recorded in
+        # its workbooks that no ledger entry covers yet, keep it aside, and redo it.
+        if directory.exists():
+            import uuid
+            charged = {entry["what"] for entry in ledger()}
+            for workbook in sorted(directory.rglob("*.ap-workbook")):
+                part = workbook.parent.relative_to(directory).as_posix()
+                what = label if part == "." else f"{label}/{part}"
+                if what not in charged:
+                    charge(f"{what} (interrupted: {workbook.name})", _workbook_cost(workbook))
+            stamp = time.strftime('%Y%m%dT%H%M%S', time.gmtime())
+            directory.rename(directory.with_name(f"{directory.name}.interrupted-{stamp}-{uuid.uuid4().hex[:8]}"))
+
+    def scored(path, seeds, directory, label):
+        """Evaluate and charge as it goes: each repeat is charged as soon as it completes."""
+        fresh(directory, label)
+        if repeats == 1:
+            result = evaluate_fn(path, cases, seeds, policy, directory, jobs=jobs, **options)
+            charge(label, cost(result))
+        else:
+            parts = []
+            for k in range(repeats):
+                part = evaluate_fn(path, cases, seeds, policy, directory / f"r{k}", jobs=jobs, **options)
+                charge(f"{label}/r{k}", cost(part))
+                parts.append(part)
+            runs = [dict(run, repeat=k) for k, part in enumerate(parts) for run in part["runs"]]
+            result = {"runs": runs, "score": score(runs),
+                      "failing_transcripts": [t for part in parts for t in part["failing_transcripts"]]}
+            artifacts = [a for part in parts for a in part.get("plot_artifacts", [])]
+            if artifacts:
+                result["plot_artifacts"] = artifacts
         directory.mkdir(parents=True, exist_ok=True)  # evaluators need not create it
         return result
-
-    def _scored(path, seeds, directory):
-        if repeats == 1:
-            return evaluate_fn(path, cases, seeds, policy, directory, jobs=jobs, **options)
-        parts = [evaluate_fn(path, cases, seeds, policy, directory / f"r{k}", jobs=jobs, **options)
-                 for k in range(repeats)]
-        runs = [dict(run, repeat=k) for k, part in enumerate(parts) for run in part["runs"]]
-        merged = {"runs": runs, "score": score(runs),
-                  "failing_transcripts": [t for part in parts for t in part["failing_transcripts"]]}
-        artifacts = [a for part in parts for a in part.get("plot_artifacts", [])]
-        if artifacts:
-            merged["plot_artifacts"] = artifacts
-        return merged
 
     def decide(trial, incumbent, index):
         if acceptance == "bootstrap":
@@ -205,23 +220,21 @@ def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_se
 
     t0 = time.monotonic()
     wall_before = float(state.get("wall_s", 0.0))
-    if resume and "incumbent" not in state and (root / "spend.jsonl").exists():
-        state["spent_usd"] = sum(json.loads(line)["usd"] for line in (root / "spend.jsonl").read_text(encoding="utf-8")
-                                 .splitlines() if line.strip())
+    if resume:
+        # The ledger is the spend of record. A run from before the ledger starts it with its
+        # recorded total, so adopting the ledger never drops earlier spending.
+        if not (root / "spend.jsonl").exists() and state["spent_usd"]:
+            charge("before the spend ledger", state["spent_usd"])
+        state["spent_usd"] = sum(entry["usd"] for entry in ledger())
     if "incumbent" not in state:
         text = load_playbook(config["playbook"] if resume else playbook).data.decode("utf-8")
         path = run.playbook(0, text)
-        report = scored(path, train_seeds, root / "train" / "000")
-        charge("train/000", cost(report))
+        report = scored(path, train_seeds, root / "train" / "000", "train/000")
         state.update(incumbent=path.name, incumbent_sha256=_sha(text), incumbent_score=report["score"],
                      initial=path.name)
         _write_json(root / "train" / "000" / "report.json", report)
         run.save_state(state)
     else:
-        ledger = root / "spend.jsonl"
-        if ledger.exists():
-            state["spent_usd"] = sum(json.loads(line)["usd"] for line in ledger.read_text(encoding="utf-8").splitlines()
-                                     if line.strip())
         path = root / "playbooks" / state["incumbent"]
         text = path.read_text(encoding="utf-8")
         report = json.loads((root / "train" / path.stem / "report.json").read_text(encoding="utf-8"))
@@ -285,9 +298,8 @@ def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_se
             entry.update(accepted=False, reason=f"invalid edit: {error}", score=None, playbook=None, diff=None)
         else:
             candidate = run.playbook(index, proposed)
-            trial = scored(candidate, train_seeds, root / "train" / f"{index:03d}")
+            trial = scored(candidate, train_seeds, root / "train" / f"{index:03d}", f"train/{index:03d}")
             _write_json(root / "train" / f"{index:03d}" / "report.json", trial)
-            charge(f"train/{index:03d}", cost(trial))
             accepted, stats = decide(trial, report, index)
             entry.update(accepted=accepted, score=trial["score"], playbook=candidate.name, sha256=_sha(proposed),
                          diff=_diff(text, proposed), acceptance=stats, reason="improves on the incumbent" if accepted
@@ -304,12 +316,10 @@ def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_se
     initial = root / "playbooks" / state["initial"]
     final = root / "playbooks" / state["incumbent"]
     stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime())
-    held_initial = scored(initial, heldout_seeds, root / "heldout" / f"initial-{stamp}")
-    charge(f"heldout/initial-{stamp}", cost(held_initial))
+    held_initial = scored(initial, heldout_seeds, root / "heldout" / f"initial-{stamp}", f"heldout/initial-{stamp}")
     held_final = held_initial
     if final != initial:
-        held_final = scored(final, heldout_seeds, root / "heldout" / f"final-{stamp}")
-        charge(f"heldout/final-{stamp}", cost(held_final))
+        held_final = scored(final, heldout_seeds, root / "heldout" / f"final-{stamp}", f"heldout/final-{stamp}")
     state["wall_s"] = wall_before + time.monotonic() - t0
     state["stopped"] = {"at": _now(), "reason": stop}
     run.save_state(state)
@@ -325,6 +335,22 @@ def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_se
                "cases": cases, "train_seeds": list(train_seeds), "heldout_seeds": list(heldout_seeds)}
     _write_json(root / "summary.json", summary)
     return summary
+
+
+def _workbook_cost(path) -> float:
+    """Known dollar cost of the reasoner calls recorded in one workbook (unpriced calls count 0)."""
+    from .workbook import WorkbookStore
+    total = 0.0
+    try:
+        with WorkbookStore(path, readonly=True) as store:
+            for investigation in store.investigations():
+                for record in store.records(investigation["id"]):
+                    usage = record.payload.get("usage") if record.kind == "step" else None
+                    if isinstance(usage, dict) and isinstance(usage.get("cost_usd"), (int, float)):
+                        total += float(usage["cost_usd"])
+    except Exception:  # a workbook cut off mid-write may not open; its spend is unknown
+        return total
+    return total
 
 
 def set_setting(text: str, key: str, value: str) -> str:
