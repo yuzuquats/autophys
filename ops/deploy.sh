@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
-# Build autophys from a clean checkout at HEAD, with the tento-cookbook-js
-# shell from the tento checkout's HEAD, and run it as the systemd user unit
-# autophys.service (`autophys serve`) from an immutable release directory:
+# Build autophys from a clean checkout at HEAD and run it as the systemd user
+# unit autophys.service (`autophys serve --web-root`) from an immutable release
+# directory:
 #
-#   ~/.local/share/tento/services/autophys/<sha7>-<yyyymmdd>/{bin/autophys,web,COMMIT,TENTO_COMMIT}
+#   ~/.local/share/tento/services/autophys/<sha7>-<yyyymmdd>/{bin/autophys,web/autophys/routes/…,COMMIT,TENTO_COMMIT}
 #   ~/.local/share/tento/services/autophys/current -> that directory
 #
-# The service never runs from either checkout or a build directory.
-# Usage: ops/deploy.sh   (AUTOPHYS_ADDR overrides 127.0.0.1:4794; TENTO overrides ~/workspace/tento)
+# web/autophys is the route tree `autophys build-web` bundles from html/routes
+# (tento-web's `<stage tree>/<domain>` shape, so its per-file module store lands
+# inside the release at target.web.modules). The service never runs from the
+# checkout or a build directory.
+# Usage: ops/deploy.sh   (AUTOPHYS_ADDR overrides 127.0.0.1:4794)
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
-tento=${TENTO:-$HOME/workspace/tento}
 addr=${AUTOPHYS_ADDR:-127.0.0.1:4794}
 case "$addr" in
   127.*:* | "[::1]":*) ;;
@@ -25,14 +27,11 @@ if [ -n "$(git -C "$repo" status --porcelain)" ]; then
   echo "deploy: autophys working tree is not clean; commit first so the release names its source" >&2
   exit 1
 fi
-# The tento checkout is shared and dirty with other sessions' work; only the
-# shell this app bundles has to match tento HEAD.
-if [ -n "$(git -C "$tento" status --porcelain -- tento-cookbook-js)" ]; then
-  echo "deploy: $tento/tento-cookbook-js differs from tento HEAD; commit it first" >&2
-  exit 1
-fi
+# The tento pin: vendor/tento is the tento source this release builds against,
+# and the clean-tree check above covers it. TENTO_COMMIT records vendor/tento's
+# git tree id at HEAD.
 commit=$(git -C "$repo" rev-parse HEAD)
-tento_commit=$(git -C "$tento" rev-parse HEAD)
+tento_commit=$(git -C "$repo" rev-parse HEAD:vendor/tento)
 release_root=$HOME/.local/share/tento/services/autophys
 release=$release_root/${commit:0:7}-$(date +%Y%m%d)
 
@@ -44,12 +43,14 @@ if [ -e "$release" ]; then
     exit 1
   fi
 else
-  (cd "$repo" && cargo test -q && AUTOPHYS_COMMIT=$commit cargo build -q --release -p autophys)
-  (cd "$repo/web" && deno task test && deno task build)
+  (cd "$repo" && cargo test -q && deno test -q --allow-read --permit-no-files html/)
+  (cd "$repo" && AUTOPHYS_COMMIT=$commit AUTOPHYS_TENTO_COMMIT=$tento_commit cargo build -q --release --bin autophys)
   mkdir -p "$release_root"
   stage=$(mktemp -d "$release_root/.staging-XXXXXX")
   install -D -m 0755 "$CARGO_TARGET_DIR/release/autophys" "$stage/bin/autophys"
-  cp -R "$repo/web/dist" "$stage/web"
+  # build-web exits non-zero when tento-web's build-status.json reports errors.
+  AUTOPHYS_PROJECT_ROOT=$repo "$stage/bin/autophys" build-web --out "$stage/web/autophys" >/dev/null
+  test -f "$stage/web/autophys/routes/index.anon.html" && test -f "$stage/web/autophys/routes/index.root.js"
   echo "$commit" > "$stage/COMMIT"
   echo "$tento_commit" > "$stage/TENTO_COMMIT"
   chmod 0755 "$stage"
@@ -71,7 +72,7 @@ systemctl --user restart autophys.service
 for _ in $(seq 1 50); do
   if body=$(curl -fsS "http://$addr/api/healthz" 2>/dev/null); then
     case "$body" in
-      *"\"commit\":\"$commit\""*) echo "deploy: autophys ${commit:0:7} (cookbook tento ${tento_commit:0:9}) healthy on $addr: $body"; exit 0 ;;
+      *"\"commit\":\"$commit\""*) echo "deploy: autophys ${commit:0:7} (vendor/tento tree ${tento_commit:0:9}) healthy on $addr: $body"; exit 0 ;;
     esac
   fi
   sleep 0.2

@@ -2,12 +2,12 @@
 # @RELEASE@, @ADDR@, @COMMIT@ and @TENTO@ are filled in; edit this template,
 # not the rendered unit.
 [Unit]
-Description=autophys serve @COMMIT@ (cookbook tento @TENTO@) on @ADDR@ (experiments/autophys)
+Description=autophys daemon @COMMIT@ (vendor/tento tree @TENTO@) on @ADDR@, serving its prebuilt route tree
 
 [Service]
 Type=simple
 WorkingDirectory=@RELEASE@
-ExecStart=@RELEASE@/bin/autophys serve --addr @ADDR@ --web @RELEASE@/web
+ExecStart=@RELEASE@/bin/autophys serve --addr @ADDR@ --web-root @RELEASE@/web/autophys
 # A crash or kill restarts; a deliberate SIGTERM stop stays stopped (AP-4).
 Restart=on-failure
 RestartSec=2

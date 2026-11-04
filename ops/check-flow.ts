@@ -13,7 +13,7 @@ const [base, outDir, title = "Autophys", appId = "autophys"] = Deno.args;
 if (!base || !outDir) throw new Error("usage: check-flow.ts <base-url> <screenshot-dir> [<title>] [<app-id>]");
 await Deno.mkdir(outDir, { recursive: true });
 const home = Deno.env.get("HOME")!;
-const { withHeadless } = await import(`file://${home}/workspace/tento/tento-headless-js/mod.ts`);
+const { withHeadless } = await import(new URL("../vendor/tento/tento-headless-js/mod.ts", import.meta.url).href);
 // Chrome for Testing has no linux-arm64 build; on ARM use Playwright's
 // aarch64 Chromium unless AUTOPHYS_CHROME names a binary.
 async function chromeForHost(): Promise<string | undefined> {
