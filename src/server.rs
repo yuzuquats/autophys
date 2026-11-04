@@ -19,7 +19,8 @@ use crate::app::{APP_ID, AppConfig, BuildInfo, TENTO, domain};
 pub const DEFAULT_ADDR: &str = "127.0.0.1:4794";
 
 pub const USAGE: &str = "usage: autophys serve [--addr 127.0.0.1:4794] [--web-root DIR]
-       autophys build-web [--out DIR]";
+       autophys build-web [--out DIR]
+       autophys pair | keys | db      (not yet available: they land with the store)";
 
 /// Parse a listen address and refuse anything that is not a literal loopback
 /// IP. Host names are refused too: `localhost` can resolve to a routable
@@ -334,5 +335,80 @@ mod tests {
         ] {
             assert!(parse_loopback(addr).is_err(), "{addr} should be refused");
         }
+    }
+
+    fn tree(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("autophys-{name}-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("routes")).unwrap();
+        std::fs::write(dir.join("routes/index.anon.html"), "x").unwrap();
+        dir
+    }
+
+    #[test]
+    fn serve_reads_flags_over_env() {
+        let dir = tree("config");
+        let env = |k: &str| match k {
+            "AUTOPHYS_ADDR" => Some("127.0.0.1:1".to_string()),
+            "AUTOPHYS_WEB_ROOT" => Some(dir.display().to_string()),
+            _ => None,
+        };
+        let from_env = parse_serve(Vec::<String>::new(), env).unwrap();
+        assert_eq!(from_env.addr.port(), 1);
+        assert_eq!(from_env.web_root.as_deref(), Some(dir.as_path()));
+        let flagged = parse_serve(["--addr=127.0.0.1:2".to_string()], env).unwrap();
+        assert_eq!(flagged.addr.port(), 2);
+        assert!(parse_serve(["--addr".into(), "0.0.0.0:2".into()], env).is_err());
+        assert!(parse_serve(["--bogus".into()], env).is_err());
+        assert!(parse_serve(["--addr".into()], env).is_err());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn serve_without_a_web_root_builds_from_source() {
+        let config = parse_serve(Vec::<String>::new(), |_| None).unwrap();
+        assert_eq!(config.addr, DEFAULT_ADDR.parse().unwrap());
+        assert_eq!(config.web_root, None);
+    }
+
+    #[test]
+    fn a_web_root_must_be_a_built_route_tree() {
+        let err = parse_serve(
+            ["--web-root".into(), "/nonexistent/autophys".into()],
+            |_| None,
+        )
+        .unwrap_err();
+        assert!(err.contains("routes/index.anon.html"), "{err}");
+    }
+
+    #[test]
+    fn a_failed_build_status_is_an_error() {
+        let dir = tree("status");
+        let write = |body: &str| std::fs::write(dir.join("build-status.json"), body).unwrap();
+        write(r#"{"status":"ok","emitter_status":"ok","errors":[]}"#);
+        assert_eq!(check_build_status(&dir).unwrap(), None);
+        write(r#"{"status":"failed","errors":["Could not resolve \"@tento-trace\""]}"#);
+        let err = check_build_status(&dir).unwrap_err().to_string();
+        assert!(err.contains("@tento-trace"), "{err}");
+        write(r#"{"status":"ok","emitter_status":"failed","emitter_errors":["x"]}"#);
+        let warning = check_build_status(&dir)
+            .unwrap()
+            .expect("an emit failure is a warning");
+        assert!(warning.contains("per-file emit"), "{warning}");
+        std::fs::remove_file(dir.join("build-status.json")).unwrap();
+        assert!(
+            check_build_status(&dir).is_err(),
+            "a missing status is not a clean build"
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn build_web_takes_only_out() {
+        assert_eq!(parse_build_web(Vec::<String>::new()).unwrap(), None);
+        assert_eq!(
+            parse_build_web(["--out=/tmp/x".to_string()]).unwrap(),
+            Some(PathBuf::from("/tmp/x"))
+        );
+        assert!(parse_build_web(["--web-root".into(), "x".into()]).is_err());
     }
 }

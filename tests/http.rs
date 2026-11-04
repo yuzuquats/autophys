@@ -1,10 +1,10 @@
-//! Checks over a real loopback socket, against a prebuilt route tree (what
-//! `serve --web-root` serves): healthz, JSON 404s under /api, and the
-//! loopback-only refusal.
+//! End-to-end checks over a real loopback socket, against a prebuilt route
+//! tree (what `serve --web-root` serves); no bundler runs here.
 
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
+use std::time::Duration;
 
 use autophys::{AppConfig, BuildInfo, http_server, serve, webapp};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -22,11 +22,10 @@ fn fixture(name: &str) -> PathBuf {
     dir
 }
 
-/// A running server; dropping the stop sender ends it.
 struct Running {
     addr: std::net::SocketAddr,
-    _stop: oneshot::Sender<()>,
-    _task: tokio::task::JoinHandle<std::io::Result<()>>,
+    stop: Option<oneshot::Sender<()>>,
+    task: tokio::task::JoinHandle<std::io::Result<()>>,
 }
 
 async fn start(name: &str) -> Running {
@@ -49,12 +48,16 @@ async fn start(name: &str) -> Running {
     }));
     Running {
         addr,
-        _stop: stop,
-        _task: task,
+        stop: Some(stop),
+        task,
     }
 }
 
 /// One HTTP/1.1 request with `Connection: close`; returns (status, headers, body).
+async fn get(addr: std::net::SocketAddr, path: &str) -> (u16, String, String) {
+    request(addr, "GET", path).await
+}
+
 async fn request(addr: std::net::SocketAddr, method: &str, path: &str) -> (u16, String, String) {
     let mut stream = TcpStream::connect(addr).await.unwrap();
     let request = format!(
@@ -72,7 +75,7 @@ async fn request(addr: std::net::SocketAddr, method: &str, path: &str) -> (u16, 
 #[tokio::test]
 async fn healthz_reports_ok_version_and_both_commits() {
     let server = start("healthz").await;
-    let (status, head, body) = request(server.addr, "GET", "/api/healthz").await;
+    let (status, head, body) = get(server.addr, "/api/healthz").await;
     assert_eq!(status, 200);
     assert!(head.contains("content-type: application/json"), "{head}");
     let json: serde_json::Value = serde_json::from_str(&body).unwrap();
@@ -83,11 +86,39 @@ async fn healthz_reports_ok_version_and_both_commits() {
 }
 
 #[tokio::test]
+async fn the_route_tree_is_served() {
+    let server = start("static").await;
+    let (status, head, body) = get(server.addr, "/").await;
+    assert_eq!(status, 200);
+    assert!(head.contains("text/html"), "{head}");
+    assert!(body.contains("<title>autophys</title>"), "{body}");
+    let (status, head, body) = get(server.addr, "/index.root.js").await;
+    assert_eq!((status, body.as_str()), (200, "console.log('autophys')"));
+    assert!(head.contains("javascript"), "{head}");
+}
+
+#[tokio::test]
+async fn app_routes_serve_the_document() {
+    let server = start("app-routes").await;
+    for path in ["/app", "/app/", "/app/untitled-2", "/app/a/b"] {
+        let (status, head, body) = get(server.addr, path).await;
+        assert_eq!(status, 200, "{path}");
+        assert!(head.contains("text/html"), "{path}: {head}");
+        assert_eq!(body, PAGE, "{path}");
+    }
+}
+
+#[tokio::test]
 async fn unknown_paths_are_404() {
     let server = start("missing").await;
-    let (status, _, _) = request(server.addr, "GET", "/nope.js").await;
+    let (status, _, _) = get(server.addr, "/nope.js").await;
     assert_eq!(status, 404);
-    for (method, path) in [("GET", "/api/nope"), ("POST", "/api/nope"), ("GET", "/api")] {
+    for (method, path) in [
+        ("GET", "/api/nope"),
+        ("GET", "/api/v1/workspace"),
+        ("POST", "/api/v1/x"),
+        ("GET", "/api"),
+    ] {
         let (status, head, body) = request(server.addr, method, path).await;
         assert_eq!(status, 404, "{method} {path}");
         assert!(head.contains("application/json"), "{path}: {head}");
@@ -95,6 +126,26 @@ async fn unknown_paths_are_404() {
         assert_eq!(json["ok"], false, "{path}");
         assert_eq!(json["path"], path);
     }
+    // Traversal stays inside the route tree.
+    let (status, _, _) = get(server.addr, "/../Cargo.toml").await;
+    assert!(status == 404 || status == 400, "traversal got {status}");
+}
+
+#[tokio::test]
+async fn shutdown_signal_drains_and_stops() {
+    let mut server = start("shutdown").await;
+    let (status, _, _) = get(server.addr, "/api/healthz").await;
+    assert_eq!(status, 200);
+    server.stop.take().unwrap().send(()).unwrap();
+    let result = tokio::time::timeout(Duration::from_secs(15), &mut server.task).await;
+    assert!(
+        matches!(result, Ok(Ok(Ok(())))),
+        "server did not stop cleanly: {result:?}"
+    );
+    assert!(
+        TcpStream::connect(server.addr).await.is_err(),
+        "listener still accepting"
+    );
 }
 
 #[test]
@@ -111,6 +162,84 @@ fn binary_refuses_non_loopback_addr() {
         assert!(
             stderr.contains("loopback") || stderr.contains("not an IP"),
             "{addr}: {stderr}"
+        );
+    }
+}
+
+#[test]
+fn binary_refuses_an_unbuilt_web_root() {
+    let out = Command::new(env!("CARGO_BIN_EXE_autophys"))
+        .args([
+            "serve",
+            "--addr",
+            "127.0.0.1:0",
+            "--web-root",
+            "/nonexistent/autophys",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("autophys build-web"));
+}
+
+#[test]
+fn binary_exits_cleanly_on_sigterm() {
+    let web = fixture("bin-sigterm");
+    let probe = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = probe.local_addr().unwrap();
+    drop(probe);
+    let mut child = Command::new(env!("CARGO_BIN_EXE_autophys"))
+        .args(["serve", "--addr", &addr.to_string(), "--web-root"])
+        .arg(&web)
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while std::net::TcpStream::connect(addr).is_err() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "server never listened"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    // Signal only the child this test spawned, by PID.
+    let status = Command::new("kill")
+        .args(["-TERM", &child.id().to_string()])
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let exit = child.wait().unwrap();
+    assert_eq!(exit.code(), Some(0), "SIGTERM should drain and exit 0");
+    let mut stderr = String::new();
+    std::io::Read::read_to_string(child.stderr.as_mut().unwrap(), &mut stderr).unwrap();
+    assert!(
+        stderr.contains("SIGTERM, draining") && stderr.contains("stopped"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn binary_lists_its_subcommands() {
+    let bin = env!("CARGO_BIN_EXE_autophys");
+    let none = Command::new(bin).output().unwrap();
+    assert_eq!(none.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&none.stderr).contains("usage: autophys serve"));
+    let unknown = Command::new(bin).arg("ingest").output().unwrap();
+    assert_eq!(unknown.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&unknown.stderr).contains("unknown command"));
+    let help = Command::new(bin).arg("--help").output().unwrap();
+    assert_eq!(help.status.code(), Some(0));
+    let help = String::from_utf8_lossy(&help.stdout).to_string();
+    assert!(
+        help.contains("autophys serve") && help.contains("autophys build-web"),
+        "{help}"
+    );
+    for command in ["pair", "keys", "db"] {
+        let out = Command::new(bin).arg(command).output().unwrap();
+        assert_eq!(out.status.code(), Some(1), "{command}");
+        assert!(
+            String::from_utf8_lossy(&out.stderr).contains("not yet available"),
+            "{command}"
         );
     }
 }

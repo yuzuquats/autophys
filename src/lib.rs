@@ -1,6 +1,7 @@
 //! The autophys daemon, a tento-web app. `autophys serve` runs one loopback
-//! actix listener: `/api/healthz` and the file-based router over
-//! `html/routes` (built on start, or prebuilt by `autophys build-web`).
+//! actix listener: `/api/healthz`, the `/api/v1` hook in [`app`], and the
+//! file-based router over `html/routes` (built on start, or prebuilt by
+//! `autophys build-web`). The record store lands beside these modules.
 
 pub mod app;
 pub mod server;

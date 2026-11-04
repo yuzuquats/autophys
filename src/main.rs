@@ -32,6 +32,10 @@ async fn main() -> ExitCode {
                 Err(error) => report(Err(error)),
             }
         }
+        Some(command @ ("pair" | "keys" | "db")) => {
+            eprintln!("autophys {command}: not yet available; it lands with the record store");
+            ExitCode::FAILURE
+        }
         Some("-h" | "--help" | "help") => {
             println!("{USAGE}");
             ExitCode::SUCCESS

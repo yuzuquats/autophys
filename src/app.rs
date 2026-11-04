@@ -1,6 +1,6 @@
 //! The autophys tento-web app: one `DomainConfig` whose compiler bundles
 //! `html/routes` by file name (`index.anon.html`, `index.root.ts`), and whose
-//! `.config` registers the daemon's routes on the same actix app.
+//! `.config` registers the daemon's API on the same actix app.
 
 use std::path::PathBuf;
 
@@ -91,6 +91,7 @@ pub fn domain(config: &AppConfig, info: BuildInfo) -> DomainConfig {
             cfg.app_data(info.clone());
             cfg.app_data(shell.clone());
             cfg.route("/api/healthz", web::get().to(healthz));
+            configure_api_v1(cfg);
             // Anything else under /api is a JSON 404, never the page.
             cfg.route("/api", web::route().to(api_not_found));
             cfg.route("/api/{tail:.*}", web::route().to(api_not_found));
@@ -101,6 +102,17 @@ pub fn domain(config: &AppConfig, info: BuildInfo) -> DomainConfig {
         })
         .build()
 }
+
+// ---------------------------------------------------------------------------
+// HOOK: /api/v1
+//
+// The store lands here: `src/store/`, `src/ingest.rs` and `src/http.rs` (owned
+// by the store agent) replace this body with `crate::http::configure(cfg, …)`,
+// registering every `/api/v1` route and the SSE stream. It runs after
+// `/api/healthz` and before the `/api` JSON 404 catch-all, so routes added
+// here win over the catch-all. Until then `/api/v1/*` answers that 404.
+// ---------------------------------------------------------------------------
+fn configure_api_v1(_cfg: &mut web::ServiceConfig) {}
 
 async fn healthz(info: web::Data<BuildInfo>) -> HttpResponse {
     HttpResponse::Ok().json(Health {
