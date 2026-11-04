@@ -16,6 +16,7 @@ import { AutophysMain } from "../ui/main.ts";
 import { AutophysSidebar } from "../ui/sidebar.ts";
 import { autophysStyles } from "../ui/styles.ts";
 import { deck, tutorial } from "./content.ts";
+import { docs } from "./docs.ts";
 
 const USER = "james";
 /** How often the open app re-reads the devices waiting to pair (pairings have no stream). */
@@ -113,4 +114,4 @@ const app: Cookbook.App = {
   export: () => ctl.exportDocument(),
 };
 
-Cookbook.mount({ deck, tutorial: [...Cookbook.Tutorial.shellSteps, ...tutorial], status, labels: { sidebar: "Workspace" } }).run(app);
+Cookbook.mount({ deck, docs, tutorial: [...Cookbook.Tutorial.shellSteps, ...tutorial], status, labels: { sidebar: "Workspace" } }).run(app);
