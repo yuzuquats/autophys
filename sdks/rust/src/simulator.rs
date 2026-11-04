@@ -8,7 +8,7 @@ use std::sync::{
 };
 pub type Params = IndexMap<String, f64>;
 pub type Settings = Value;
-pub type Trajectory = IndexMap<String, Vec<f64>>;
+pub use crate::trajectory::Trajectory;
 pub type Result<T> = std::result::Result<T, SimulationError>;
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum SimulationError {
@@ -186,6 +186,7 @@ pub struct FunctionSimulator {
     pub experiments: IndexMap<String, Settings>,
     pub outputs: Vec<String>,
     pub stochastic: bool,
+    pub(crate) display: Option<crate::display::Display>,
     source_hash: String,
     func: Arc<SimFn>,
     calls: Arc<AtomicUsize>,
@@ -219,6 +220,7 @@ pub fn simulator(
         experiments,
         outputs,
         stochastic: false,
+        display: None,
         source_hash: String::new(),
         func: Arc::new(func),
         calls: Arc::new(AtomicUsize::new(0)),
@@ -269,8 +271,16 @@ impl FunctionSimulator {
         let t = out
             .get("t")
             .ok_or_else(|| SimulationError::Simulation("missing time vector".into()))?;
+        let inputs = self
+            .display
+            .as_ref()
+            .map(|d| d.input_names())
+            .unwrap_or_default();
         let channels: Vec<_> = if self.outputs.is_empty() {
-            out.keys().filter(|k| k.as_str() != "t").cloned().collect()
+            out.keys()
+                .filter(|k| k.as_str() != "t" && !inputs.contains(k))
+                .cloned()
+                .collect()
         } else {
             self.outputs.clone()
         };
@@ -286,6 +296,9 @@ impl FunctionSimulator {
                 )));
             }
             checked.insert(ch, v.clone());
+        }
+        if let Some(display) = &self.display {
+            display.check_inputs(&out, &exp, &mut checked)?;
         }
         Ok(checked)
     }

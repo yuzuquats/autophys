@@ -1,6 +1,6 @@
 # autophys-rs: the daemon's endpoints are a thin layer over a Rust library that matches the Python SDK
 
-Status: phase 1 implemented, rev 4, 2026-11-04. Rev 2: full API parity (AX-2 revised). Rev 3: the numerics case format, the `autophys-cli` layout, the conformance tree as committed. Operator direction (autophys/rs thread): the
+Status: phase 1 implemented, rev 4, 2026-11-04. Display-manifest step 3 is implemented: `autophys::Display`, trajectory `.u`, uncounted previews and byte-identical bench manifests ([contract](display-manifest.md)); HTTP registration is outside this step. Rev 2: full API parity (AX-2 revised). Rev 3: the numerics case format, the `autophys-cli` layout, the conformance tree as committed. Operator direction (autophys/rs thread): the
 Rust binary produces the app and serves the endpoints, and each endpoint
 calls a Rust library crate that is the Rust counterpart of the Python SDK, so
 Rust programs can import it directly. Phase 1 is implemented; phase 2 remains pending. It refines W-4

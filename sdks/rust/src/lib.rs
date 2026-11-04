@@ -60,3 +60,7 @@ pub mod synthetic;
 
 pub mod playbook;
 pub mod usage;
+
+pub mod display;
+mod trajectory;
+pub use display::Display;

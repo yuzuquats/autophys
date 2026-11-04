@@ -2,8 +2,9 @@
 
 Status: rev 3 (2026-11-04). **Approved by the operator for implementation
 (DM-1 in [decisions.md](decisions.md)).** Step 1 (Python SDK) is implemented
-(I6e0c3a9f2d8b51c7e4a2). Its golden manifests, the canonical bytes Rust must
-reproduce exactly, are:
+(I6e0c3a9f2d8b51c7e4a2). Step 3 (Rust SDK) is implemented: `Display`,
+trajectory `.u`, validated bench declarations and 64-point previews. Full archive
+gates and independent review are recorded below. The byte-identical manifests are:
 - `sdks/rust/src/models/fixtures/display/battery_ecm.json` (sha256
   `e1aea0cbe6f8065c8b642d4aeb895509290ae3b30eb6496373c2a17d70c3f5fd`);
 - `sdks/rust/src/models/fixtures/display/oscillator.json`
@@ -410,3 +411,33 @@ be retained. This choice does not alter the records or hash contract.
 
 Task-board CLI was unavailable on rwc-dev-01; implementation, archived-tree
 gates and independent review are tracked in these two spec pages.
+
+## Rust step 3 implementation (2026-11-04)
+
+`autophys::Display` attaches with `FunctionSimulator::with_display`; metadata is
+validated before attachment. `display().canonical(&project)` and `digest` use
+uncounted previews at `Project::initial_value`, linear interpolation before
+six-significant-digit rounding, and the existing canonical encoder without a
+newline. All three Python golden byte comparisons pass. The source-hashed
+`models/{battery,oscillator,thermal}.rs` files and golden fixtures are unchanged;
+public model constructors attach declarations through wrappers outside those
+files. A test compares schemas, source hashes and config versions before and
+after attachment for every bench model. HTTP registration is outside step 3.
+
+DM-RS-1 — **agent-chosen, pending operator review**: replace the `Trajectory`
+map alias with a map-compatible struct exposing `.u` separately. Indexing,
+iteration, collection and serde retain the historical time/output mapping;
+serde intentionally keeps that wire shape (inputs are accessed via `.u`). A
+caller returning an explicit `IndexMap` can use `.into()`. The alternative is
+a separate display-only simulation API, which would keep the exact map alias
+but split the simulation contract from Python. The wrapper is implemented to
+keep ordinary simulation results aligned with Python; reversing it would be a
+small SDK-only API refactor before external adoption. Identity and numerical
+conformance tests cover the boundary. Implementation: this step's `Project:
+autophys` commit and its matching Change-Id.
+
+Validation receipt: pending final archived-commit gate and independent review.
+Task-board CLI was unavailable on rwc-dev-01 (installed `lona-console` has no
+`task` command); plan and live gate logs are in
+`~/.cache/autophys/rs-dm1-evidence/` on the owner host. No other threads were
+messaged.

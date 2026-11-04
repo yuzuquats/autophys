@@ -1,6 +1,6 @@
 # The Python SDK: moved from hacks-site, renamed autophys, speaking /api/v1
 
-Status: SDK page, rev 2, 2026-11-04. Owner: autophys/api (thread 755eea02). It covers the SDK half of phase 5 in
+Status: SDK page, rev 2, 2026-11-04. Python and Rust now share format-1 Display declarations and canonical bench manifest bytes; see [display-manifest.md](display-manifest.md) for the contract and scoped validation. Owner: autophys/api (thread 755eea02). It covers the SDK half of phase 5 in
 tento's `projects/autophys.project.docs/content/architecture.md` ("SDK
 retargeted to `/api/v1` (renamed to autophys)"). That means the package at
 `autophys/sdks/python`, what changed in the move, the decisions it carries,
