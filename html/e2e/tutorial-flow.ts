@@ -72,8 +72,10 @@ await withHeadless(async b => {
       });
       check(state.selected === expected && state.expected === expected,width+": step "+step+"."+substep+" uses the actual selected row ("+state.selected+")");
       const crumb = await p.$eval(".ap-crumb",e=>e.textContent ?? "");
-      const leaf = step===1 || step===2 || step===9 ? "Configuration" : step===3 ? "bench A" : step===4 ? "free_response" : step===5 ? substep ? "Residuals" : "Fit" : step===6 ? "Sensitivity" : step===7 ? "Sine" : "Validate";
-      check(crumb.includes(leaf),width+": Main follows the selected "+leaf+" row");
+      const configuration = step===1 || step===2 || step===9;
+      check(crumb.includes(configuration ? "Configuration" : "bench A"),width+": Main stays on the investigation while selecting sections");
+      const anchor = ({4:"data-free_response%401",5:substep ? "fit-1-residuals" : "fit-1",6:"identifiability-1",7:"proposal-p1",8:"validate"} as Record<number,string>)[step];
+      if (anchor) check(await p.$eval('[id="ap-bench-a-'+anchor+'"]',e=>e.getClientRects().length>0),width+": selected section has a visible anchor");
       check(state.preview,width+": step "+step+"."+substep+" has a real DOM preview");
       check(state.rings.length > 0 && state.rings.every(r=>r.exact && r.clear),width+": step "+step+"."+substep+" halo follows a visible target above the sheet "+JSON.stringify(state.rings));
       check(state.source,width+": demo source is clearly labeled");

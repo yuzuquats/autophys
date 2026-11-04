@@ -215,7 +215,8 @@ function investigationMain(s: State, project: Project, sel: Exclude<Sel, { kind:
   else {
     const check = v.state === "needs-data" ? "No held-out check recorded." : `Held-out check ${v.state === "passed" || v.state === "summary" && v.passed ? "passed" : "failed"}: χ²/N ${sig(v.chi2N, 3)} (≤ ${sig(v.threshold, 3)}).`;
     summary = card("summary", "Summary", [], [
-      { kind: "text", lead: true, text: `${done ? (inv.state === "validated" ? "Validated" : "Inconclusive") : "Investigation in progress"}. ${check}`, tone: done ? statusText(inv).tone : undefined },
+      { kind: "text", lead: true, text: done ? (inv.state === "validated" ? "Validated" : "Inconclusive") : "Investigation in progress", tone: done ? statusText(inv).tone : undefined },
+      { kind: "text", text: check },
       ...(fit ? [{ kind: "table" as const, rows: paramsTable(c, fit) }] : []),
     ], `${rounds.length} round${rounds.length === 1 ? "" : "s"} · ${experimentsUsed(inv)} / ${c.budgets.maxExperiments} experiments`);
   }

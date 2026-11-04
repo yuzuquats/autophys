@@ -10,7 +10,7 @@ import { buttonMarkup } from "./actions.ts";
 import { newProjectFocusTarget, newProjectMarkup } from "./new-project.ts";
 import { blockMarkup } from "./blocks.ts";
 import { breadcrumbText } from "./breadcrumb.ts";
-import type { InvestigationCard, MainModel, Section } from "./view-model.ts";
+import type { Block, InvestigationCard, MainModel, Section } from "./view-model.ts";
 
 /** Class names the host page styles these elements with (its toolbar and button recipes). */
 export type MainClasses = { toolbar?: string; button?: string; primary?: string };
@@ -50,10 +50,11 @@ export function mainMarkup(model: MainModel, width: number, classes: MainClasses
     const renderCard = (c: InvestigationCard, columns = 1) => {
       const chartWidth = Math.max(160, (width - 64 - (columns - 1) * 10) / columns - 24);
       const panels = (c.panels ?? []).map((p, i) => `<div class="ap-investigation-panel"${p.id && i === (c.panels ?? []).findIndex(x => x.id === p.id) ? ` id="${esc(p.id)}"` : ""}>${p.title ? `<h4 class="ap-panel-title">${esc(p.title)}</h4>` : ""}${p.charts.map((chart, j) => chartMarkup(chart, chartWidth, `${c.id}-${i}-${j}`)).join("")}${(p.blocks ?? []).map(blockMarkup).join("")}</div>`).join("");
-      const content = (c.aliases ?? []).map(id => `<span id="${esc(id)}" class="ap-anchor-alias"></span>`).join("") + cardMarkup("ap-dcard", c.heading, c.caption ?? "", panels + c.blocks.map(blockMarkup).join(""));
+      const block = (b: Block) => b.kind === "table" ? `<div class="ap-table-scroll">${blockMarkup(b)}</div>` : blockMarkup(b);
+      const content = (c.aliases ?? []).map(id => `<span id="${esc(id)}" class="ap-anchor-alias"></span>`).join("") + cardMarkup("ap-dcard", c.heading, c.caption ?? "", panels + c.blocks.map(block).join(""));
       return c.collapsed ? `<details id="${esc(c.id)}" class="ap-measurement"><summary>Data · ${esc(c.heading)} <span>${esc(c.caption ?? "")}</span></summary>${content}</details>` : `<div id="${esc(c.id)}" class="ap-section-target">${content}</div>`;
     };
-    const row = (cards: InvestigationCard[]) => `<div class="ap-investigation-row" data-ap-grid="300">${cards.map(c => renderCard(c, width >= 670 ? cards.length : 1)).join("")}</div>`;
+    const row = (cards: InvestigationCard[]) => `<div class="ap-investigation-row" data-ap-grid="${cards.length === 1 ? 100000 : 300}">${cards.map(c => renderCard(c, width >= 670 ? cards.length : 1)).join("")}</div>`;
     const nav = `<nav class="ap-jumps" aria-label="Investigation sections">${b.jumps.map(j => `<a href="#${esc(j.anchor)}" data-ap-jump="${esc(j.anchor)}">${esc(j.label)}</a>`).join("")}</nav>`;
     body = `${nav}<div class="ap-viewer ap-decision-view ap-investigation" data-ap-page="${esc(b.pageId)}">${renderCard(b.summary)}${b.outcome.length ? `<div id="${esc(b.summary.id.replace(/summary$/, "outcome"))}">${row(b.outcome)}</div>` : ""}${b.rounds.map(r => `<details class="ap-round" id="${esc(r.id)}"${r.open ? " open" : ""}><summary><b>${esc(r.heading)}</b><span>${esc(r.caption)}</span></summary><div class="ap-round-body">${r.rows.map(row).join("")}</div></details>`).join("")}</div>`;
   } else if (model.body.kind === "decision") {
@@ -112,7 +113,7 @@ export class AutophysMain {
     const top = viewer.getBoundingClientRect().top + 32;
     for (const link of links) {
       const target = this.host.querySelector<HTMLElement>(`[id="${CSS.escape(link.dataset.apJump!)}"]`);
-      if (target?.getClientRects().length && target.getBoundingClientRect().top <= top) current = link;
+      if (target?.getClientRects().length && (target.getBoundingClientRect().top <= top || viewer.scrollTop + viewer.clientHeight >= viewer.scrollHeight - 2 && target.getBoundingClientRect().top < viewer.getBoundingClientRect().bottom)) current = link;
     }
     for (const link of links) {
       if (link === current) link.setAttribute("aria-current", "location");

@@ -220,7 +220,8 @@ ${w} .ap-round > summary b { font:600 14px/20px var(--ap-font);white-space:nowra
 ${w} .ap-round > summary span { color:var(--ap-sec);font:12px/17px var(--ap-font); }
 ${w} .ap-round-body { display:flex;flex-direction:column;gap:10px; }
 ${w} .ap-investigation-panel + .ap-investigation-panel { margin-top:8px; }
-${w} .ap-investigation .ap-table { display:block;max-width:100%;overflow-x:auto; }
+${w} .ap-investigation .ap-table-scroll { max-width:100%;overflow-x:auto; }
+${w} .ap-investigation .ap-prose.ap-t-ok { color:var(--ap-ok);font:600 18px/24px var(--ap-font); }
 ${w} .ap-measurement { min-width:0; }
 ${w} .ap-measurement > summary { cursor:pointer;padding:6px 12px;color:var(--ap-sec);font:12px/18px var(--ap-font); }
 ${w} .ap-measurement > summary span { color:var(--ap-ter);margin-left:8px; }

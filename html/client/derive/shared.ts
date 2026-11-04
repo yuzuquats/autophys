@@ -100,13 +100,10 @@ export function parseSel(project: Project, id: string): Sel | null {
   return null;
 }
 
-/** What opens first in a project: the mock's bench A / Fit #1 / Landscape, else the first investigation's latest fit. */
+/** An investigation opens at its overview; legacy section ids remain selectable. */
 export function defaultSelection(project: Project): string {
   const inv = project.investigations[0];
-  if (!inv) return ids.config(project);
-  const fit = latestFit(inv);
-  if (!fit) return ids.inv(inv);
-  return project.id === "bench-oscillators" ? ids.view(inv, fit, "landscape") : ids.view(inv, fit, "fit");
+  return inv ? ids.inv(inv) : ids.config(project);
 }
 
 /** The rows a selection sits under, so selecting opens them. */
