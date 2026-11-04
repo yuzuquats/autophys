@@ -200,7 +200,7 @@ ${w} .ap-wave svg { display:block;width:100%;height:28px;overflow:visible; }
 ${w} .ap-viewer.ap-decision-view { display:flex;flex-direction:column;gap:10px;overflow:auto;padding:16px 20px 28px; }
 ${w} .ap-decision-view > .ap-card { position:relative;flex:none; }
 ${w} .ap-table tr.ap-strong td { font-weight:600;background:color-mix(in srgb, var(--ap-ink) 4%, transparent); }
-${w} .ap-steps { margin-top:12px; }
+${w} .ap-steps { margin-top:4px; }
 ${w} .ap-steps std-stepper { display:block;--step-marker-size:18px;--step-marker-font-size:10px;--step-marker-color:var(--ap-sec);--step-marker-bg:var(--ap-card-bg);--step-marker-border:1px solid var(--ap-line);--step-rail-width:1.5px;--step-rail-color:var(--ap-line);--step-spacing:12px;--step-gap:10px;--step-title-size:13px;--step-title-color:var(--ap-ink);--step-title-muted-color:var(--ap-ink);--step-body-size:12px;--step-body-color:var(--ap-sec);--step-meta-size:11.5px;--step-meta-color:var(--ap-ter);--step-row-current-bg:transparent;--step-row-hover-bg:transparent; }
 ${w} .ap-step-body p { margin:0;font:12px/17px var(--ap-font);color:var(--ap-sec); }
 ${w} .ap-step-body ul { margin:2px 0 4px;padding-left:16px;font:12px/17px var(--ap-font);color:var(--ap-sec); }

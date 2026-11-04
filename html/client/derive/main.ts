@@ -77,11 +77,17 @@ export function experimentSummary(s: State, c: ProjectConfig, inv: Investigation
   return [what, p.hypothesis, expected ? `Expected: ${expected}.` : ""].filter(Boolean).join(" ");
 }
 
-/** The experiment summarised in prose, then the agent's steps that led to it on a stepper: one line each, the proposing step with its evidence and expectation. */
-function reasoningSection(s: State, c: ProjectConfig, inv: Investigation, p: Proposal): Section {
-  const trace = p.trace ?? [], lead = { kind: "text" as const, text: experimentSummary(s, c, inv, p), lead: true };
+/** The experiment in prose, first on the page: what it does, why, and what it should settle. */
+function summarySection(s: State, c: ProjectConfig, inv: Investigation, p: Proposal): Section {
+  const status = p.status === "proposed" ? "awaiting approval" : p.status;
+  return { heading: "Summary", caption: `Proposed at Fit #${p.atFit} · ${status}`, blocks: [{ kind: "text", text: experimentSummary(s, c, inv, p), lead: true }] };
+}
+
+/** The agent's steps that led to the proposal on a stepper: one line each, the proposing step with its evidence and expectation. */
+function reasoningSection(c: ProjectConfig, p: Proposal): Section {
+  const trace = p.trace ?? [];
   if (!trace.length) {
-    return { heading: "Reasoning", caption: "The agent's steps were not recorded for this proposal", blocks: [lead] };
+    return { heading: "Reasoning", caption: "The agent's steps that led here", blocks: [{ kind: "missing", title: "Not recorded yet", description: "The SDK recorded no agent steps for this proposal." }] };
   }
   const steps: TraceRow[] = trace.map((t, i) => {
     const current = i === trace.length - 1;
@@ -89,7 +95,7 @@ function reasoningSection(s: State, c: ProjectConfig, inv: Investigation, p: Pro
       text: t.error || (current ? undefined : t.hypothesis || undefined),
       ...(t.error ? { tone: "danger" as const } : {}), ...(current ? { current, evidence: t.evidence, expected: t.expected || undefined } : {}) };
   });
-  return { heading: "Reasoning", caption: `${trace.length} agent step${trace.length === 1 ? "" : "s"} since the last proposal · ${c.policy.label}`, blocks: [lead, { kind: "trace", steps }] };
+  return { heading: "Reasoning", caption: `${trace.length} agent step${trace.length === 1 ? "" : "s"} since the last proposal · ${c.policy.label}`, blocks: [{ kind: "trace", steps }] };
 }
 
 export function mainModel(s: State): MainModel {
@@ -160,7 +166,7 @@ function selectedMain(s: State): MainModel {
     case "proposal": {
       const c = configFor(project, sel.inv), p = sel.proposal;
       return { crumb: [invCrumb(sel.inv), { label: proposalLabel({ ...p, fields: displayedFields(s, sel.inv, p) }) }], meta: `${p.status} · ${experimentsUsed(sel.inv) + (p.status === "proposed" ? 1 : 0)} / ${c.budgets.maxExperiments} experiments`, actions: [],
-        body: { kind: "decision", cards: [candidatesSection(s, c, sel.inv, p), reasoningSection(s, c, sel.inv, p)] }, credit: "" };
+        body: { kind: "decision", cards: [summarySection(s, c, sel.inv, p), candidatesSection(s, c, sel.inv, p), reasoningSection(c, p)] }, credit: "" };
     }
     case "truth": return { crumb: [invCrumb(sel.inv), { label: "Ground truth" }], meta: "Revealed after outcome", actions: [],
       body: { kind: "panels", panels: truthPanels(sel.inv.reveal!) }, credit: "Synthetic: truth was hidden from the agent until the outcome." };

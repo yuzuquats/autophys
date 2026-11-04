@@ -177,15 +177,15 @@ Deno.test("derive: the proposal details carry previews, settings, the decision r
 Deno.test("derive: the proposal main view is the candidates table and the agent's reasoning", () => {
   const m = mainModel(at("bench-oscillators", "bench-a/prop/p1"));
   assert(m.body.kind === "decision");
-  const [candidates, reasoning] = m.body.cards;
-  assertEquals([candidates.heading, reasoning.heading], ["Candidates", "Reasoning"]);
+  const [summaryCard, candidates, reasoning] = m.body.cards;
+  assertEquals([summaryCard.heading, candidates.heading, reasoning.heading], ["Summary", "Candidates", "Reasoning"]);
   const table = candidates.blocks[0];
   assert(table.kind === "table");
   const rows = table.rows.slice(1);
   assertEquals([rows[0].strong, rows[0].cells[0].text, rows[0].cells.at(-1)!.text], [true, "Sine 0.44 Hz", rows[0].cells.at(-1)!.text]);
   assertEquals(rows.filter((r) => r.strong).length, 1);
   assertEquals(rows.at(-1)!.cells.at(-1)!.text, "≈ 0");
-  const [summary, trace] = reasoning.blocks;
+  const [summary] = summaryCard.blocks, [trace] = reasoning.blocks;
   assert(summary.kind === "text" && summary.lead);
   assertStringIncludes(summary.text, "Sine 0.44 Hz applies Force (N) (amplitude 2 N and frequency 440 mHz) and records Displacement (m) for 10 s at 100 Hz.");
   assertStringIncludes(summary.text, "Driving near resonance separates m.");
