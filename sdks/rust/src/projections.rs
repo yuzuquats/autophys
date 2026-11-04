@@ -17,6 +17,8 @@ use crate::validate::{Envelope, Event, Kind};
 /// An investigation row (`GET /investigations`, `/workspace`).
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct InvestigationInfo {
+    #[serde(flatten)]
+    pub reason: records::ReasonMetadata,
     pub id: String,
     pub project_id: String,
     pub config_version: String,
@@ -32,6 +34,9 @@ pub struct InvestigationInfo {
 /// A proposal's folded state (`GET …/proposals/{pid}`, `/workspace`).
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Proposal {
+    /// Inference context of the owning investigation, read from its records.
+    #[serde(flatten)]
+    pub reason: records::ReasonMetadata,
     pub investigation: String,
     pub proposal_id: String,
     /// proposed | approved | edited | rejected | withdrawn | data_attached
@@ -308,6 +313,7 @@ pub(crate) fn investigations(conn: &Connection) -> Result<Vec<InvestigationInfo>
     let rows = stmt.query_map([], |r| {
         let overrides: String = r.get(3)?;
         Ok(InvestigationInfo {
+            reason: Default::default(),
             id: r.get(0)?,
             project_id: r.get(1)?,
             config_version: r.get(2)?,
@@ -318,7 +324,12 @@ pub(crate) fn investigations(conn: &Connection) -> Result<Vec<InvestigationInfo>
             updated: r.get(7)?,
         })
     })?;
-    rows.map(|r| r.map_err(Error::from)).collect()
+    rows.map(|r| {
+        let mut row = r?;
+        row.reason = records::ReasonMetadata::read(conn, &row.id)?;
+        Ok(row)
+    })
+    .collect()
 }
 
 pub(crate) fn proposals(conn: &Connection, only: Option<(&str, &str)>) -> Result<Vec<Proposal>> {
@@ -331,6 +342,7 @@ pub(crate) fn proposals(conn: &Connection, only: Option<(&str, &str)>) -> Result
     let rows = stmt.query_map(params![inv, pid], |r| {
         let settings: Option<String> = r.get(4)?;
         Ok(Proposal {
+            reason: Default::default(),
             investigation: r.get(0)?,
             proposal_id: r.get(1)?,
             status: r.get(2)?,
@@ -339,7 +351,19 @@ pub(crate) fn proposals(conn: &Connection, only: Option<(&str, &str)>) -> Result
             updated: r.get(5)?,
         })
     })?;
-    rows.map(|r| r.map_err(Error::from)).collect()
+    let mut contexts = std::collections::HashMap::new();
+    rows.map(|r| {
+        let mut row = r?;
+        if !contexts.contains_key(&row.investigation) {
+            contexts.insert(
+                row.investigation.clone(),
+                records::ReasonMetadata::read(conn, &row.investigation)?,
+            );
+        }
+        row.reason = contexts[&row.investigation].clone();
+        Ok(row)
+    })
+    .collect()
 }
 
 /// Create the two projection tables (for a replay into a scratch database).

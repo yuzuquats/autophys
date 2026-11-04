@@ -485,3 +485,16 @@ The numerics reader selects ScriptedPolicy only for the top-level
 `policy: "scripted"`; all 21 shared cases pass in its clean-export workspace
 gate. Task-board CLI is unavailable on rwc-dev-01; this section and the active
 session plan carry the work state until the CLI is available.
+
+### Phase-3 HTTP read shapes
+
+`InvestigationInfo` and `Proposal` flatten the crate's `ReasonMetadata`.
+`GET /api/v1/investigations`, `GET …/proposals/{pid}` and both arrays in
+`GET /api/v1/workspace` gain optional `playbook`, `model`, `price`,
+`usage_total`, and `steps` (ordered step payloads, including each usage,
+images and replay flag). Proposal context belongs to its investigation;
+its `steps` includes that investigation's full step history. Absent metadata
+and empty steps are omitted. Raw historical usage is returned unchanged.
+The library reads this context from records alongside the existing folded
+state. Projection columns, rebuild comparison and SQL schema stay unchanged;
+handlers continue to call the crate and serialize its result without SQL.

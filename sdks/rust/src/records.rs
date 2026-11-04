@@ -132,3 +132,37 @@ pub(crate) fn cursor(conn: &Connection) -> Result<i64> {
         })?,
     )
 }
+
+/// Record-derived inference context. These fields are not projection columns.
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+pub struct ReasonMetadata {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub playbook: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub price: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub usage_total: Option<Value>,
+    /// Step payloads in record order; raw historical usage is preserved.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub steps: Vec<Value>,
+}
+impl ReasonMetadata {
+    pub(crate) fn read(conn: &Connection, investigation: &str) -> Result<Self> {
+        let mut out = Self::default();
+        for record in of_investigation(conn, investigation, None)? {
+            match record.kind.as_str() {
+                "investigation" => {
+                    out.playbook = record.payload.get("playbook").cloned();
+                    out.model = record.payload.get("model").cloned();
+                    out.price = record.payload.get("price").cloned();
+                }
+                "step" => out.steps.push(record.payload),
+                "outcome" => out.usage_total = record.payload.get("usage_total").cloned(),
+                _ => {}
+            }
+        }
+        Ok(out)
+    }
+}

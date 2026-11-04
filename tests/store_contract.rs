@@ -1502,3 +1502,71 @@ async fn collection_cursors_resume_two_workbooks_and_detect_external_writes() {
     assert_eq!(recs["records"].as_array().unwrap().len(), 1);
     assert_eq!(recs["records"][0]["id"], "b-live");
 }
+
+#[actix_web::test]
+async fn inference_context_is_read_from_records_in_investigations_and_proposals() {
+    let f = fixture();
+    let app = app!(f.api);
+    let (key, existing) = seeded(&app, &f.api).await;
+    let wb = f
+        .api
+        .client
+        .find_investigation(&existing)
+        .unwrap()
+        .workbook()
+        .clone();
+    let context = json!({
+        "config_version": version(),
+        "playbook":{"name":"policy", "version":"1", "sha256":"a".repeat(64)},
+        "model":{"role":"policy", "route":"meta", "model":"muse-spark-1.3", "effort":null, "max_tokens":2400},
+        "price":{"model":"muse-spark-1.3", "input_per_mtok":1.25, "output_per_mtok":4.25, "as_of":"2026-11-04"}
+    });
+    let (inv, _) = wb.create_investigation(context.clone(), None).unwrap();
+    let step = json!({"index":1, "model":"muse-spark-1.3", "elapsed_ms":9.0, "usage":{"route":"meta", "model":"muse-spark-1.3", "input_tokens":10, "output_tokens":2, "total_tokens":12, "latency_ms":9.0, "cost_usd":null}, "replayed":true});
+    inv.append("step", step.clone(), None).unwrap();
+    // Historical raw provider dictionaries remain untouched in the read model.
+    let legacy = json!({"index":2,"usage":{"prompt_tokens":7}});
+    inv.append("step", legacy.clone(), None).unwrap();
+    inv.append("proposal", proposed("reasoned"), None).unwrap();
+    let total = json!({"calls":1,"input_tokens":10,"output_tokens":2,"cost_usd":null});
+    inv.append(
+        "outcome",
+        json!({"status":"inconclusive", "usage_total":total}),
+        None,
+    )
+    .unwrap();
+    let info = serde_json::to_value(inv.info().unwrap()).unwrap();
+    let proposal = serde_json::to_value(inv.proposal("reasoned").unwrap()).unwrap();
+    for view in [&info, &proposal] {
+        for field in ["playbook", "model", "price"] {
+            assert_eq!(view[field], context[field]);
+        }
+        assert_eq!(view["steps"], json!([step, legacy]));
+        assert_eq!(view["usage_total"], total);
+    }
+    let (_, listing) = call(&app, get("/investigations", Some(&key)).to_request()).await;
+    let listed = listing["investigations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|v| v["id"] == inv.id)
+        .unwrap();
+    assert_eq!(listed, &info);
+    let (status, reply) = call(
+        &app,
+        get(
+            &format!("/investigations/{}/proposals/reasoned", inv.id),
+            Some(&key),
+        )
+        .to_request(),
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(reply, proposal);
+    let snapshot = wb.snapshot().unwrap();
+    assert_eq!(
+        snapshot.investigations.last().unwrap().reason.steps,
+        vec![step, legacy]
+    );
+    assert!(wb.verify().unwrap().ok);
+}
