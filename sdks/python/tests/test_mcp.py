@@ -17,7 +17,7 @@ from autophys.agent import ToolError
 from autophys.mcp import MCPSession, load_project
 from autophys.mcp.server import create_server
 from autophys.models.battery import current
-from autophys.playbook import load_playbook
+from autophys.mcp.playbook import load_playbook
 from autophys.sensitivity import jacobian, report_from_jacobian
 
 TOOLS = {"describe_project", "import_measurements", "fit", "identifiability",
@@ -241,7 +241,7 @@ def test_plugin_builder_keeps_canonical_skill_and_paths_in_config(tmp_path):
     manifest = json.loads((result / ".muse-plugin/plugin.json").read_text())
     argv = manifest["capabilities"]["mcpServers"][0]["command"]
     assert argv == [str(Path(sys.executable).absolute()), "-m", "autophys.cli", "mcp",
-                    "--config", "mcp-config.json"]
+                    "--config", "mcp-config.json", "--playbook", "skills/autophys/SKILL.md"]
     assert json.loads((result / "mcp-config.json").read_text())["root"] == str(tmp_path)
     with pytest.raises(FileExistsError):
         build(result)
@@ -265,3 +265,25 @@ def test_ssh_bundle_keeps_simulator_on_remote_host_and_quotes_paths(tmp_path):
                               "/remote/venv/bin/python"]
     assert remote_args[-1] == "/remote/my lab"
     assert "/remote/my books" in remote_args
+
+
+def test_canonical_snapshot_pins_without_m2_loader(tmp_path, monkeypatch):
+    import hashlib
+    import sys
+    from autophys.mcp.playbook import load_playbook as compatible
+    canonical = compatible()
+    file = tmp_path / "SKILL.md"
+    file.write_bytes(canonical.data)
+    monkeypatch.setitem(sys.modules, "autophys.playbook", None)
+    snapshot = compatible(file)
+    assert snapshot.sha256 == hashlib.sha256(canonical.data).hexdigest()
+    assert snapshot.name == canonical.name
+    project = load_project("battery_ecm")
+    write_csv(tmp_path / "pulse.csv", project, "pulse_2A")
+    with_session = MCPSession(project, str(tmp_path / "books"), root=tmp_path, playbook=file)
+    try:
+        with_session.import_measurements("pulse.csv", "pulse_2A", sigma={"v": 0.002})
+        assert with_session.inv.records()[0].payload["playbook"]["sha256"] == snapshot.sha256
+        assert with_session.workbook.verify()["ok"]
+    finally:
+        with_session.close()

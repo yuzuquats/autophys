@@ -29,7 +29,9 @@
         "transport": "stdio",
         "command": [
           "autophys",
-          "mcp"
+          "mcp",
+          "--playbook",
+          "skills/autophys/SKILL.md"
         ]
       }
     ],

@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 from ..agent import Decision, Investigation, ProposalRunner, ToolError
-from ..playbook import load_playbook
+from .playbook import load_playbook
 from ..client import connect
 from ..data import Dataset
 from ..models.battery import battery_ecm
@@ -37,8 +37,8 @@ class MCPPolicy:
     """Never runs a model; Muse supplies decisions through named MCP tools."""
     name = "muse-code-mcp"
 
-    def __init__(self):
-        self.playbook = load_playbook()
+    def __init__(self, playbook=None):
+        self.playbook = load_playbook(playbook)
 
     def meta(self) -> dict:
         book = self.playbook
@@ -50,12 +50,12 @@ class MCPPolicy:
 
 class MCPSession:
     def __init__(self, project: Project, target: str | None = None, *, root: str | Path = ".",
-                 investigation: str | None = None):
+                 investigation: str | None = None, playbook: str | Path | None = None):
         self.project = project
         self.root = Path(root).expanduser().resolve()
         self.client = connect(target)
         self.workbook = self.client.project(project)
-        self.policy = MCPPolicy()
+        self.policy = MCPPolicy(playbook)
         self.lock = threading.RLock()
         self.inv = self.workbook.investigation(investigation, policy=self.policy) if investigation else None
         self.target = str(getattr(self.workbook.store, "path", target or self.root))
@@ -99,6 +99,9 @@ class MCPSession:
         obs = read_csv(self.project, self.root, path, experiment, columns=columns, sigma=sigma, split=split)
         if self.inv is None:
             self.inv = self.workbook.investigate(Dataset([obs]), ProposalRunner(), policy=self.policy)
+            # M-2 does this in Investigation; retain blob pinning on older SDKs.
+            if hasattr(self.workbook.store, "put_blob"):
+                self.workbook.store.put_blob(self.policy.playbook.data, "text/markdown")
         else:
             inv = self.inv
             data = Dataset([*inv.dataset, obs])

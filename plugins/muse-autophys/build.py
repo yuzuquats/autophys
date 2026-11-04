@@ -13,8 +13,13 @@ def build(output, *, python="autophys", project=None, workbook=None, root=None, 
         raise SystemExit("--source-root is only used with --ssh-host")
     source = Path(__file__).resolve().parent
     canonical = Path(playbook) if playbook else source.parents[1] / "sdks/python/src/autophys/playbooks/default/SKILL.md"
+    if not canonical.is_file() and not playbook:
+        canonical = source / "skills/autophys/SKILL.md"
+        expected = json.loads((source / "playbook.json").read_text())["sha256"]
+        if hashlib.sha256(canonical.read_bytes()).hexdigest() != expected:
+            raise SystemExit("bundled canonical snapshot hash mismatch")
     if not canonical.is_file():
-        raise SystemExit("Canonical M-2 playbook is missing; pass --playbook PATH. No divergent fallback is generated.")
+        raise SystemExit("Canonical playbook is missing; pass --playbook PATH. No replacement strategy is generated.")
     output = Path(output).expanduser().resolve()
     if output != source:
         output.mkdir(parents=True, exist_ok=False)
@@ -44,6 +49,8 @@ def build(output, *, python="autophys", project=None, workbook=None, root=None, 
         # Muse validates path-like argv as package sources; put lab paths in JSON.
         (output / "mcp-config.json").write_text(json.dumps(config, indent=2) + "\n")
         command += ["--config", "mcp-config.json"]
+    if not ssh_host:
+        command += ["--playbook", "skills/autophys/SKILL.md"]
     manifest = {
         "schemaVersion": 1, "name": "autophys", "displayName": "autophys",
         "version": "0.1.0", "description": "Calibrate local simulators with honest identifiability and human-reviewed experiments.",

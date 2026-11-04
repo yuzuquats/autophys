@@ -63,8 +63,8 @@ MCP capability definition, as required for third-party plugins. It does not
 approve any experiment. The source bundle can also be installed directly
 with `muse plugins install plugins/muse-autophys`: it launches
 `autophys mcp` from PATH and reads `.autophys-mcp.json` in the working
-directory. The supported keys are `project`, `workbook`, `root` and
-`investigation`. CLI flags override the file.
+directory. The supported keys are `project`, `workbook`, `root`,
+`investigation` and `playbook`. CLI flags override the file.
 
 Tell Muse:
 
@@ -147,10 +147,17 @@ Agent-chosen, pending operator review. These choices add no workbook format.
 
 The canonical skill is
 `sdks/python/src/autophys/playbooks/default/SKILL.md`, supplied by M-2.
-No placeholder is shipped. Its copied bytes currently hash to
+The canonical bytes were available in the shared tree before M-2’s commit,
+so this bundle carries that exact snapshot rather than a guessed strategy.
+Its copied bytes currently hash to
 `cd65c7b3bb19471f3a76e42a9b331a1134cc46f176ca599f5a0466bcc1e0e35a`.
 The investigation pins `playbook {name, version, sha256}`; M-2's
-Investigation stores the skill blob for local workbooks. The plugin's
+Investigation stores the skill blob for local workbooks. While M-2’s loader
+is not installed, a small MCP compatibility reader loads the same bundled
+bytes and pins the same metadata/blob; it contains no strategy of its own.
+Local manifests pass the installed SKILL.md explicitly via `--playbook`;
+the native SDK loader takes over when available. The builder can rebuild
+from the hash-checked snapshot before canonical source lands. The plugin’s
 `calibrate` command maps conceptual playbook actions to MCP tool names; it
 does not maintain a second strategy or replace the guardrail.
 
@@ -166,13 +173,13 @@ All source reads, writes and Python tests ran over SSH on rwc-dev-01 in
 extra's dependency. The integration suite uses a real in-memory MCP client
 and a real stdio subprocess, without a reasoner or model call.
 
-The 12 integration tests cover the exact tool list (including absence of
+The 13 integration tests cover the exact tool list (including absence of
 approve/reject), JSON object mappings, synthetic battery fit → SVD → ranking
 → proposed outlook, rejected attachment before approval (including direct
 store refusal), approval by a second process, attachment/refit/report,
 resume, canonical skill pin, waveform/time/noise/path checks, budgets, a
 small-residual yet non-identified case, independent validation, and bundle
-generation with correct venv and SSH quoting.
+generation with correct venv and SSH quoting, and pinning without M-2’s loader.
 
 An initial full SDK run passed 350 tests with 2 opt-in skips in 93.45 s.
 After the builder checks and concurrent SDK additions, the final full suite
