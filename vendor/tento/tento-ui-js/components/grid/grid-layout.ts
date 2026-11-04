@@ -209,7 +209,7 @@ export class GridLayout extends LonaWebComponent {
     if (Math.abs(heightDelta) < 1) return;
 
     const wasSuspended = this.layoutSuspended;
-    const canRelayout = this.allowResizeLayout(this.$("root").getBoundingClientRect().width);
+    const canRelayout = this.allowResizeLayout(this.layoutWidth());
     // Stopping writes must not strand a larger child over the next card.
     // Within the blocked cycle keep the largest height seen for each pin;
     // growth converges while retaining enough space for every cycle state.
@@ -392,6 +392,16 @@ export class GridLayout extends LonaWebComponent {
     });
   }
 
+  /** The root's laid-out width. Unlike getBoundingClientRect it ignores
+   * ancestor transforms, so a grid inside a scaled or moving container (a
+   * carousel page mid-swipe) lays out at its real width instead of shifting
+   * once the transform settles. */
+  private layoutWidth(): number {
+    const root = this.$("root");
+    const used = parseFloat(getComputedStyle(root).width);
+    return Number.isFinite(used) ? used : root.getBoundingClientRect().width;
+  }
+
   layoutGridSync(): number {
     this.resetLayoutFeedback();
     return this.performLayout();
@@ -399,7 +409,7 @@ export class GridLayout extends LonaWebComponent {
 
   private performLayout(): number {
     if (!this.isConnected) return 0;
-    const { width } = this.$("root").getBoundingClientRect();
+    const width = this.layoutWidth();
     if (!this.allowResizeLayout(width)) {
       const expanded = this.pinRects.find(pin => pin.$e === this.$expandedElement);
       return expanded ? expanded.rect.y + expanded.rect.height : 0;
