@@ -244,8 +244,8 @@ then M-4.
 | MQ-5 | Who owns the battery case suite | autophys/py owns all of it: R0/R1/C1 cases, an experiment catalog costed in test hours, a short-data non-identifiable case, goldens and the experiment-cost budget in bench. | Operator, 2026-11-04. sdks/python keeps a single writer; a test-hour budget field is a new config version that autophys/rs mirrors. About 3-4 h agent time, after batch 2 and before M-4. | implemented in Python (7e20524) and Rust (f5ad648); reviewed, with null-cost validation fixed in 11f2787 |
 | MQ-6 | 402 handling | Stop on the first 402 everywhere: no retry; the investigation records the step, ends `failed` with reason `billing: provider refused the call (HTTP 402)` and raises `BudgetError`; bench (including `--jobs` pools) and research stop the whole run. | Operator, 2026-11-04, choosing the recommendation over keeping the earlier behaviour, which made three 402 calls per investigation, reported "three unusable decisions in a row" and continued through every batch unit. Meta documents 402 as billing_not_configured, so waiting does not help. | implemented (batch 2 commit) |
 | MQ-7 | One zero-token `muse exec` echo run to learn the event format | Allowed once. Run on macbookpro-laptop with isolated XDG dirs, `--provider echo --json --no-session-log`, shell/writes/web off; output kept as `sdks/python/tests/data/muse-exec-echo-1.4.14.jsonl`, temp dirs removed. | Operator, 2026-11-04. Exit 0, 14 events, zero tokens, SKILL.md unchanged (sha256 cd65c7b3...). Events are `{schema_version: 1, payload_type, payload}`; final text in `run.terminal.completed` payload.text, streamed text in `run.output.delta`, usage in `run.usage` payload.models[] (`input_tokens`, `cached_tokens`, `output_tokens`, `reasoning_tokens`, `calls`). Real-model usage values remain unverified until a live run. | implemented: `parse_muse_events` reads this envelope; a non-completed terminal is an error |
-| MQ-8 | Billing for the first live Muse run | The Muse coding plan, through the `muse exec` / Muse Code adapter; not metered API tokens. | Operator, 2026-11-04, relayed from the progress-review thread. MQ-6 still applies: stop at the first 402 or quota error. If the coding plan cannot reach the reasoning path the run needs (for example, MCP tools not starting under `muse exec`), ask the operator before any fallback to metered tokens; never fall back unasked. Supersedes MQ-2's replay-only rule for this run only. | pending: set up after the battery suite (done, I1f9b4d7e2c6a08e3b5d4) |
-| MQ-9 | Size of the first live run | Small: one case, one seed and a short step limit. It is a smoke test of the real reasoning path and the MCP tools, not a benchmark, and its numbers are not reported as Muse results. | Operator, 2026-11-04. | pending, with MQ-8 |
+| MQ-8 | Billing for the first live Muse run | The Muse coding plan, through the `muse exec` / Muse Code adapter; not metered API tokens. | Operator, 2026-11-04, relayed from the progress-review thread. MQ-6 still applies: stop at the first 402 or quota error. If the coding plan cannot reach the reasoning path the run needs (for example, MCP tools not starting under `muse exec`), ask the operator before any fallback to metered tokens; never fall back unasked. Supersedes MQ-2's replay-only rule for this run only. | done 2026-11-04: see "First live Muse smoke" |
+| MQ-9 | Size of the first live run | Small: one case, one seed and a short step limit. It is a smoke test of the real reasoning path and the MCP tools, not a benchmark, and its numbers are not reported as Muse results. | Operator, 2026-11-04. | done 2026-11-04, with MQ-8 |
 ```
 
 ## Battery case suite (MQ-5, plan 2026-11-04)
@@ -331,7 +331,7 @@ crate's working tree (read only, in progress), and those say so.
    `Investigation.approve/reject` over `HttpStore` posts there with a key,
    and the store accepts keys. Is that intended?
 7. **`withdrawn`.** The state diagram has "SDK withdraw", and the store
-   accepts the event. The SDK has no withdraw call yet (remaining work).
+   accepts the event. The SDK call is `inv.withdraw` (Q-7, 8bd1316).
 8. **Canonical JSON across languages.** `Store.verify()` recomputes
    `sha256(prev_hash + canonical {id, kind, payload})` with Python's
    canonical form: sorted keys, `(",", ":")` separators, NaN and infinity as
@@ -407,10 +407,43 @@ rwc-dev-01.
 - M-4 image input (the Rust reasoner already accepts `images`).
 - First live Spark/Wonder runs, once the operator approves a token budget
   (MQ-2); until then no result may be labelled Muse.
-- Muse Code to MCP dispatch is still unverified (the echo provider does not
-  start MCP servers).
+- The plugin builder emits `["sh", "mcp-stdio.sh"]`, which Muse cannot
+  start (see "First live Muse smoke"); the MCP integration's owner fixes
+  `plugins/muse-autophys/build.py`.
 - Retire the yuzuquats original and `~/.cache/modellab/venv` once the
   operator agrees.
+
+## First live Muse smoke (MQ-8, MQ-9), 2026-11-04
+
+A smoke test of the real reasoning path and the MCP tools, not a benchmark.
+Its numbers are not Muse results (MQ-9).
+
+- **Where and how billed:** `muse exec` 1.4.14 on rwc-dev-01, logged in by
+  OAuth device code on the Muse Code Power Usage plan. The model was
+  `muse-wonder-1.0`, Muse Code's default. No metered tokens were used and no
+  quota or 402 error occurred; the 5-hour window went from 4% to 6%.
+- **Setup:** an isolated Muse plugin store with a local stdio bundle that
+  runs a clean export of 3c71f29. Shell, file writes, web tools and approval
+  prompts were disabled, with at most 16 model steps. The synthetic
+  `pulse_2A` CSV came from R0=0.025, R1=0.045, C1=1600.
+- **First run:** Muse loaded the plugin's skill, but the autophys MCP server
+  was "skipped during startup: the transport closed unexpectedly", and
+  `describe_project` was an unknown tool. Muse starts stdio servers in the
+  workspace directory, so the builder's `["sh", "mcp-stdio.sh"]` cannot
+  find its script. `${PLUGIN_ROOT}` is refused for native plugins.
+  `["./mcp-stdio.sh"]` (executable) validates and starts.
+- **Third run, with that command:** Muse called `describe_project`,
+  `import_measurements` (601 samples, train), `fit` (converged at the true
+  values), `identifiability` (all three identified), `rank_experiments`
+  (`pulse_train` first by min_eig) and `propose_experiment`, then stopped
+  without approving. It used 8 model calls: 215,934 input tokens (187,436
+  cached), 891 output and 134 reasoning.
+- **Result:** investigation `inv_2652c5ab86b662d0`, proposal
+  `prop_280a77c38538` (`pulse_train`, proposed), in
+  `/home/james/autophys/battery_ecm.ap-workbook`, with 4 valid steps.
+- **Evidence:** the event streams, launch log, MCP stderr and both
+  manifests are in `~/.local/state/autophys/evidence/muse-smoke-20261104/`
+  on rwc-dev-01 (SHA256SUMS).
 
 ## How the loops nest (research and investigation)
 
