@@ -1,5 +1,5 @@
 import type { CookbookApp, CookbookShell } from "../src/types.ts";
-import { settleIn } from "../src/dom.ts";
+import { h, settleIn } from "../src/dom.ts";
 import { mountView, type View, type ViewHandle } from "../src/view.ts";
 
 type Row = { id: string; title: string };
@@ -46,11 +46,24 @@ export class PlaceholderApp implements CookbookApp {
       ${scope} .ph-facts dt { color: oklch(43.9% 0 0); }
       ${scope} .ph-facts dd { margin: 0; }
     `);
-    slots.queue.innerHTML = `<ul class="${classes.list ?? ""}">${
-      this.rows.map((row) =>
-        `<li><button type="button" class="${classes.listItem ?? ""}" data-row="${row.id}">${row.title}</button></li>`
-      ).join("")
-    }</ul>`;
+    slots.queue.replaceChildren(
+      h(
+        "ul",
+        classes.list ?? "",
+        null,
+        ...this.rows.map((row) =>
+          h(
+            "li",
+            "",
+            null,
+            h("button", classes.listItem ?? "", {
+              type: "button",
+              "data-row": row.id,
+            }, row.title),
+          )
+        ),
+      ),
+    );
     const model = () => this.model();
     this.views = [
       mountView(shell, mainView(slots.main, classes.toolbar ?? ""), model),
@@ -111,8 +124,22 @@ function detailsView(host: HTMLElement, classes: CookbookShell["classes"]): View
   return {
     render(m) {
       name.textContent = m.row.title;
-      facts.innerHTML =
-        `<div><dt>ID</dt><dd>${m.row.id}</dd></div><div><dt>Position</dt><dd>${m.position} of ${m.count}</dd></div>`;
+      facts.replaceChildren(
+        h(
+          "div",
+          "",
+          null,
+          h("dt", "", null, "ID"),
+          h("dd", "", null, m.row.id),
+        ),
+        h(
+          "div",
+          "",
+          null,
+          h("dt", "", null, "Position"),
+          h("dd", "", null, `${m.position} of ${m.count}`),
+        ),
+      );
     },
     destroy: () => host.replaceChildren(),
   };

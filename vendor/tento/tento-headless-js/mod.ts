@@ -10,6 +10,7 @@
 //   import { withHeadless } from "@tento-headless";            // in the tento repo
 //   import { withHeadless } from "file://<tento>/tento-headless-js/mod.ts";  // elsewhere
 //   await withHeadless(async (browser) => { … });
+//   await withHeadless(async (browser) => { … }, { scrollbars: "classic" });
 //
 // The executable is `executablePath`, else $TENTO_HEADLESS_CHROME, else the
 // newest chrome-headless-shell under ~/.cache/puppeteer, else the newest
@@ -23,7 +24,26 @@ import puppeteer, { type Browser, type PuppeteerLaunchOptions } from "npm:puppet
 
 const CLOSE_BOUND_MS = 20_000;
 
-export async function launchHeadless(options: PuppeteerLaunchOptions = {}): Promise<Browser> {
+export type HeadlessOptions = PuppeteerLaunchOptions & {
+  /** Classic scrollbars consume layout space. Select this for responsive
+   * layout checks; Puppeteer's default headless mode hides scrollbars. */
+  scrollbars?: "default" | "classic";
+};
+
+export async function launchHeadless(options: HeadlessOptions = {}): Promise<Browser> {
+  const { scrollbars, ...launchOptions } = options;
+  if (scrollbars === "classic") {
+    if (launchOptions.ignoreDefaultArgs !== true) {
+      launchOptions.ignoreDefaultArgs = [...new Set([
+        ...(Array.isArray(launchOptions.ignoreDefaultArgs) ? launchOptions.ignoreDefaultArgs : []),
+        "--hide-scrollbars",
+      ])];
+    }
+    launchOptions.args = [
+      ...(launchOptions.args ?? []).filter(arg => arg !== "--hide-scrollbars"),
+      "--disable-features=OverlayScrollbar,FluentOverlayScrollbar",
+    ];
+  }
   const executablePath = options.executablePath ?? await findChrome();
   const shell = executablePath.endsWith("chrome-headless-shell");
   const profile = options.userDataDir ? undefined : await Deno.makeTempDir({ prefix: "tento-headless-" });
@@ -37,7 +57,7 @@ export async function launchHeadless(options: PuppeteerLaunchOptions = {}): Prom
       // A loaded shared host can take a minute to start Chrome.
       timeout: 180_000,
       protocolTimeout: 180_000,
-      ...options,
+      ...launchOptions,
       executablePath,
       userDataDir: options.userDataDir ?? profile,
       pipe: true,
@@ -66,7 +86,7 @@ export async function closeHeadless(browser: Browser, boundMs = CLOSE_BOUND_MS):
   }
 }
 
-export async function withHeadless<T>(run: (browser: Browser) => Promise<T>, options?: PuppeteerLaunchOptions): Promise<T> {
+export async function withHeadless<T>(run: (browser: Browser) => Promise<T>, options?: HeadlessOptions): Promise<T> {
   const browser = await launchHeadless(options);
   let result: T;
   try {

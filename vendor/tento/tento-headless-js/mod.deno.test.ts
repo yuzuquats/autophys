@@ -55,3 +55,25 @@ Deno.test({
     assertEquals(running(pid), false);
   },
 });
+
+
+Deno.test({
+  name: "classic scrollbar mode exposes the layout space hidden by default headless runs",
+  ignore: !chrome,
+  async fn() {
+    await withHeadless(async browser => {
+      const page = await browser.newPage();
+      await page.setContent(`<style>::-webkit-scrollbar { width:15px; height:15px; }</style>
+        <div id="scroller" style="width:100px;height:100px;overflow:scroll">
+          <div style="width:200px;height:200px"></div>
+        </div>`);
+      const gutter = await page.evaluate(() => {
+        const scroller = document.querySelector("#scroller") as HTMLElement;
+        scroller.scrollTop = 20;
+        return { horizontal: scroller.offsetWidth - scroller.clientWidth,
+          vertical: scroller.offsetHeight - scroller.clientHeight, scrollTop: scroller.scrollTop };
+      });
+      assertEquals(gutter, { horizontal: 15, vertical: 15, scrollTop: 20 });
+    }, { scrollbars: "classic", ignoreDefaultArgs: ["--mute-audio"], args: ["--hide-scrollbars"] });
+  },
+});

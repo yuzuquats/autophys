@@ -58,7 +58,7 @@ export namespace GeometryWash {
   // Render a `GeometrySource`'s blobs through the real `GradientSplat` wash filter for `size`. The
   // softness + sharp-patch scale track the source's EFFECTIVE blob size, so the wash holds its
   // blob-relative character as the canvas resizes. Returns a `url("data:image/svg+xml,…")` string.
-  // Shared by the live `GeometryField` (wash mode) and the "Gradient Splat — new" variant gallery.
+  // Shared geometry-to-wash renderer used by the noise surfaces.
   export function background(
     source: GeometrySource,
     size: GeometrySource.Size,

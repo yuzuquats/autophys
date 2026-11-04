@@ -1,8 +1,7 @@
 /**
- * The interface between the cookbook shell and an app. It matches the
- * consumer contract in tento-autophys-js/cookbook-contract.ts member for
- * member, so a host built here satisfies that file structurally; the extra
- * members marked "cookbook extension" are optional for apps to use.
+ * The contract an external app implements is the Cookbook.App / Cookbook.Shell
+ * types defined in this file and exposed through the public Cookbook namespace.
+ * Members marked "cookbook extension" are optional for apps to use.
  */
 
 /** The three mount points, each an empty element the app fills and owns until unmount. */

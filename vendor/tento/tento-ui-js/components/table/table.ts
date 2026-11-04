@@ -520,7 +520,7 @@ export class Table<Item extends Identifiable<{}>> extends LonaWebComponent {
       this.$bg.style.height = "";
       this.$bg.style.zIndex = "";
       this.$bg.bind({
-        ...Round.Props.FLAT_CARD,
+        ...TableHeader.SURFACE_PROPS,
         transformTopLeft: true,
         bg: "var(--bg-surface-light-opaque)",
       });

@@ -45,17 +45,13 @@ pub mod store;
 pub mod template;
 #[cfg(feature = "vault")]
 pub mod vault;
-#[cfg(feature = "vault")]
-pub mod write_lock;
 
 #[cfg(feature = "vault")]
 pub use address::Address;
 #[cfg(feature = "vault")]
-pub use manifest::{Health, HistoryEntry, Kind, Record, Unlock};
+pub use manifest::{Health, HistoryEntry, Record, Unlock};
 #[cfg(feature = "vault")]
 pub use secret::{Secret, SecretBytes};
 pub use template::{SECRETS_TEMPLATE_FILE, SecretDecl, SecretsTemplate};
 #[cfg(feature = "vault")]
-pub use vault::{Guard, SetOpts, Vault};
-#[cfg(feature = "vault")]
-pub use write_lock::VaultWriteLock;
+pub use vault::{SetOpts, Vault};

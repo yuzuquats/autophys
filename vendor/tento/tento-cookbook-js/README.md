@@ -18,7 +18,7 @@ The whole public API is one namespace, `Cookbook` (the tento-ui convention,
 as in `export namespace TreeList`; operator decision N-1, 2026-11-04).
 
 ```ts
-// html/routes/index.root.ts (the tento-cef pattern)
+// html/routes/index.root.ts (the browser entry point)
 import { Cookbook } from "@tento-cookbook";
 Cookbook.mount().run(myApp); // or Cookbook.mount(options).run(myApp, { root: someElement })
 ```
@@ -62,15 +62,14 @@ Draws `view.render(model())` once, immediately. Each `handle.redraw()` reads
 children move with FLIP (a shell without `reflow` renders directly).
 `handle.dispose()` calls `view.destroy()` once; later `redraw()` calls do
 nothing. Call `dispose()` from the app's `unmount()`. It is optional:
-slots stay opaque (AX-1), and an app may fill them however it likes. Views
+the shell does not inspect slot contents, and an app may fill them however it likes. Views
 that update their elements in place, rather than replacing them, let FLIP
 follow those elements.
 
 ## The slot contract
 
-`Cookbook.App` and `Cookbook.Shell` match `tento-autophys-js/cookbook-contract.ts`
-member for member and are checked structurally against it, in both
-directions.
+The contract an external app implements is the `Cookbook.App` / `Cookbook.Shell`
+types in `src/types.ts`, exposed through the public `Cookbook` namespace.
 
 ```review-table
 | Member | What the shell does |

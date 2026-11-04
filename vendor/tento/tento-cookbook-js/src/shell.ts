@@ -4,7 +4,7 @@ import { installDrawer } from "./drawer.ts";
 import { createHeader } from "./header.ts";
 import type { Stage } from "./model.ts";
 import { createPanels } from "./panels.ts";
-import { readHealthz, type StatusLine } from "./status.ts";
+import { describeHealth, readHealthz, type StatusLine } from "./status.ts";
 import { cookbookCss } from "./styles.ts";
 import { createTutorial, shellSteps, type TutorialStep } from "./tutorial.ts";
 import type { CookbookApp, CookbookClasses, CookbookHost, CookbookShell } from "./types.ts";
@@ -174,7 +174,7 @@ export function mountHost(options: ShellOptions = {}): CookbookHost {
       const status = options.status === undefined ? () => readHealthz() : options.status;
       if (status) {
         panels.setStatus({ tone: "pending", text: "Checking server…" });
-        void status().then((line) => panels.setStatus(line));
+        void status().then((line) => panels.setStatus(line)).catch(() => panels.setStatus(describeHealth(null)));
       } else panels.setStatus(null);
     },
   };

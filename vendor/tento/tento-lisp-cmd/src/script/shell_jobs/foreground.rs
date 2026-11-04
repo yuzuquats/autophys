@@ -85,6 +85,7 @@ pub fn start_process_foreground(
         Ok(())
       });
     }
+    super::super::LispHost::inherit_ignored_sigchld(&mut command);
     let mut child = match command.spawn() {
       Ok(child) => child,
       Err(error) => {

@@ -1,4 +1,4 @@
-import { assertEquals, assertThrows } from "jsr:@std/assert@1";
+import { assertEquals, assertThrows } from "@std/assert";
 import { readRoute, routeUrl } from "./src/route.ts";
 import { arrowStage, closePanel, initialPanels, Stepper, togglePanel, visiblePanels } from "./src/model.ts";
 import { clampSlide, dragOffset, swipeTarget } from "./src/deck-data.ts";
@@ -6,6 +6,26 @@ import { describeHealth, parseHealth, readHealthz } from "./src/status.ts";
 import { invert } from "./src/flip.ts";
 import { cookbookClasses, placeholderDeck } from "./src/shell.ts";
 import { shellSteps } from "./src/tutorial.ts";
+import { cookbookCss } from "./src/styles.ts";
+import source0 from "./src/cookbook.ts" with { type: "text" };
+import source1 from "./src/deck-data.ts" with { type: "text" };
+import source2 from "./src/deck.ts" with { type: "text" };
+import source3 from "./src/dom.ts" with { type: "text" };
+import source4 from "./src/drawer.ts" with { type: "text" };
+import source5 from "./src/flip.ts" with { type: "text" };
+import source6 from "./src/header.ts" with { type: "text" };
+import source7 from "./src/model.ts" with { type: "text" };
+import source8 from "./src/motion.ts" with { type: "text" };
+import source9 from "./src/panels.ts" with { type: "text" };
+import source10 from "./src/route.ts" with { type: "text" };
+import source11 from "./src/shell.ts" with { type: "text" };
+import source12 from "./src/status.ts" with { type: "text" };
+import source13 from "./src/styles.ts" with { type: "text" };
+import source14 from "./src/tutorial.ts" with { type: "text" };
+import source15 from "./src/types.ts" with { type: "text" };
+import source16 from "./src/view.ts" with { type: "text" };
+import source17 from "./demo/placeholder-app.ts" with { type: "text" };
+import source18 from "./demo/routes/index.root.ts" with { type: "text" };
 
 Deno.test("routes: landing and app paths round-trip under any base", () => {
   assertEquals(readRoute("/"), { app: false });
@@ -92,6 +112,80 @@ Deno.test("classes: every recipe the contract names is provided and ck- prefixed
   }
   assertEquals(cookbookClasses.cardNameAttribute, "data-card-name");
 });
+
+// Raw imports keep this source audit usable with plain deno test (no read
+// permission). Include new src/ and demo/ TS files in this source list.
+Deno.test("classes: every assigned shell class has a stylesheet selector", () => {
+  const sources = [
+    ["src/cookbook.ts", source0],
+    ["src/deck-data.ts", source1],
+    ["src/deck.ts", source2],
+    ["src/dom.ts", source3],
+    ["src/drawer.ts", source4],
+    ["src/flip.ts", source5],
+    ["src/header.ts", source6],
+    ["src/model.ts", source7],
+    ["src/motion.ts", source8],
+    ["src/panels.ts", source9],
+    ["src/route.ts", source10],
+    ["src/shell.ts", source11],
+    ["src/status.ts", source12],
+    ["src/styles.ts", source13],
+    ["src/tutorial.ts", source14],
+    ["src/types.ts", source15],
+    ["src/view.ts", source16],
+    ["demo/placeholder-app.ts", source17],
+    ["demo/routes/index.root.ts", source18],
+  ];
+  const intentional: Record<string, string> = {
+    "ck-stat": "Grouping hook for ck-stat-value and ck-stat-label; uses block flow.",
+    "ck-queue": "Mount-slot hook; the containing ck-panel-body supplies layout.",
+    "ck-details-slot": "Mount-slot hook; the containing ck-panel-body supplies layout.",
+    "ph-title": "Demo-local heading recipe installed by PlaceholderApp.mount.",
+    "ph-stage": "Demo-local stage recipe installed by PlaceholderApp.mount.",
+    "ph-detail": "Demo-local details recipe installed by PlaceholderApp.mount.",
+    "ph-facts": "Demo-local facts recipe installed by PlaceholderApp.mount.",
+    "ph-label": "Demo text-update and settleIn hook; inherits the stage typography.",
+  };
+  const selectors = new Set([...cookbookCss.matchAll(/\.([a-zA-Z_][\w-]*)/g)].map((m) => m[1]));
+  const missing: string[] = [];
+  const assigned = new Set<string>();
+  for (const [file, raw] of sources) {
+    const source = raw.replace(/\/\*[\s\S]*?\*\/|^\s*\/\/.*$/gm, "");
+    const add = (value: string) => {
+      for (const token of value.trim().split(/\s+/)) {
+        if (!token) continue;
+        assigned.add(token);
+        if (!selectors.has(token) && !intentional[token]) missing.push(`${file}: ${token}`);
+      }
+    };
+    // All current class assignment forms: h's second argument, className,
+    // class object properties and classList state changes.
+    for (const match of source.matchAll(
+      /\bh\(\s*["'][^"']+["']\s*,\s*((?:"[^"]*"|'[^']*'|[^,"')])*)[,)]|\.className\s*=\s*([^;]+)|\bclass(?:Name)?\s*:\s*([^,}]+)|\.classList\.(?:add|remove|toggle|replace)\(([^)]*)\)/g,
+    )) {
+      const expression = match.slice(1).find((part) => part !== undefined)!;
+      for (const literal of expression.matchAll(/(["'])(.*?)\1/g)) {
+        // "icon" in slide.eyebrow tests the slide variant; it is not a class.
+        if (/^\s*in\b/.test(expression.slice(literal.index! + literal[0].length))) continue;
+        add(literal[2]);
+      }
+    }
+    // Remove interpolation before scanning HTML attributes, so quotes in an
+    // expression such as classes.name ?? "" cannot end the attribute early.
+    for (const match of source.replace(/\$\{[^}]*\}/g, "").matchAll(/\bclass=(["'])(.*?)\1/g)) add(match[2]);
+    // The deck passes a conditional emphasis class through this variable.
+    for (const match of source.matchAll(/const tone\s*=\s*([^;]+);/g)) {
+      for (const literal of match[1].matchAll(/(["'])(.*?)\1/g)) add(literal[2]);
+    }
+  }
+  for (const [key, value] of Object.entries(cookbookClasses)) {
+    if (key !== "cardNameAttribute") assertEquals(selectors.has(value), true, value);
+  }
+  assertEquals(assigned.size > 60, true, "the audit must include templates and h calls");
+  assertEquals(missing, [], "assigned classes need CSS or a documented nonvisual/demo hook");
+});
+
 
 Deno.test("status: parse, describe and fetch healthz", async () => {
   assertEquals(parseHealth({ ok: true, version: "0.1.0", commit: "abcdef0123" }), {

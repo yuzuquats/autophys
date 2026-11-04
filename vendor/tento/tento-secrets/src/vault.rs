@@ -29,7 +29,9 @@ use sha2::{Digest, Sha256};
 use crate::address::Address;
 use crate::envelope::Envelope;
 use crate::identity::{IDENTITY_FILE, Identity, SIGNING_KEY_FILE, Signer};
-use crate::manifest::{Health, HistoryEntry, Host, MANIFEST_FILE, Manifest, Record, SignedManifest, Unlock, Kind};
+use crate::manifest::{
+  Health, HistoryEntry, Host, MANIFEST_FILE, Manifest, Record, SignedManifest, Unlock,
+};
 use crate::secret::SecretBytes;
 
 pub const ENVELOPE_SUFFIX: &str = ".envelope";
@@ -49,20 +51,6 @@ pub fn now() -> u64 {
 
 /// Options for a new record; `set` on an existing record keeps its metadata
 /// unless a field is given.
-/// What a guarded write expects to find: `address` still at `version`
-/// (`None`: still absent). See [`Vault::write_guarded`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Guard {
-  pub address: Address,
-  pub version: Option<u32>,
-}
-
-impl Guard {
-  pub fn new(address: Address, version: Option<u32>) -> Self {
-    Self { address, version }
-  }
-}
-
 #[derive(Clone, Debug, Default)]
 pub struct SetOpts {
   pub provider: Option<String>,
@@ -70,9 +58,6 @@ pub struct SetOpts {
   pub expires: Option<u64>,
   pub renewal_url: Option<String>,
   pub unlock: Option<Unlock>,
-  /// What the record holds; `api-key` for a new record when unnamed, and
-  /// unchanged on a rotate. A password defaults to the session tier.
-  pub kind: Option<Kind>,
   /// Who is setting: `operator` by default.
   pub source: Option<String>,
 }
@@ -252,39 +237,6 @@ impl Vault {
       .collect()
   }
 
-  /// The guarded write every writer outside tsh should use, and the contract
-  /// tsh's `std.vault.write-json` keeps: take the one write lock
-  /// ([`crate::write_lock`]), open the store (creating it when absent), check
-  /// that each guarded address is still at the version the caller last read
-  /// (`None`: still absent), and only then [`Vault::set`]. The lock is held
-  /// from before the open until the write lands, so a guard that held when
-  /// it was checked still holds when the manifest is replaced. A refresh
-  /// guards both the credential it rewrites and the client record it was
-  /// issued under, so a rotated client or a concurrent refresh is refused
-  /// rather than overwritten.
-  ///
-  /// Errors: a lock still held after [`crate::write_lock::LOCK_WAIT`]
-  /// (`TimedOut`), a store that cannot be opened, a guard that no longer
-  /// holds (the message names the address, never a value), and whatever
-  /// [`Vault::set`] refuses. Returns the version written.
-  pub fn write_guarded(dir: &Path, addr: &Address, value: &[u8], opts: SetOpts, guards: &[Guard]) -> Result<u32> {
-    let _lock = crate::write_lock::acquire(dir)
-      .with_context(|| format!("vault write lock in {}", dir.display()))?;
-    let mut vault = Self::open_or_init_at(dir)?;
-    for guard in guards {
-      let current = vault.record(&guard.address).map(|r| r.current);
-      if current != guard.version {
-        bail!(
-          "{} changed since it was read (expected {}, found {}); re-read and retry without overwriting the newer value",
-          guard.address,
-          guard.version.map_or("absent".to_string(), |v| format!("v{v}")),
-          current.map_or("absent".to_string(), |v| format!("v{v}")),
-        );
-      }
-    }
-    vault.set(addr, value, opts)
-  }
-
   /// Store a value. A new address creates the record at v1; an existing one
   /// gets a new version (`rotated` bumps, health → ok, previous version kept,
   /// older ciphertext removed).
@@ -305,7 +257,6 @@ impl Vault {
     let (version, record, stale): (u32, Record, Vec<u32>) =
       match self.manifest.manifest.records.get(&key) {
         None => {
-          let kind = opts.kind.unwrap_or_default();
           let r = Record {
             provider: opts.provider,
             account: opts.account,
@@ -313,8 +264,7 @@ impl Vault {
             rotated: ts,
             expires: opts.expires,
             renewal_url: opts.renewal_url,
-            unlock: opts.unlock.unwrap_or_else(|| kind.default_unlock()),
-            kind,
+            unlock: opts.unlock.unwrap_or(Unlock::None),
             health: Health::Ok,
             current: 1,
             versions: vec![1],
@@ -356,9 +306,6 @@ impl Vault {
           }
           if let Some(u) = opts.unlock {
             r.unlock = u;
-          }
-          if let Some(k) = opts.kind {
-            r.kind = k;
           }
           r.history.push(HistoryEntry {
             at: ts,
@@ -609,67 +556,6 @@ mod tests {
     )
     .unwrap();
     assert!(v.read(&addr, None).is_err());
-    let _ = std::fs::remove_dir_all(&dir);
-  }
-
-  /// A record's kind is metadata the manifest carries: unnamed it is
-  /// `api-key`, a password defaults to the session tier, and a rotate that
-  /// names no kind keeps the old one. Records written before the field
-  /// existed read as `api-key`.
-  /// The refresh pattern: a token rewrite guarded by its own version and the
-  /// client it was issued under. A guard that no longer holds refuses, names
-  /// the address and never the value; one that holds writes the next version.
-  #[test]
-  fn a_guarded_write_refuses_a_stale_guard_and_writes_otherwise() {
-    let dir = tempfile::tempdir().unwrap();
-    let client = Address::parse("google/desktop-client").unwrap();
-    let token = Address::parse("google/account-me").unwrap();
-    let opts = || SetOpts { kind: Some(Kind::TokenJson), ..Default::default() };
-    // A fresh store: the guard says both are absent.
-    let v1 = Vault::write_guarded(dir.path(), &client, b"{\"client_id\":\"c\"}", opts(), &[Guard::new(client.clone(), None)]).unwrap();
-    assert_eq!(v1, 1);
-    let guards = |client_v, token_v| vec![Guard::new(client.clone(), client_v), Guard::new(token.clone(), token_v)];
-    assert_eq!(Vault::write_guarded(dir.path(), &token, b"{\"refresh_token\":\"r1\"}", opts(), &guards(Some(1), None)).unwrap(), 1);
-    // A refresh that read v1 of the token writes v2; a second one holding the same guard is stale.
-    assert_eq!(Vault::write_guarded(dir.path(), &token, b"{\"refresh_token\":\"r2\"}", opts(), &guards(Some(1), Some(1))).unwrap(), 2);
-    let stale = Vault::write_guarded(dir.path(), &token, b"{\"refresh_token\":\"r3\"}", opts(), &guards(Some(1), Some(1))).unwrap_err().to_string();
-    assert!(stale.contains("google/account-me") && stale.contains("v2") && !stale.contains("r3"), "{stale}");
-    // A rotated client refuses the refresh too.
-    Vault::write_guarded(dir.path(), &client, b"{\"client_id\":\"d\"}", opts(), &[Guard::new(client.clone(), Some(1))]).unwrap();
-    assert!(Vault::write_guarded(dir.path(), &token, b"{\"refresh_token\":\"r3\"}", opts(), &guards(Some(1), Some(2))).is_err());
-    let v = Vault::open_at(dir.path()).unwrap();
-    assert_eq!(v.record(&token).unwrap().current, 2);
-    assert_eq!(v.read(&token, None).unwrap().expose(), b"{\"refresh_token\":\"r2\"}");
-    assert!(dir.path().join(crate::write_lock::LOCK_FILE).is_file());
-  }
-
-  #[test]
-  fn kind_is_recorded_defaults_and_survives_rotation() {
-    let dir = temp("kind");
-    let mut v = Vault::init_at(&dir).unwrap();
-    let key = Address::parse("openai/api-key").unwrap();
-    v.set(&key, b"k1", SetOpts::default()).unwrap();
-    let r = v.record(&key).unwrap();
-    assert_eq!((r.kind, r.unlock), (Kind::ApiKey, Unlock::None));
-
-    let pw = Address::parse("google/password-a").unwrap();
-    v.set(&pw, b"p1", SetOpts { kind: Some(Kind::Password), ..Default::default() }).unwrap();
-    let r = v.record(&pw).unwrap();
-    assert_eq!((r.kind, r.unlock), (Kind::Password, Unlock::Session));
-    assert!(v.read(&pw, None).is_err(), "session tier is refused until it exists");
-
-    v.set(&pw, b"p2", SetOpts::default()).unwrap();
-    assert_eq!(v.record(&pw).unwrap().kind, Kind::Password, "rotate keeps the kind");
-
-    let reopened = Vault::open_at(&dir).unwrap();
-    assert_eq!(reopened.record(&pw).unwrap().kind, Kind::Password);
-
-    let legacy: Record = serde_json::from_value(serde_json::json!({
-      "created": 1, "rotated": 1, "unlock": "none", "health": "ok",
-      "current": 1, "versions": [1], "fingerprint": "ab"
-    }))
-    .unwrap();
-    assert_eq!(legacy.kind, Kind::ApiKey);
     let _ = std::fs::remove_dir_all(&dir);
   }
 

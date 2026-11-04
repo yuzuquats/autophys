@@ -51,8 +51,74 @@ export class GridLayout extends LonaWebComponent {
 
   private preloadId: Option<number>;
   private childResizeObservers: Map<HTMLElement, ResizeObserver> = new Map();
+  private childResizeTasks: Map<HTMLElement, EmptyFunction> = new Map();
   private layoutRevision = 0;
   private layoutTask: Option<EmptyFunction>;
+  // Automatic resize work must converge. Keep a bounded history, never a
+  // retry timer: after a repeating cycle, only a new input can restart it.
+  private feedbackHistory: string[] = [];
+  private feedbackBlocked: Set<string> | null = null;
+  private feedbackChildren: Element[] = [];
+  private feedbackViewport = "";
+  private feedbackTime = 0;
+  private appliedWidth = 0;
+
+  /** During a rapid feedback cycle columns and height decreases pause, but
+   * height increases still keep every child contained. Fresh observer input
+   * after quiet or an explicit layout/bind/reconnect resumes normal layout. */
+  get layoutSuspended(): boolean { return this.feedbackBlocked !== null; }
+
+  private resetLayoutFeedback(): void {
+    this.feedbackHistory = [];
+    this.feedbackBlocked = null;
+    this.feedbackChildren = [];
+    this.feedbackViewport = "";
+    this.feedbackTime = 0;
+  }
+
+  private allowResizeLayout(width: number): boolean {
+    const children = [...this.children];
+    const viewport = `${window.innerWidth},${window.innerHeight}`;
+    const now = performance.now();
+    if (viewport !== this.feedbackViewport ||
+      children.length !== this.feedbackChildren.length ||
+      children.some((child, i) => child !== this.feedbackChildren[i]) ||
+      now - this.feedbackTime > 50) {
+      this.resetLayoutFeedback();
+    }
+    // Feedback advances on consecutive frames. Slower independent changes,
+    // including known inputs after a pause, begin a fresh sequence.
+    this.feedbackViewport = viewport;
+    this.feedbackChildren = children;
+    this.feedbackTime = now;
+    // Border-box heights match layoutGridSync/onChildResize. Content-box
+    // measurements make padding/borders look like perpetual height changes.
+    const key = [width, ...children.map(child => (child as HTMLElement).offsetHeight)].join(",");
+    if (this.feedbackBlocked) {
+      if (this.feedbackBlocked.has(key)) return false;
+      this.feedbackBlocked = null;
+      this.feedbackHistory = [];
+    }
+    // Several child observers can report the same DOM snapshot in one batch.
+    // They must all update their pins; only transitions count toward a cycle.
+    if (this.feedbackHistory[this.feedbackHistory.length - 1] === key) return true;
+    this.feedbackHistory.push(key);
+    if (this.feedbackHistory.length > 24) this.feedbackHistory.shift();
+    // Three repetitions distinguish a cycle from an ordinary settle (A-B-A).
+    // Delay suspension until the retained columns fit the current width.
+    const history = this.feedbackHistory;
+    for (let period = 2; period <= Math.floor(history.length / 3); period++) {
+      const end = history.length;
+      if (history.slice(end - period).every((state, i) =>
+        state === history[end - 2 * period + i] && state === history[end - 3 * period + i]) &&
+        width >= this.appliedWidth) {
+        this.feedbackBlocked = new Set(history.slice(end - period));
+        console.warn("GridLayout paused repeating resize geometry; new constraints or layoutGrid() will resume it", this);
+        return false;
+      }
+    }
+    return true;
+  }
   /** Cleared once the first layout has painted; until then transitions are
       suppressed so the grid snaps into place instead of animating on open. */
   private initialTransitionCleared = false;
@@ -78,7 +144,7 @@ export class GridLayout extends LonaWebComponent {
   onSizeChange: Option<(s: Size) => void> = (s: Size) => {
     if (Math.abs(s.width - this.lastWidth) >= 1) {
       this.lastWidth = s.width;
-      this.layoutGrid();
+      this.queueLayout();
     }
   };
 
@@ -98,6 +164,7 @@ export class GridLayout extends LonaWebComponent {
     this.preloadId = null;
     this.cleanupChildResizeObservers();
     this.lastWidth = 0;
+    this.resetLayoutFeedback();
   }
 
   disconnectedCallback(): void {
@@ -119,6 +186,8 @@ export class GridLayout extends LonaWebComponent {
   }
 
   private cleanupChildResizeObservers() {
+    for (const task of this.childResizeTasks.values()) $$.clear(task);
+    this.childResizeTasks.clear();
     for (const [element, observer] of this.childResizeObservers) {
       observer.disconnect();
     }
@@ -138,6 +207,19 @@ export class GridLayout extends LonaWebComponent {
 
     // If height hasn't changed, no need to update
     if (Math.abs(heightDelta) < 1) return;
+
+    const wasSuspended = this.layoutSuspended;
+    const canRelayout = this.allowResizeLayout(this.$("root").getBoundingClientRect().width);
+    // Stopping writes must not strand a larger child over the next card.
+    // Within the blocked cycle keep the largest height seen for each pin;
+    // growth converges while retaining enough space for every cycle state.
+    if (!canRelayout && heightDelta <= 0) return;
+    if (canRelayout && wasSuspended) {
+      // Content has changed since the pause. Recompute columns as well as
+      // heights instead of keeping the retained cycle's narrower columns.
+      this.queueLayout();
+      return;
+    }
 
     // Update the element's stored height
     pinRect.rect.height = newHeight;
@@ -246,13 +328,23 @@ export class GridLayout extends LonaWebComponent {
 
   private setupChildResizeObserver(element: HTMLElement) {
     const revision = this.layoutRevision;
-    const observer = new ResizeObserver(([entry]) => {
+    const observer = new ResizeObserver(() => {
       if (!this.isConnected || revision !== this.layoutRevision || this.childResizeObservers.get(element) !== observer) return;
-      const newHeight = entry.contentRect.height || element.offsetHeight;
-      this.onChildResize(element, newHeight);
+      const newHeight = element.offsetHeight;
+      const previous = this.childResizeTasks.get(element);
+      if (previous) $$.clear(previous);
+      // Updating the grid's height resizes its ancestors. Never write that
+      // geometry during ResizeObserver delivery; consume the latest child
+      // measurement in the next write phase, while it still belongs to us.
+      const task = $$.mutate(() => {
+        this.childResizeTasks.delete(element);
+        if (!this.isConnected || revision !== this.layoutRevision || this.childResizeObservers.get(element) !== observer) return;
+        this.onChildResize(element, newHeight);
+      });
+      this.childResizeTasks.set(element, task);
     });
 
-    observer.observe(element);
+    observer.observe(element, { box: "border-box" });
     this.childResizeObservers.set(element, observer);
   }
 
@@ -282,6 +374,11 @@ export class GridLayout extends LonaWebComponent {
 
   private layoutQueued = false;
   layoutGrid() {
+    this.resetLayoutFeedback();
+    this.queueLayout();
+  }
+
+  private queueLayout() {
     if (!this.isConnected || this.layoutQueued) return;
     this.layoutQueued = true;
     const revision = this.layoutRevision;
@@ -291,13 +388,23 @@ export class GridLayout extends LonaWebComponent {
       if (!this.isConnected || revision !== this.layoutRevision) return;
       this.layoutTask = null;
       this.layoutQueued = false;
-      this.layoutGridSync();
+      this.performLayout();
     });
   }
 
   layoutGridSync(): number {
+    this.resetLayoutFeedback();
+    return this.performLayout();
+  }
+
+  private performLayout(): number {
     if (!this.isConnected) return 0;
     const { width } = this.$("root").getBoundingClientRect();
+    if (!this.allowResizeLayout(width)) {
+      const expanded = this.pinRects.find(pin => pin.$e === this.$expandedElement);
+      return expanded ? expanded.rect.y + expanded.rect.height : 0;
+    }
+    this.appliedWidth = width;
     const columnState = (this.columnState = this.makeColumnState(width));
 
     this.$("root").style.setProperty(

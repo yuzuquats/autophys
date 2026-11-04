@@ -405,11 +405,14 @@ export class TableHeader<
 }
 
 export namespace TableHeader {
+  /** A compact header band needs local corners, not the tall-card radius. */
+  export const SURFACE_PROPS: Round.Props = { ...Round.Props.FLAT_CARD, radius: 8 };
+
   @component({
     name: "std-table-header-column",
   })
   export class Column<Item extends Identifiable<{}>> extends LonaWebComponent {
-    $bg: Round = this.hydrate<Round>("bg").bind(Round.Props.FLAT_CARD);
+    $bg: Round = this.hydrate<Round>("bg").bind(TableHeader.SURFACE_PROPS);
     $handle = this.$("drag-handle");
     $sortArrow = this.$("sort-arrow");
     $labels = this.$("labels");

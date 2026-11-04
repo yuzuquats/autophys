@@ -639,6 +639,7 @@ impl super::interp::ExternalCommands for WorkerPrograms {
       use std::os::unix::process::CommandExt;
       command.process_group(0);
     }
+    LispHost::inherit_ignored_sigchld(&mut command);
     let mut child = command.spawn().map_err(|e| crate::Error::Other(e.into()))?;
     let pid = child.id();
     let stdout = child.stdout.take();
@@ -795,6 +796,7 @@ fn worker_pipeline(
         super::process_pipeline::configure_std_descriptors(&mut command, io)?,
       ));
     }
+    LispHost::inherit_ignored_sigchld(&mut command);
     let mut child = match command.spawn() {
       Ok(child) => child,
       Err(error) => {

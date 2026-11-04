@@ -44,7 +44,7 @@ export function createDeck(slides: readonly DeckSlide[]): Deck {
     viewport,
     h(
       "nav",
-      "deck-controls",
+      "ck-deck-controls",
       { "aria-label": "Choose slide" },
       counter,
       h("div", "ck-deck-arrows", null, prev, next),
@@ -171,7 +171,7 @@ function renderSlide(slide: DeckSlide): HTMLElement {
   else eyebrow.append(h("p", "ck-slide-label", null, slide.eyebrow.label));
   const lead = h(
     "div",
-    "slide-frame slide-lead",
+    "ck-slide-frame ck-slide-lead",
     null,
     eyebrow,
     h("h2", "ck-slide-title", null, slide.title),
@@ -189,7 +189,7 @@ function renderBody(body: DeckBody): HTMLElement {
       return frame(
         h(
           "div",
-          "person",
+          "ck-person",
           null,
           h("span", "ck-avatar"),
           h("div", "", null, h("p", "ck-person-name", null, body.name), h("p", "ck-slide-label", null, body.role)),
@@ -228,7 +228,7 @@ function renderBody(body: DeckBody): HTMLElement {
     case "demo":
       return h(
         "div",
-        "slide-wide slide-body",
+        "ck-slide-wide ck-slide-body",
         null,
         h("div", "ck-demo-panel", null, h("p", "ck-slide-label", null, body.caption)),
       );
@@ -248,7 +248,7 @@ function stats(list: DeckStat[]): HTMLElement[] {
   return [
     h(
       "dl",
-      "stats",
+      "ck-stats",
       null,
       ...list.map((s) =>
         h("div", "ck-stat", null, h("dt", "ck-stat-value", null, s.value), h("dd", "ck-stat-label", null, s.label))

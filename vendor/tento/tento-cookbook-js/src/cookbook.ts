@@ -1,3 +1,4 @@
+// deno-lint-ignore-file no-namespace -- the public API is one Cookbook namespace by design (operator ruling N-1)
 /**
  * The public API, in one namespace (the tento-ui convention, as in
  * `export namespace TreeList`). lib.ts exports only this.

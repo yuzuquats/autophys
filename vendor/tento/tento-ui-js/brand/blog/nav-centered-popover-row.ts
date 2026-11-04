@@ -10,7 +10,6 @@ import { DomUtils } from "@tento-ui/dom";
 import { $$ } from "@tento-ui/fastdom";
 import { GESTURE_MANAGER } from "@tento-ui/gesture-manager";
 import { SimpleKeyframe } from "@tento-ui/keyframe";
-import type { MarketingHeader } from "../header/marketing-header";
 import type {
   NavConfig,
   NavDetailsColumn,
@@ -29,7 +28,7 @@ export class NavCenteredPopoverRow extends LonaWebComponent {
   private $popoverContainer: HTMLElement = Column.make();
   private $round: Round;
   private $linksRow: HTMLElement = Row.make();
-  private $header: Option<MarketingHeader> = null;
+  private $header: Option<HTMLElement> = null;
   private resizeObserver: Option<ResizeObserver> = null;
   private appliedOffset: number = 0;
   private linkRefs: Map<string, NavCenteredPopoverRow.LinkRef> = new Map();
@@ -78,7 +77,7 @@ export class NavCenteredPopoverRow extends LonaWebComponent {
     return this;
   }
 
-  bind(nav: NavConfig, $header: MarketingHeader): this {
+  bind(nav: NavConfig, $header: HTMLElement): this {
     this.$header = $header;
     this.onNavigate = nav.onNavigate;
     this.dismissCurrent(false);

@@ -336,17 +336,24 @@ export class ThickSlider extends LonaWebComponent {
         onPointerDown: () => {
           baseValue = this.state;
         },
-        onPointerMove: ({ progress }) =>
+        // Report the new value like DefaultSlider and the keyboard path do;
+        // without it, drags and track clicks moved the thumb but no consumer
+        // (SliderInput.onChange included) ever heard about it.
+        onPointerMove: ({ progress }) => {
           this.render(
             baseValue!.withProgressPx(
               baseValue!.layout().progressPx - progress.x,
             ),
-          ),
+          );
+          this.onProgressChanged?.(this.value);
+        },
       });
     }
 
-    this.$("track").onpointerup = (e) =>
+    this.$("track").onpointerup = (e) => {
       this.render(this.state.withProgressPx(e.offsetX + 6));
+      this.onProgressChanged?.(this.value);
+    };
   }
 
   connectedCallback() {

@@ -33,6 +33,8 @@ const DEFAULT_SHELL_GEOMETRY: ShellLayout.Geometry = {
  * desktop, hover-peek when collapsed, modal drawer on mobile) and the
  * expand-button wiring. Nav binding, breadcrumb building, and content loading
  * are the consumer's job (see `docs-shell.ts` for the docs orchestration).
+ * The content viewport reserves classic scrollbar space by default. Set
+ * `--shell-content-scrollbar-gutter: auto` explicitly to opt out.
  */
 @component({
   name: "std-shell-layout",
@@ -276,9 +278,11 @@ export class ShellLayout extends LonaWebComponent {
         /* Also the last stop for a framed miniapp's own overscroll, which
            chains out through the iframe into this document. */
         overscroll-behavior: contain;
-        /* stable keeps centred content still when a page's length brings its
-           scrollbar in or out (classic, always-visible scrollbars). */
-        scrollbar-gutter: var(--shell-content-scrollbar-gutter, auto);
+        /* Reserve classic scrollbar space before measuring responsive content.
+           Otherwise a narrow/tall grid can add a scrollbar, become wide/short
+           when it loses a column, remove the scrollbar and repeat forever.
+           Consumers can explicitly opt out with the CSS variable. */
+        scrollbar-gutter: var(--shell-content-scrollbar-gutter, stable);
         box-sizing: border-box;
         display: flex;
         flex-direction: column;

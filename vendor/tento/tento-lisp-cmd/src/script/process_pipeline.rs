@@ -111,6 +111,8 @@ pub async fn run_process_pipeline_with_io(
       command.env_clear();
     }
     let _ = flush_shell_output();
+    #[cfg(unix)]
+    super::LispHost::inherit_ignored_sigchld(command.as_std_mut());
     let mut child = match command.spawn() {
       Ok(child) => child,
       Err(error) => {
@@ -497,6 +499,8 @@ pub fn start_process_background(
   }
   #[cfg(not(unix))]
   ignore_keyboard_signals(&mut command);
+  #[cfg(unix)]
+  super::LispHost::inherit_ignored_sigchld(&mut command);
   let mut child = command.spawn().map_err(|error| crate::Error::ProcessStart {
     status: if error.kind() == std::io::ErrorKind::NotFound { 127 } else { 126 },
     detail: error.to_string(),

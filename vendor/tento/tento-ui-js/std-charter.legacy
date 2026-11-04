@@ -159,10 +159,7 @@ std-footer	# tento-ui-js/brand/nav/footer.ts:5
 std-formula	# tento-lona-js/sheets-ui/src/plugins/renderer/source-formula.ts:119
 std-formula-cell	# tento-lona-js/sheets-ui/src/plugins/renderer/source-formula.ts:167
 std-fractal-noise-field	# tento-ui-js/components/noise/fractal-noise-field.ts:8
-std-geometry-field	# tento-ui-js/brand/landing/geometry/geometry-field.ts:19
-std-geometry-field-preview	# tento-ui-js/brand/landing/geometry/geometry-field.example.ts:23
 std-gradient-splat-gallery	# tento-ui-js/brand/landing/gradient-splat.example.ts:19
-std-gradient-splat-new-gallery	# tento-ui-js/brand/landing/geometry/gradient-splat-new.example.ts:97
 std-gradient-splat-wash	# tento-ui-js/brand/landing/gradient-splat-wash.ts:10
 std-graph-grid	# tento-ui-js/components/review-notes/graph-grid.ts:42
 std-header-legend	# tento-lona-js/sheets-ui/src/plugins/inert/header/support/legend.ts:6
@@ -170,7 +167,6 @@ std-hls-player	# tento-ui-js/components/video/hls-player.ts:15
 std-home-grid-card	# tento-ui-js/components/home-card/home-grid-card.ts:22
 std-home-list-cell	# tento-ui-js/components/home-card/home-list-cell.ts:8
 std-illustration-medallion	# tento-ui-js/components/presentation/illustration-medallion.ts:23
-std-install-command	# tento-ui-js/brand/landing/install-command.ts:19
 std-kernel-picker	# tento-ui-js/convolution/kernel-picker.ts:19
 std-kernel-preview	# tento-ui-js/convolution/kernel-preview.ts:10
 std-landing-bento	# tento-ui-js/brand/landing/landing-bento.ts:8

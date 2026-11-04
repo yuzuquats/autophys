@@ -918,6 +918,9 @@ impl LispHost {
   /// the returned mounts. The resolver owns where bundles come from and how
   /// their commands dispatch (the `.tsh.app` transport stays behind the trait).
   pub fn with_resolver(resolver: Rc<dyn ImportResolver>) -> Self {
+    // Preserve entry-ignored traps before an async child can install runtime
+    // handlers (notably Tokio's SIGCHLD handler) over the native disposition.
+    super::bash_compound::traps::ignored_at_entry(0);
     super::stack::install();
     let mut interp = Interpreter::<Sym, StringBackend>::new();
     let env = interp.default_env();
