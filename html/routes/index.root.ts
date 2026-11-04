@@ -17,6 +17,7 @@ import { AutophysSidebar } from "../ui/sidebar.ts";
 import { autophysStyles } from "../ui/styles.ts";
 import { deck, tutorial } from "./content.ts";
 import { landingDocs } from "./docs.ts";
+import { signedOutView } from "../client/derive/signed-out.ts";
 import "./brand.ts";
 
 const USER = "james";
@@ -42,6 +43,7 @@ const source: Source & { chosen?: Promise<Source> } = forced === "fixtures" ? fi
 
 /** The sidebar status line: which source the records come from. */
 async function status(): Promise<Cookbook.Status.Line> {
+  if (SIGNED_OUT) return { tone: "pending", text: "Signed out · sign in to see your projects" };
   await ctl.store.start().catch(() => {});
   const active = source.chosen ? await source.chosen : source;
   if (ctl.store.error) return { tone: "down", text: "Connection unavailable" };
@@ -54,6 +56,10 @@ async function status(): Promise<Cookbook.Status.Line> {
 
 const clock = () => new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 const ctl = new Controller(new Store(source), { user: USER, now: clock });
+// `serve --login` marks a signed-out page (the Sign in badge). The landing page stays usable:
+// the app makes no API calls (no 401, no reload) and its main pane asks to sign in.
+const SIGNED_OUT = forced !== "fixtures" && document.getElementById("ap-account")?.dataset.signedIn === "false";
+if (SIGNED_OUT) { const base = ctl.view.bind(ctl); ctl.view = () => signedOutView(base()); }
 
 let teardown: (() => void) | null = null;
 
@@ -69,6 +75,8 @@ const app: Cookbook.App = {
         if (toggle && document.querySelector<HTMLElement>(".ck-panels")?.dataset.mobile !== "details") toggle.click();
         return;
       }
+      if (intent.kind === "action" && intent.name === "sign-in") { location.assign("/login?next=/app"); return; }
+      if (SIGNED_OUT) return; // Nothing else works without an account; the main pane says so.
       if (intent.kind === "action" && intent.name === "retry") { location.reload(); return; }
       if (intent.kind === "action" && intent.name === "copy-sdk") {
         const body = ctl.view().main.body;
@@ -104,8 +112,8 @@ const app: Cookbook.App = {
     };
     const unsubscribe = ctl.subscribe(redraw);
     redraw();
-    void ctl.store.start().catch(() => {}); // Store exposes the failure through the view.
-    const poll = setInterval(() => void ctl.store.refreshPairings(), PAIRING_POLL_MS);
+    if (!SIGNED_OUT) void ctl.store.start().catch(() => {}); // Store exposes the failure through the view.
+    const poll = SIGNED_OUT ? undefined : setInterval(() => void ctl.store.refreshPairings(), PAIRING_POLL_MS);
     teardown = () => { clearInterval(poll); unsubscribe(); views.forEach((v) => v.dispose()); removeStyles(); };
   },
   unmount() {
