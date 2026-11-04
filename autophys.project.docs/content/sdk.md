@@ -188,19 +188,32 @@ decisions × ~3k input / ~1.5k output tokens is ~$0.25 per investigation on
 Spark 1.3, so ~$5 for a 4-case × 5-seed bench. One Wonder iteration (~200k in,
 ~20k out) is ~$1.2 plus a train re-evaluation; ten iterations ≈ $60.
 
-Proposed record fields (to be agreed with autophys/rs, then added to
-`workbook-format.md`):
+Record fields, agreed with autophys/rs on 2026-11-04. All are optional
+and additive in format v1, and both validators accept them before either SDK
+writes them:
 
-- investigation: `playbook: {name, sha256}` (sha256 of the SKILL.md bytes;
-  the bytes are stored as a blob), `model: {role, route, model, effort,
-  max_tokens}`, `price: {model, input_per_mtok, output_per_mtok, as_of}`.
-  `system_prompt_sha256` stays and covers the contract and playbook.
-- step: `usage: {input_tokens, output_tokens, reasoning_tokens,
-  cached_input_tokens}` (normalised; replaces the raw provider dict),
-  `latency_ms` (renames `elapsed_ms`), `cost_usd`, `images: [{sha256,
-  media_type, caption}]`, `replayed: true` when served from a cassette.
-- outcome: `usage_total: {calls, input_tokens, output_tokens, cost_usd,
-  latency_ms}`.
+- reasoner API: `complete(..., images=[{media_type, data}])` (base64 data,
+  sent as `image_url` data URIs); constants `MUSE_SPARK = "muse-spark-1.3"`,
+  `MUSE_WONDER = "muse-wonder-1.0"`. Retries 429/5xx with backoff and
+  Retry-After; 402 fails fast as a budget error.
+- replay: `AUTOPHYS_REASON_RECORD=<file>` / `AUTOPHYS_REASON_REPLAY=<file>`;
+  JSONL `{key, reply: {content, model, usage, route, elapsed_ms}}`, key =
+  sha256 of the canonical request body without auth; shared cassettes in
+  `tests/conformance/reasoner/`.
+- investigation: `playbook {name, version, sha256}` (sha256 of the SKILL.md
+  bytes, stored as a blob); `model {role, route, model, effort, max_tokens}`;
+  `price {model, input_per_mtok, output_per_mtok, as_of}`. The shared price
+  table is `tests/conformance/reasoner/prices.json`; each SDK embeds a copy
+  checked against it. `system_prompt_sha256` stays.
+- step: `usage {route, model, input_tokens, output_tokens, total_tokens,
+  reasoning_tokens?, cached_input_tokens?, latency_ms, cost_usd}`, with
+  `cost_usd` null for an unknown model. The key used to hold the raw
+  provider dict, so validators type-check known keys when present and older
+  records stay valid. `images [{sha256, media_type, caption}]` (bytes in
+  `blobs`, never inline); `replayed: true` for cassette replies.
+- outcome: `usage_total {calls, input_tokens, output_tokens, cost_usd}`.
+- projections: unchanged in v1 (they are fixed SQL columns). Read APIs derive
+  `playbook` from the seq-0 record and `usage_total` from the outcome.
 
 Open: Muse skill frontmatter rules and the `muse exec --json` event schema
 need `muse skills validate` and `muse exec --help` run once on the laptop
