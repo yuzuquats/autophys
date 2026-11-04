@@ -6,7 +6,7 @@ import {
   validationPanels, VIEW_LABEL,
 } from "./charts.ts";
 import { truthPanels } from "./truth.ts";
-import { configurationSections } from "./configuration.ts";
+import { configurationSections, experimentSections } from "./configuration.ts";
 import { simulatorLabel } from "../config.ts";
 import { int, shortHash, sig } from "./fmt.ts";
 import { displayedFields, outlookAt } from "./outlook.ts";
@@ -47,7 +47,7 @@ function selectedMain(s: State): MainModel {
     case "config": {
       const c = latestConfig(project);
       return { crumb: [{ label: project.name }, { label: "Configuration" }], meta: `v${c.version} · ${shortHash(c.hash)}`, actions: [EXPORT],
-        body: { kind: "configuration", parameters: configPanels(c)[0].charts[0] as RangesChart, sections: configurationSections(c).filter((section) => ["Experiments", "Noise", "Budget"].includes(section.heading)) }, creditLabel: `${simulatorLabel(c)} · source ${shortHash(c.simulator.sourceHash) || "unrecorded"} · config ${shortHash(c.hash)}`, credit: `${simulatorLabel(c)} · source ${c.simulator.sourceHash || "–"} · config ${c.hash}` };
+        body: { kind: "configuration", parameters: configPanels(c)[0].charts[0] as RangesChart, experiments: experimentSections(c), sections: configurationSections(c).filter((section) => ["Noise", "Run limits"].includes(section.heading)) }, creditLabel: `${simulatorLabel(c)} · source ${shortHash(c.simulator.sourceHash) || "unrecorded"} · config ${shortHash(c.hash)}`, credit: `${simulatorLabel(c)} · source ${c.simulator.sourceHash || "–"} · config ${c.hash}` };
     }
     case "investigation": {
       const c = configFor(project, sel.inv), fit = latestFit(sel.inv);

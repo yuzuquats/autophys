@@ -252,7 +252,7 @@ export function proposalPanels(ctx: Ctx, p: Proposal, ranking: BarRow[], edited:
 export function configPanels(config: ProjectConfig): ChartPanel[] {
   const rows: RangeRow[] = config.params.map((p) => ({
     label: p.name, lo: engineering(p.lo, p.unit), hi: engineering(p.hi, p.unit),
-    initial: Number.isFinite(p.initial) ? `Initial ${engineering(p.initial, p.unit)}` : undefined, scale: `${p.coord} scale`,
+    initial: Number.isFinite(p.initial) ? engineering(p.initial, p.unit) : undefined, scale: `${p.coord} scale`,
     at: !Number.isFinite(p.initial) ? NaN : p.hi === p.lo ? .5 : p.coord === "log" ? Math.log(p.initial / p.lo) / Math.log(p.hi / p.lo) : (p.initial - p.lo) / (p.hi - p.lo),
     tag: p.fixed ? { text: "fixed", tone: "muted" } : Number.isFinite(p.initial) ? { text: "free" } : { text: "free · no initial", tone: "muted" },
   }));

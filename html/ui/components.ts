@@ -11,6 +11,8 @@ import { EmptyState } from "@tento-ui/components/empty-state/empty-state";
 import { Skeleton } from "@tento-ui/components/skeleton/skeleton";
 import { SelectInput } from "@tento-ui/components/input/select-input";
 import { Button } from "@tento-ui/components/button/button";
+import { GridLayout } from "@tento-ui/components/grid/grid-layout";
+import "@tento-ui/components/round";
 import { LabelTimeline } from "./timeline.ts";
 import type { IntentHandler } from "./intent.ts";
 
@@ -29,6 +31,13 @@ export function hydrateComponents(host: HTMLElement, onIntent: IntentHandler): v
       content.style.cssText = "align-items:flex-start;text-align:left;padding:0;max-width:100%";
     }
     marker.replaceChildren(empty);
+  }
+  for (const marker of host.querySelectorAll<HTMLElement>("[data-ap-grid]")) {
+    const grid = GridLayout.make();
+    grid.style.cssText = "display:block;width:100%";
+    grid.append(...marker.children);
+    marker.replaceChildren(grid);
+    grid.bind({ blockSpacingPx: 10, inlineSpacingPx: 10, minWidthPx: Number(marker.dataset.apGrid) || 260 });
   }
   for (const marker of host.querySelectorAll<HTMLElement>("[data-ap-timeline]")) {
     marker.replaceChildren(LabelTimeline.makeWith(JSON.parse(marker.dataset.apTimeline!)));

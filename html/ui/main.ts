@@ -8,7 +8,7 @@ import { chartMarkup } from "./charts.ts";
 import { ATTR, escapeHtml as esc, intentOf, type IntentHandler } from "./intent.ts";
 import { buttonMarkup } from "./actions.ts";
 import { blockMarkup } from "./blocks.ts";
-import type { MainModel } from "./view-model.ts";
+import type { MainModel, Section } from "./view-model.ts";
 
 /** Class names the host page styles these elements with (its toolbar and button recipes). */
 export type MainClasses = { toolbar?: string; button?: string; primary?: string };
@@ -35,7 +35,11 @@ export function mainMarkup(model: MainModel, width: number, classes: MainClasses
   } else if (model.body.kind === "missing" || model.body.kind === "unavailable") {
     body = `<section class="ap-viewer ap-state">${emptyMarkup(model.body.title, model.body.description)}</section>`;
   } else if (model.body.kind === "configuration") {
-    body = `<div class="ap-viewer ap-configuration"><section class="ap-config-params"><h2>Parameters</h2><p class="ap-help">Declared bounds and initial guesses. Each track uses its labelled fitting scale.</p>${chartMarkup(model.body.parameters, width - 48, "config")}</section><div class="ap-config-sections">${model.body.sections.map((s) => `<section><h2>${esc(s.heading)}</h2>${s.blocks.map(blockMarkup).join("")}</section>`).join("")}</div></div>`;
+    const card = (cls: string, title: string, aside: string | undefined, inner: string) =>
+      `<section class="ap-card ${cls}"><std-round floating bg="var(--ap-card-bg)" border="var(--ap-line)" radius="10"></std-round><header><h3>${esc(title)}</h3>${aside ? `<span>${esc(aside)}</span>` : ""}</header>${inner}</section>`;
+    const section = (cls: string) => (s: Section) => card(cls, s.heading, undefined, s.blocks.map(blockMarkup).join(""));
+    const params = card("ap-config-params", "Parameters", undefined, `<p class="ap-text">Bounds and initial guess, each on its fitting scale</p>${chartMarkup(model.body.parameters, width - 48, "config")}`);
+    body = `<div class="ap-viewer ap-configuration"><div data-ap-grid="260">${[params, ...model.body.experiments.map(section("ap-config-exp"))].join("")}</div><div data-ap-grid="260">${model.body.sections.map(section("ap-config-limits")).join("")}</div></div>`;
   } else {
     const cols = Math.max(1, model.body.columns ?? 1);
     const inner = Math.max(120, width - 24);

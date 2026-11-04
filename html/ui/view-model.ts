@@ -104,7 +104,7 @@ export type MainBody =
   | { kind: "loading"; title: string; description: string }
   | { kind: "unavailable"; title: string; description: string }
   | { kind: "onboarding"; title: string; description: string; snippet: string; copyLabel: string; note: string }
-  | { kind: "configuration"; parameters: RangesChart; sections: Section[] }
+  | { kind: "configuration"; parameters: RangesChart; experiments: Section[]; sections: Section[] }
   | { kind: "panels"; panels: ChartPanel[]; columns?: number };
 
 export type MainModel = {

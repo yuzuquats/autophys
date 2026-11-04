@@ -230,10 +230,15 @@ Deno.test("configuration: ranges have SI bounds, labelled scales and initial val
   const body = view.main.body;
   assert(body.kind === "configuration");
   assertEquals(body.parameters.rows.map((r) => [r.lo, r.hi, r.initial, r.scale]), [
-    ["10 F", "100 kF", "Initial 1.5 kF", "log scale"],
-    ["1 mΩ", "500 mΩ", "Initial 30 mΩ", "log scale"],
+    ["10 F", "100 kF", "1.5 kF", "log scale"],
+    ["1 mΩ", "500 mΩ", "30 mΩ", "log scale"],
   ]);
-  assertEquals(body.sections.map((s) => s.heading), ["Experiments", "Noise", "Budget"]);
+  assertEquals(body.sections.map((s) => s.heading), ["Noise", "Run limits"]);
+  assertEquals(body.experiments.map((s) => s.heading), project.configs[0].catalog.map((e) => e.label));
+  const captions = body.experiments.map((s) => s.blocks[0].kind === "text" ? s.blocks[0].text : "");
+  assert(captions.every((t, i) => project.configs[0].catalog[i].maxRuns == null || t.endsWith(` · up to ${project.configs[0].catalog[i].maxRuns} runs`)), captions.join("; "));
+  const settings = body.experiments.flatMap((s) => s.blocks.flatMap((b) => b.kind === "table" ? b.rows.slice(1) : []));
+  assertEquals(settings.length, project.configs[0].catalog.reduce((n, e) => n + e.settings.length, 0), "every setting is shown, with its default and allowed range");
   assert(!view.main.creditLabel?.includes("sha256:"));
 });
 
