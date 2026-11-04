@@ -381,3 +381,29 @@ loop remain phase 2 or later. No schema-format question remains open.
 Repeated outlook axis names use the last axis's range when checking edits,
 matching Python. Operator confirmed this v1 interpretation on 2026-11-04;
 no schema change or new payload rejection was introduced.
+
+### Phase-1 qualification
+
+A clean archive of the phase-1 tree passes `cargo test --workspace --locked`
+(66 passed, including one SDK doc test; one illustrative daemon doc test
+ignored), and `cargo test` from `sdks/rust` (25 passed). The library checks
+all three Python goldens and both Rust cases; independent Python stdlib
+SQLite/hash/JSON readback also verifies all five files. The Python SDK and
+its tests were not run or edited. The shared vectors and Python golden bytes
+are unchanged. A differential check of 999,515 finite f64 values finds no
+canonical-number mismatch with Python repr.
+
+The socket check on 127.0.0.1:4796 passes health, document cookie mint/remint,
+cookie-less 401, session-auth reads/SSE, cross-origin 403, pairing,
+approval/edit bounds, replay 200, id-conflict 409, data and workbook verify.
+Restarting that private test daemon invalidates its cookie while retaining
+the API key in its private server DB. It is stopped and port 4796 is closed.
+The deployed service was never restarted. `bash -n ops/deploy.sh` passes.
+
+The read-only HTML run passes 55 tests. The working checkout's later full
+Cargo/SDK attempts are blocked by the parallel implementer's uncommitted
+`sdks/rust/tests/numerics.rs` (unfinished phase-2 exports and `indexmap`);
+those files are excluded from these scoped commits and the archive.
+Task CLI is unavailable on this host, as already recorded in the project
+cover. Remaining work is the reserved phase-2 API, remote Rust transport,
+and review of RS-CURSOR-1 / RS-WAIT-1; no format-v1 blocker remains.

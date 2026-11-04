@@ -23,3 +23,17 @@ JSON edge values: non-ASCII text, Python float repr, a u64, NaN as null).
 Regenerate (on rwc-dev-01, from `sdks/python`):
 
     PYTHONPATH=src ~/.cache/autophys/venv/bin/python tests/conformance_cases.py ../../tests/conformance/python
+
+Rust checks all three Python cases on temporary copies and its own checked-in
+cases with `cargo test` in `sdks/rust`. It compares format pragmas, project,
+kind counts, heads and every original/rebuilt projection field. Failures name
+the case, table, row and field. Missing Python fixtures fail the suite.
+
+The Rust writer produces `events-and-values` and `two-investigations`.
+To explicitly regenerate those Rust-owned files, from `sdks/rust`:
+
+    AUTOPHYS_WRITE_GOLDENS=1 cargo test --test conformance -- --exact the_generator_writes_self_consistent_cases
+
+Ordinary runs generate extra cases in a temporary directory and leave all
+checked-in goldens untouched. Exported Rust files use DELETE journal mode
+and are vacuumed before the sibling JSON is written.

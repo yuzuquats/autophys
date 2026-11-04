@@ -1,0 +1,59 @@
+{
+  "format": {
+    "application_id": 1095784258,
+    "user_version": 1
+  },
+  "heads": {
+    "inv_76533ec677641048": {
+      "hash": "ad780a3a3d4b8e7e319972f8d7e399feca5d4d7d974366e834455de361d69e49",
+      "seq": 7
+    },
+    "inv_8c9391f4440f32bc": {
+      "hash": "76742f151447d656dec7c5cc9f63cebc292e7e12ba241e9b2827393617617694",
+      "seq": 7
+    }
+  },
+  "kinds": {
+    "investigation": 2,
+    "measurement": 6,
+    "outcome": 1,
+    "proposal": 1,
+    "run": 6
+  },
+  "project": "two-investigations",
+  "projections": {
+    "investigations": [
+      {
+        "budget_used": 3,
+        "config_version": "sha256:953b9132eaa420a8bec9f60a77b1c4af00a2a40f77339383d70c6a2185d023bd",
+        "created": 1793796194.118053,
+        "id": "inv_76533ec677641048",
+        "overrides": "{\"fixed\":{\"m\":2.0},\"free\":[\"k\"]}",
+        "project": "prj_323c2d5cc533e0cf",
+        "status": "validated",
+        "updated": 1793796194.121235
+      },
+      {
+        "budget_used": 3,
+        "config_version": "sha256:7f737f86d3b0241aa6bb85aff1ae9d4870f1880992311bc6d5f01937337d39e4",
+        "created": 1793796194.117774,
+        "id": "inv_8c9391f4440f32bc",
+        "overrides": "{}",
+        "project": "prj_323c2d5cc533e0cf",
+        "status": "awaiting_approval",
+        "updated": 1793796194.121017
+      }
+    ],
+    "proposals": [
+      {
+        "experiment": "step",
+        "id": "next",
+        "investigation": "inv_8c9391f4440f32bc",
+        "settings": null,
+        "state": "proposed",
+        "updated": 1793796194.121017
+      }
+    ]
+  },
+  "records": 16
+}
