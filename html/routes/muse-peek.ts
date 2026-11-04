@@ -12,7 +12,8 @@ const COLUMN = 800; // std-documentation's max-width in the docs section (docs.t
 export const MUSE_PEEK_CSS = `
 .ap-landing-docs { position: relative; overflow-x: clip; }
 .ap-muse-peek {
-  position: absolute; z-index: 1; height: auto; pointer-events: none; user-select: none;
+  position: absolute; z-index: 1; top: 0; left: 0; width: 104px; height: auto;
+  pointer-events: none; user-select: none;
   opacity: 0; transform: translateX(var(--ap-peek-off, 110vw)) rotate(10deg);
   transition: transform 320ms cubic-bezier(.5, 0, .75, 0), opacity 320ms ease-in;
 }
