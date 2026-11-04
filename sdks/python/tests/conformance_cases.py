@@ -1,0 +1,114 @@
+"""Write the golden workbooks in tests/conformance/python/.
+
+Each case is ``<case>.ap-workbook`` plus ``<case>.json`` with what any
+implementation must read back: the format pragmas, the record count by kind,
+every chain head and every projection row. Ids and timestamps are random, so
+regenerating changes the bytes; the JSON always describes its own workbook.
+
+    PYTHONPATH=src python tests/conformance_cases.py ../../tests/conformance/python
+"""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+import sys
+from collections import Counter
+from pathlib import Path
+
+import numpy as np
+
+from autophys.agent import Investigation, ProposalRunner, ScriptedPolicy
+from autophys.project import Budgets, Project
+from autophys.store import config_hash
+from autophys.synthetic import NoiseModel, observe, oscillator_case, thermal_case
+from autophys.workbook import APPLICATION_ID, SCHEMA_VERSION, WorkbookStore, projection_rows
+
+
+def _thermal_validated(store: WorkbookStore) -> None:
+    """A scripted run with a direct runner: measurements, runs, steps, one outcome."""
+    view, _ = thermal_case(0, max_experiments=1)
+    project = Project(name="thermal-validated", simulator=view.simulator, budgets=Budgets(max_experiments=1))
+    Investigation(project, view.dataset, view.runner, policy=ScriptedPolicy(), store=store).run()
+
+
+def _oscillator_edited(store: WorkbookStore) -> None:
+    """A proposal with an E-1 outlook, edited within its axis, data attached, run to the end."""
+    view, _ = oscillator_case(0, max_experiments=1)
+    catalog = {n: {"max_runs": None} for n in view.simulator.experiments}
+    catalog["sine_0.44Hz"] = {"max_runs": None, "edit": {"freq": [0.1, 2.0]}}
+    project = Project(name="oscillator-edited", simulator=view.simulator, catalog=catalog, budgets=Budgets(max_experiments=1))
+    inv = Investigation(project, view.dataset, ProposalRunner(), policy=ScriptedPolicy(), store=store)
+    pid = inv.run().proposal_id
+    settings = {**view.simulator.experiments["sine_0.44Hz"], "freq": 0.5}
+    inv.approve(pid, by="reviewer", settings=settings)
+    obs = observe(view.simulator, {"m": 2.0, "c": 0.8, "k": 15.0}, settings, NoiseModel({"x": 0.01}), np.random.default_rng(3))
+    obs.experiment = "sine_0.44Hz"
+    inv.attach_data(pid, obs)
+    inv.run()
+
+
+def _events_and_values(store: WorkbookStore) -> None:
+    """Every proposal event and the canonical-JSON edge values, written through the raw store API."""
+    cfg = {"name": "events-and-values", "params": {"a": {"lo": 0.1, "hi": 1.0}}}
+    pid = store.ensure_project("events-and-values")
+    ver = store.put_config_version(pid, config_hash(cfg), cfg)
+    inv = store.create_investigation({"project_id": pid, "config_version": ver, "overrides": {"free": ["a"]}},
+                                     record_id="conformance-inv-0")
+    store.append(inv, "measurement", {"version": 1, "observation": {"t": [0.0, 1.0], "y": {"x": [0.5, None]}}})
+    store.append(inv, "step", {"text": "é😀\"\\\n\u0001\u007f", "floats": [1.0, 0.1, 1e-05, 1.5e-07, 1e16, -0.0, 123.456,
+                                                                         5e-324, 1.7976931348623157e308],
+                               "ints": [0, -3, 18446744073709551615], "nan": float("nan"), "nested": {"b": 1, "a": [True, None]}})
+    outlook = {"axes": [{"name": "freq", "values": [0.1, 1.0]}, {"name": "amp", "values": [1, 2, 3]}],
+               "score": [1, 2, 3, 4, 5, 6], "after": {"a": [0.6, 0.5, 0.4, 0.3, 0.2, 0.1]}}
+    base = {"kind": "sine", "freq": 0.1, "amp": 1}
+    for p, events in (("p-rejected", [("rejected", {"reason": "too long"})]),
+                      ("p-withdrawn", [("withdrawn", {})]),
+                      ("p-approved", [("approved", {"by": "r"}), ("data_attached", {"measurement_version": 1})]),
+                      ("p-edited", [("edited", {"settings": {**base, "freq": 1.0, "amp": 3}})])):
+        store.append(inv, "proposal", {"proposal_id": p, "event": "proposed", "experiment": "sine", "settings": base,
+                                       "outlook": outlook})
+        for ev, extra in events:
+            store.append(inv, "proposal", {"proposal_id": p, "event": ev, **extra})
+    store.append(inv, "outcome", {"status": "inconclusive", "reasons": ["conformance"]})
+
+
+CASES = {"thermal-validated": _thermal_validated, "oscillator-edited": _oscillator_edited,
+         "events-and-values": _events_and_values}
+
+
+def expected(store: WorkbookStore) -> dict:
+    kinds = Counter(r[0] for r in store._q("SELECT kind FROM records"))
+    return {
+        "format": {"application_id": APPLICATION_ID, "user_version": SCHEMA_VERSION},
+        "project": store.project_name(),
+        "records": sum(kinds.values()),
+        "kinds": dict(sorted(kinds.items())),
+        "heads": store.heads(),
+        "projections": projection_rows(store._conn),
+    }
+
+
+def write(out: Path) -> list[Path]:
+    out.mkdir(parents=True, exist_ok=True)
+    written = []
+    for name, build in CASES.items():
+        path = out / f"{name}.ap-workbook"
+        for p in (path, path.with_name(path.name + "-wal"), path.with_name(path.name + "-shm")):
+            p.unlink(missing_ok=True)
+        with WorkbookStore(path) as store:
+            build(store)
+            assert store.check()["ok"]
+            exp = expected(store)
+        c = sqlite3.connect(path)  # a single self-contained file in the repository
+        c.execute("PRAGMA journal_mode = DELETE")
+        c.execute("VACUUM")
+        c.close()
+        path.with_suffix(".json").write_text(json.dumps(exp, indent=1, sort_keys=True) + "\n")
+        written.append(path)
+    return written
+
+
+if __name__ == "__main__":
+    for p in write(Path(sys.argv[1])):
+        print(p, p.stat().st_size)

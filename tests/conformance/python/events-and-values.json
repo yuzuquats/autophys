@@ -1,0 +1,69 @@
+{
+ "format": {
+  "application_id": 1095784258,
+  "user_version": 1
+ },
+ "heads": {
+  "inv_4cdd73c2d1c8aa50": {
+   "hash": "fe96e880e0cdbf7f05b030fffa9c224436654a5bad8071b406bf35cca8a9622a",
+   "seq": 12
+  }
+ },
+ "kinds": {
+  "investigation": 1,
+  "measurement": 1,
+  "outcome": 1,
+  "proposal": 9,
+  "step": 1
+ },
+ "project": "events-and-values",
+ "projections": {
+  "investigations": [
+   {
+    "budget_used": 1,
+    "config_version": "sha256:1f9b73b1c5f2bbcb67e7eb627a17bfe3a082d347eeeb08766df89e5e05b4b265",
+    "created": 1793794364.65768,
+    "id": "inv_4cdd73c2d1c8aa50",
+    "overrides": "{\"free\":[\"a\"]}",
+    "project": "prj_0a5ca2c4a043c35b",
+    "status": "inconclusive",
+    "updated": 1793794364.658593
+   }
+  ],
+  "proposals": [
+   {
+    "experiment": "sine",
+    "id": "p-approved",
+    "investigation": "inv_4cdd73c2d1c8aa50",
+    "settings": "{\"amp\":1,\"freq\":0.1,\"kind\":\"sine\"}",
+    "state": "data_attached",
+    "updated": 1793794364.658359
+   },
+   {
+    "experiment": "sine",
+    "id": "p-edited",
+    "investigation": "inv_4cdd73c2d1c8aa50",
+    "settings": "{\"amp\":3,\"freq\":1.0,\"kind\":\"sine\"}",
+    "state": "edited",
+    "updated": 1793794364.65853
+   },
+   {
+    "experiment": "sine",
+    "id": "p-rejected",
+    "investigation": "inv_4cdd73c2d1c8aa50",
+    "settings": "{\"amp\":1,\"freq\":0.1,\"kind\":\"sine\"}",
+    "state": "rejected",
+    "updated": 1793794364.65804
+   },
+   {
+    "experiment": "sine",
+    "id": "p-withdrawn",
+    "investigation": "inv_4cdd73c2d1c8aa50",
+    "settings": "{\"amp\":1,\"freq\":0.1,\"kind\":\"sine\"}",
+    "state": "withdrawn",
+    "updated": 1793794364.658182
+   }
+  ]
+ },
+ "records": 13
+}

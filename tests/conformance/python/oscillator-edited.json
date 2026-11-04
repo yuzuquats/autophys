@@ -1,0 +1,46 @@
+{
+ "format": {
+  "application_id": 1095784258,
+  "user_version": 1
+ },
+ "heads": {
+  "inv_630c41f1a14ec424": {
+   "hash": "8ded4d8d4fe939c0b58e84805e5349e6a0d85e89fe6c53bdbf3654e8792006d0",
+   "seq": 18
+  }
+ },
+ "kinds": {
+  "investigation": 1,
+  "measurement": 3,
+  "outcome": 2,
+  "proposal": 3,
+  "run": 2,
+  "step": 8
+ },
+ "project": "oscillator-edited",
+ "projections": {
+  "investigations": [
+   {
+    "budget_used": 3,
+    "config_version": "sha256:e098b94f72a970479d2f124c8f83a5b72b86b8442491aecd04b02fde6f3bc4fd",
+    "created": 1793794362.110103,
+    "id": "inv_630c41f1a14ec424",
+    "overrides": "{\"fixed\":{},\"free\":[\"m\",\"c\",\"k\"]}",
+    "project": "prj_6d9838ec5b38e07f",
+    "status": "validated",
+    "updated": 1793794364.605735
+   }
+  ],
+  "proposals": [
+   {
+    "experiment": "sine_0.44Hz",
+    "id": "prop_d9ac9c1315a0",
+    "investigation": "inv_630c41f1a14ec424",
+    "settings": "{\"amplitude\":2.0,\"duration\":10.0,\"freq\":0.5,\"kind\":\"sine\",\"rate\":100.0}",
+    "state": "data_attached",
+    "updated": 1793794363.72552
+   }
+  ]
+ },
+ "records": 19
+}

@@ -1,0 +1,36 @@
+{
+ "format": {
+  "application_id": 1095784258,
+  "user_version": 1
+ },
+ "heads": {
+  "inv_01852c3cb5c403f8": {
+   "hash": "7d961288a3b1a35f4da66b4369c25b3702c8fbc6fc36e2ca5b8b13a56be2ff05",
+   "seq": 14
+  }
+ },
+ "kinds": {
+  "investigation": 1,
+  "measurement": 3,
+  "outcome": 1,
+  "run": 2,
+  "step": 8
+ },
+ "project": "thermal-validated",
+ "projections": {
+  "investigations": [
+   {
+    "budget_used": 3,
+    "config_version": "sha256:5f2fe06f6b08c9014186998a194d3c43747bcab76989269c70acb6938fe3e51c",
+    "created": 1793794361.707883,
+    "id": "inv_01852c3cb5c403f8",
+    "overrides": "{\"fixed\":{},\"free\":[\"C\",\"R\"]}",
+    "project": "prj_7ec403f0d720b09e",
+    "status": "validated",
+    "updated": 1793794362.035688
+   }
+  ],
+  "proposals": []
+ },
+ "records": 15
+}
