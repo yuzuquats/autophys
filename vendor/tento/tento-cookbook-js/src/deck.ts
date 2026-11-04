@@ -19,7 +19,8 @@ const lerp = (a: number, b: number, p: number) => a + (b - a) * p;
 const easeInSine = (p: number) => 1 - Math.cos(p * Math.PI / 2);
 
 /** Position and depth share the fractional page index, as in std-carousel.
- * Edge pages approach a third of a page of overscroll, even on long pulls. */
+ * Out-of-range calls retain std-carousel parity: edge pages approach a third
+ * of a page of overscroll. The live adapter clamps idx and uses deckPull. */
 export function deckTransforms(
   idx: number,
   count: number,

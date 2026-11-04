@@ -335,7 +335,7 @@ fn plan_urls(
   }
 }
 
-/// Resolve auth (unless explicitly anonymous), write the plan, and run the Deno runner
+/// Mint auth (when the app has any), write the plan, and run the Deno runner
 /// against `session_id`.
 ///
 /// Returns `true` if the runner exited 0 (every step executed). The runner drives
@@ -371,8 +371,9 @@ pub async fn drive_headless(
   let manifest = AppManifest::resolve(ctx.env().ux_tests_dir().as_deref())
     .context("read the corpus app manifest")?;
 
-  // The corpus manifest declares whether the app authenticates. Resolve this
-  // run's auth policy once so credential issuance and the plan's cookie agree.
+  // Whether this app authenticates AT ALL is the manifest's `auth:` block —
+  // the same field that decides whether the plan carries a cookie. Asking the
+  // question once, here, is what stops the two halves disagreeing.
   //
   // It used to be unconditional: every headless run demanded an account and
   // minted a key before it read the corpus. An app with no account model could
@@ -381,20 +382,11 @@ pub async fn drive_headless(
   // `revoke_api_key` with `true` — a placeholder that authorises nothing,
   // sitting in run reports looking exactly like a credential. A corpus should
   // not have to tell a lie to be driven.
-  // requires_user controls the launcher's user-specific test listing, not
-  // authentication. Even an explicit false keeps the corpus's auth contract.
-  // Only an explicit anonymous headless mode opts out.
-  let anonymous = spec.headless_auth == HeadlessAuth::Anonymous;
-  let authenticates =
-    !anonymous && manifest.as_ref().is_some_and(|manifest| manifest.auth.is_some());
+  let authenticates = manifest
+    .as_ref()
+    .is_some_and(|manifest| manifest.auth.is_some());
 
-  // Explicit anonymous tests ignore inherited credentials, including malformed
-  // cookies, rather than allowing the host's login to change a public entry page.
-  let mut provided = if anonymous {
-    None
-  } else {
-    provided_auth_cookie(std::env::var(PROVIDED_AUTH_COOKIE_ENV).ok())?
-  };
+  let mut provided = provided_auth_cookie(std::env::var(PROVIDED_AUTH_COOKIE_ENV).ok())?;
   let ttl_secs = (spec.timeout as i64) + 120;
   if spec.headless_auth == HeadlessAuth::BrowserSession {
     anyhow::ensure!(
@@ -423,11 +415,7 @@ pub async fn drive_headless(
       ));
     }
     (false, None) => {
-      if anonymous {
-        info!("  Anonymous: no credentials, using a fresh browser profile");
-      } else {
-        info!("  No auth: this corpus's app.yaml declares no `auth:` block");
-      }
+      info!("  No auth: this corpus's app.yaml declares no `auth:` block");
       None
     }
     (true, Some(cookie)) => {
@@ -469,7 +457,7 @@ host that provides a default account",
       .as_ref()
       .map(|manifest| manifest.domains.clone())
       .unwrap_or_default(),
-    auth_cookie: manifest.as_ref().filter(|_| authenticates).and_then(|manifest| {
+    auth_cookie: manifest.as_ref().and_then(|manifest| {
       manifest
         .auth
         .as_ref()
@@ -496,7 +484,6 @@ host that provides a default account",
     credential.as_ref().map(Credential::value).unwrap_or(""),
     &base_url,
     &bridge_token,
-    anonymous,
   )
   .await;
   bridge_task.abort();
@@ -527,13 +514,11 @@ async fn run_runner(
   token: &str,
   base_url: &str,
   bridge_token: &str,
-  fresh_profile: bool,
 ) -> Result<std::process::ExitStatus> {
   let script = ux_runner_dir.join("ux-runner.deno.ts");
   let config = ux_runner_dir.join("deno.json");
   info!("  Spawning ux-runner: deno run {}", script.display());
-  let mut command = tokio::process::Command::new("deno");
-  command
+  tokio::process::Command::new("deno")
     .arg("run")
     .arg("-A")
     .arg("--config")
@@ -547,13 +532,7 @@ async fn run_runner(
     .env("UX_HOST_BRIDGE_TOKEN", bridge_token)
     // The runner receives the credential once, as UX_API_TOKEN; a second copy
     // inherited under its original name is one more place to leak it from.
-    .env_remove(PROVIDED_AUTH_COOKIE_ENV);
-  if fresh_profile {
-    // The runner otherwise honors this persistent profile, which may already
-    // contain login cookies even when no credential is passed for this run.
-    command.env_remove("UX_USER_DATA_DIR");
-  }
-  command
+    .env_remove(PROVIDED_AUTH_COOKIE_ENV)
     .spawn()
     .context("spawn deno ux-runner (is `deno` on PATH?)")?
     .wait()
@@ -646,244 +625,7 @@ async fn handle_host_bridge_request(
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::orchestration::{SessionTarget, UxTestEnv};
   use serde_json::json;
-  use std::sync::Arc;
-
-  struct AuthEnv(PathBuf);
-  impl UxTestEnv for AuthEnv {
-    fn llm_logger_dir(&self) -> PathBuf { self.0.clone() }
-    fn loaf_logs_dir(&self) -> Option<PathBuf> { None }
-    fn server_host(&self) -> Option<String> { None }
-    fn resolve_session_target(
-      &self,
-      _: &Option<String>,
-      initial_path: Option<&str>,
-      _: Option<&str>,
-    ) -> Result<SessionTarget> {
-      Ok(SessionTarget::from_full_host("app.example.test".into(), initial_path))
-    }
-    fn ux_runner_dir(&self) -> Option<PathBuf> { Some(self.0.join("no-runner")) }
-    fn ux_tests_dir(&self) -> Option<PathBuf> { Some(self.0.clone()) }
-  }
-
-  #[tokio::test]
-  async fn requires_user_listing_flags_keep_corpus_auth() {
-    // Isolate inherited credentials without changing this process's env (tests
-    // run concurrently). The child exercises the real driver, never a browser.
-    const CHILD: &str = "TENTO_UX_HEADLESS_AUTH_REGRESSION_CHILD";
-    if std::env::var_os(CHILD).is_none() {
-      let status = std::process::Command::new(std::env::current_exe().unwrap())
-        .args([
-          "--exact",
-          "headless::tests::requires_user_listing_flags_keep_corpus_auth",
-          "--nocapture",
-        ])
-        .env(CHILD, "1")
-        .env_remove(PROVIDED_AUTH_COOKIE_ENV)
-        .env_remove(BROWSER_SESSION_COMMAND_ENV)
-        .status()
-        .unwrap();
-      assert!(status.success(), "corpus auth regression failed in isolated child");
-      return;
-    }
-
-    let root = std::env::temp_dir().join(format!("ux-headless-auth-{}", Uuid::new_v4().simple()));
-    std::fs::create_dir_all(&root).unwrap();
-    std::fs::write(root.join("app.yaml"), "id: auth-fixture\nauth:\n  cookie: x_api_token\n").unwrap();
-    let profile = EnvProfile::builtin_local();
-    for declaration in ["", "requiresUser: false\n", "requiresUser: true\n"] {
-      let spec = TestSpec::from_yaml(&format!(
-        "id: auth-fixture\nname: Auth fixture\ntimeout: 7\n{declaration}instructions: []\n"
-      )).unwrap();
-      let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-      let ctx = UxTestCtx::new(Arc::new(AuthEnv(root.clone())), HostPort::new(vec![], tx));
-
-      // A listing flag cannot let an authenticated corpus run without login.
-      let error = drive_headless(
-        &ctx, &root, "auth-fixture", &spec, "app.example.test",
-        "https://app.example.test/", None, &profile,
-      ).await.unwrap_err();
-      assert!(error.to_string().contains("no account to drive headless"), "{error:#}");
-      assert!(matches!(rx.try_recv(), Err(tokio::sync::mpsc::error::TryRecvError::Empty)));
-
-      // With an account, all three listing declarations must request the same
-      // corpus credential. Reject minting so the runner is never started.
-      let run = drive_headless(
-        &ctx, &root, "auth-fixture", &spec, "app.example.test",
-        "https://app.example.test/", Some("tester@example.test"), &profile,
-      );
-      tokio::pin!(run);
-      let request = tokio::select! {
-        request = rx.recv() => request.unwrap(),
-        result = &mut run => panic!("driver skipped corpus login for {declaration:?}: {result:?}"),
-      };
-      assert_eq!(request.action, "mint_api_key");
-      assert_eq!(request.params, json!({ "user": "tester@example.test", "ttl_secs": 127 }));
-      request.reply.send(Err(anyhow!("fixture refuses minting"))).unwrap();
-      let error = run.await.unwrap_err();
-      assert_eq!(format!("{error:#}"), "mint api key for headless run: fixture refuses minting");
-      assert!(!root.join("headless-plan.json").exists());
-    }
-  }
-
-  #[cfg(unix)]
-  #[tokio::test]
-  async fn driver_auth_modes_keep_normal_flows_and_isolate_anonymous_runs() {
-    use std::os::unix::fs::PermissionsExt;
-    const CASE: &str = "TENTO_UX_DRIVER_AUTH_CASE";
-    const ROOT: &str = "TENTO_UX_DRIVER_AUTH_ROOT";
-    let Ok(mode) = std::env::var(CASE) else {
-      // Each case owns its env, fake Deno executable and corpus. The actual
-      // Rust driver writes its plan and launches only this recording stand-in.
-      let root = std::env::temp_dir().join(format!("ux-driver-auth-{}", Uuid::new_v4().simple()));
-      for mode in [
-        "default-minted", "api-key-minted", "default-provided", "browser-session-issued",
-        "browser-session-provided", "browser-session-missing",
-        "anonymous", "anonymous-provided", "anonymous-malformed", "no-auth",
-      ] {
-        let case_root = root.join(mode);
-        std::fs::create_dir_all(&case_root).unwrap();
-        let mut child = std::process::Command::new(std::env::current_exe().unwrap());
-        child.args([
-          "--exact",
-          "headless::tests::driver_auth_modes_keep_normal_flows_and_isolate_anonymous_runs",
-          "--nocapture",
-        ])
-          .env(CASE, mode)
-          .env(ROOT, &case_root)
-          .env("PATH", std::env::join_paths(
-            std::iter::once(case_root.clone())
-              .chain(std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()))
-          ).unwrap())
-          .env("UX_USER_DATA_DIR", case_root.join("signed-in-profile"))
-          .env("UX_API_TOKEN", "inherited-token-must-be-replaced")
-          .env_remove(PROVIDED_AUTH_COOKIE_ENV)
-          .env_remove(BROWSER_SESSION_COMMAND_ENV);
-        if mode.ends_with("-provided") {
-          child.env(PROVIDED_AUTH_COOKIE_ENV, "id=provided-cookie");
-        } else if mode == "anonymous-malformed" {
-          child.env(PROVIDED_AUTH_COOKIE_ENV, "invalid-cookie-must-be-ignored");
-        }
-        if matches!(mode, "browser-session-issued" | "anonymous-provided" | "anonymous-malformed") {
-          child.env(BROWSER_SESSION_COMMAND_ENV, serde_json::to_string(&[
-            "python3".to_string(), case_root.join("issuer.py").to_str().unwrap().to_string(),
-          ]).unwrap());
-        }
-        assert!(child.status().unwrap().success(), "driver auth case failed: {mode}");
-      }
-      std::fs::remove_dir_all(root).unwrap();
-      return;
-    };
-
-    let root = PathBuf::from(std::env::var_os(ROOT).unwrap());
-    let anonymous = mode.starts_with("anonymous");
-    let minted = matches!(mode.as_str(), "default-minted" | "api-key-minted");
-    let browser_session = mode.starts_with("browser-session");
-    let auth = if mode == "no-auth" { "" } else { "auth:\n  cookie: x_api_token\n" };
-    std::fs::write(root.join("app.yaml"), format!("id: auth-fixture\n{auth}")).unwrap();
-    std::fs::write(root.join("deno"), r#"#!/usr/bin/env python3
-import json, os, pathlib, sys
-args = sys.argv[1:]
-assert args[:2] == ['run', '-A']
-plan = json.loads(pathlib.Path(args[args.index('--plan') + 1]).read_text())
-record = dict(plan=plan, apiToken=os.environ.get('UX_API_TOKEN'),
-              profile=os.environ.get('UX_USER_DATA_DIR'),
-              providedCookie=os.environ.get('UX_PROVIDED_AUTH_COOKIE'))
-(pathlib.Path(os.environ['TENTO_UX_DRIVER_AUTH_ROOT']) / 'runner-record.json').write_text(json.dumps(record))
-"#).unwrap();
-    std::fs::set_permissions(root.join("deno"), std::fs::Permissions::from_mode(0o700)).unwrap();
-    std::fs::write(root.join("issuer.py"), r#"import json, pathlib, sys
-pathlib.Path(__file__).with_name('issuer-called').write_text('called')
-assert json.load(sys.stdin) == dict(user='tester@example.test', ttlSeconds=127, origin='https://app.example.test')
-print('id=issued-cookie')
-"#).unwrap();
-
-    let auth_mode = if anonymous {
-      "headlessAuth: anonymous\n"
-    } else if browser_session {
-      "headlessAuth: browser_session\n"
-    } else if mode == "api-key-minted" {
-      "headlessAuth: api_key\n"
-    } else { "" };
-    // Even requiresUser:true is only listing metadata, including for anonymous.
-    let spec = TestSpec::from_yaml(&format!(
-      "id: auth-fixture\nname: Auth fixture\ntimeout: 7\nrequiresUser: true\n{auth_mode}instructions: []\n"
-    )).unwrap();
-    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-    let ctx = UxTestCtx::new(Arc::new(AuthEnv(root.clone())), HostPort::new(vec![], tx));
-    let mut profile = EnvProfile::builtin_local();
-    profile.name = "rc".into();
-    profile.resolver = Resolver::Public;
-    let run = drive_headless(
-      &ctx, &root, "auth-fixture", &spec, "app.example.test",
-      "https://app.example.test/", if mode == "anonymous" || mode == "no-auth" {
-        None
-      } else { Some("tester@example.test") }, &profile,
-    );
-    tokio::pin!(run);
-    let mut calls = Vec::new();
-    let result = tokio::time::timeout(std::time::Duration::from_secs(10), async {
-      loop {
-        tokio::select! {
-          result = &mut run => break result,
-          request = rx.recv() => {
-            let request = request.unwrap();
-            assert!(minted, "unexpected credential operation in {mode}: {}", request.action);
-            let reply = match request.action.as_str() {
-              "mint_api_key" => {
-                assert_eq!(request.params, json!({"user": "tester@example.test", "ttl_secs": 127}));
-                json!("minted-cookie")
-              }
-              "revoke_api_key" => {
-                assert_eq!(request.params, json!({"token": "minted-cookie"}));
-                json!(true)
-              }
-              action => panic!("unexpected host operation: {action}"),
-            };
-            calls.push(request.action);
-            request.reply.send(Ok(reply)).unwrap();
-          }
-        }
-      }
-    }).await.expect("driver fixture timed out");
-
-    if mode == "browser-session-missing" {
-      assert!(format!("{:#}", result.unwrap_err()).contains("refusing to mint an API key"));
-      assert!(!root.join("headless-plan.json").exists());
-    } else {
-      assert!(result.unwrap());
-      let record: serde_json::Value = serde_json::from_slice(
-        &std::fs::read(root.join("runner-record.json")).unwrap()
-      ).unwrap();
-      let plan = &record["plan"];
-      assert_eq!(plan["harnessSink"], "runner");
-      assert_eq!(plan["resolver"], "public");
-      assert!(record["providedCookie"].is_null());
-      let expected_token = if anonymous || mode == "no-auth" { "" }
-        else if minted { "minted-cookie" }
-        else if mode == "browser-session-issued" { "issued-cookie" }
-        else { "provided-cookie" };
-      assert_eq!(record["apiToken"], expected_token);
-      if anonymous || mode == "no-auth" {
-        assert!(plan.get("authCookie").is_none(), "{mode}: {plan}");
-      } else {
-        assert_eq!(plan["authCookie"]["name"], if minted { "x_api_token" } else { "id" });
-        assert_eq!(plan["authCookie"]["bearerHeader"], minted);
-      }
-      if anonymous {
-        assert!(record["profile"].is_null(), "anonymous run reused a signed-in profile");
-      } else {
-        assert_eq!(record["profile"], root.join("signed-in-profile").to_str().unwrap());
-      }
-      for token in ["minted-cookie", "provided-cookie", "issued-cookie"] {
-        assert!(!plan.to_string().contains(token), "credential value leaked into plan");
-      }
-    }
-    assert_eq!(root.join("issuer-called").exists(), mode == "browser-session-issued");
-    assert_eq!(calls, if minted { vec!["mint_api_key", "revoke_api_key"] } else { vec![] });
-    assert!(matches!(rx.try_recv(), Err(tokio::sync::mpsc::error::TryRecvError::Empty)));
-  }
 
   #[test]
   fn inject_port_adds_port_to_host() {

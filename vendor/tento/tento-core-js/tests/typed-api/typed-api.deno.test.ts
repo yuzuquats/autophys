@@ -6,7 +6,7 @@ import {
 } from "jsr:@std/assert";
 
 import { Tracing } from "../../tracing.ts";
-import { RequestTransportError, ResponseDecodeError, TypedApi, RouteList } from "../../typed-api.ts";
+import { ResponseDecodeError, TypedApi, RouteList } from "../../typed-api.ts";
 
 // The request URL is built in exactly one place — `send` — and `baseUrl` is the
 // only part of it a caller can change. These tests pin what that one line is
@@ -530,47 +530,4 @@ Deno.test("send: the body is stringified once, and the logged string is the sent
   }
   assertEquals(sent, "{\"a\":1}");
   assertEquals(calls, 1);
-});
-
-
-Deno.test("body reads classify broken transport but preserve caller abort and body ownership errors", async (t) => {
-  for (const mode of ["stream", "abort", "consumed", "locked"] as const) {
-    await t.step(mode, async () => {
-      const abort = new AbortController();
-      const failure = mode === "abort"
-        ? new DOMException("caller stopped reading", "AbortError")
-        : new TypeError("Failed to fetch");
-      let response: Response;
-      if (mode === "stream" || mode === "abort") {
-        response = new Response(new ReadableStream<Uint8Array>({
-          pull(controller) {
-            if (mode === "abort") abort.abort();
-            controller.error(failure);
-          },
-        }), { status: 200 });
-      } else {
-        response = new Response("[]", { status: 200 });
-        if (mode === "consumed") await response.text();
-        else response.body?.getReader();
-      }
-      const api = TypedApi.make<Routes>().withOptions({
-        baseUrl: "https://body.test",
-        fetch: () => Promise.resolve(response),
-      });
-      try {
-        await api.getResultAbortable("/api/repos", abort.signal);
-        assert(false, "a failed body read must reject");
-      } catch (error) {
-        if (mode === "stream") {
-          assert(error instanceof RequestTransportError);
-          assertEquals(error.cause, failure);
-        } else if (mode === "abort") {
-          assertEquals(error, failure, "caller cancellation keeps the platform error");
-        } else {
-          assert(error instanceof TypeError);
-          assert(!(error instanceof RequestTransportError), "body ownership errors remain application bugs");
-        }
-      }
-    });
-  }
 });

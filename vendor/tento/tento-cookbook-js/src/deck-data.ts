@@ -31,7 +31,8 @@ export function clampSlide(index: number, count: number): number {
   return Math.max(0, Math.min(count - 1, Math.round(index)));
 }
 
-/** Where a released swipe lands: a drag past a fifth of the width, or a
+/** Legacy exported helper retained for API compatibility; createDeck uses
+ * Hacks’ 15% distance-only release instead. Where a released swipe lands: a drag past a fifth of the width, or a
  * flick faster than 0.4 px/ms, moves one slide from the rounded starting
  * position; anything else springs back to that starting slide. */
 export function swipeTarget(
@@ -48,7 +49,8 @@ export function swipeTarget(
   return clampSlide(index + (dx < 0 ? 1 : -1), count);
 }
 
-/** Drag offset with resistance past the first and last slide. */
+/** Legacy exported helper retained for API compatibility. The live adapter
+ * uses the bounded shared deckPull layer instead. */
 export function dragOffset(index: number, dx: number, count: number): number {
   const pastStart = index === 0 && dx > 0, pastEnd = index === count - 1 && dx < 0;
   return pastStart || pastEnd ? dx * 0.35 : dx;

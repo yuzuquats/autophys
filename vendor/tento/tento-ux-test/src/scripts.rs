@@ -2466,6 +2466,18 @@ async fn run_single(
 
   ctx.port().preflight_commands().await?;
 
+  // Phase 1: Setup
+  if !spec.setup.is_empty() {
+    info!("Phase 1: Setup ({} actions)", spec.setup.len());
+    let setup_actions = spec.setup.clone();
+    for action in &setup_actions {
+      execute_setup_action(ctx.port(), &mut spec, action).await?;
+    }
+  }
+
+  // Phase 2: Create browser session
+  info!("Phase 2: Creating browser session");
+
   // Generate session ID if not already set (for file-based tests)
   let session_id = if spec.id.contains('_') && spec.id.chars().filter(|c| *c == '_').count() >= 2 {
     // Already looks like a session ID (date_name_random)
@@ -2477,115 +2489,79 @@ async fn run_single(
     format!("{}_{}_{}{}", date, spec.id, random_suffix, flaky_suffix)
   };
 
-  // Reserve writable, durable output before the first setup action can mutate
-  // the host. Session contents and target params still resolve AFTER setup.
-  let test_id = if is_ephemeral {
-    SCRATCH_TEST_ID
-  } else {
-    &spec.id
-  };
-  let mut lifecycle = reserve_run_output(&logger, test_id, &session_id)?;
-  let mut setup_started = false;
-  let mut failure_phase = "setup";
-  let prepared: tento_sh::Result<_> = async {
-    // Phase 1: Setup
-    if !spec.setup.is_empty() {
-      info!("Phase 1: Setup ({} actions)", spec.setup.len());
-      let setup_actions = spec.setup.clone();
-      for action in &setup_actions {
-        setup_started = true;
-        execute_setup_action(ctx.port(), &mut spec, action).await?;
-      }
-    }
+  // Generate tracing UUID for linking client/server spans
+  let tracing_uuid = Uuid::new_v4();
 
-    failure_phase = "session-creation";
-    // Phase 2: Create browser session
-    info!("Phase 2: Creating browser session");
-
-    // Generate tracing UUID for linking client/server spans
-    let tracing_uuid = Uuid::new_v4();
-
-    // Collect display params from steps
-    let display_params = {
-      let resolved = spec.resolved_display_params();
-      if resolved.is_empty() {
-        None
-      } else {
-        Some(
-          resolved
-            .into_iter()
-            .map(|(k, v, step_index)| SessionParam {
-              label: k,
-              value: v,
-              step_index,
-            })
-            .collect(),
-        )
-      }
-    };
-
-    // Substitute params (e.g. {{promo_code}}) in the initial path after setup, so
-    // the printed URL and the recorded jump target share the resolved path.
-    let substituted_initial_path = spec
-      .initial_path
-      .as_deref()
-      .map(|p| spec.substitute_params(p));
-    let target = ctx
-      .env()
-      .resolve_session_target(
-        &url_arg,
-        substituted_initial_path.as_deref(),
-        profile.server_host.as_deref(),
-      )?
-      .with_scheme(profile.scheme);
-    // Record the session's absolute jump target (origin + path). The in-app
-    // "jump to" link (uxTestJumpUrl) opens this origin directly instead of
-    // resolving same-origin against wherever the operator currently is — the
-    // calendar app lives only on its own subdomain, so a same-origin jump from
-    // the root domain would land on the root home, not the test's page.
-    let jump_metadata = serde_json::json!({
-      "targetOrigin": target.origin(),
-      "targetPath": target.target_path.clone(),
-      // Tests that need a specific signed-in user are skipped by the anonymous
-      // in-app "jump to newest UX test" (uxTestJumpUrl / jumpToNewestUxTest).
-      "requiresUser": spec.requires_user(),
-      // Tests that redeem a single-use promo/`trynow` link brick it on access —
-      // the operator UI surfaces this so the link is regenerated before re-running.
-      "consumesSingleUseLink": spec.consumes_single_use_link(),
-    });
-
-    // Create session
-    let session = Session {
-      id: session_id.clone(),
-      prefix: args.testing_prefix.unwrap_or_else(|| spec.name.clone()),
-      instructions: spec.substituted_instructions(),
-      metadata: Some(jump_metadata),
-      status: SessionStatus::Pending,
-      created_at: Utc::now(),
-      flaky: args.flaky.clone(),
-      tracing_uuid: Some(tracing_uuid),
-      display_params,
-      // Ephemeral runs bucket under `.scratch`; persisted runs are stamped
-      // Some(spec.id) by create_session_with_spec below.
-      test_id: is_ephemeral.then(|| crate::folder::SCRATCH_TEST_ID.to_string()),
-      completed_steps: Vec::new(),
-    };
-
-    // Create session directory with both session.json and spec.yaml
-    let session_dir = logger.create_session_with_spec(&session, &spec)?;
-    Ok((session_dir, target, substituted_initial_path, tracing_uuid))
-  }
-  .await;
-  let (session_dir, target, substituted_initial_path, tracing_uuid) = match prepared {
-    Ok(prepared) => prepared,
-    Err(primary) => {
-      teardown_after_failed_preparation(ctx, &spec, setup_started, failure_phase, &mut lifecycle)
-        .await;
-      return Err(primary);
+  // Collect display params from steps
+  let display_params = {
+    let resolved = spec.resolved_display_params();
+    if resolved.is_empty() {
+      None
+    } else {
+      Some(
+        resolved
+          .into_iter()
+          .map(|(k, v, step_index)| SessionParam {
+            label: k,
+            value: v,
+            step_index,
+          })
+          .collect(),
+      )
     }
   };
-  drop(lifecycle);
+
+  // Substitute params (e.g. {{promo_code}}) in the initial path after setup, so
+  // the printed URL and the recorded jump target share the resolved path.
+  let substituted_initial_path = spec
+    .initial_path
+    .as_deref()
+    .map(|p| spec.substitute_params(p));
+  let target = ctx
+    .env()
+    .resolve_session_target(
+      &url_arg,
+      substituted_initial_path.as_deref(),
+      profile.server_host.as_deref(),
+    )?
+    .with_scheme(profile.scheme);
   let full_host = target.full_host.clone();
+
+  // Record the session's absolute jump target (origin + path). The in-app
+  // "jump to" link (uxTestJumpUrl) opens this origin directly instead of
+  // resolving same-origin against wherever the operator currently is — the
+  // calendar app lives only on its own subdomain, so a same-origin jump from
+  // the root domain would land on the root home, not the test's page.
+  let jump_metadata = serde_json::json!({
+    "targetOrigin": target.origin(),
+    "targetPath": target.target_path.clone(),
+    // Tests that need a specific signed-in user are skipped by the anonymous
+    // in-app "jump to newest UX test" (uxTestJumpUrl / jumpToNewestUxTest).
+    "requiresUser": spec.requires_user(),
+    // Tests that redeem a single-use promo/`trynow` link brick it on access —
+    // the operator UI surfaces this so the link is regenerated before re-running.
+    "consumesSingleUseLink": spec.consumes_single_use_link(),
+  });
+
+  // Create session
+  let session = Session {
+    id: session_id.clone(),
+    prefix: args.testing_prefix.unwrap_or_else(|| spec.name.clone()),
+    instructions: spec.substituted_instructions(),
+    metadata: Some(jump_metadata),
+    status: SessionStatus::Pending,
+    created_at: Utc::now(),
+    flaky: args.flaky.clone(),
+    tracing_uuid: Some(tracing_uuid),
+    display_params,
+    // Ephemeral runs bucket under `.scratch`; persisted runs are stamped
+    // Some(spec.id) by create_session_with_spec below.
+    test_id: is_ephemeral.then(|| crate::folder::SCRATCH_TEST_ID.to_string()),
+    completed_steps: Vec::new(),
+  };
+
+  // Create session directory with both session.json and spec.yaml
+  let session_dir = logger.create_session_with_spec(&session, &spec)?;
   info!("Created session: {}", session_dir.display());
   spec_out.run = Some(session_id.clone());
   spec_out.session_dir = Some(session_dir.clone());
@@ -2784,93 +2760,6 @@ async fn run_single(
     },
   )
   .await
-}
-
-/// Reserve the run directory and a writable diagnostic descriptor. Keep it
-/// open across setup so even a later permission change can leave a receipt.
-fn reserve_run_output(
-  logger: &LLMLogger,
-  test_id: &str,
-  session_id: &str,
-) -> anyhow::Result<std::fs::File> {
-  let dir = logger.runs().create_run_dir(test_id, session_id)?;
-  let mut file = std::fs::OpenOptions::new()
-    .create(true)
-    .truncate(true)
-    .write(true)
-    .open(dir.join("lifecycle.json"))
-    .context("preflight durable run output")?;
-  write_lifecycle_record(&mut file, &serde_json::json!({"phase": "output-reserved"}))
-    .context("preflight durable run output")?;
-  Ok(file)
-}
-
-fn write_lifecycle_record(
-  file: &mut std::fs::File,
-  record: &serde_json::Value,
-) -> anyhow::Result<()> {
-  use std::io::Seek;
-  file.rewind()?;
-  serde_json::to_writer_pretty(&mut *file, record)?;
-  let end = file.stream_position()?;
-  file.set_len(end)?;
-  file.sync_all()?;
-  Ok(())
-}
-
-/// Setup or session creation failed before the ordinary drive/finalize paths
-/// took ownership. Attempt each declared teardown once, only if setup began.
-/// Never propagate cleanup errors or record host payloads, params or raw errors.
-async fn teardown_after_failed_preparation(
-  ctx: &UxTestCtx,
-  spec: &TestSpec,
-  setup_started: bool,
-  phase: &str,
-  lifecycle: &mut std::fs::File,
-) {
-  let mut outcomes = Vec::new();
-  if setup_started {
-    for (index, action) in spec.teardown.iter().enumerate() {
-      let succeeded = match action {
-        crate::spec::TeardownAction::Host { action, params } => {
-          // Same substitution and store_as stripping as execute_teardown_action.
-          // That executor intentionally swallows failures and logs raw host
-          // errors; here we need a sanitized, durable per-action outcome.
-          let mut params = params.clone();
-          spec.substitute_value(&mut params);
-          if let serde_json::Value::Object(map) = &mut params {
-            map.remove("store_as");
-          }
-          ctx.port().execute_verb(action, params).await.is_ok()
-        }
-        _ => execute_teardown_action(ctx.port(), spec, action)
-          .await
-          .is_ok(),
-      };
-      if !succeeded {
-        warn!(
-          action_index = index,
-          "early teardown action failed (host details omitted)"
-        );
-      }
-      outcomes.push(serde_json::json!({
-        "index": index,
-        "outcome": if succeeded { "succeeded" } else { "failed" },
-      }));
-    }
-  }
-  if write_lifecycle_record(
-    lifecycle,
-    &serde_json::json!({
-      "phase": phase,
-      "setupStarted": setup_started,
-      "teardown": outcomes,
-    }),
-  )
-  .is_err()
-  {
-    warn!("could not persist early teardown outcomes (details omitted)");
-  }
 }
 
 /// The teardown of a run that setup started and an error ended before
@@ -5670,7 +5559,3 @@ mod finalize_tests {
     assert!(!json.contains("provisional"));
   }
 }
-
-#[cfg(test)]
-#[path = "lifecycle_tests.rs"]
-mod lifecycle_tests;
