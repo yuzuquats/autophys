@@ -46,8 +46,9 @@ Deno.test("old investigation addresses: each resolves to an actual anchor on the
     assert(model.body.kind === "investigation");
     assertEquals(model.body.pageId, selection.inv.id);
     assertEquals(model.body.anchor, investigationAnchor(selection));
+    const anchor = model.body.anchor;
     const cards = [model.body.summary, ...model.body.outcome, ...model.body.rounds.flatMap(r => r.rows.flat())];
-    assert(cards.some(c => c.id === model.body.anchor || c.aliases?.includes(model.body.anchor)), address);
+    assert(cards.some(c => c.id === anchor || c.aliases?.includes(anchor)), address);
     if (address.startsWith("bench-a")) assertEquals(detailsModel(state(address)).decision?.map(a => a.name), ["approve", "reject"]);
   }
 });
