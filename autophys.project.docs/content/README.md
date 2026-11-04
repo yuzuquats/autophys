@@ -1,8 +1,34 @@
 # autophys is a daemon that serves the tento cookbook shell, and grows from there
 
-Status: plan rev 3 (2026-11-04). Batch 1 runs on rwc-dev-01 as
-`autophys serve`, serving the vanilla tento-cookbook-js skeleton; later
-batches wait for operator direction.
+Status: rev 4 (2026-11-04). The repo is restructured per the operator's
+S-1..S-3 rulings ([repo.md](repo.md)): one root crate on tento-web's
+file-based router, `html/` holding the routes, ui and client, and a vendored
+tento tree at `vendor/tento`. The deployed unit still runs the batch-1
+release until the store lands and the orchestrator redeploys. Rev 3's text
+below is kept as the batch-1 record; "Shape after the restructure" and
+[decisions.md](decisions.md) supersede it where they differ.
+
+Pages: [decisions.md](decisions.md) (operator rulings and pending agent
+choices), [repo.md](repo.md) and [architecture.md](architecture.md) (moved
+from tento's record, unchanged), [tento-plan.md](tento-plan.md) (tento's
+cover, moved and renamed), [sdk.md](sdk.md), and the batch-1 verification
+pages.
+
+## Shape after the restructure
+
+```
+Cargo.toml  Cargo.lock    package and bin `autophys`; tento-web and tento-dirs from vendor/tento
+src/app.rs                DomainConfig: compiler deps (html, vendored cookbook and tento-ui), /api/healthz,
+                          the /api/v1 hook, /app document routes
+src/server.rs             loopback refusal, serve (dev build + watch, or --web-root), build-web
+html/routes/              index.anon.html + index.root.ts (the composition root) + content.ts
+html/ui/  html/client/    imported from tento-autophys-js (tento 645a1155c)
+html/tsconfig.json        esbuild aliases into vendor/tento; html/deno.json the same for deno test
+e2e/approve.ts            serve on 4795, deck -> app -> proposal -> Approve, headless
+ops/                      deploy.sh (build-web + release build, serve --web-root), unit template
+vendor/                   hackathon/lib's vendored tento tree
+sdks/python/              the SDK (sdk.md)
+```
 
 The operator asked on 2026-11-04 to rebuild the app from first principles in
 a new repository, autophys, on rwc-dev-01: in batches, skeleton first, then
@@ -78,7 +104,7 @@ checkout has a real `target/`.
 | Id | Decision | Who | Reason / alternative | Reversal cost |
 | -- | -------- | --- | -------------------- | ------------- |
 | AP-1 (revised) | shell in `tento/tento-cookbook-js`; this repo is the `autophys` crate (`autophys serve`, axum) and owns the composition; no `tento/tento-autophys` crate in this batch | **operator, 2026-11-04** | supersedes the agent-chosen "standalone repo, crates.io axum, no tento" | n/a: operator ruling |
-| AP-2 | repo stays at `~/workspace/experiments/autophys`, branch master, no remote | agent-chosen, kept by the operator's correction | the ignored home for unpublished miniapps | move and add to the root inventory |
+| AP-2 | repo stays at `~/workspace/experiments/autophys`, branch master, no remote | superseded by S-1 (operator, 2026-11-04): `~/workspace/autophys`, a workspace submodule with a private remote | the ignored home for unpublished miniapps | n/a: superseded |
 | AP-3 | port `127.0.0.1:4794` | agent-chosen, pending operator review | free in the 47xx block next to hacks-inference (4790) on 2026-11-04 | edit deploy default and self.toml |
 | AP-4 | `Restart=on-failure` | agent-chosen, pending operator review | a crash restarts and a deliberate stop stays stopped; the alternative is `always` | one line in the unit template |
 | AP-6 | the app is the cookbook's PlaceholderApp with autophys's id and title | **operator, 2026-11-04** | "for now the app that autophys serves is the vanilla tento-cookbook-js skeleton" | replace `web/src/app.ts` |
@@ -110,6 +136,12 @@ app stays the vanilla skeleton and no batch after B1 is proposed.
 
 ## Remaining work
 
+- Restructure follow-ups (2026-11-04): redeploy with `ops/deploy.sh` once
+  the store lands (the unit still runs release 582927a); remove
+  `tento-autophys-js` and the moved record pages from tento (S-3, the
+  orchestrator's); fill in O-3 in decisions.md; replace deploy's tento pin
+  with `vendor/sync.sh --check`. The dev watch (tento-web `watch_dev`) was
+  checked once: an edit to html/routes/content.ts rebuilt the served bundle.
 - Operator direction for B2+; review of AP-3, AP-4 and AP-8.
 - Confirm `http://tento.localhost/#/rwc-dev-01/autophys` from the laptop
   after its next registry refresh.
