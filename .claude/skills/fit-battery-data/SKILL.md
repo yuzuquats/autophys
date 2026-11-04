@@ -72,8 +72,10 @@ increase. Fix the input; don't edit around the check.
 - **A 2RC model or temperature dependence:** edit `make_model` in
   `examples/battery_fit/battery_fit.py`. It's an `@ap.simulator` function that returns
   `{"t": t, "v": volts}`.
-- **The closed loop:** autophys ranks the next experiment, a human approves
-  it in the browser, and the new data is attached and refitted. See
-  `sdks/python/README.md` and `autophys.project.docs/content/muse-plugin.md`.
-  That loop currently uses the built-in catalogue experiments, not arbitrary
-  traces.
+- **The closed loop:** `examples/battery_fit/closed_loop.py`, run as
+  `examples/battery_fit/run.sh agent ...`. Section 5 of the example README covers it.
+  It proposes the next test from a fixed list of cycler programs
+  (`./run.sh agent tests`), and a person approves it. Never approve a
+  proposal on the user's behalf. `./run.sh agent approve` is for the user to
+  run. `--simulate` data is synthetic, from a hidden demo cell: never present
+  it as a measurement. Real data must follow the listed programs.

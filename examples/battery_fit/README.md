@@ -4,13 +4,16 @@ Everything needed to run this is in this folder. It fits a first-order
 (1RC) battery model to a time / current / voltage CSV, plots the measured and
 fitted voltage, and says which of R0, R1 and C1 the data determines to better
 than ±10%. It runs locally, with no accounts, keys or network calls after
-setup.
+setup. Section 5 runs the closed loop: an agent proposes the next cycler test,
+a person approves it, and its data is attached and refitted.
 
 ```
 battery_fit/
 ├── README.md          this file
 ├── run.sh             one-step setup and run
 ├── battery_fit.py     the model, fit, identifiability check and plot
+├── closed_loop.py     the closed loop: propose the next test, approve, attach, refit
+├── .env.example       server and model settings for the closed loop; copy to .env
 ├── data/
 │   ├── demo.csv       a made-up cell with a known answer: three pulses and rests, 2 mV noise
 │   ├── short.csv      the first 64 s of demo.csv: one pulse with no rest after it
@@ -105,6 +108,83 @@ SDK installed: `python battery_fit.py --help`.
   currents.
 - **at bounds:** the fit hit a parameter's limit. Check units, or widen the
   bounds in `make_model`.
+
+## 5. Run the closed loop
+
+The fit above uses data you already have. The closed loop decides which test
+to run next. It starts from one short test, fits it, and finds what the data
+can't determine. It then ranks the cycler tests it may propose, proposes the
+most informative one, and stops until a person approves it. Once the test's
+data is attached, it refits and checks the result against a held-out test that
+it never fits.
+
+```sh
+./run.sh agent tests                    # the programs it may propose, plus the held-out check
+./run.sh agent start --simulate         # fit quick_pulse; ends with a proposal
+./run.sh agent approve                  # or approve it in the browser
+./run.sh agent continue --simulate      # attach the test's data, refit, report, write loop.png
+```
+
+`--simulate` stands in for a cycler. It generates each test's voltage from a
+hidden demo cell (R0 = 0.025 Ω, R1 = 0.045 Ω, C1 = 1600 F) plus 2 mV noise, and
+records the data as `synthetic`. The start ends like this:
+
+```
+status: awaiting_data (proposal prop_… awaits approval and data)
+  R0  = 0.024856 ohm  identified
+  R1  = 0.050667 ohm  NOT identified
+  C1  = 1644.2 F    NOT identified
+  tied: R1^1 * C1^0.22
+  tests run: 2 (quick_pulse, check [held out]), 7 min of cycler time
+
+proposed next test: pulse_ladder (17 min): rest 10 s, +1 A 30 s, rest 300 s, +2 A 30 s, rest 300 s, -1.5 A 30 s, rest 300 s
+```
+
+and the continue like this:
+
+```
+status: validated
+  R0  = 0.024944 ohm  identified
+  R1  = 0.045125 ohm  identified
+  C1  = 1609.9 F    identified
+  tests run: 3 (quick_pulse, check [held out], pulse_ladder), 24 min of cycler time
+  held-out check: chi2/N 1.04 (passed, threshold 2)
+```
+
+**With a real cell**, run the programs listed by `./run.sh agent tests` on the
+cycler at 2 Hz, starting at 90% SOC, and export each as a
+`time,current,voltage` CSV. The script checks that the current matches the
+program, then resamples the voltage onto the program's time grid.
+
+```sh
+./run.sh agent start --data quick_pulse.csv --validation check.csv --sigma 0.002
+./run.sh agent continue --data pulse_ladder.csv    # after approving and running the proposed test
+```
+
+The cell's capacity, starting SOC and OCV curve are fixed in `closed_loop.py`
+(`CELL` and the generic OCV table). Edit them for your cell.
+
+**Who decides each step.** `--policy scripted`, the default, is autophys's
+built-in strategy: fit, check identifiability, and propose the top-ranked test.
+It needs no network. `--policy model` hands each decision to a language model
+that reads the autophys playbook; set it up in `.env` (see `.env.example`, for
+example a Baseten deployment). The fit, identifiability check and ranking run
+on this machine either way, and the guardrail rechecks any "identified" claim
+before the result is recorded.
+
+**Where it's recorded.** Without `AUTOPHYS_SERVER`, investigations go to a
+local workbook in `~/autophys`. To record them on a shared server, where
+proposals are approved in the browser:
+
+```sh
+cp .env.example .env        # set AUTOPHYS_SERVER
+./run.sh pair               # prints a code; the server's operator approves it
+./run.sh agent start --simulate
+./run.sh agent continue --simulate --wait    # waits for the approval in the browser
+```
+
+`./run.sh agent status` shows where the proposal stands. The current
+investigation's ID is kept in `.agent-state.json` in this folder.
 
 ## The model
 

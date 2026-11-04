@@ -40,7 +40,7 @@ The rest of the repo does the following:
 
 | Path | What it is |
 | --- | --- |
-| `examples/battery_fit` | fit any measured battery trace, check identifiability, plot the curve |
+| `examples/battery_fit` | fit any measured battery trace, check identifiability, plot the curve; `run.sh agent` runs the closed loop (propose the next test, approve, attach, refit) |
 | `sdks/python` | Python SDK: `@ap.simulator`, fit, identifiability, experiment ranking, agent loop, workbook ([README](sdks/python/README.md)) |
 | `sdks/python/src/autophys/models/` | built-in battery, oscillator and thermal models |
 | `plugins/muse-autophys` | Muse Code plugin: a local MCP server, so Muse can run the calibration ([guide](autophys.project.docs/content/muse-plugin.md)) |

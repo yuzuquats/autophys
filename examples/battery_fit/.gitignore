@@ -1,3 +1,6 @@
 .venv/
 /*.png
 /demo.csv
+.env
+.agent-state.json
+__pycache__/
