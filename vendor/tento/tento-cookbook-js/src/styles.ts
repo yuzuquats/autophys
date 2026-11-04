@@ -279,12 +279,16 @@ html[data-ck-stage="tour"] .ck-tour-peek { opacity: 1; transition-duration: 300m
 .ck-use.ck-emphasis .ck-use-live { background: #fff; }
 .ck-uses-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: -10px 0 0; position: relative; font-size: 12px; line-height: 16px; color: var(--ck-n500); }
 .ck-uses-legend .ck-use-live { position: static; display: inline-block; margin-right: 6px; vertical-align: 1px; }
+/* slide builds (deck.ts renderSlide): every state stacked in one grid cell */
+.ck-build-stack { display: grid; }
+.ck-build-stack > * { grid-area: 1 / 1; min-width: 0; }
+.ck-build-stack > [data-ck-hidden] { visibility: hidden; }
 /* loop bodies (deck-loops.ts): HTML cells on a design canvas, every connector in one SVG layer */
 .ck-loops { position: relative; height: var(--ck-body-h); }
 .ck-loop-stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
 .ck-loop-stage > *, .ck-loop-card > * { position: absolute; }
-.ck-loop-wires { left: 0; top: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
-.ck-loop-wires path { fill: none; stroke: var(--ck-n300); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.ck-loop-wires, .ck-loop-ring { left: 0; top: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.ck-loop-wires path, .ck-loop-ring path { fill: none; stroke: var(--ck-n300); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .ck-loop-cell { display: flex; align-items: center; gap: 10px; padding: 8px 14px 8px 8px; border-radius: 12px; background: var(--ck-n100); white-space: nowrap; }
 .ck-loop-cell b { display: block; font-size: 13.5px; line-height: 17px; font-weight: 600; color: #000; }
 .ck-loop-caption { display: block; font-size: 12px; line-height: 15px; color: var(--ck-n500); }

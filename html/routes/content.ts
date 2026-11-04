@@ -200,21 +200,23 @@ export function deck(app: Cookbook.App, appPath = "/app"): Cookbook.Deck.Slide[]
           left: { title: "Score", caption: "answer, error, cost", icon: LOOP_ICONS.score },
         },
       },
-    },
-    {
-      eyebrow: { label: "Post-training" },
-      title: "Then train the model that runs it.",
-      description: "Every investigation is training data: the policy copies the expert first, then learns from what scores best.",
-      body: {
-        kind: "feedback",
-        inner: { ...INVESTIGATION, badge: "improves" },
-        steps: [
-          { title: "Record each step", caption: "state and decision", icon: LOOP_ICONS.record },
-          { title: "Distil", tag: "today", caption: "copy the scripted expert", icon: LOOP_ICONS.distil, emphasis: true },
-          { title: "Reinforce", tag: "planned", caption: "reward the hidden-truth score", icon: LOOP_ICONS.reinforce, planned: true },
-        ],
-        back: "new weights",
-      },
+      builds: [
+        {
+          eyebrow: { label: "Post-training" },
+          title: "Then train the model that runs it.",
+          description: "Every investigation is training data: the policy copies the expert first, then learns from what scores best.",
+          body: {
+            kind: "feedback",
+            inner: { ...INVESTIGATION, badge: "improves" },
+            steps: [
+              { title: "Record each step", caption: "state and decision", icon: LOOP_ICONS.record },
+              { title: "Distil", tag: "today", caption: "copy the scripted expert", icon: LOOP_ICONS.distil, emphasis: true },
+              { title: "Reinforce", tag: "planned", caption: "reward the hidden-truth score", icon: LOOP_ICONS.reinforce, planned: true },
+            ],
+            back: "new weights",
+          },
+        },
+      ],
     },
     {
       eyebrow: { label: "Beyond batteries" },

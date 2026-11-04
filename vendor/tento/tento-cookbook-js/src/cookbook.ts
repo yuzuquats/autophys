@@ -68,6 +68,7 @@ export namespace Cookbook {
     export type LoopCard = DeckTypes.DeckLoopCard;
     export type Loops = DeckTypes.DeckLoops;
     export type Feedback = DeckTypes.DeckFeedback;
+    export type Build = DeckTypes.DeckBuild;
     /** Fifteen neutral slides, one of each body kind; slide one carries the title. */
     export const placeholderDeck = placeholder;
   }

@@ -12,6 +12,7 @@ import { clampSlide, dragOffset, swipeTarget } from "./src/deck-data.ts";
 import { deckPull, deckTransforms } from "./src/deck.ts";
 import { bubbleRadii, shellTokens } from "./src/deck-convo.ts";
 import { ringPath, ringPaths } from "./src/deck-loops.ts";
+import { stepTarget } from "./src/deck-data.ts";
 import { describeHealth, parseHealth, readHealthz } from "./src/status.ts";
 import { invert } from "./src/flip.ts";
 import { cookbookClasses, placeholderDeck } from "./src/shell.ts";
@@ -514,4 +515,15 @@ Deno.test("deck loops: connectors leave and enter cells with fixed gaps and turn
     "M85 0 L90 0 A10 10 0 0 1 100 10 L100 14",
   );
   assertEquals(ringPaths(ring, [[a, 0], [b, 0], [c, 1]]).length, 3);
+});
+
+Deno.test("deck builds: a step runs through the slide's builds before moving on", () => {
+  const builds = [1, 2, 1];
+  assertEquals(stepTarget(0, 0, 1, builds), { index: 1, build: 0 });
+  assertEquals(stepTarget(1, 0, 1, builds), { index: 1, build: 1 });
+  assertEquals(stepTarget(1, 1, 1, builds), { index: 2, build: 0 });
+  assertEquals(stepTarget(2, 0, -1, builds), { index: 1, build: 1 });
+  assertEquals(stepTarget(1, 1, -1, builds), { index: 1, build: 0 });
+  assertEquals(stepTarget(0, 0, -1, builds), { index: 0, build: 0 });
+  assertEquals(stepTarget(2, 0, 1, builds), { index: 2, build: 0 });
 });

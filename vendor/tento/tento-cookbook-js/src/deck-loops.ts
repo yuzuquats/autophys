@@ -128,10 +128,41 @@ function cell(c: DeckCell, extra = ""): HTMLElement {
   return el;
 }
 
-type Card = { el: HTMLElement; pills: HTMLElement[]; note: HTMLElement | null };
+type Card = {
+  el: HTMLElement;
+  ring: SVGSVGElement;
+  pills: HTMLElement[];
+  note: HTMLElement | null;
+};
 
+let wireIds = 0;
+/** Draws connectors into `svg` with the shared arrowhead. */
+function drawWires(
+  svg: SVGSVGElement,
+  width: number,
+  height: number,
+  paths: string[],
+): void {
+  const id = `ck-loop-head-${++wireIds}`;
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.innerHTML =
+    `<defs><marker id="${id}" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="12" markerHeight="12" ` +
+    `markerUnits="userSpaceOnUse" orient="auto"><path d="M3 1.5L9 6L3 10.5"/></marker></defs>` +
+    paths.map((d) => `<path d="${d}" marker-end="url(#${id})"/>`).join("");
+}
+
+function wireLayer(className: string): SVGSVGElement {
+  const svg = document.createElementNS(SVG, "svg");
+  svg.setAttribute("class", className);
+  svg.setAttribute("aria-hidden", "true");
+  return svg;
+}
+
+/** The inner-loop card draws its own ring, so the card moves as one piece;
+ * `data-ck-share` lets the deck FLIP it between builds that both show it. */
 function card(c: DeckLoopCard): Card {
-  const el = h("div", "ck-loop-card");
+  const ring = wireLayer("ck-loop-ring");
+  const el = h("div", "ck-loop-card", { "data-ck-share": "loop-card" }, ring);
   el.append(
     cell(
       { title: c.title, caption: c.caption, avatar: c.avatar },
@@ -143,7 +174,7 @@ function card(c: DeckLoopCard): Card {
   el.append(...pills);
   const note = c.note ? h("p", "ck-loop-note", null, c.note) : null;
   if (note) el.append(note);
-  return { el, pills, note };
+  return { el, ring, pills, note };
 }
 
 const at = (el: HTMLElement, l: number, t: number): Box => {
@@ -154,12 +185,8 @@ const at = (el: HTMLElement, l: number, t: number): Box => {
 const centred = (el: HTMLElement, cx: number, cy: number) =>
   at(el, cx - el.offsetWidth / 2, cy - el.offsetHeight / 2);
 
-/** Places the card at (l, t) and returns its box and the inner ring's connectors. */
-function placeCard(
-  c: Card,
-  l: number,
-  t: number,
-): { box: Box; paths: string[] } {
+/** Places the card at (l, t), draws its inner ring and returns its box. */
+function placeCard(c: Card, l: number, t: number): { box: Box } {
   const R = RING_IN, inset = R.r + 14;
   const [tl, tr, br, bl] = c.pills;
   const top = R.y, bottom = R.y + R.h;
@@ -183,13 +210,14 @@ function placeCard(
     );
   }
   at(c.el, l, t);
-  const shift = (b: Box) => box(b.l + l, b.t + t, b.r - b.l, b.b - b.t);
-  const ring = { ...R, x: R.x + l, y: R.y + t };
   const sides: Side[] = [0, 0, 2, 2];
-  return {
-    box: box(l, t, CARD_W, CARD_H),
-    paths: ringPaths(ring, boxes.map((b, i) => [shift(b), sides[i]])),
-  };
+  drawWires(
+    c.ring,
+    CARD_W,
+    CARD_H,
+    ringPaths(R, boxes.map((b, i) => [b, sides[i]])),
+  );
+  return { box: box(l, t, CARD_W, CARD_H) };
 }
 
 type Layout = { width: number; height: number; paths: string[] };
@@ -206,12 +234,9 @@ function mount(
     { role: "img", "aria-label": label },
     ...parts,
   );
-  const wires = document.createElementNS(SVG, "svg");
-  wires.setAttribute("class", "ck-loop-wires");
-  wires.setAttribute("aria-hidden", "true");
+  const wires = wireLayer("ck-loop-wires");
   stage.append(wires);
   const wrap = h("div", "ck-loops", null, stage);
-  const id = `ck-loop-head-${Math.random().toString(36).slice(2, 8)}`;
   const draw = () => {
     const w = wrap.clientWidth, ht = wrap.clientHeight;
     if (!w || !ht) return;
@@ -226,11 +251,7 @@ function mount(
         (ht - height * s) / 2
       }px) scale(${s})`,
     });
-    wires.setAttribute("viewBox", `0 0 ${width} ${height}`);
-    wires.innerHTML =
-      `<defs><marker id="${id}" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="12" markerHeight="12" ` +
-      `markerUnits="userSpaceOnUse" orient="auto"><path d="M3 1.5L9 6L3 10.5"/></marker></defs>` +
-      paths.map((d) => `<path d="${d}" marker-end="url(#${id})"/>`).join("");
+    drawWires(wires, width, height, paths);
   };
   new ResizeObserver(draw).observe(wrap);
   void document.fonts?.ready.then(draw);
@@ -266,7 +287,6 @@ export function renderLoops(body: DeckLoops): HTMLElement {
         width: cx + CARD_W / 2 + 4,
         height: l.b,
         paths: [
-          ...c.paths,
           down(t, c.box),
           down(c.box, b, cx),
           down(b, l),
@@ -290,7 +310,6 @@ export function renderLoops(body: DeckLoops): HTMLElement {
       width: 576,
       height: b.b,
       paths: [
-        ...c.paths,
         ...ringPaths(ring, [[t, 0], [c.box, 1], [b, 2], [l, 3]]),
       ],
     };
@@ -318,7 +337,6 @@ export function renderFeedback(body: DeckFeedback): HTMLElement {
       });
       const last = boxes[boxes.length - 1];
       const paths = [
-        ...c.paths,
         down(c.box, boxes[0], cx),
         ...boxes.slice(1).map((b, i) => down(boxes[i], b)),
         upGutter(last, c.box),
@@ -341,7 +359,6 @@ export function renderFeedback(body: DeckFeedback): HTMLElement {
     const first = boxes[0], last = boxes[boxes.length - 1];
     const yb = Math.max(c.box.b, last.b) + 22;
     const paths = [
-      ...c.paths,
       `M${c.box.r + GAP_OUT} ${first.cy} H${first.l - GAP_IN}`,
       ...boxes.slice(1).map((b, i) => down(boxes[i], b)),
       `M${last.cx} ${last.b + GAP_OUT} V${yb - TURN} Q${last.cx} ${yb} ${

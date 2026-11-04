@@ -2,14 +2,17 @@ import {
   clampSlide,
   type DeckBar,
   type DeckBody,
+  type DeckBuild,
   type DeckSlide,
   type DeckStat,
+  stepTarget,
 } from "./deck-data.ts";
 import { renderLines, renderProfile, renderUncertainty } from "./deck-charts.ts";
 import { renderBrowser, renderChat, renderTerminal } from "./deck-convo.ts";
 import { renderUses } from "./deck-uses.ts";
 import { renderFeedback, renderLoops } from "./deck-loops.ts";
-import { h } from "./dom.ts";
+import { ease, h, reducedMotion } from "./dom.ts";
+import { invert } from "./flip.ts";
 import { createTexture } from "./texture.ts";
 
 export type Deck = {
@@ -69,12 +72,14 @@ export function createDeck(slides: readonly DeckSlide[]): Deck {
   const viewport = h("div", "ck-deck-viewport");
   const texture = createTexture();
   const track = h("div", "ck-deck-track");
-  const pages = slides.map((slide, i) =>
+  const views = slides.map(renderSlide);
+  const builds = slides.map((slide) => 1 + (slide.builds?.length ?? 0));
+  const pages = views.map((view, i) =>
     h("div", "ck-deck-page", {
       role: "group",
       "aria-roledescription": "slide",
       "aria-label": `${i + 1} of ${count}`,
-    }, renderSlide(slide))
+    }, view.el)
   );
   track.append(...pages);
   viewport.append(texture.el, track);
@@ -101,6 +106,8 @@ export function createDeck(slides: readonly DeckSlide[]): Deck {
   );
 
   let index = 0;
+  /** The current slide's build (0 for slides without builds). */
+  let build = 0;
   let position = 0;
   let revision = 0;
   let suppressClickUntil = 0;
@@ -182,19 +189,38 @@ export function createDeck(slides: readonly DeckSlide[]): Deck {
       page.setAttribute("aria-hidden", String(i !== index));
     });
     counter.textContent = `${index + 1} / ${count}`;
-    prev.disabled = index === 0;
-    next.disabled = index === count - 1;
-    status.textContent = `Slide ${index + 1} of ${count}`;
+    prev.disabled = index === 0 && build === 0;
+    next.disabled = index === count - 1 && build === builds[index] - 1;
+    status.textContent = `Slide ${index + 1} of ${count}` +
+      (builds[index] > 1 ? `, step ${build + 1} of ${builds[index]}` : "");
   }
 
-  function go(target: number, duration = 500): void {
+  /** Moves to a slide, landing on `landing` (by default its first build going
+   * forwards and its last going backwards). */
+  function go(target: number, duration = 500, landing?: number): void {
     endDrag();
-    index = clampSlide(target, count);
+    const to = clampSlide(target, count);
+    if (to !== index) {
+      build = landing ?? (to < index ? builds[to] - 1 : 0);
+      views[to].show(build, false);
+    }
+    index = to;
     update();
     render(index, true, duration);
   }
-  prev.addEventListener("click", () => go(index - 1), { signal });
-  next.addEventListener("click", () => go(index + 1), { signal });
+  function showBuild(to: number): void {
+    build = to;
+    views[index].show(build, true);
+    update();
+  }
+  /** One step: through the current slide's builds, then across slides. */
+  function step(delta: number): void {
+    const target = stepTarget(index, build, delta, builds);
+    if (target.index !== index) go(target.index, 500, target.build);
+    else if (target.build !== build) showBuild(target.build);
+  }
+  prev.addEventListener("click", () => step(-1), { signal });
+  next.addEventListener("click", () => step(1), { signal });
 
   let drag: {
     id: number;
@@ -297,11 +323,14 @@ export function createDeck(slides: readonly DeckSlide[]): Deck {
     if (!previous.active) return;
     const progress = (previous.x0 - event.clientX) / previous.width;
     suppressClickUntil = performance.now() + 250;
-    go(
-      Math.round(previous.start) +
-        (Math.abs(progress) >= .15 ? Math.sign(progress) : 0),
-      300,
-    );
+    const dir = Math.abs(progress) >= .15 ? Math.sign(progress) : 0;
+    const start = Math.round(previous.start);
+    const target = stepTarget(index, build, dir, builds);
+    if (dir && start === index && target.index === index && target.build !== build) {
+      // A swipe on a slide with builds left steps the build; the page springs back.
+      go(index, 300);
+      showBuild(target.build);
+    } else go(start + dir, 300);
   }, { signal });
   window.addEventListener("pointercancel", (event) => {
     if (drag?.id === event.pointerId) recover();
@@ -357,18 +386,18 @@ export function createDeck(slides: readonly DeckSlide[]): Deck {
       return index;
     },
     go,
-    step: (delta) => go(index + delta),
+    step,
   };
 }
 
 const mark = `<svg viewBox="0 0 56 40" width="56" height="40" aria-hidden="true" focusable="false">
   <circle cx="14" cy="20" r="11"/><circle cx="33" cy="20" r="8" opacity=".55"/><circle cx="47" cy="20" r="5.5" opacity=".3"/></svg>`;
 
-function renderSlide(slide: DeckSlide): HTMLElement {
+function renderLead(slide: DeckBuild): HTMLElement {
   const eyebrow = h("div", "ck-slide-eyebrow");
   if ("icon" in slide.eyebrow) eyebrow.innerHTML = mark;
   else eyebrow.append(h("p", "ck-slide-label", null, slide.eyebrow.label));
-  const lead = h(
+  return h(
     "div",
     "ck-slide-frame ck-slide-lead",
     null,
@@ -376,7 +405,107 @@ function renderSlide(slide: DeckSlide): HTMLElement {
     h("h2", "ck-slide-title", null, slide.title),
     h("p", "ck-slide-description", null, slide.description),
   );
-  return h("section", "ck-slide" + ("icon" in slide.eyebrow ? " ck-hook" : ""), null, lead, renderBody(slide.body));
+}
+
+type SlideView = { el: HTMLElement; show(build: number, animate: boolean): void };
+
+/** The elements to fade under `root` so that every `keep` element stays
+ * drawn: each sibling along the path from a kept element up to `root`. */
+function around(root: Element, keep: Element[]): Element[] {
+  if (!keep.length) return [root];
+  const path = new Set<Element>();
+  for (const k of keep) for (let n: Element | null = k; n && n !== root; n = n.parentElement) path.add(n);
+  const out = new Set<Element>();
+  for (const n of path) for (const sib of n.parentElement?.children ?? []) if (!path.has(sib)) out.add(sib);
+  return [...out];
+}
+
+/** A slide and its builds. Every state is rendered up front and stacked in one
+ * grid cell, so bodies measure and lay out while hidden. Changing build
+ * crossfades the leads and bodies; shared elements move from their old place. */
+function renderSlide(slide: DeckSlide): SlideView {
+  const hook = "icon" in slide.eyebrow ? " ck-hook" : "";
+  const states: DeckBuild[] = [slide, ...(slide.builds ?? [])];
+  if (states.length === 1) {
+    return { el: h("section", "ck-slide" + hook, null, renderLead(slide), renderBody(slide.body)), show() {} };
+  }
+  const leads = states.map(renderLead), bodies = states.map((s) => renderBody(s.body));
+  const el = h(
+    "section",
+    "ck-slide" + hook,
+    null,
+    h("div", "ck-build-stack", null, ...leads),
+    h("div", "ck-build-stack", null, ...bodies),
+  );
+  let current = 0;
+  let running: Animation[] = [];
+  let restore: (() => void)[] = [];
+  const visible = (i: number) => {
+    for (const list of [leads, bodies]) {
+      list.forEach((part, j) => {
+        part.toggleAttribute("data-ck-hidden", j !== i);
+        part.inert = j !== i;
+        part.setAttribute("aria-hidden", String(j !== i));
+      });
+    }
+  };
+  const settle = () => {
+    for (const a of running) a.cancel();
+    for (const undo of restore) undo();
+    running = [];
+    restore = [];
+    visible(current);
+  };
+  visible(0);
+  return {
+    el,
+    show(to, animate) {
+      if (to === current) return;
+      settle();
+      const from = current;
+      current = to;
+      const before = bodies[from], after = bodies[to];
+      const pairs = [...after.querySelectorAll<HTMLElement>("[data-ck-share]")].flatMap((n) => {
+        const o = before.querySelector<HTMLElement>(`[data-ck-share="${n.dataset.ckShare}"]`);
+        return o ? [[o, n] as const] : [];
+      });
+      const firsts = pairs.map(([o]) => o.getBoundingClientRect());
+      visible(to);
+      if (!animate || reducedMotion()) return;
+      // The outgoing state stays drawn (inert) while it fades.
+      leads[from].removeAttribute("data-ck-hidden");
+      before.removeAttribute("data-ck-hidden");
+      const fade = (part: Element, out: boolean) =>
+        running.push(part.animate(out ? [{ opacity: 1 }, { opacity: 0 }] : [{ opacity: 0 }, { opacity: 1 }], {
+          duration: out ? 200 : 280,
+          delay: out ? 0 : 180,
+          easing: ease,
+          fill: "both",
+        }));
+      fade(leads[from], true);
+      fade(leads[to], false);
+      for (const part of around(before, pairs.map(([o]) => o))) fade(part, true);
+      for (const part of around(after, pairs.map(([, n]) => n))) fade(part, false);
+      pairs.forEach(([o, n], i) => {
+        o.style.visibility = "hidden";
+        restore.push(() => o.style.visibility = "");
+        const last = n.getBoundingClientRect();
+        // Rects include the body's own scale; the transform is applied inside it.
+        const k = last.width / (n.offsetWidth || last.width || 1) || 1;
+        const first = firsts[i];
+        const t = invert(
+          { left: first.left / k, top: first.top / k, width: first.width, height: first.height },
+          { left: last.left / k, top: last.top / k, width: last.width, height: last.height },
+          "move",
+        );
+        if (t) running.push(n.animate([{ transform: t }, { transform: "none" }], { duration: 560, easing: ease }));
+      });
+      const mine = running;
+      void Promise.allSettled(mine.map((a) => a.finished)).then(() => {
+        if (running === mine) settle();
+      });
+    },
+  };
 }
 
 function renderBody(body: DeckBody): HTMLElement {

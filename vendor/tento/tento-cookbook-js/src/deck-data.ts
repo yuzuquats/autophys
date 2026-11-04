@@ -172,7 +172,31 @@ export type DeckSlide = {
   /** Under about 120 characters. */
   description: string;
   body: DeckBody;
+  /** Later states of this slide, shown in place before the deck moves on (as
+   * Keynote builds do): each replaces the eyebrow, title, description and
+   * body. An element marked `data-ck-share` in both bodies moves between its
+   * two places (FLIP) instead of fading, such as the loop bodies' card. */
+  builds?: DeckBuild[];
 };
+export type DeckBuild = Omit<DeckSlide, "builds">;
+
+/** Where one step lands, given each slide's build count: through the current
+ * slide's builds first, then to the next slide's first build (forwards) or
+ * the previous slide's last build (backwards). The ends stay put. */
+export function stepTarget(
+  index: number,
+  build: number,
+  delta: number,
+  builds: readonly number[],
+): { index: number; build: number } {
+  const dir = Math.sign(delta);
+  if (build + dir >= 0 && build + dir < builds[index]) {
+    return { index, build: build + dir };
+  }
+  const target = clampSlide(index + dir, builds.length);
+  if (target === index) return { index, build };
+  return { index: target, build: dir > 0 ? 0 : builds[target] - 1 };
+}
 
 export function clampSlide(index: number, count: number): number {
   return Math.max(0, Math.min(count - 1, Math.round(index)));
