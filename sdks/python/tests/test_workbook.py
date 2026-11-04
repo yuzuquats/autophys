@@ -271,3 +271,24 @@ def test_another_process_approves_while_the_sdk_waits(tmp_path):
     assert time.monotonic() - t0 < 10
     assert wb.check()["ok"]
     wb.close()
+
+
+def _curve_run(points, rid="m1", pad=0):
+    values = [1.0] * points
+    run = {"fit_id": 1, "curves": {rid: {"fit": {"v": values}, "initial": {"v": values}}}}
+    if pad:
+        run["note"] = "x" * pad
+    return run
+
+
+def test_run_curves_bounds_match_rust():
+    from autophys.workbook import WorkbookError, payload_shape
+    payload_shape("run", _curve_run(2000))
+    with pytest.raises(WorkbookError, match="2000 curve points"):
+        payload_shape("run", _curve_run(2001))
+    with pytest.raises(WorkbookError, match="may contain only"):
+        payload_shape("run", _curve_run(3, rid="bad id"))
+    with pytest.raises(WorkbookError) as err:
+        payload_shape("run", _curve_run(3, pad=300_000))
+    assert err.value.error == "too_large"
+    payload_shape("run", {"fit_id": 1, "note": "x" * 300_000})  # no curves: the 1 MiB limit applies

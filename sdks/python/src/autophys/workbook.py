@@ -282,11 +282,16 @@ def check_integer_range(value: Any, path: str = "payload") -> None:
 
 
 
+MAX_CURVE_POINTS = 2000
+MAX_CURVE_PAYLOAD_BYTES = 256 * 1024
+
+
 def curves_shape(curves):
     if not isinstance(curves, dict):
         raise _invalid("payload.curves", "must be an object")
     for rid, entry in curves.items():
         at = f"payload.curves.{rid}"
+        check_id(at, rid)
         if not isinstance(entry, dict):
             raise _invalid(at, "must be an object")
         lengths = []
@@ -297,6 +302,8 @@ def curves_shape(curves):
             lengths.extend(_finite_array(v, f"{at}.{label}.{ch}") for ch, v in channels.items())
         if "t" in entry:
             lengths.append(_finite_array(entry["t"], f"{at}.t"))
+        if any(n > MAX_CURVE_POINTS for n in lengths):
+            raise _invalid(at, f"at most {MAX_CURVE_POINTS} curve points")
         if len(set(lengths)) > 1:
             raise _invalid(at, "curve arrays must have equal length")
 
@@ -358,6 +365,8 @@ def payload_shape(kind: str, payload: Any) -> None:
         _string(payload, "payload", "config_version")
     elif kind == "run" and "curves" in payload:
         curves_shape(payload["curves"])
+        if len(canonical(payload).encode()) > MAX_CURVE_PAYLOAD_BYTES:
+            raise WorkbookError("too_large", f"run payload with curves exceeds {MAX_CURVE_PAYLOAD_BYTES} bytes")
     elif kind == "reveal":
         reveal_shape(payload)
     elif kind == "measurement":

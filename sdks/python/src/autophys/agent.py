@@ -447,7 +447,9 @@ class Investigation:
         if not any("cost_hours" in lim for lim in self.project.catalog.values()):
             return 0.0
         # Attached observations may have a lab-specific name. Resolve those
-        # from the existing proposal/measurement-version linkage.
+        # from the proposal/measurement-version linkage. Python records the
+        # dataset position as measurement_version; Rust records the
+        # measurement record's hash, so look both up.
         proposals, attached = {}, {}
         for record in self.records("proposal"):
             p = record.payload
@@ -455,7 +457,11 @@ class Investigation:
                 proposals[p["proposal_id"]] = p["experiment"]
             elif p.get("event") == "data_attached":
                 attached[p["measurement_version"]] = proposals.get(p["proposal_id"])
-        return sum(float(self.project.catalog.get(attached.get(version) or o.experiment, {}).get("cost_hours", 0.0))
+        hashes = [r.hash for r in self.records("measurement")]
+        def name(version, o):
+            by_hash = attached.get(hashes[version - 1]) if version <= len(hashes) else None
+            return attached.get(version) or by_hash or o.experiment
+        return sum(float(self.project.catalog.get(name(version, o), {}).get("cost_hours", 0.0))
                    for version, o in enumerate(self.dataset, 1))
 
     def _affordable(self, name: str) -> bool:

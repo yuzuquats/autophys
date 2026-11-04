@@ -115,3 +115,16 @@ def test_bench_hours_are_exported():
     summary = summarize([row])
     assert summary[0]["test_hours"] == row.test_hours
     assert "test_hours" in format_table(summary)
+
+
+def test_rust_attached_hash_version_costs_after_python_resume():
+    """Rust records data_attached.measurement_version as the measurement record's hash."""
+    inv, view, _ = investigation(runner=ProposalRunner())
+    pid = inv.tool_request_experiment("pulse_2A")["proposal_id"]
+    inv.approve(pid)
+    obs = view.runner.run("pulse_2A")
+    obs.experiment = "lab-trace-rust"
+    m = inv.store.append(inv.id, "measurement", {"observation": obs.to_dict()})
+    inv.store.append(inv.id, "proposal", {"proposal_id": pid, "event": "data_attached", "measurement_version": m.hash})
+    resumed = Investigation.resume(inv.project, inv.store, inv.id)
+    assert resumed.test_hours_used == pytest.approx(1 + 300 / 3600)
