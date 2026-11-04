@@ -4,12 +4,18 @@ use serde::{Deserialize, Serialize};
 use std::ops::{Deref, DerefMut};
 
 pub type Channels = IndexMap<String, Vec<f64>>;
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Trajectory {
     y: Channels,
     #[serde(skip)]
     pub u: Channels,
+}
+// Like the Python dict result, equality compares only the time/output mapping.
+impl PartialEq for Trajectory {
+    fn eq(&self, other: &Self) -> bool {
+        self.y == other.y
+    }
 }
 impl Trajectory {
     pub fn new() -> Self {

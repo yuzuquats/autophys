@@ -218,5 +218,6 @@ fn trajectory_mapping_wire_shape_and_implicit_outputs() {
     assert_eq!(wire, json!({"t":[0.,1.],"y":[1.,2.]}));
     let restored: Trajectory = serde_json::from_value(wire).unwrap();
     assert!(restored.u.is_empty());
+    assert_eq!(restored, result);
     assert_eq!(restored["y"], result["y"]);
 }

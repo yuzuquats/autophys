@@ -145,12 +145,12 @@ fn compare_rows(case: &str, stage: &str, rows: &Value, expected: &Value) {
 #[test]
 fn python_goldens_read_back_exactly() {
     let found = goldens("python");
-    assert_eq!(
-        found.len(),
-        4,
-        "expected the four Python workbook goldens in {}",
-        conformance().join("python").display()
-    );
+    // Keep the original cases mandatory while checking additional committed
+    // Python workbooks too (for example the fit-curves reveal case).
+    for name in ["events-and-values", "oscillator-edited", "reason-replayed", "thermal-validated"] {
+        assert!(found.iter().any(|p| p.file_stem().unwrap() == name),
+            "missing Python workbook golden {name} in {}", conformance().join("python").display());
+    }
     for golden in found {
         read_back(&golden);
     }
