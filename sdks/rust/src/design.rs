@@ -11,6 +11,10 @@ pub struct Candidate {
     pub d_opt: f64,
     pub min_eig_gain: f64,
     pub worst_direction: Params,
+    /// MQ-5: the catalog cost of one run, set only when the catalog defines
+    /// costs, so uncosted rankings serialize unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost_hours: Option<f64>,
 }
 impl Candidate {
     pub fn to_dict(&self) -> Value {
@@ -143,6 +147,7 @@ pub fn rank_experiments(
         let f = &f0 + fisher(&jacobian(sim, p, &[o], 1e-4, FIT_OPTIONS)?);
         let (w, v) = eigen(&f);
         out.push(Candidate {
+            cost_hours: None,
             experiment: name,
             min_eig: w[0].max(0.),
             d_opt: logdet(&f, eps) - log0,

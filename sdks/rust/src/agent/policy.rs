@@ -337,18 +337,27 @@ pub fn render_facts(f: &Value) -> String {
             .collect::<Vec<_>>()
             .join("; ")
     ));
+    // Every budget key, as Python prints `{k}={v}`: integers plainly, floats
+    // (MQ-5 test hours, present only for costed catalogs) as `repr`.
     lines.push(format!(
         "BUDGET: {}",
-        [
-            "steps_left",
-            "simulations_left",
-            "experiments_left",
-            "experiments_requested"
-        ]
-        .iter()
-        .map(|k| format!("{k}={}", f["budget"][k]))
-        .collect::<Vec<_>>()
-        .join(" ")
+        f["budget"]
+            .as_object()
+            .map(|m| {
+                m.iter()
+                    .map(|(k, v)| match v {
+                        Value::Number(n) if n.is_f64() => {
+                            format!(
+                                "{k}={}",
+                                crate::canonical::py_float_repr(n.as_f64().unwrap())
+                            )
+                        }
+                        v => format!("{k}={v}"),
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            })
+            .unwrap_or_default()
     ));
     let fixed = fields(&f["fixed"]).replace(',', ", ");
     lines.push(format!(

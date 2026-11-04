@@ -106,6 +106,11 @@ pub struct Investigation {
     pub wall: f64,
     pub outcome: Option<Outcome>,
     pub runs_per_experiment: IndexMap<String, usize>,
+    /// MQ-5: measurement version (1-based dataset position) of each
+    /// observation that came in through `data_attached`, mapped to its
+    /// proposal's experiment, so a lab-renamed observation is still charged
+    /// the proposed experiment's cost. Rebuilt from the records on resume.
+    attached: IndexMap<usize, Option<String>>,
     budget: Arc<Mutex<CallBudget>>,
 }
 impl Deref for Investigation {
@@ -204,6 +209,7 @@ impl Investigation {
             wall: 0.,
             outcome: None,
             runs_per_experiment: IndexMap::new(),
+            attached: IndexMap::new(),
             budget: Arc::new(Mutex::new(CallBudget::new(Some(limit)))),
         })
     }
@@ -256,11 +262,17 @@ impl Investigation {
         }
         let mut i = 1;
         let mut initial = vec![];
+        // Measurement records map 1:1, in order, onto dataset positions. A
+        // `data_attached` event names its measurement by that position
+        // (Python) or by the measurement record's hash (Rust record API).
+        let mut positions: std::collections::HashMap<String, usize> = Default::default();
         while i < recs.len() && recs[i].kind == "measurement" {
             initial
                 .push(Observation::from_dict(recs[i].payload["observation"].clone()).map_err(err)?);
+            positions.insert(recs[i].hash.clone(), initial.len());
             i += 1;
         }
+        let mut measured = initial.len();
         let free: Option<Vec<String>> = head.payload["overrides"]["free"].as_array().map(|v| {
             v.iter()
                 .filter_map(Value::as_str)
@@ -289,15 +301,23 @@ impl Investigation {
                 let o = Observation::from_dict(p["observation"].clone()).map_err(err)?;
                 unclaimed = Some(o.experiment.clone());
                 s.dataset.add(o).map_err(err)?;
+                measured += 1;
+                positions.insert(r.hash.clone(), measured);
                 continue;
             }
             if r.kind == "proposal" && p["event"] == "data_attached" {
                 unclaimed = None;
-                let name = proposals
+                let proposed = proposals
                     .get(p["proposal_id"].as_str().unwrap_or(""))
-                    .and_then(|v| v.1.clone())
-                    .unwrap_or_default();
-                s.count(&name);
+                    .and_then(|v| v.1.clone());
+                let version = match &p["measurement_version"] {
+                    Value::String(hash) => positions.get(hash).copied(),
+                    v => v.as_u64().map(|v| v as usize),
+                };
+                if let Some(version) = version {
+                    s.attached.insert(version, proposed.clone());
+                }
+                s.count(&proposed.unwrap_or_default());
                 s.outcome = None;
             } else if let Some(n) = unclaimed.take() {
                 s.count(&n);
@@ -419,10 +439,47 @@ impl Investigation {
             .filter(|(n, c)| {
                 c.max_runs.is_none_or(|limit| {
                     self.runs_per_experiment.get(*n).copied().unwrap_or(0) < limit
-                })
+                }) && self.affordable(n)
             })
             .map(|(n, _)| n.clone())
             .collect()
+    }
+    /// MQ-5: whether any catalog experiment declares `cost_hours`. Outputs
+    /// carry hours and costs only then, so uncosted ones stay byte-identical.
+    fn costed(&self) -> bool {
+        self.project
+            .catalog
+            .values()
+            .any(|c| c.cost_hours.is_some())
+    }
+    fn cost_hours(&self, experiment: &str) -> f64 {
+        self.project
+            .catalog
+            .get(experiment)
+            .and_then(|c| c.cost_hours)
+            .unwrap_or(0.)
+    }
+    /// Test hours used, recomputed from the measured data (including data
+    /// restored on resume). An attached observation is charged its
+    /// proposal's experiment even if the lab named it differently.
+    pub fn test_hours_used(&self) -> f64 {
+        if !self.costed() {
+            return 0.;
+        }
+        python_sum(self.dataset.iter().enumerate().map(|(i, o)| {
+            let name = self
+                .attached
+                .get(&(i + 1))
+                .and_then(|n| n.as_deref())
+                .filter(|n| !n.is_empty())
+                .unwrap_or(&o.experiment);
+            self.cost_hours(name)
+        }))
+    }
+    fn affordable(&self, experiment: &str) -> bool {
+        self.project.budgets.max_test_hours.is_none_or(|limit| {
+            self.test_hours_used() + self.cost_hours(experiment) <= limit + 1e-12
+        })
     }
     pub fn facts(&self) -> Value {
         let sim = self.sim();
@@ -435,7 +492,15 @@ impl Investigation {
             v["current"] = json!(self.validation_fit == Some(self.fit_id));
             v
         });
-        json!({"model":{"name":sim.name,"variant":self.model,"variants":self.variants.keys().collect::<Vec<_>>(),"params":sim.params.values().collect::<Vec<_>>()},"measurements":{"version":self.dataset.version,"observations":observations},"budget":{"steps_left":self.project.budgets.max_steps as i64-self.steps as i64,"simulations_left":self.project.budgets.max_simulations as i64-self.simulations()as i64,"experiments_left":self.project.budgets.max_experiments as i64-self.experiments_used as i64,"experiments_requested":self.experiments_used},"catalog":self.available_experiments(),"fixed":self.fixed,"noise_scale":self.noise_scale(),"compared":self.compared,"rule":self.project.stop.rule.describe(),"history":self.history.iter().skip(self.history.len().saturating_sub(6)).collect::<Vec<_>>(),"last_error":self.last_error,"fit":fit,"sensitivity":sens,"ranking":rank,"validation":val})
+        let mut facts = json!({"model":{"name":sim.name,"variant":self.model,"variants":self.variants.keys().collect::<Vec<_>>(),"params":sim.params.values().collect::<Vec<_>>()},"measurements":{"version":self.dataset.version,"observations":observations},"budget":{"steps_left":self.project.budgets.max_steps as i64-self.steps as i64,"simulations_left":self.project.budgets.max_simulations as i64-self.simulations()as i64,"experiments_left":self.project.budgets.max_experiments as i64-self.experiments_used as i64,"experiments_requested":self.experiments_used},"catalog":self.available_experiments(),"fixed":self.fixed,"noise_scale":self.noise_scale(),"compared":self.compared,"rule":self.project.stop.rule.describe(),"history":self.history.iter().skip(self.history.len().saturating_sub(6)).collect::<Vec<_>>(),"last_error":self.last_error,"fit":fit,"sensitivity":sens,"ranking":rank,"validation":val});
+        if self.costed() {
+            let used = self.test_hours_used();
+            facts["budget"]["test_hours_used"] = json!(used);
+            if let Some(limit) = self.project.budgets.max_test_hours {
+                facts["budget"]["test_hours_left"] = json!(limit - used);
+            }
+        }
+        facts
     }
     fn need_fit(&self) -> NumResult<&FitResult> {
         self.fit
@@ -547,7 +612,7 @@ impl Investigation {
             .into_iter()
             .map(|(k, v)| (k, v * self.noise_scale()))
             .collect();
-        let rank = design::rank_experiments(
+        let mut rank = design::rank_experiments(
             self.sim(),
             &self.need_fit()?.params,
             &self.dataset.split("train"),
@@ -556,7 +621,14 @@ impl Investigation {
             criterion,
             self.jac.as_ref(),
         )?;
-        let out = json!({"criterion":criterion,"ranking":rank.iter().map(|c|json!([c.experiment,c.min_eig,c.d_opt])).collect::<Vec<_>>()});
+        let out = if self.costed() {
+            for c in &mut rank {
+                c.cost_hours = Some(self.cost_hours(&c.experiment));
+            }
+            json!({"criterion":criterion,"ranking":rank})
+        } else {
+            json!({"criterion":criterion,"ranking":rank.iter().map(|c|json!([c.experiment,c.min_eig,c.d_opt])).collect::<Vec<_>>()})
+        };
         self.ranking = Some(rank);
         self.ranking_fit = Some(self.fit_id);
         self.ranking_criterion = criterion.into();
@@ -638,6 +710,12 @@ impl Investigation {
     ) -> NumResult<Value> {
         if self.experiments_used >= self.project.budgets.max_experiments {
             return Err(invalid("experiment budget is spent"));
+        }
+        if self.project.catalog.contains_key(experiment) && !self.affordable(experiment) {
+            return Err(invalid(format!(
+                "{experiment} exceeds the test-hour budget of {}",
+                crate::canonical::py_float_repr(self.project.budgets.max_test_hours.unwrap_or(0.))
+            )));
         }
         if !self
             .available_experiments()
@@ -1111,6 +1189,8 @@ impl Investigation {
         o.validate().map_err(err)?;
         let a = self.record.attach_data(pid, o.to_dict())?;
         self.dataset.add(o.clone()).map_err(err)?;
+        self.attached
+            .insert(self.dataset.len(), self.pending_experiment.clone());
         if let Some(n) = self.pending_experiment.take() {
             self.count(&n);
         }
@@ -1142,5 +1222,24 @@ impl Investigation {
             )));
         }
         Ok(())
+    }
+}
+/// CPython 3.12+ `sum()` over floats: Neumaier-compensated, so recomputed
+/// test hours match the Python reference bit for bit.
+fn python_sum(values: impl IntoIterator<Item = f64>) -> f64 {
+    let (mut sum, mut c) = (0_f64, 0_f64);
+    for x in values {
+        let t = sum + x;
+        c += if sum.abs() >= x.abs() {
+            (sum - t) + x
+        } else {
+            (x - t) + sum
+        };
+        sum = t;
+    }
+    if c != 0. && c.is_finite() {
+        sum + c
+    } else {
+        sum
     }
 }

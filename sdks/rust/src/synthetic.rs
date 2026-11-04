@@ -110,6 +110,9 @@ pub struct CaseView {
     pub runner: SyntheticRunner,
     pub max_experiments: usize,
     pub candidates: Option<Vec<String>>,
+    /// MQ-5: the case's test-hour budget and costed catalog, when it has one.
+    pub max_test_hours: Option<f64>,
+    pub catalog: Option<IndexMap<String, crate::project::CatalogEntry>>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Evaluator {
@@ -239,6 +242,8 @@ fn build(
             runner,
             max_experiments,
             candidates: None,
+            max_test_hours: None,
+            catalog: None,
         },
         Evaluator {
             case: name.into(),
@@ -353,12 +358,77 @@ pub fn thermal_case(
         "Over 120 s of a 1000 s time constant the response is nearly linear in t/C; R only bends it.",
     )
 }
+pub const BATTERY_TRUTH: [(&str, f64); 3] = [("R0", 0.025), ("R1", 0.045), ("C1", 1600.)];
+/// MQ-5: a short pulse measures the ohmic drop and initial polarization slope.
+pub fn battery_case(seed: u64, max_experiments: usize) -> Result<(CaseView, Evaluator)> {
+    let sim = models::battery_ecm();
+    let truth = params(&BATTERY_TRUTH);
+    let short = max_experiments == 0;
+    let pulse = |name: &str, current: f64, on: f64| json!({"name":name,"kind":"pulse","current":current,"on":on,"duration":25.,"rate":32.,"capacity_ah":2.5,"soc0":0.9});
+    let combos = if short {
+        [
+            ("R0".into(), params(&[("R0", 1.)])),
+            ("C1".into(), params(&[("C1", 1.)])),
+        ]
+        .into_iter()
+        .collect()
+    } else {
+        truth
+            .keys()
+            .map(|k| (k.clone(), [(k.clone(), 1.)].into_iter().collect()))
+            .collect()
+    };
+    let expected = if short {
+        ["R1".into()].into_iter().collect()
+    } else {
+        BTreeSet::new()
+    };
+    let catalog = sim
+        .experiments
+        .iter()
+        .map(|(n, e)| {
+            Ok((
+                n.clone(),
+                crate::project::CatalogEntry {
+                    max_runs: None,
+                    cost_hours: Some(1.0 + number(e, "duration")? / 3600.0),
+                    ..Default::default()
+                },
+            ))
+        })
+        .collect::<Result<IndexMap<_, _>>>()?;
+    let (mut view, ev) = build(
+        if short {
+            "battery-short-only"
+        } else {
+            "battery"
+        },
+        sim,
+        truth,
+        NoiseModel::new(params(&[("v", 0.002)])),
+        seed,
+        vec![pulse("pulse_short", 2., 6.)],
+        vec![pulse("pulse_short_1A", 1., 6.)],
+        vec![
+            json!({"name":"unseen_train","kind":"pulse_train","current":1.5,"on":40.,"off":60.,"duration":500.,"rate":1.,"capacity_ah":2.5,"soc0":0.9}),
+        ],
+        max_experiments,
+        combos,
+        expected,
+        "A 6 s pulse against a 72 s RC time constant resolves the instantaneous I R0 drop and initial I/C1 slope; R1 needs a longer polarization and relaxation trace.",
+    )?;
+    view.max_test_hours = Some(3.);
+    view.catalog = Some(catalog);
+    Ok((view, ev))
+}
 pub fn case(name: &str, seed: u64) -> Result<(CaseView, Evaluator)> {
     match name {
         "oscillator" => oscillator_case(seed, 2, 0., 0.),
         "oscillator-free-only" => oscillator_case(seed, 0, 0., 0.),
         "thermal" => thermal_case(seed, 2, 0., 0.),
         "thermal-short-only" => thermal_case(seed, 0, 0., 0.),
+        "battery" => battery_case(seed, 2),
+        "battery-short-only" => battery_case(seed, 0),
         _ => Err(invalid("unknown synthetic case")),
     }
 }

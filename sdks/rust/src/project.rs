@@ -16,6 +16,11 @@ pub struct Budgets {
     pub max_simulations: usize,
     pub max_experiments: usize,
     pub max_outlook_simulations: usize,
+    /// MQ-5: a cap on the physical test hours that catalog experiments with a
+    /// `cost_hours` may spend. Omitted from the config when unset, so configs
+    /// without it keep their hash.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_test_hours: Option<f64>,
 }
 impl Default for Budgets {
     fn default() -> Self {
@@ -24,6 +29,7 @@ impl Default for Budgets {
             max_simulations: 20000,
             max_experiments: 2,
             max_outlook_simulations: 50000,
+            max_test_hours: None,
         }
     }
 }
@@ -78,6 +84,10 @@ impl Default for StopRules {
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct CatalogEntry {
     pub max_runs: Option<usize>,
+    /// MQ-5: physical test hours one run costs; absent means 0. Serialized
+    /// only when declared, so configs without it keep their hash.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost_hours: Option<f64>,
     #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
     pub edit: IndexMap<String, [f64; 2]>,
 }
@@ -140,12 +150,24 @@ impl Project {
         if !["scripted", "reason-lane"].contains(&self.policy.kind.as_str()) {
             return Err(invalid("invalid policy kind"));
         }
+        if self
+            .budgets
+            .max_test_hours
+            .is_some_and(|h| !h.is_finite() || h < 0.)
+        {
+            return Err(invalid("max_test_hours must be finite and non-negative"));
+        }
         for (n, entry) in &self.catalog {
             let s = self
                 .simulator
                 .experiments
                 .get(n)
                 .ok_or_else(|| invalid(format!("unknown catalog experiment {n}")))?;
+            if entry.cost_hours.is_some_and(|h| !h.is_finite() || h < 0.) {
+                return Err(invalid(format!(
+                    "{n}: cost_hours must be finite and non-negative"
+                )));
+            }
             if entry.edit.len() > 3 {
                 return Err(invalid("at most three editable settings"));
             }
@@ -219,6 +241,10 @@ impl Project {
             .iter()
             .map(|(k, c)| {
                 let mut v = json!({"settings":sim.experiments[k],"max_runs":c.max_runs});
+                // Only present when declared, so configs without it keep their hash.
+                if let Some(h) = c.cost_hours {
+                    v["cost_hours"] = json!(h);
+                }
                 if !c.edit.is_empty() {
                     v["edit"] = json!(c.edit);
                 }
