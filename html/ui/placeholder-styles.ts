@@ -35,7 +35,7 @@ ${w} .ap-signin input { font-size:1.16em;font-weight:400;font-family:inherit;pad
 ${w} .ap-signin input:focus { outline:2px solid var(--ap-ink,#141414);outline-offset:-1px;border-color:transparent; }
 ${w} .ap-signin button { margin-top:1em;padding:.8em;border:0;border-radius:.55em;background:var(--ap-ink,#141414);color:#fff;
   font:inherit;font-weight:600;cursor:pointer; }
-${w} .ap-signin button.ap-signin-demo { margin-top:.5em;background:#efefef;color:var(--ap-ink,#141414); }
+${w} .ap-signin button.ap-signin-demo { margin-top:0;background:#efefef;color:var(--ap-ink,#141414); }
 ${w} .ap-signin button.ap-signin-demo:hover { background:#e4e4e4; }
 ${w} .ap-signin .ap-signin-alt { margin:.85em 0 0;font-size:.93em;color:var(--ap-sec,#5b5b5b); }
 ${w} .ap-signin .ap-signin-alt a { color:inherit; }

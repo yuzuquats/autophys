@@ -129,7 +129,7 @@ background:#141414;color:#fff;font:inherit;font-weight:600;cursor:pointer}\
 .err{background:#fdecec;color:#9b1c1c;border-radius:8px;padding:9px 12px;margin:0 0 6px}\
 .mark{width:28px;height:28px;border-radius:7px;background:#141414;margin-bottom:16px}\
 .alt{margin:18px 0 0;font-size:13px}.alt a{color:#141414}\
-form.demo{margin-top:10px}button.secondary{background:#efefef;color:#141414}";
+form.demo{margin-top:8px}form.demo button{margin-top:0}button.secondary{background:#efefef;color:#141414}";
 
 fn page(title: &str, body: &str) -> String {
     format!(
