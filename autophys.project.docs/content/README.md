@@ -57,7 +57,7 @@ here by a forward commit; the history keeps it.
 
 ```review-flow
 flowchart LR
-  T[tento/tento-cookbook-js\nCookbook namespace] -->|import @tento-cookbook\n../../../tento path| R[web/src/index.root.ts\nCookbook.mount.run AutophysApp]
+  T[vendor/tento/tento-cookbook-js\nCookbook namespace] -->|import @tento-cookbook\nhtml/deno.json import map| R[html/routes/index.root.ts\nCookbook.mount.run AutophysApp]
   R -->|tento-cookbook-js/build.ts| D[web/dist: index.html + index.root.js]
   D -->|ops/deploy.sh| W[release web/]
   S[server/: autophys serve\n127.0.0.1:4794] -->|static + /api/healthz| W
@@ -108,7 +108,7 @@ checkout has a real `target/`.
 | AP-3 | port `127.0.0.1:4794` | agent-chosen, pending operator review | free in the 47xx block next to hacks-inference (4790) on 2026-11-04 | edit deploy default and self.toml |
 | AP-4 | `Restart=on-failure` | agent-chosen, pending operator review | a crash restarts and a deliberate stop stays stopped; the alternative is `always` | one line in the unit template |
 | AP-6 | the app is the cookbook's PlaceholderApp with autophys's id and title | **operator, 2026-11-04** | "for now the app that autophys serves is the vanilla tento-cookbook-js skeleton" | replace `web/src/app.ts` |
-| AP-8 | the client imports the cookbook by relative path `../../../tento/tento-cookbook-js/lib.ts` (web/deno.json import map) | agent-chosen, pending operator review | no publish step and always tento HEAD. The release records which tento commit it bundled. The alternative is a pinned `git archive` of tento-cookbook-js | edit one import-map line |
+| AP-8 | the client imports the cookbook through the `@tento-cookbook` alias in `html/deno.json` and `html/tsconfig.json`, which resolves to `vendor/tento/tento-cookbook-js` | agent-chosen, pending operator review | the bundle is built from the vendored tree, and the release records the vendored tree id | edit one import-map line |
 ```
 
 The rev 2 decisions AP-5 (plain TypeScript shell) and AP-7 (`ck-` prefix)
