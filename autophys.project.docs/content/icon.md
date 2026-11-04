@@ -31,6 +31,19 @@ No additional UI, server, auth or data changes were deployed.
 Receipt: workspace/fleet/evidence/lona-family-landings/autophys/response_cutover_20261104/receipt.json.
 Future master builds include these committed resources normally.
 
+## First-slide icon removed
+
+Operator requested removal on 2026-11-04. Source 44fcc00 removes the first-slide
+icon container before paint; the header mark and favicon remain unchanged.
+Release 0ce95e8-no-slide-icon-44fcc00-20261104 carries this resource update over
+the preceding Response release. The native executable and seven web entries
+are byte-identical; only the branding call in index.root.js and its source map
+change. Generated positions and unaffected source mappings are preserved;
+the replacement expression is explicitly unmapped and brand.ts source content
+is updated. Deno type/format checks, isolated browser verification and live
+browser verification pass (zero slide marks, one loaded header mark).
+Receipt: workspace/fleet/evidence/lona-family-landings/autophys/slide_icon_20261104/receipt.json.
+
 ## Earlier circle integration (superseded artwork)
 
 The retained compact circle replaces the placeholder favicon and pitch mark
