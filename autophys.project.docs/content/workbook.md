@@ -1,6 +1,6 @@
 # Workbooks: the `.ap-workbook` file is the record
 
-Status: decision page, rev 1, 2026-11-04. Operator decisions from an
+Status: decision page, rev 2, 2026-11-04. Operator decisions from an
 `/open-questions` walkthrough. Nothing here is implemented yet. It changes
 the direction of `store.md` and `sdk.md`: the daemon's database stops being
 the only store, and the store becomes a workbook format that both Rust and
@@ -34,6 +34,8 @@ same rules.
 | W-4 | Keeping Rust and Python consistent | Two native implementations of one spec (Python `sqlite3`, Rust `rusqlite`). The Rust crate is the reference. A shared conformance suite (hash vectors `tests/vectors/chain.json`, golden workbooks, cross tests where each side verifies the other's writes) runs in CI. The SDK stays pure Python. | The shared rules are small; `pip install` stays simple. | none |
 | W-5 | Merge rules for copies           | Retired by W-2: move semantics, no merges.                                                                                              | —                                                                                              | —              |
 | W-6 | Workbook granularity             | One workbook per project. A collection is a directory (or a server's set) of `<project>.ap-workbook`; `client.project(p)` opens or creates it. | The project is already the UI's grouping and the natural unit to move.                   | none           |
+| W-7 | Client API                       | A client object: `client = ap.connect(target)`; `wb = client.project(project)` opens or creates that project's workbook; `wb.investigate(...)`, `wb.investigations()`, `wb.investigation(id)` resumes an investigation from its records. `target` is a directory (local collection), a `.ap-workbook` path, an `http(s)` URL, or nothing (`AUTOPHYS_HOME`, default `~/autophys`). `store=` injection stays for tests. | The workbook is a visible object; resuming has a home. | none |
+| W-8 | Moving workbooks between hosts   | No send/fetch API for now. Workbooks live with the server that holds them: connecting to a URL works on that server's workbooks. The server can run as a daemon, including locally, and Python connects to it on localhost. W-2's move machinery (pointer, snapshot, prefix check) is deferred until a workbook must change hosts. | Operator, 2026-11-04. | none |
 ```
 
 ## What changes for the existing work
@@ -52,7 +54,6 @@ same rules.
 
 ## Still open
 
-- The exact `ap.connect` and client API (sketch only so far).
-- The send/return commands and the pointer file format for W-2's move.
+- W-2's move between hosts (deferred by W-8).
 - Agent-chosen items awaiting review: store.md choices, SD-1, AP-3/4/8,
   E-1a..f, ML-8..ML-14.
