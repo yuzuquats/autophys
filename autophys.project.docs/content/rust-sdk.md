@@ -476,10 +476,10 @@ Direct calls retry 429 and 5xx up to four attempts, respecting numeric
 Retry-After (0–30 seconds) and otherwise backing off 1, 2, 4 seconds. A 402
 fails immediately with the committed Python `billing_not_configured` detail.
 
-The Muse Code CLI adapter remains Python-only. Record metadata, prices and
-cassette integration await the Python Muse batch being committed; Rust does
-not consume peer working files. No schema or projection-table change is
-planned; workbook `user_version` remains 1. All tests use loopback HTTP or
+The Muse Code CLI adapter remains Python-only. Writing record metadata,
+prices and cassette integration await the Python Muse batch being committed;
+Rust builds use committed inputs. Workbook schema and projection tables remain
+unchanged; workbook `user_version` remains 1. All tests use loopback HTTP or
 fixtures. No live provider call, deployment or restart is part of phase 3.
 The numerics reader selects ScriptedPolicy only for the top-level
 `policy: "scripted"`; all 21 shared cases pass in its clean-export workspace
@@ -498,3 +498,57 @@ and empty steps are omitted. Raw historical usage is returned unchanged.
 The library reads this context from records alongside the existing folded
 state. Projection columns, rebuild comparison and SQL schema stay unchanged;
 handlers continue to call the crate and serialize its result without SQL.
+
+### Phase-3 checkpoint and validation (2026-11-04)
+
+This checkpoint implements the numerics reader, direct Muse reasoner inputs
+and retry behavior, and daemon/API read scaffolding. Phase 3 is incomplete.
+The operator requested a bounded wait for Python's committed Muse batch.
+Ten-minute checks through 15:15Z found no commit in
+`git log -- tests/conformance/reasoner sdks/python/src/autophys/usage.py`.
+The monitor was disabled and implementation stopped at that cutoff.
+
+Each implementation commit passed `cargo test --workspace --locked` from
+its own `git archive <commit>` export, with a fresh
+`CARGO_TARGET_DIR=~/.cache/autophys/rs-target-*` per export:
+
+| Commit | Change-Id | Scope | Passed / ignored |
+| --- | --- | --- | --- |
+| `37bcf81f1d208b719786817ef51d9bbfa3cd1477` | `I9df7436b9d742d057f3a` | Numerics case policy discriminator; all 21 shared cases | 115 / 2 |
+| `3da55d04676f717625f0cd3f50572cead97969f5` | `I650cdd6bef98bd5d5fe1` | Muse defaults, image inputs, 5xx retries | 116 / 2 |
+| `34df3a89d471baf9e8fcd1993e0aad723790cdc1` | `I5f1121865e42382d4f8c` | Record-derived metadata views and HTTP contract coverage | 117 / 2 |
+
+These counts sum the test harness summaries, including SDK doc tests; there
+were no failures. The earlier chat count of 126 was an addition error; the
+last implementation gate passed 117 tests. Exports, fresh targets and private
+indexes were removed after each gate. Commits landed with private indexes and
+CAS ref updates; no CAS retry was required for these three commits. The shared
+index, peer Python/HTML source and peer changes were preserved.
+
+The committed Python names mirrored at this checkpoint are `ChatReasoner`,
+`HttpReasoner`, `ReasonReply`, `reasoner_from_env`, `parse_json_content`,
+`MIN_TOKENS` and `REASON_PATH`, plus the immediate HTTP-402
+`billing_not_configured` detail and unchanged `elapsed_ms` reply key.
+Muse constants and role names follow the agreed phase-3 contract; no
+committed Python Muse batch has yet qualified the remaining parity surface.
+
+Deferred until Python commits: optional-field type validators; playbook blob
+loading and investigation playbook/model/price writes; normalized step usage,
+image blob references and replay flags; outcome usage totals; embedded shared
+pricing and equality test; Python-compatible replay/record reasoners and env
+selection; Python `reason-replayed` golden verification; and a new Rust
+conformance workbook with the phase-3 fields. Distinct typed budget errors
+and any additional Python factory names must be reconciled from that commit.
+The existing API scaffolding exposes these optional values when present in
+records; it does not create them.
+
+Closure qualification note: the first documentation-only export failed the
+existing `binary_exits_cleanly_on_sigterm` HTTP test (8 passed, 1 failed in
+that binary; Cargo stopped there). No test or implementation was changed for
+the retry; the closure gate was repeated with another fresh export and target.
+The failed run log is
+`~/.cache/autophys/5faaee2eaa526e405546f01e26f585643b6090a6.test.log`.
+
+Relay question for autophys/py: which committed Muse slice should the follow-up
+use for validators, `prices.json`, cassette format/environment names and the
+`reason-replayed` golden? No schema-format question remains open.
