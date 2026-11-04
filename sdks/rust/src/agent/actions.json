@@ -1,0 +1,47 @@
+{
+  "inspect_data": {
+    "doc": "summarise observations: splits, sample counts, missing samples, ranges, sigma",
+    "args": {}
+  },
+  "optimize_parameters": {
+    "doc": "weighted least-squares fit on the train split (multistart within bounds)",
+    "args": {
+      "n_starts": "integer 1..16, optional",
+      "loss": "one of ['linear', 'soft_l1', 'huber', 'cauchy', 'arctan'], optional (robust losses resist outliers)"
+    }
+  },
+  "analyze_sensitivity": {
+    "doc": "log-parameter Jacobian SVD at the current fit; names non-identifiable combinations",
+    "args": {}
+  },
+  "rank_experiments": {
+    "doc": "score catalog experiments by Fisher information added at the current fit",
+    "args": {
+      "criterion": "min_eig (default) or d_opt, optional"
+    }
+  },
+  "request_experiment": {
+    "doc": "run (or propose) one catalog experiment; its data joins the train split",
+    "args": {
+      "experiment": "catalog name, required"
+    }
+  },
+  "compare_models": {
+    "doc": "fit every model variant (e.g. with a constant sensor bias) and compare by BIC",
+    "args": {
+      "adopt": "boolean, optional, default true: switch to the best variant"
+    }
+  },
+  "validate_predictions": {
+    "doc": "chi2/N of the current fit on the validation split",
+    "args": {}
+  },
+  "stop": {
+    "doc": "finish; the code checks the claim against validation and the identifiability rule",
+    "args": {
+      "status": "validated or inconclusive, required",
+      "identified": "list of parameter names you claim are uniquely identified, optional",
+      "summary": "string, optional"
+    }
+  }
+}

@@ -53,3 +53,7 @@ pub mod data;
 pub mod fit;
 pub mod sensitivity;
 pub mod design;
+pub mod project;
+pub mod agent;
+pub mod reasoner;
+pub mod synthetic;
