@@ -26,6 +26,10 @@ impl Mock {
             while !end.load(Ordering::Relaxed) {
                 match listener.accept() {
                     Ok((mut socket, _)) => {
+                        // BSD/macOS accept() inherits the listener's O_NONBLOCK; Linux
+                        // does not. A nonblocking read before the request arrives returns
+                        // WouldBlock, which read().unwrap_or(0) took as EOF and dropped.
+                        socket.set_nonblocking(false).unwrap();
                         let h = handler.clone();
                         let reqs = reqs.clone();
                         workers.push(thread::spawn(move || {
