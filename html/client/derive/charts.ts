@@ -6,7 +6,7 @@
 import { sigmaOf, simulatorLabel, specOf } from "../config.ts";
 import type { Fit, Investigation, Measurement, ProjectConfig, Proposal, ViewHint } from "../domain.ts";
 import type { BarRow, Chart, ChartPanel, HeatmapChart, LegendItem, Point, RangeRow, XYChart } from "../../ui/view-model.ts";
-import { axisAround, int, logTicks, niceTicks, sig } from "./fmt.ts";
+import { axisAround, int, logTicks, niceTicks, engineering, sig } from "./fmt.ts";
 
 /** What a view needs: the configuration the investigation pinned, and the investigation. */
 export type Ctx = { config: ProjectConfig; inv: Investigation };
@@ -235,11 +235,12 @@ export function proposalPanels(ctx: Ctx, p: Proposal, ranking: BarRow[], edited:
 
 export function configPanels(config: ProjectConfig): ChartPanel[] {
   const rows: RangeRow[] = config.params.map((p) => ({
-    label: p.name, unit: p.unit, lo: sig(p.lo, 3), hi: sig(p.hi, 3),
-    at: p.coord === "log" ? Math.log(p.initial / p.lo) / Math.log(p.hi / p.lo) : (p.initial - p.lo) / (p.hi - p.lo),
+    label: p.name, lo: engineering(p.lo, p.unit), hi: engineering(p.hi, p.unit),
+    initial: Number.isFinite(p.initial) ? `Initial ${engineering(p.initial, p.unit)}` : undefined, scale: `${p.coord} scale`,
+    at: !Number.isFinite(p.initial) ? NaN : p.hi === p.lo ? .5 : p.coord === "log" ? Math.log(p.initial / p.lo) / Math.log(p.hi / p.lo) : (p.initial - p.lo) / (p.hi - p.lo),
     tag: p.fixed ? { text: "fixed", tone: "muted" } : Number.isFinite(p.initial) ? { text: "free" } : { text: "free · no initial", tone: "muted" },
   }));
-  return [{ title: `${simulatorLabel(config)} · parameter bounds, initial guess marked`, charts: [{ kind: "ranges", rows }] }];
+  return [{ title: "Parameters", charts: [{ kind: "ranges", rows }] }];
 }
 
 export function sensitivityPanels(fit: Fit): ChartPanel[] {

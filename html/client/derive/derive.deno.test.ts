@@ -130,9 +130,7 @@ Deno.test("derive: empty, loading, project-only and demo states have explicit ki
   const one = derive({ ...snap, workspace: { ...ws, projects: [project] } }, initialSelection({ ...ws, projects: [project] }));
   assertEquals(one.sidebar.switcher.kind, "single");
   assertEquals(one.sidebar.notice?.kind, "no-investigations");
-  assert(one.main.body.kind === "onboarding");
-  assertStringIncludes(one.main.body.snippet, `ap.Project(${JSON.stringify(project.name)}, simulator)`);
-  assertStringIncludes(one.main.body.snippet, "wb.investigate(measurements, ap.ProposalRunner()");
+  assertEquals(one.main.body.kind, "configuration");
   assertEquals(one.main.source, "demo");
   const failed = connectionFailure(loading, "401 session_expired", false);
   assertEquals(failed.main.body.kind, "unavailable");
@@ -144,4 +142,44 @@ Deno.test("derive: clipboard acknowledgement is a view-model label", () => {
   const copied = derive({ ...snap, workspace: { ...ws, projects: [] } }, { ...s0, copyStatus: "copied" });
   assert(copied.main.body.kind === "onboarding");
   assertEquals(copied.main.body.copyLabel, "Copied Python");
+});
+
+Deno.test("configuration: ranges have SI bounds, labelled scales and initial values", () => {
+  const project = structuredClone(ws.projects[0]);
+  project.configs = [{ ...project.configs[0], params: [
+    { name: "C1", unit: "F", lo: 10, hi: 100_000, initial: 1500, fixed: false, coord: "log" },
+    { name: "R0", unit: "ohm", lo: .001, hi: .5, initial: .03, fixed: false, coord: "log" },
+  ] }];
+  project.investigations = [];
+  const workspace = { ...ws, projects: [project] };
+  const view = derive({ ...snap, workspace }, initialSelection(workspace));
+  const body = view.main.body;
+  assert(body.kind === "configuration");
+  assertEquals(body.parameters.rows.map((r) => [r.lo, r.hi, r.initial, r.scale]), [
+    ["10 F", "100 kF", "Initial 1.5 kF", "log scale"],
+    ["1 mΩ", "500 mΩ", "Initial 30 mΩ", "log scale"],
+  ]);
+  assertEquals(body.sections.map((s) => s.heading), ["Experiments", "Noise", "Budget"]);
+  assert(!view.main.creditLabel?.includes("sha256:"));
+});
+
+Deno.test("pairing: two devices keep their own decisions and absolute expiry input", () => {
+  const pairings = ["FIRST-1234", "NEXT-5678"].map((code, i) => ({ code, device: `Device ${i}`, client: "autophys-python/0.1", expires: "2026-11-04T20:00:00Z" }));
+  const view = derive({ ...snap, workspace: { ...ws, projects: [] }, pairings }, s0);
+  const cards = view.details.sections.flatMap((s) => s.blocks).filter((b) => b.kind === "pairing");
+  assertEquals(cards.map((c) => [c.device, c.code, c.expiry.at, c.decision.map((a) => a.name)]), [
+    ["Device 0", "FIRST-1234", pairings[0].expires, ["pair-approve:FIRST-1234", "pair-deny:FIRST-1234"]],
+    ["Device 1", "NEXT-5678", pairings[1].expires, ["pair-approve:NEXT-5678", "pair-deny:NEXT-5678"]],
+  ]);
+  assertEquals(view.details.actions?.length ?? 0, 0);
+});
+
+Deno.test("unconfigured project: Details has one section-aligned next step", () => {
+  const project = { ...ws.projects[0], configs: [], investigations: [] };
+  const workspace = { ...ws, projects: [project] };
+  const view = derive({ ...snap, workspace }, initialSelection(workspace));
+  assertEquals(view.details.status.text, "Awaiting first investigation");
+  assertEquals(view.details.sections[0].heading, "");
+  assertEquals(view.details.sections[0].blocks[0].kind, "missing");
+  assert(!JSON.stringify(view.details).includes("Not recorded yet"));
 });

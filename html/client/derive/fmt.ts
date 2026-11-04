@@ -51,3 +51,15 @@ export function axisAround(values: number[], opts: { pad?: number; include?: num
   min -= pad; max += pad;
   return { min, max, ticks: niceTicks(min, max, opts.count ?? 4), label: opts.label };
 }
+
+/** SI prefixes for scalar configuration values; leave compound units unscaled. */
+export function engineering(value: number, unit = ""): string {
+  if (!Number.isFinite(value)) return "–";
+  const normalized = unit === "ohm" ? "Ω" : unit;
+  const scalar = ["Ω", "F", "A", "V", "s", "Hz", "m", "N", "W", "K"].includes(normalized);
+  const power = scalar && value !== 0 ? Math.max(-12, Math.min(12, Math.floor(Math.log10(Math.abs(value)) / 3) * 3)) : 0;
+  const prefix: Record<number, string> = { [-12]: "p", [-9]: "n", [-6]: "µ", [-3]: "m", 0: "", 3: "k", 6: "M", 9: "G", 12: "T" };
+  const number = Number((value / 10 ** power).toPrecision(3)).toString();
+  return `${number}${normalized ? ` ${prefix[power]}${normalized}` : ""}`;
+}
+export const shortHash = (hash: string) => hash.replace(/^sha256:/, "").slice(0, 8);

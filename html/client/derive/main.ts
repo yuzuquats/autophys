@@ -1,14 +1,15 @@
 /** The main column: crumb, meta, the viewer's panels and one credit line. */
 import type { Investigation, Project, ProjectConfig, Proposal } from "../domain.ts";
-import type { Action, BarRow, MainModel } from "../../ui/view-model.ts";
+import type { Action, BarRow, MainModel, RangesChart } from "../../ui/view-model.ts";
 import {
   configPanels, edgePanels, envelopePanels, fitPanels, frequencyPanels, landscapeChart, measurementPanels, proposalPanels, residualPanels, sensitivityPanels,
   validationPanels, VIEW_LABEL,
 } from "./charts.ts";
+import { configurationSections } from "./configuration.ts";
 import { simulatorLabel } from "../config.ts";
-import { int, sig } from "./fmt.ts";
+import { int, shortHash, sig } from "./fmt.ts";
 import { displayedFields, outlookAt } from "./outlook.ts";
-import { configFor, defaultSelection, experimentsUsed, ids, latestConfig, latestFit, parseSel, projectOf, proposalLabel, rankOf, type State, statusText } from "./shared.ts";
+import { configFor, investigationLabel, defaultSelection, experimentsUsed, ids, latestConfig, latestFit, parseSel, projectOf, proposalLabel, rankOf, type State, statusText } from "./shared.ts";
 
 
 const EXPORT: Action = { name: "export", label: "Export", variant: "ghost" };
@@ -40,17 +41,17 @@ export function mainModel(s: State): MainModel {
 function selectedMain(s: State): MainModel {
   const project = projectOf(s);
   const sel = parseSel(project, s.selected[project.id] ?? "") ?? parseSel(project, defaultSelection(project))!;
-  const invCrumb = (inv: Investigation) => ({ label: inv.name, id: ids.inv(inv) });
+  const invCrumb = (inv: Investigation) => ({ label: investigationLabel(project, inv), id: ids.inv(inv) });
   switch (sel.kind) {
     case "config": {
       const c = latestConfig(project);
-      return { crumb: [{ label: project.name }, { label: "Configuration" }], meta: `v${c.version} · ${c.hash.slice(0, 12)}`, actions: [EXPORT],
-        body: { kind: "panels", panels: configPanels(c) }, credit: `${simulatorLabel(c)} · source ${c.simulator.sourceHash || "–"} · config ${c.hash.slice(0, 12)}` };
+      return { crumb: [{ label: project.name }, { label: "Configuration" }], meta: `v${c.version} · ${shortHash(c.hash)}`, actions: [EXPORT],
+        body: { kind: "configuration", parameters: configPanels(c)[0].charts[0] as RangesChart, sections: configurationSections(c).filter((section) => ["Experiments", "Noise", "Budget"].includes(section.heading)) }, creditLabel: `${simulatorLabel(c)} · source ${shortHash(c.simulator.sourceHash) || "unrecorded"} · config ${shortHash(c.hash)}`, credit: `${simulatorLabel(c)} · source ${c.simulator.sourceHash || "–"} · config ${c.hash}` };
     }
     case "investigation": {
       const c = configFor(project, sel.inv), fit = latestFit(sel.inv);
       const panels = fit ? fitPanels({ config: c, inv: sel.inv }, fit) : sel.inv.measurements.flatMap((m) => measurementPanels(c, m));
-      return { crumb: [{ label: sel.inv.name }], meta: fit ? `Fit #${fit.n} · χ²/N ${fit.chi2N.toFixed(2)}` : statusText(sel.inv).text, actions: [EXPORT],
+      return { crumb: [{ label: investigationLabel(project, sel.inv) }], meta: fit ? `Fit #${fit.n} · χ²/N ${fit.chi2N.toFixed(2)}` : statusText(sel.inv).text, actions: [EXPORT],
         body: panels.length ? { kind: "panels", panels } : { kind: "missing", title: "Not recorded yet", description: "No measurements or fits have arrived. Run the investigation from the SDK; records appear live here." }, credit: credit(c, sel.inv, fit?.measurements ?? sel.inv.measurements.map((m) => m.id), fit ? ` · fit #${fit.n}` : "") };
     }
     case "measurement": {

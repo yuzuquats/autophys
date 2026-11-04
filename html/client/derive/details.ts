@@ -3,11 +3,13 @@ import { simulatorLabel, specOf } from "../config.ts";
 import type { Fit, Investigation, Measurement, Project, ProjectConfig, Proposal, SensitivityResult } from "../domain.ts";
 import { awaiting, type Decision, delivered, edited, expectedMeasurement, stateOf } from "../proposal.ts";
 import type { Action, DetailsModel, Fact, Section, TableRow } from "../../ui/view-model.ts";
-import { int, pct, plural, sig } from "./fmt.ts";
+import { shortHash, int, pct, plural, sig } from "./fmt.ts";
+import { configurationSections } from "./configuration.ts";
+import { pairingExpiry } from "./pairing.ts";
 import { rankingBars } from "./main.ts";
 import { displayedFields, outlookAt } from "./outlook.ts";
 import {
-  configFor, defaultSelection, draftKey, experimentsUsed, ids, latestConfig, latestFit, parseSel, plusMinus, projectOf, proposalLabel, rankOf, type State, statusText, unitOf,
+  configFor, investigationLabel, defaultSelection, draftKey, experimentsUsed, ids, latestConfig, latestFit, parseSel, plusMinus, projectOf, proposalLabel, rankOf, type State, statusText, unitOf,
 } from "./shared.ts";
 
 
@@ -86,43 +88,31 @@ export function devices(s: Pick<State, "pairings">): { section: Section; actions
   if (!s.pairings) return null;
   if (!s.pairings.length) return { section: { heading: "Devices", blocks: [{ kind: "text", text: "No pending connection requests. Connect the Python SDK to your daemon URL to request access, then approve its code here or with autophys pair.", tone: "muted" }] }, actions: [] };
   return {
-    section: { heading: "Devices waiting to pair", blocks: [{ kind: "table", rows: s.pairings.map((p) => ({ cells: [{ text: p.device }, { text: p.code, end: true }, { text: p.client || "–", end: true }] })) },
-      { kind: "text", text: `Codes expire ${s.pairings.map((p) => p.expires).join(", ")}`, tone: "muted" }] },
-    actions: s.pairings.flatMap((p): Action[] => [
-      { name: `pair-approve:${p.code}`, label: s.pairings!.length > 1 ? `Approve ${p.code}` : "Approve device", variant: "primary" },
-      { name: `pair-deny:${p.code}`, label: s.pairings!.length > 1 ? `Deny ${p.code}` : "Deny" },
-    ]),
+    section: { heading: "Devices waiting to pair", blocks: s.pairings.map((p) => ({
+      kind: "pairing", device: p.device, code: p.code, client: p.client || "Client not reported", expiry: pairingExpiry(p.expires),
+      decision: [{ name: `pair-approve:${p.code}`, label: "Approve device", variant: "primary" }, { name: `pair-deny:${p.code}`, label: "Deny" }],
+    })) }, actions: [],
   };
 }
 
-function configDetails(s: State, project: Project): DetailsModel {
+export function configDetails(s: State, project: Project): DetailsModel {
   const c = latestConfig(project), dev = devices(s);
   return {
     actions: dev?.actions.length ? dev.actions : undefined,
-    icon: "config", title: "Configuration", status: { text: `v${c.version} · ${c.hash.slice(0, 12)} · declared in code` },
+    icon: "config", title: "Configuration", status: { text: `v${c.version} · ${shortHash(c.hash)} · declared in code` },
     sections: [
-      { heading: "Parameters", blocks: [{ kind: "table", rows: c.params.map((p) => ({ cells: [{ text: p.name, unit: p.unit }, { text: `${sig(p.lo, 3)} – ${sig(p.hi, 3)}`, end: true },
-        { text: "", tag: p.fixed ? { text: "fixed", tone: "muted" } : { text: "free" }, end: true }] })) }] },
-      { heading: "Experiments", blocks: [{ kind: "table", rows: c.catalog.map((e) => ({ cells: [{ text: e.label }, { text: e.maxRuns == null ? "no limit" : `≤ ${e.maxRuns} runs`, end: true },
-        { text: e.viewHints.join(", ") || "–", end: true }] })) }] },
-      { heading: "Noise", blocks: [{ kind: "facts", rows: [
-        ...Object.entries(c.noise.sigma).map(([k, v]) => ({ label: `σ ${k}`, value: `${sig(v, 2)} ${specOutput(c, k)}` })),
-        { label: "Estimate scale", value: c.noise.estimate ? "yes" : "no" }, { label: "Sensor bias", value: c.noise.bias }] }] },
-      { heading: "Budget", blocks: [{ kind: "facts", rows: [{ label: "Agent steps", value: String(c.budgets.maxSteps) }, { label: "Simulations", value: int(c.budgets.maxSimulations) },
-        { label: "Experiments", value: String(c.budgets.maxExperiments) }, { label: "Policy", value: c.policy.label }] }] },
-      { heading: "Used by", blocks: [{ kind: "links", links: project.investigations.map((inv) => ({ label: `${inv.name} · v${inv.configVersion}${inv.configVersion === c.version ? "" : " (older)"}`, id: ids.inv(inv) })) }] },
+      ...configurationSections(c),
+      { heading: "Used by", blocks: [{ kind: "links", links: project.investigations.map((inv) => ({ label: `${investigationLabel(project, inv)} · v${inv.configVersion}${inv.configVersion === c.version ? "" : " (older)"}`, id: ids.inv(inv) })) }] },
       ...(dev ? [dev.section] : []),
     ],
   };
 }
 
-const specOutput = (c: ProjectConfig, channel: string) => c.catalog.find((e) => e.output.name === channel)?.output.unit ?? "";
-
 function investigationDetails(project: Project, inv: Investigation): DetailsModel {
   const c = configFor(project, inv), st = statusText(inv);
   const used = experimentsUsed(inv);
   return {
-    icon: "investigation", title: inv.name, status: st,
+    icon: "investigation", title: investigationLabel(project, inv), status: st,
     sections: [
       { heading: "Budget", blocks: [{ kind: "meters", rows: [
         { label: "Agent steps", value: `${inv.budget.steps} / ${c.budgets.maxSteps}`, fraction: inv.budget.steps / c.budgets.maxSteps, tone: stateOf(inv) === "running" ? "run" : undefined },
@@ -131,7 +121,7 @@ function investigationDetails(project: Project, inv: Investigation): DetailsMode
       ] }] },
       whereItStands(c, latestFit(inv)),
       { heading: "Run", blocks: [{ kind: "facts", rows: [
-        { label: "Simulator", value: simulatorLabel(c) }, { label: "Source hash", value: c.simulator.sourceHash.slice(0, 6) || "–" },
+        { label: "Investigation ID", value: inv.id }, { label: "Simulator", value: simulatorLabel(c) }, { label: "Source hash", value: c.simulator.sourceHash.slice(0, 6) || "–" },
         { label: "Config", value: `v${c.version} · ${c.hash.slice(0, 8)}` }, { label: "Free", value: inv.free.join(", ") },
         { label: "Policy", value: c.policy.label }, { label: "Seed", value: Number.isFinite(inv.seed) ? String(inv.seed) : "not recorded" },
       ] }] },

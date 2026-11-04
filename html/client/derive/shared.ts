@@ -60,6 +60,10 @@ export const ids = {
 };
 
 export const projectOf = (s: State): Project => s.ws.projects.find((p) => p.id === s.projectId) ?? s.ws.projects[0];
+/** Preserve authored names; raw daemon ids get a readable project-local ordinal. */
+export const investigationLabel = (project: Project, inv: Investigation): string =>
+  inv.name === inv.id || /^inv_[a-f0-9]+$/.test(inv.name) ? `Investigation ${project.investigations.indexOf(inv) + 1}` : inv.name;
+
 export const configFor = (p: Project, inv: Investigation): ProjectConfig => configOf(p, inv.configVersion);
 export const latestConfig = (p: Project): ProjectConfig => p.configs.reduce((a, b) => (b.version > a.version ? b : a));
 /** The newest converged fit, which the investigation's diagnosis and sensitivity describe. */

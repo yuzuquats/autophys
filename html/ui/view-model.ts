@@ -10,7 +10,7 @@ export type Tone = "default" | "muted" | "ok" | "warn" | "run" | "danger";
 
 /** Glyphs the package draws (icons.ts). */
 export type IconName =
-  | "workspace" | "config" | "investigation" | "measurements" | "measurement" | "fit" | "sensitivity"
+  | "workspace" | "device" | "config" | "investigation" | "measurements" | "measurement" | "fit" | "sensitivity"
   | "proposal" | "validate" | "view" | "residuals" | "landscape" | "envelope" | "frequency" | "zoom" | "plus" | "chevron";
 
 /** A row's trailing edge: text in a tone, optionally a spinner before it, or a count badge. */
@@ -83,7 +83,7 @@ export type BarRow = { label: string; fraction: number; value: string; tone?: To
 export type BarsChart = { kind: "bars"; rows: BarRow[]; label?: string };
 
 /** One row per range: a track from `lo` to `hi` with a marker at `at` (a fraction of the track). */
-export type RangeRow = { label: string; unit?: string; lo: string; hi: string; at: number; tag?: Tag };
+export type RangeRow = { label: string; unit?: string; lo: string; hi: string; at: number; initial?: string; scale?: string; tag?: Tag };
 export type RangesChart = { kind: "ranges"; rows: RangeRow[]; label?: string };
 
 export type Missing = { kind: "missing"; title: string; description: string };
@@ -103,6 +103,7 @@ export type MainBody =
   | { kind: "loading"; title: string; description: string }
   | { kind: "unavailable"; title: string; description: string }
   | { kind: "onboarding"; title: string; description: string; snippet: string; copyLabel: string; note: string }
+  | { kind: "configuration"; parameters: RangesChart; sections: Section[] }
   | { kind: "panels"; panels: ChartPanel[]; columns?: number };
 
 export type MainModel = {
@@ -114,6 +115,7 @@ export type MainModel = {
   body: MainBody;
   /** The one credit line under the viewer. */
   credit: string;
+  creditLabel?: string;
 };
 
 // ------------------------------------------------------------------------------------ details
@@ -128,8 +130,11 @@ export type Meter = { label: string; value: string; fraction: number; tone?: Ton
 export type Field = { name: string; label: string; value: string; unit?: string; invalid?: string };
 export type Link = { label: string; id: string };
 
+export type TextStep = { label: string; delayMs: number };
+
 export type Block =
   | Missing
+  | { kind: "pairing"; device: string; client: string; code: string; expiry: { at: string; steps: TextStep[] }; decision: [Action, Action] }
   | { kind: "facts"; rows: Fact[] }
   | { kind: "table"; rows: TableRow[] }
   | { kind: "bars"; rows: BarRow[] }

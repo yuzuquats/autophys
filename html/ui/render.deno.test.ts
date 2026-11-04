@@ -205,3 +205,17 @@ Deno.test("components: they draw what they are given and forward the raw intent"
   assertEquals(seen, [{ kind: "select", id: "a" }], "clicks forward before any render (rendering needs a document; see mainMarkup tests)");
   view.destroy();
 });
+
+Deno.test("pairing markup associates unbroken codes and actions with each card", () => {
+  const m: DetailsModel = { icon: "device", title: "Devices", status: { text: "Approval needed" }, sections: [{ heading: "Pending", blocks: [
+    { kind: "pairing", device: "Lab <laptop>", client: "autophys-python/0.1", code: "LHMX-5814", expiry: { at: "2027-01-15T08:00:00Z", steps: [{ label: "Expires in 7 min", delayMs: 0 }] },
+      decision: [{ name: "pair-approve:LHMX-5814", label: "Approve device", variant: "primary" }, { name: "pair-deny:LHMX-5814", label: "Deny" }] },
+  ] }] };
+  const html = detailsMarkup(m);
+  assertStringIncludes(html, 'aria-label="Pair Lab &lt;laptop&gt;"');
+  assertStringIncludes(html, '<code class="ap-pair-code">LHMX-5814</code>');
+  const card = html.slice(html.indexOf('<article'), html.indexOf('</article>'));
+  assertStringIncludes(card, 'Expires in 7 min');
+  assertStringIncludes(card, 'id="ap-action-pair-approve:LHMX-5814"');
+  assertStringIncludes(card, 'id="ap-action-pair-deny:LHMX-5814"');
+});

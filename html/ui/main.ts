@@ -6,17 +6,14 @@
 import { emptyMarkup, skeletonMarkup, componentButton, recoveryMarkup } from "./state-markup.ts";
 import { chartMarkup } from "./charts.ts";
 import { ATTR, escapeHtml as esc, intentOf, type IntentHandler } from "./intent.ts";
-import { actionAttrs } from "./sidebar-markup.ts";
-import type { Action, MainModel } from "./view-model.ts";
+import { buttonMarkup } from "./actions.ts";
+import { blockMarkup } from "./blocks.ts";
+import type { MainModel } from "./view-model.ts";
 
 /** Class names the host page styles these elements with (its toolbar and button recipes). */
 export type MainClasses = { toolbar?: string; button?: string; primary?: string };
 
-export function buttonMarkup(a: Action, classes: { button?: string; primary?: string }): string {
-  const variant = a.variant ?? "secondary";
-  const cls = [classes.button ?? "", variant === "primary" ? classes.primary ?? "" : "", "ap-btn", `ap-btn-${variant}`].filter(Boolean).join(" ");
-  return `<button type="button" class="${esc(cls)}" ${actionAttrs(a)}>${esc(a.label)}</button>`;
-}
+export { buttonMarkup } from "./actions.ts";
 
 /** The whole main surface at `width` pixels. */
 export function mainMarkup(model: MainModel, width: number, classes: MainClasses = {}): string {
@@ -37,6 +34,8 @@ export function mainMarkup(model: MainModel, width: number, classes: MainClasses
     body = `<section class="ap-viewer ap-state" aria-busy="true" role="status">${emptyMarkup(model.body.title, model.body.description)}${skeletonMarkup()}</section>`;
   } else if (model.body.kind === "missing" || model.body.kind === "unavailable") {
     body = `<section class="ap-viewer ap-state">${emptyMarkup(model.body.title, model.body.description)}</section>`;
+  } else if (model.body.kind === "configuration") {
+    body = `<div class="ap-viewer ap-configuration"><section class="ap-config-params"><h2>Parameters</h2><p class="ap-help">Declared bounds and initial guesses. Each track uses its labelled fitting scale.</p>${chartMarkup(model.body.parameters, width - 48, "config")}</section><div class="ap-config-sections">${model.body.sections.map((s) => `<section><h2>${esc(s.heading)}</h2>${s.blocks.map(blockMarkup).join("")}</section>`).join("")}</div></div>`;
   } else {
     const cols = Math.max(1, model.body.columns ?? 1);
     const inner = Math.max(120, width - 24);
@@ -48,7 +47,7 @@ export function mainMarkup(model: MainModel, width: number, classes: MainClasses
   }
   const source = model.source === "demo" ? `<div class="ap-source"><span>Demo data</span><a href="?source=daemon">Back to live data</a></div>` : "";
   const error = model.connectionError ? `<aside class="ap-connection" role="alert"><b>Connection unavailable</b><p>${esc(model.connectionError)}</p>${recoveryMarkup()}</aside>` : "";
-  return `${toolbar}${source}${error}${body}<p class="ap-credit" id="ap-credit">${esc(model.credit)}</p>`;
+  return `${toolbar}${source}${error}${body}<div class="ap-credit" id="ap-credit">${model.creditLabel ? `<details><summary>${esc(model.creditLabel)}</summary><p>${esc(model.credit)}</p><span data-ap-copy="${esc(model.credit)}"><button type="button">Copy provenance</button></span></details>` : esc(model.credit)}</div>`;
 }
 
 export class AutophysMain {

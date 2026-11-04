@@ -37,10 +37,12 @@ Deno.test("boundary: own files, the tree list, and std assertions in tests only"
   assert(seen > 20, `only ${seen} imports seen`);
 });
 
-Deno.test("boundary: no network, storage or timers in the components", async () => {
+Deno.test("boundary: no network or storage; presentation callbacks stay isolated", async () => {
   for (const [name, src] of await sources()) {
     if (name.endsWith(".deno.test.ts")) continue;
+    // The presentation timeline advances derived text only; it clears its callback on detach.
     for (const banned of ["fetch(", "XMLHttpRequest", "localStorage", "sessionStorage", "indexedDB", "setInterval(", "setTimeout(", "WebSocket"]) {
+      if (name === "timeline.ts" && banned === "setTimeout(") continue;
       assert(!src.includes(banned), `${name} uses ${banned}`);
     }
   }

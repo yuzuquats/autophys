@@ -18,7 +18,7 @@ export function empty(source: string, pairings?: Pairing[], notice?: string): Vi
       section: { label: "", count: "" }, pinned: { id: "devices", label: "Devices", icon: "config", selectable: true, children: null,
         trail: pairings?.length ? { badge: `${pairings.length} pending` } : { text: "Pair SDK" } } },
     main: { crumb: [{ label: "Getting started" }], meta: "", actions: [], body: onboarding(), credit: "" },
-    details: { icon: "config", title: "Devices", status: { text: pairings?.length ? "Connection approval needed" : "Connect your SDK" },
+    details: { icon: "device", title: "Devices", status: { text: pairings?.length ? "Connection approval needed" : "Connect your SDK" },
       sections: [...(notice ? [{ heading: "Not saved", blocks: [{ kind: "text" as const, text: notice, tone: "danger" as const }] }] : []), ...(dev ? [dev.section] : [])], actions: dev?.actions },
   };
 }
@@ -56,11 +56,11 @@ export function derive(snapshot: Snapshot | null, selection: Selection, source =
       const dev = devices(s);
       view = { sidebar: sidebarModel(s),
         main: { crumb: [{ label: project.name }], meta: "", actions: [], body: onboarding(project.name), credit: "" },
-        details: { icon: "config", title: "Project configuration", status: { text: "Not recorded yet" },
-          sections: [{ heading: "Declare your simulator", blocks: [{ kind: "missing", title: "Not recorded yet", description: "This project is registered. Start its first investigation from the Python SDK to record the simulator configuration." }] }, ...(dev ? [dev.section] : [])], actions: dev?.actions },
+        details: { icon: "config", title: "Project configuration", status: { text: "Awaiting first investigation" },
+          sections: [{ heading: "", blocks: [{ kind: "missing", title: "Record your configuration", description: "This project is registered. Start its first investigation from the Python SDK to record the simulator configuration." }] }, ...(dev ? [dev.section] : [])], actions: dev?.actions },
       };
     } else view = { sidebar: sidebarModel(s), main: mainModel(s), details: detailsModel(s) };
-    if (!project.investigations.length) {
+    if (!project.investigations.length && view.main.body.kind !== "configuration") {
       view.main = { ...view.main, crumb: [{ label: project.name }], meta: "", body: onboarding(project.name) };
     }
   }

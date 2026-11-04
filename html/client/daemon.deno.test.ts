@@ -215,7 +215,7 @@ Deno.test("daemon: pairings are listed and approved from the configuration panel
   assertEquals(store.snapshot()!.pairings, [{ code: "WXYZ-1234", device: "laptop", client: "autophys-py 0.1", expires: "2026-11-04T10:10:00Z" }]);
   assertEquals(ctl.view().sidebar.pinned.trail, { badge: "1 pending" });
   ctl.handle({ kind: "select", id: "config:p_bench" });
-  assertEquals(ctl.view().details.actions?.map((a) => a.name), ["pair-approve:WXYZ-1234", "pair-deny:WXYZ-1234"]);
+  assertEquals(ctl.view().details.sections.flatMap((s) => s.blocks.flatMap((b) => b.kind === "pairing" ? b.decision.map((a) => a.name) : [])), ["pair-approve:WXYZ-1234", "pair-deny:WXYZ-1234"]);
   ctl.handle({ kind: "action", name: "pair-approve:WXYZ-1234" });
   await settle(); await settle(); await settle();
   const post = d.calls.find((c) => c.url.endsWith("/approve"))!;
@@ -293,7 +293,7 @@ Deno.test("daemon: the first device can pair before any project exists, and a re
   const store = new Store(daemon(d.opts)), ctl = new Controller(store, { user: "james", now: () => "" });
   await store.start();
   await settle();
-  assertEquals(ctl.view().details.actions?.map((a) => a.name), ["pair-approve:FIRST", "pair-deny:FIRST"]);
+  assertEquals(ctl.view().details.sections.flatMap((s) => s.blocks.flatMap((b) => b.kind === "pairing" ? b.decision.map((a) => a.name) : [])), ["pair-approve:FIRST", "pair-deny:FIRST"]);
   ctl.handle({ kind: "action", name: "pair-deny:FIRST" });
   await settle(); await settle();
   assertStringIncludes(JSON.stringify(ctl.view().details), "code expired; start pairing again");
