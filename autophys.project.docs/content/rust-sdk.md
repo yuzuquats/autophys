@@ -683,6 +683,15 @@ message was rewritten: the closed-loop commit got
 606 passed / 6 skipped, html 70 passed. Receipt:
 `fleet/evidence/autophys/sink-20261104c/`.
 
+The fourth publication, `7ffea22..88a6729`, carried that record and the
+Rust Remote HTTP transport (`I287f159ad3181d7b0a76`), sunk directly onto
+the base with patch-ids unchanged. Seventeen peer drafts stay local above
+it, including both sign-in commits. An independent Codex review returned
+ready. Its one note: the `attach_data` rustdoc should say the single
+transaction is Local-only. At the prefix: Rust 185 passed / 2 ignored,
+Python 606 passed / 6 skipped, html 70 passed. Receipt:
+`fleet/evidence/autophys/sink-20261104d/`.
+
 ## Battery case suite (MQ-5, Rust landing, 2026-11-04)
 
 Rust implementation `f5ad648` (`I80eae9dd2c2e790f9b2c`) mirrors the Python
