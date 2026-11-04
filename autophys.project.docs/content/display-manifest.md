@@ -1,8 +1,14 @@
 # The UI should render what the simulator declares and know nothing about batteries
 
-Status: rev 1 (2026-11-04), plan only. Nothing here is implemented. The
-operator asked for the decoupling ("autophys should be generic") and for a
-spec, after seeing the mock of two products rendered by one UI.
+Status: rev 2 (2026-11-04). **Approved by the operator for implementation
+(DM-1 in [decisions.md](decisions.md)).** Steps 1–3 are handed to
+autophys/py and autophys/rs; step 4 (the UI) starts once step 1's golden
+manifests exist. Nothing is implemented yet. Rev 2 makes Python the source
+of the bench manifests, in line with AX-2, and pins the preview sampling so
+that both SDKs can produce identical bytes.
+
+The operator asked for the decoupling ("autophys should be generic") and for
+a spec, after seeing a mock of two products rendered by one UI.
 
 This plan adds a **display manifest**: a simulator's declaration of how its
 channels, settings and experiments should be shown. The Python or Rust SDK
@@ -103,6 +109,7 @@ a body whose sha256 is not the version (`sdks/python/src/autophys/http.py:355`).
 {
   "format": 1,
   "simulator": "battery_ecm",
+  "default_view": "fit",              // optional; one of the core views or an experiment's view
   "channels": {
     "v": {"label": "Terminal voltage", "unit": "V", "role": "output"},
     "i": {"label": "Current",          "unit": "A", "role": "input"}
@@ -267,17 +274,39 @@ The steps can land one at a time, because every new field is optional and a
 project with no manifest renders generically.
 
 ```review-steps
-1. autophys/rs — Rust SDK: `Display` type with canonical JSON, `u` channels kept in the trajectory, previews; manifests for battery, oscillator and thermal; conformance fixtures.
-2. autophys/rs — daemon: the display table, `PUT /projects/{pid}/display`, `display` in `/workspace`, a `display` event on `/stream`, `workbook-format.md`.
-3. autophys/py — Python SDK: `Display`, `@simulator(..., display=)`, inputs kept as `u` in `_check_result`, previews, the client PUT on project registration, byte-identical conformance with step 1.
+1. autophys/py — Python SDK: `Display`, `@simulator(..., display=)`, inputs kept as `u` in `_check_result`, previews, the client PUT on project registration, the fake store's endpoint; manifests for battery, oscillator and thermal; golden manifest JSON for the three bench models.
+2. autophys/rs — daemon: the display table, `PUT /projects/{pid}/display`, `display` in `/workspace`, a `display` event on `/stream`, `workbook-format.md`. Independent of step 1.
+3. autophys/rs — Rust SDK: `Display` type, `u` channels kept in the trajectory, previews, the bench manifests, byte-identical against step 1's goldens.
 4. autophys/ui — `wire.ts` mapping, fixtures in manifest format, the four guesses deleted, the guard test, the Configuration page grouped by role (mock A).
 5. Deferred — Python-supplied custom panels (a Vega-Lite spec or precomputed series), so a product can ship its own chart with no UI release. Waits for a real product that needs one.
 6. Deferred — more than one output channel per chart. Format 1 allows a list of outputs; the UI draws the first and lists the rest.
 ```
 
-Steps 1 and 3 are one cross-owner contract. They are agreed in one Agent
-Board thread before either lands, and the bench manifests are written once,
-in Rust, with Python matching them byte for byte.
+### The contract between the two SDKs
+
+This page is the contract between the two SDKs. A disagreement is settled by
+revising this page, not by one side diverging.
+
+- **Python is the reference**, as for numerics (AX-2). Step 1 writes the
+  golden manifests through the existing fixture generator
+  (`sdks/rust/src/models/fixtures/generate.py`), and Rust's conformance test
+  reads them.
+- **Bytes:** the manifest is serialised with the same canonical JSON as
+  `config()` (`sdks/rust/src/canonical.rs` and its Python counterpart). The
+  digest is the sha256 of those bytes.
+- **Preview sampling:** `t` is 64 points spaced evenly over
+  `[0, duration]`. Each `u` channel is the simulated input, linearly
+  interpolated onto `t` and rounded to 6 significant figures. The simulation
+  runs at the project's `initial` parameters with default options.
+- **Validation in both SDKs:**
+  - every key in `settings` must exist in some experiment in the catalog;
+  - every `output` channel must be in `outputs`;
+  - every `input` channel must be returned by the simulator;
+  - `views` must come from `{edges, envelope, spectrum}`;
+  - `default_view` must be one of `fit`, `residuals`, `landscape`, `edges`,
+    `envelope` or `spectrum`.
+
+  A violation fails at declaration time, not when the manifest is uploaded.
 
 ## Validation
 

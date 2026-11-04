@@ -80,3 +80,11 @@ this record I81f7837f7c0ee007ff06.
 | B1-M1 | Confirmed: macOS `pack` keeps relinking with `-sectcreate`; **add a real macOS check** (section present, signature valid, `serve` hydrates) before relying on it | the linker signs the result; a build-time link stage adds a step for no current gain | built; macOS check not yet run |
 | CVE-MERGE | Confirmed (workspace project `cve-2026-98432`, commit 550026e8): the additive merge of the 148-line history and the 2026-11-03 status and monitoring section stands | it changes none of the owner's text | committed locally on rwc-dev-01 workspace master, not pushed |
 ```
+
+## Display manifest, 2026-11-04 (autophys/ui)
+
+```review-table
+| Id | Decision | Who | Where it is applied |
+| --- | --- | --- | --- |
+| DM-1 | The UI holds no product knowledge. Simulators declare a display manifest (channels, setting roles and units, views, input previews), uploaded with `PUT /projects/{pid}/display` outside `config()` and its hashes, and one compiled UI renders any product from it. Approved as written in [display-manifest.md](display-manifest.md) rev 2, with implementation handed to autophys/py (SDK, goldens) and autophys/rs (daemon, Rust SDK) | operator, 2026-11-04 ("autophys should be generic"; "have autophys/py and autophys/rs implement") | `sdks/python`, `src/http.rs` and the workbook, `sdks/rust`, then `html/client` |
+```
