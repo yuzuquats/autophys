@@ -1,4 +1,4 @@
-# train/sft: distil the scripted autophys policy into a model on Baseten Loops
+# train/sft: distil the scripted autophys policy into a model on Modal or Baseten Loops
 
 **Framing.** No live model runs have been recorded yet, so this first SFT is
 *distillation of `ScriptedPolicy`*, the Fisher-ranking expert. At best the
@@ -26,7 +26,7 @@ Captured by the SDK's own code (`ReasonLanePolicy.decide`), not copied:
 | `data/` | Strict split: train seeds 0,1,2 (72 rows), validation 5,6 (48), held-out 3,4 (48, evaluation only). Includes `*.meta.jsonl` and `manifest.json` with per-trajectory Evaluator scores. |
 | `data-ext/` | Not committed; regenerate with `--out data-ext --train-seeds 0,1,2,10-59`. Train is 1,272 rows; validation and held-out are as above. |
 | `patch_chat_template.py`, `render.py`, `serving/*.jinja` | Serving template that renders `developer` as `system`, with thinking off by default. Verified byte-identical to the training prompt. |
-| `train_sft.py` | Loops LoRA SFT (`baseten-loops`). Dry run by default (offline); `--live` trains. |
+| `train_sft.py` | Loops LoRA SFT (`baseten-loops`). Dry run by default (offline); `--live` trains. Guards dedicated trainers: `--allow-dedicated --max-seconds N` (the CLI passes these), otherwise a dedicated trainer is deactivated before training. |
 | `modal_app.py` | Modal backend: `dataset_main` (CPU, one case per container), `train_main` (GPU LoRA SFT plus held-out scoring before and after), `eval_main` (closed-loop benchmark of an adapter served on localhost in one container). |
 | `eval_heldout.py` | Held-out benchmark of reason vs scripted through `autophys.bench.run_case`, with workbooks, `--record` cassette, `scores.json` and `report.json`. |
 | `selftest_replay.py` | Offline harness check: replays the teacher's answers as a `--route baseten` cassette. |
@@ -56,13 +56,27 @@ evaluation and history. These scripts are its worker. All commands take
   predicted action, parsed, matches, first 400 characters of the reply) in
   `heldout_rows`. The adapter goes to the `autophys-train` Modal volume at
   `runs/N/adapter`.
-- `--backend loops --usd-per-mtok X --max-usd Y --live`: Baseten Loops via
-  `train_sft.py --live` (serverless scope by default).
+- `--backend loops --live`: Baseten Loops via `train_sft.py --live`. The
+  organization's settings decide whether Loops gives the run a serverless
+  trainer (billed per token) or a dedicated one (billed by GPU time); the
+  caller cannot choose (the SDK's `scope` argument only works for
+  Baseten-internal organizations and gets HTTP 403 otherwise, so the worker
+  never sends it). Pick the gate for what your organization gets:
+  - `--usd-per-mtok X --max-usd Y`: serverless. If Loops assigns a dedicated
+    trainer anyway, the worker deactivates it before any training and fails.
+  - `--usd-per-hour X --max-usd Y`: dedicated. The cap becomes a deadline as
+    on Modal; the worker deactivates the trainer
+    (`POST /v1/loops/deployments/{id}/deactivate`) at the deadline, after
+    training, and on any error. The manifest records `trainer` (deployment
+    and run ids) and `wall_seconds`.
 
-**Budget gates.** The CLI never assumes a price. Loops needs `--usd-per-mtok`
-and `--max-usd`, and refuses if tokens x price exceeds the cap. On Modal the cap
-is a hard function timeout: `max_usd / usd_per_hour`, less 20% for container
-CPU, memory and startup. A live run with a missing price, cap, GPU or
+**Budget gates.** The CLI never assumes a price. Serverless Loops needs
+`--usd-per-mtok` and `--max-usd`, and refuses if tokens x price exceeds the
+cap. On Modal and on a dedicated Loops trainer the cap is a deadline:
+`max_usd / usd_per_hour`, less 20% for startup and billing lag. Modal enforces
+it as a function timeout; for Loops the worker deactivates the trainer. Read
+the hourly rate for the trainer Loops assigns (this workspace got `H100:4`,
+$26/h) from `GET /v1/instance_type_prices`. A live run with a missing price, cap, GPU or
 credentials is refused before anything starts. A run name that is no longer
 `planned` cannot be reused.
 
@@ -123,12 +137,49 @@ GPU-minutes on an L40S for the 48 calls plus load (about $0.20 to $0.35 at $1.95
 - Caveats: 8 of the 48 held-out rows are byte-identical to training rows (step 1, `FIT: none`), so excluding them it is about 34/40. These are one-step decisions on the scripted policy's states, not closed-loop investigations (that is `eval_main`). And it is distillation, so it can at best match scripted.
 - An earlier attempt (`smoke-qwen35-4b`) was refused by Modal before any GPU ran ("add a payment method"), at $0.00.
 
-## Baseten Loops in this workspace (capabilities API, 2026-11-04)
+Closed-loop eval of that adapter (`autophys train eval --backend modal --run smoke-qwen35-4b-2 --gpu L40S --usd-per-hour 1.95 --max-usd 2`, held-out seeds 3,4, 132 GPU-seconds, $0.07):
 
-- The default `Qwen/Qwen3.6-35B-A3B` is **not enabled** in this workspace.
-- `Qwen/Qwen3.8-27B` is enabled and is the serverless (per-token) option. Smoke-test plan: 582,170 billed tokens on `data/`.
-- `Qwen/Qwen3.5-4B`, `Qwen3.5-9B`, `Qwen3.5-27B`, `Qwen3.6-27B` and others are enabled but dedicated-only (GPU-time billing), which the per-token gate cannot cap. Keep those on Modal.
-- Loops does not publish a serverless price, and the current key cannot read billing (HTTP 403). A live Loops run needs the rate from the dashboard.
+| case | scripted | trained Qwen3.5-4B |
+|---|---|---|
+| oscillator-free-only, thermal-short-only (correct answer: stop inconclusive) | 4/4 | 4/4 |
+| oscillator, thermal (needs an experiment) | 4/4 validated | **0/4**: stops after 4 steps with 0 experiments |
+
+0 parse failures and 0 guardrail overrides. The model learned "fit and stop"
+and never chooses `run_experiment`: one-step accuracy (42/48) hides the one
+decision that matters. The pipeline measured this correctly; fixing it is a
+data problem (more cases, weight the experiment steps).
+
+## Baseten Loops result (2026-11-04)
+
+`autophys train run --backend loops --name loops-qwen38-27b-1 --base-model Qwen/Qwen3.8-27B --data data --usd-per-hour 26 --max-usd 17 --live`
+
+- Loops assigned a dedicated `H100:4` trainer. Deadline 1,883 s; the run took
+  545 s wall clock (about 8 minutes of startup, about 1 minute of training)
+  and the worker deactivated the trainer at the end. About **$3.94** at $26/h.
+- 36 updates. Validation NLL went from 1.116 to 2.7e-6. On data this small and
+  this scripted that mostly says the answers are easy to imitate; it is not
+  evidence the 27B avoids the 4B's closed-loop failure.
+- Weights: `bt://loops:3yd54l3/sampler_weights/loops-qwen38-27b-1-step-36`
+  (run `3yd54l3`). Not yet served or evaluated closed-loop.
+- Earlier attempts, all at about $0: a key without training permission (403
+  on `POST /v1/loops/sessions`); `scope=serverless` (403 on the internal
+  `/v1/loops/debug/trainers`); and a dedicated trainer refused by the guard
+  and deactivated by hand after about a minute (before the worker learned to).
+
+## Baseten Loops in this workspace (2026-11-04)
+
+- **API key.** Loops training needs a **Team** key with **Manage and call all
+  team models** (Organization settings -> API keys). A Personal key and
+  "Call certain models" keys get HTTP 403 on `POST /v1/loops/sessions`. Even
+  the Team key gets 400 on `/v1/billing/usage_summary`, so check credits in
+  the dashboard.
+- **Models** (`GET /v1/loops/capabilities`): `Qwen/Qwen3.8-27B`, `Qwen3.5-0.8B`
+  to `27B`, `Qwen3.6-27B`, `Qwen3-0.6B` and `gemma-4-26B-A4B` are enabled.
+  The old default `Qwen/Qwen3.6-35B-A3B` is **not**.
+- **Trainer type.** This organization gets a dedicated trainer, even for
+  Qwen3.8-27B, so use the `--usd-per-hour` gate. Baseten's single-GPU H100 is
+  $6.50/h (Modal's about $3.95/h), and startup dominates short runs, so small
+  experiments are cheaper on Modal.
 
 ## Setup (private venv, never the shared checkout)
 
@@ -151,15 +202,17 @@ The `loops-cookbook` package that Baseten's docs reference is not on PyPI (check
 - Dataset: 100% of targets pass `Decision.parse`. All 228 extended trajectories equal `ScriptedPolicy`. The system-prompt sha is identical between HEAD and the live working tree.
 - Held-out overlap: seeds are disjoint, but 8 of 48 held-out rows are byte-identical to training rows. All 8 are step 1 (`FIT: none`), which carries nothing seed-specific.
 - Coverage gap: `compare_models` and `inspect_data` never appear in the targets. No synthetic case has a sensor bias, so the model never learns them.
-- Templates: Qwen3.6-35B-A3B and Qwen3.5-4B upstream **reject** `developer`, and Qwen3-8B **drops its content**. The patched templates reproduce all 72 training prompts byte-for-byte. Qwen3.8-27B was dropped as a candidate because its template injects a reasoning-effort preamble.
+- Templates: Qwen3.6-35B-A3B and Qwen3.5-4B upstream **reject** `developer`, and Qwen3-8B **drops its content**. The patched templates reproduce all 72 training prompts byte-for-byte. Qwen3.8-27B was first dropped as a candidate because its template injects a reasoning-effort preamble. It was later trained anyway, since it is the largest Qwen enabled on Loops here, with that preamble in every training prompt, so serving must use the same template.
 - Dry run (Qwen3.6-35B-A3B, strict): 900–1355 tokens per sequence, 5.6% of tokens trained, 36 updates, about 0.58M billed tokens. Extended, at batch 16 and 2 epochs: 160 updates, about 3.76M tokens.
 - Harness self-test (replaying the teacher through `--route baseten`): 8/8 pass for reason and scripted, 0 parse failures, 0 guardrail overrides, same actions 8/8. That's a ceiling for a perfect distillation, **not a model result**.
 
-## Not done yet on Loops (needs budget approval, a price and an enabled serverless model)
+## Not done yet on Loops
 
-These steps run in order:
+Training works (above). Serving and closed-loop evaluation do not, and
+`autophys train eval` has no `--backend baseten` yet. These steps run in order
+(deployments bill GPU time; get a budget approved first):
 
-1. `train_sft.py --live`.
+1. ~~`train_sft.py --live`~~ (done: `loops-qwen38-27b-1`).
 2. `baseten loops checkpoint deploy --dry-run`. This shows the GPU and whether the Truss config can take `serving/<model>.jinja` as its chat template. If it can't, the deployment will reject or mangle the SDK's `developer` message until SDK_BRIEF item 1 lands.
 3. Deploy.
 4. `AUTOPHYS_ALLOW_LIVE_REASON=1 eval_heldout.py --out results/heldout --model <checkpoint name>`, with the URL and key from the environment.

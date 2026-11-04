@@ -990,6 +990,22 @@ mod tests {
     }
 
     #[test]
+    fn loops_dedicated_budget_is_a_deadline() {
+        let gate = loops_dedicated_budget(Some(26.0), Some(17.0));
+        assert_eq!(gate["live_allowed"], true);
+        assert_eq!(gate["timeout_s"], 1883);
+        assert_eq!(gate["gpu"], Value::Null);
+        assert_eq!(gate["billing"], "dedicated trainer, GPU time");
+        let refused = loops_dedicated_budget(Some(26.0), None);
+        assert_eq!(refused["live_allowed"], false);
+        assert!(refused["refusal"].as_str().unwrap().contains("--max-usd"));
+        assert_eq!(
+            loops_dedicated_budget(Some(26.0), Some(0.5))["live_allowed"],
+            false
+        );
+    }
+
+    #[test]
     fn flags_refuse_unknown_and_keep_repeats() {
         let f = Flags::parse(
             words("--case a --case=b --live --json"),
