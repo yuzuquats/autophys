@@ -420,8 +420,7 @@ operator decision, not missing SDK code.
 Linux ships one native executable with a deflated ZIP and the 24-byte
 `APZIP001 | prefix u64 LE | ZIP length u64 LE` footer. macOS relinks the ZIP
 into `__AUTOPHYS,__web` with `-Wl,-sectcreate` and reads it with
-`getsectiondata`; macOS packaging requires the source checkout and remains
-untested on this Linux host. Strip Linux executables before packing.
+`getsectiondata`; macOS packaging requires the source checkout (qualified below). Strip Linux executables before packing.
 
 `autophys pack --web-root DIR --out FILE [--no-maps]` packs a built tree;
 `autophys build-web [--out DIR] --bundle FILE` builds and packs it.
@@ -435,6 +434,23 @@ prunes complete entries older than seven days.
 the payload SHA-256 when serving embedded assets and null for an explicit
 web root or a dev build. The existing routes and document session cookie
 remain in force.
+
+macOS arm64 qualification (B1-M1, rwc-01, 2026-11-04, published `88a6729`):
+
+- **Build:** a `git archive` built with `AUTOPHYS_RELEASE=1`, output on the
+  SSD. `build-web` and `pack` relinked the ZIP into `__AUTOPHYS,__web`
+  (1.2 MiB), and `codesign -v` passes.
+- **Tests:** `cargo test --workspace --locked` passes 181 with 1 ignored.
+  `remote::tests::streaming_reconnect_resumes_cursor_and_ignores_other_investigations`
+  is flaky on macOS: it timed out once in the first run and once in five
+  reruns. It looks like a race in the test's mock server, not a client defect.
+- **Serve:** `serve` on a scratch loopback port reports commit `88a6729`
+  and a non-null `web_id`, served from the hydrated embedded tree.
+- **UI:** `html/e2e/daemon-flow.ts` passes 17 checks with no unexpected
+  errors, using chrome-headless-shell 156 with a pipe connection.
+- **Investigation:** a synthetic oscillator investigation over `HttpStore`
+  reaches `validated`, and `autophys verify` on the collection is clean,
+  with matching chains and projections.
 
 ## CLI command tree
 
@@ -464,7 +480,7 @@ the source checkout with `-sectcreate`, preserving the compiled release guard
 and commit stamp; `AUTOPHYS_PROJECT_ROOT` can select that checkout. This keeps
 the native linker's signature valid. The alternative is an explicit build-time
 ZIP/link step instead of `pack`; switching costs a small command/build change.
-The section and relink implementation remains untested on macOS.
+The macOS arm64 check passed on 2026-11-04; see Embedded web release (B-1).
 
 ## Phase 3: Muse roles
 
