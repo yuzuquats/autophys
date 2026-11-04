@@ -1,7 +1,7 @@
 /** The Muse Code plugin heading's mascot. Hovering the heading slides the dancing Muse in from
  * the left to stand just right of the heading's text, and leaving slides it back. The SVG
  * animates itself (and stays still under reduced motion); it loads only when the heading comes
- * near, since it is 1.4 MB. Decorative: hidden from assistive tech and from the pointer, so it
+ * near. Decorative: hidden from assistive tech and from the pointer, so it
  * never steals the hover that shows it. */
 
 const SRC = "/muse-twerk.svg";
