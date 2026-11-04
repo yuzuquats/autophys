@@ -1,0 +1,20 @@
+# Rendered by ops/deploy.sh into ~/.config/systemd/user/autophys.service.
+# @RELEASE@, @ADDR@ and @COMMIT@ are filled in; edit this template, not the
+# rendered unit.
+[Unit]
+Description=autophys @COMMIT@ on @ADDR@ (experiments/autophys)
+
+[Service]
+Type=simple
+WorkingDirectory=@RELEASE@
+ExecStart=@RELEASE@/bin/autophys-server --addr @ADDR@ --web @RELEASE@/web
+# A crash or kill restarts; a deliberate SIGTERM stop stays stopped (AP-4).
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=10
+NoNewPrivileges=true
+StandardOutput=append:%h/.local/state/autophys/logs/autophys.log
+StandardError=append:%h/.local/state/autophys/logs/autophys.log
+
+[Install]
+WantedBy=default.target
