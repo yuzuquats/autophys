@@ -37,7 +37,7 @@ export function loading(_source: string): View {
 export function connectionFailure(view: View, error: string, loaded: boolean): View {
   return { ...view,
     sidebar: loaded ? view.sidebar : { ...view.sidebar, switcher: { ...view.sidebar.switcher, kind: "unavailable" }, notice: undefined },
-    main: { ...view.main, connectionError: `${error} ${loaded ? "Showing stale records until the daemon reconnects." : "Check that your daemon is running, then retry the connection."} Approvals are paused.`,
+    main: { ...view.main, connectionError: `${error.replace(/[.!?]$/, "")}. ${loaded ? "Showing stale records until the daemon reconnects." : "Check that your daemon is running, then retry the connection."} Approvals are paused.`,
       ...(loaded ? {} : { body: { kind: "unavailable", title: "Your workspace", description: "Projects and investigations will appear here once records are loaded." } }) },
     details: loaded ? view.details : { ...view.details, status: { text: "No records loaded" }, sections: [] },
   };
