@@ -442,8 +442,12 @@ macOS arm64 qualification (B1-M1, rwc-01, 2026-11-04, published `88a6729`):
   (1.2 MiB), and `codesign -v` passes.
 - **Tests:** `cargo test --workspace --locked` passes 181 with 1 ignored.
   `remote::tests::streaming_reconnect_resumes_cursor_and_ignores_other_investigations`
-  is flaky on macOS: it timed out once in the first run and once in five
-  reruns. It looks like a race in the test's mock server, not a client defect.
+  was flaky on macOS: it failed 23 of 40 runs. The cause was the test's
+  mock, not the client. A BSD `accept()` inherits the listener's
+  non-blocking flag, so the mock read `WouldBlock` as end of stream and
+  dropped the request. With accepted sockets set blocking
+  (`I0f6b2d8a4c1e93a7b5d4`), it passes 40 of 40 runs, and the macOS
+  workspace passes 190 with 1 ignored.
 - **Serve:** `serve` on a scratch loopback port reports commit `88a6729`
   and a non-null `web_id`, served from the hydrated embedded tree.
 - **UI:** `html/e2e/daemon-flow.ts` passes 17 checks with no unexpected
