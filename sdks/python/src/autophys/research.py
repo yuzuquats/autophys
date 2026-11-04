@@ -13,7 +13,7 @@ import tempfile
 from .bench import run_units
 from .playbook import load_playbook
 from .reasoner import BudgetError, ModelSpec, MUSE_WONDER, ReasonerError, reasoner_for, images_enabled
-from .synthetic import CASES
+from .synthetic import CASES, PLANTED_CASES, case as synthetic_case
 
 
 def require_replay(replay=None, *, use_env=True):
@@ -122,6 +122,24 @@ class APIResearcher:
         from .usage import normalize_usage
         self.last_usage = normalize_usage(reply)
         return validate_edit(playbook_text, reply.content)
+
+
+class ScriptedResearcher:
+    """An offline researcher that proposes the given SKILL.md texts in order.
+
+    It stands in for the model so the outer loop (score, keep or reject, held-out
+    check) can run end to end with no network, e.g. against PLANTED_CASES.
+    """
+
+    def __init__(self, edits):
+        self.edits = list(edits)
+        self.last_usage = None
+        self.last_events = None
+
+    def propose(self, playbook_text, report):
+        if not self.edits:
+            raise ReasonerError("scripted researcher has no edits left; pass one --edit per iteration")
+        return self.edits.pop(0)
 
 
 def parse_muse_events(stdout):
@@ -282,7 +300,7 @@ def evaluate(playbook, cases, seeds, policy, directory, *, jobs=1, **options):
                     artifacts.append({"workbook": str(path.resolve()), "images": refs})
             # Exact ratios are recovered from the fitted physical values using
             # the evaluator's identifiable monomials, never absolute rel_errors.
-            evaluator = CASES[row.case](row.seed)[1]
+            evaluator = synthetic_case(row.case)(row.seed)[1]
             outcome = next(r.payload for r in reversed(records) if r.kind == "outcome")
             estimate = outcome.get("estimate")
             ratios = {name: evaluator.combo_value(estimate, name) / evaluator.combo_value(evaluator.truth, name)
@@ -310,7 +328,7 @@ def research(*, researcher, output_dir, playbook="default", cases=None, train_se
         raise ValueError("invalid iterations, seeds or jobs")
     if len(set(train_seeds)) != len(train_seeds) or len(set(heldout_seeds)) != len(heldout_seeds):
         raise ValueError("seeds must be unique")
-    if any(seed < 0 for seed in (*train_seeds, *heldout_seeds)) or any(case not in CASES for case in cases):
+    if any(seed < 0 for seed in (*train_seeds, *heldout_seeds)) or any(case not in CASES and case not in PLANTED_CASES for case in cases):
         raise ValueError("unknown case or negative seed")
     if policy == "reason":
         require_replay(options.get("replay"))

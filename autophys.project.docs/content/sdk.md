@@ -624,6 +624,37 @@ calls than proposing an edit; the dollar cost depends on the models chosen
 for each role, token volumes (the researcher reads failing transcripts) and
 replay use.
 
+### Offline end-to-end check: a planted fix (2026-11-04)
+
+Offline, a playbook edit used to change nothing, because the scripted policy and
+the fake reasoner both ignored SKILL.md. So the research loop had only been tested
+with test doubles and had never been seen to improve a playbook. This check closes
+that gap without a model or network.
+
+- **Planted case.** `battery-biased` (`synthetic.PLANTED_CASES`) is the battery
+  case with a voltage sensor that reads 10 mV high. Comparing the sensor-bias
+  variant when the fit is poor validates it (max parameter error under 1%).
+  Never comparing ends inconclusive (about 250%). Without the offset both
+  strategies validate. Planted cases are kept out of `CASES`, so the benchmark
+  suite and its Rust mirror are unchanged.
+- **Playbook-sensitive fake reasoner.** It reads typed settings from the
+  playbook text, as lines such as `- compare_variants: never` or
+  `- experiments: none` (`bench.STRATEGY_SETTINGS`). The defaults reproduce the
+  scripted baseline, so existing benchmark rows are unchanged. A real model
+  reads the prose instead.
+- **Scripted researcher.** `autophys research --researcher scripted --edit
+  A.md --edit B.md` proposes the given SKILL.md files in order, one per iteration.
+- **The test** (`tests/test_research_planted.py`, about 2.5 minutes). It starts
+  from a playbook that never compares, on `battery-biased` and `battery` with
+  train seeds 0-1 and held-out seeds 2-3. It proposes the fix, then the fix plus
+  `experiments: none`. The loop keeps the fix, so training goes from 2/4 to 4/4
+  correct. It rejects the regression, and held-out goes from 2/4 to 4/4. The
+  same run passes through the CLI.
+
+What it proves is the outer loop's mechanics with a strategy that really changes
+behaviour. It does not show that a model proposes good edits or follows them;
+that needs a recorded or live run with real models (MQ-2).
+
 ### Proposed extensions (agent-proposed, not built, pending operator review)
 
 ```review-flow

@@ -95,11 +95,17 @@ def cmd_bench(args, out=sys.stdout) -> int:
 
 
 def cmd_research(args, out=sys.stdout):
-    from .research import APIResearcher, MuseCLIResearcher, research
+    from .research import APIResearcher, MuseCLIResearcher, ScriptedResearcher, research
     from .reasoner import ModelSpec, MUSE_SPARK, MUSE_WONDER, ReasonerError
     try:
         spec = ModelSpec("researcher", args.researcher_route, args.researcher_model, args.researcher_effort, images=args.researcher_images)
-        if args.researcher == "muse":
+        if args.researcher == "scripted":
+            edits = []
+            for path in args.edit or []:
+                with open(path, encoding="utf-8") as stream:
+                    edits.append(stream.read())
+            researcher = ScriptedResearcher(edits)
+        elif args.researcher == "muse":
             researcher = MuseCLIResearcher(binary=args.muse_binary, spec=spec, timeout=args.timeout,
                                            max_model_steps=args.max_model_steps, replay=args.researcher_replay,
                                            record=args.researcher_record)
@@ -169,7 +175,9 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--images", action="store_true", help="opt policy into plot images (asserts model capability)")
     pr.add_argument("--replay")
     pr.add_argument("--record")
-    pr.add_argument("--researcher", choices=("api", "muse"), default="api")
+    pr.add_argument("--researcher", choices=("api", "muse", "scripted"), default="api")
+    pr.add_argument("--edit", action="append",
+                    help="with --researcher scripted: a SKILL.md proposed per iteration, in order (repeatable)")
     pr.add_argument("--researcher-model", default="muse-wonder-1.0")
     pr.add_argument("--researcher-route", choices=("meta", "baseten"), default="meta")
     pr.add_argument("--researcher-effort")

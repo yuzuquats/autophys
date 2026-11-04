@@ -298,8 +298,11 @@ def thermal_case(seed: int = 0, *, max_experiments: int = 2, bias: float = 0.0, 
 BATTERY_TRUTH = {"R0": 0.025, "R1": 0.045, "C1": 1600.0}
 
 
-def battery_case(seed: int = 0, *, max_experiments: int = 2):
-    """A short pulse measures the ohmic drop and initial polarization slope."""
+def battery_case(seed: int = 0, *, max_experiments: int = 2, bias: float = 0.0):
+    """A short pulse measures the ohmic drop and initial polarization slope.
+
+    ``bias`` adds a constant voltage-sensor offset (V) to every measurement.
+    """
     from .models.battery import battery_ecm, KNOWN
 
     short = max_experiments == 0
@@ -307,8 +310,8 @@ def battery_case(seed: int = 0, *, max_experiments: int = 2):
         return {"name": name, "kind": "pulse", "current": current, "on": on,
                 "duration": 25.0, "rate": 32.0, **KNOWN}
     view, ev = _build(
-        "battery-short-only" if short else "battery", battery_ecm, BATTERY_TRUTH,
-        NoiseModel({"v": 0.002}), seed,
+        "battery-short-only" if short else "battery-biased" if bias else "battery", battery_ecm, BATTERY_TRUTH,
+        NoiseModel({"v": 0.002}, {"v": bias} if bias else {}), seed,
         train=[pulse("pulse_short", 2.0)],
         validation=[pulse("pulse_short_1A", 1.0, 6.0)],
         test=[{"name": "unseen_train", "kind": "pulse_train", "current": 1.5,
@@ -333,3 +336,20 @@ CASES = {
     "battery-short-only": lambda seed: battery_case(seed, max_experiments=0),
     "battery": lambda seed: battery_case(seed, max_experiments=2),
 }
+
+# Cases with a known strategy fix, used to check that the research loop finds it.
+# They are not in CASES: the benchmark suite (and its Rust mirror) stays as is.
+PLANTED_CASES = {
+    # The voltage sensor reads 10 mV high. Comparing the sensor-bias variant when
+    # the fit is poor validates the cell; never comparing ends inconclusive.
+    "battery-biased": lambda seed: battery_case(seed, max_experiments=2, bias=0.01),
+}
+
+
+def case(name: str):
+    """A case factory by name, from the benchmark suite or the planted checks."""
+    if name in CASES:
+        return CASES[name]
+    if name in PLANTED_CASES:
+        return PLANTED_CASES[name]
+    raise KeyError(f"unknown case {name!r}")
