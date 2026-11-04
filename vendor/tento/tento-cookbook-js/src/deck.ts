@@ -6,6 +6,7 @@ import {
   type DeckStat,
 } from "./deck-data.ts";
 import { renderLines, renderProfile, renderUncertainty } from "./deck-charts.ts";
+import { renderChat, renderTerminal } from "./deck-convo.ts";
 import { h } from "./dom.ts";
 import { createTexture } from "./texture.ts";
 
@@ -436,6 +437,10 @@ function renderBody(body: DeckBody): HTMLElement {
       return frame(renderProfile(body));
     case "uncertainty":
       return frame(renderUncertainty(body));
+    case "terminal":
+      return frame(renderTerminal(body));
+    case "chat":
+      return frame(renderChat(body));
   }
 }
 

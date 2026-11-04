@@ -4,6 +4,7 @@
  * cookbook's own steps cover its chrome.)
  */
 import type { Cookbook } from "@tento-cookbook/lib.ts";
+import { MUSE_AVATAR } from "./loops-figure.ts";
 
 /** Every number in the deck below is MOCK, invented to show the charts (handoff from
  * autophys/design, 2026-11-04). The marker shows on each slide that carries numbers, so
@@ -107,6 +108,50 @@ export function deck(app: Cookbook.App, appPath = "/app"): Cookbook.Deck.Slide[]
           series("Muse Spark, base skill", 55, 5.2, 2),
           series("Muse Spark, tuned skill", 55, 3.1, 2, true),
         ],
+      },
+    },
+    {
+      eyebrow: { label: "Get started" },
+      title: "From a CSV to a verdict.",
+      description: "Python 3.10 or newer, with no accounts or keys. Bring a pulse trace and its noise level.",
+      body: {
+        kind: "terminal",
+        lines: [
+          "# get the SDK and the battery example",
+          "git clone github.com/yuzuquats/autophys",
+          "cd autophys/examples/battery_fit",
+          "",
+          "# fit your cell; see which parameters are identified",
+          "./run.sh my_cell.csv --sigma 0.002",
+          "",
+          "# let it propose the next test; approve it in the browser",
+          "./run.sh agent",
+        ],
+      },
+    },
+    {
+      eyebrow: { label: `How Muse decides · ${MOCK}` },
+      title: "Muse Spark reasons about what to measure next.",
+      description: "Every number it repeats comes from an autophys tool. It can propose a test; only you can approve one.",
+      body: {
+        kind: "chat",
+        agent: { name: "Muse Spark", avatar: MUSE_AVATAR },
+        messages: [
+          { from: "user", text: "Calibrate this cell from pulses.csv. What should I test next?" },
+          { from: "agent", source: "fit · identifiability", text: "R0 and C1 are within ±10%. R1 is at ±61%." },
+          { from: "agent", text: "The 6 s pulse is too short to tell R1 from C1." },
+          { from: "agent", source: "rank_experiments", text: "A 30 s pulse at 2 A scores 4.1 and fits the 3 h budget." },
+        ],
+        approval: {
+          label: "In your autophys workbench · needs approval",
+          title: "Pulse at 2 A",
+          rows: [
+            { label: "Current", value: "2 A for 30 s" },
+            { label: "Cost", value: "1.08 of 3 test h" },
+            { label: "Resolves", value: "R1 ↔ C1" },
+          ],
+          actions: ["Approve", "Edit", "Reject"],
+        },
       },
     },
     {

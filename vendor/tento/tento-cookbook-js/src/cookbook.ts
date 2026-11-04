@@ -60,7 +60,9 @@ export namespace Cookbook {
     export type Lines = DeckTypes.DeckLines;
     export type Profile = DeckTypes.DeckProfile;
     export type Uncertainty = DeckTypes.DeckUncertainty;
-    /** Nine neutral slides, one of each body kind; slide one carries the title. */
+    export type Terminal = DeckTypes.DeckTerminal;
+    export type Chat = DeckTypes.DeckChat;
+    /** Eleven neutral slides, one of each body kind; slide one carries the title. */
     export const placeholderDeck = placeholder;
   }
 

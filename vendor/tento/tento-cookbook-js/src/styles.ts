@@ -201,6 +201,56 @@ html[data-ck-stage="tour"] .ck-tour-peek { opacity: 1; transition-duration: 300m
 .ck-legend .ck-emphasis i { background: var(--ck-n900); }
 .ck-legend .ck-dashed i { height: 0; border-top: 1.5px dashed var(--ck-n500); border-radius: 0; background: none; }
 @media (max-width: 639px) { .ck-plot .ck-dot-label:not(.ck-emphasis) { display: none; } }
+/* conversation bodies (deck-convo.ts): a terminal card and an iOS-style chat */
+.ck-term { border-radius: 12px; overflow: hidden; background: #141414; }
+.ck-term-bar { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid #262626; }
+.ck-term-bar i { width: 9px; height: 9px; border-radius: 50%; background: #333; }
+.ck-term-bar span { margin-left: 8px; font: 11px/16px var(--ck-mono); color: #6b6b6b; }
+.ck-term pre { margin: 0; padding: 14px 20px 16px; overflow-x: auto; font: 13px/22px var(--ck-mono); color: #e6e6e6; scrollbar-width: none; }
+.ck-sh-comment { color: #6b6b6b; } .ck-sh-prompt { color: #5a5a5a; user-select: none; -webkit-user-select: none; }
+.ck-sh-cmd { color: #e6e6e6; } .ck-sh-arg { color: #9ecbff; } .ck-sh-flag { color: #f0b37e; }
+.ck-sh-num { color: #d6a8f5; } .ck-sh-path { color: #8fd19e; }
+.ck-chat-wrap { display: flex; flex-direction: column; }
+.ck-chat { display: flex; flex-direction: column; gap: 10px; }
+.ck-chat-run { display: flex; align-items: flex-end; gap: 8px; }
+.ck-chat-stack { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.ck-user .ck-chat-stack { align-items: flex-end; padding-right: 7px; }
+.ck-agent .ck-chat-stack { align-items: flex-start; }
+.ck-chat-name { margin: 0 0 2px 12px; font-size: 11px; line-height: 16px; color: var(--ck-n500); }
+.ck-chat-avatar { position: relative; z-index: 1; width: 30px; height: 30px; flex: none; border-radius: 50%;
+  background: var(--ck-n200) center / cover; box-shadow: 0 0 0 1px rgb(0 0 0 / 6%); }
+.ck-bubble { position: relative; max-width: 82%; padding: 7px 12px; border-radius: 18px; font-size: 14px; line-height: 19px; text-wrap: pretty; }
+.ck-user .ck-bubble { background: var(--ck-n900); color: #fff; }
+.ck-agent .ck-bubble { background: #ececec; color: var(--ck-n900); }
+.ck-bubble-source { display: block; margin-bottom: 1px; font: 10.5px/15px var(--ck-mono); color: #8a8a8a; }
+/* the tail: a bubble-coloured curl, trimmed by a patch of the page colour */
+.ck-bubble.ck-tail::before, .ck-bubble.ck-tail::after { content: ""; position: absolute; bottom: 0; height: 20px; }
+.ck-user .ck-tail::before { right: -7px; width: 20px; background: var(--ck-n900); border-bottom-left-radius: 16px 14px; }
+.ck-user .ck-tail::after { right: -26px; width: 26px; background: #fff; border-bottom-left-radius: 10px; }
+.ck-agent .ck-tail::before { left: -7px; width: 20px; background: #ececec; border-bottom-right-radius: 16px 14px; }
+.ck-agent .ck-tail::after { left: -26px; width: 26px; background: #fff; border-bottom-right-radius: 10px; }
+.ck-approval { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 0 16px;
+  margin: 12px 0 0 38px; padding: 12px 16px; border-radius: 18px; background: #fff;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 6%), 0 1px 2px rgb(0 0 0 / 6%), 0 6px 20px rgb(0 0 0 / 8%); }
+.ck-approval p, .ck-approval dl { grid-column: 1; margin: 0; }
+.ck-approval .ck-slide-label { font-size: 11.5px; line-height: 16px; }
+.ck-approval-title { margin-top: 2px !important; font-size: 15px; line-height: 22px; font-weight: 600; color: #000; }
+.ck-approval-rows { display: flex; flex-wrap: wrap; gap: 0 6px; margin-top: 2px !important; font-size: 12.5px; line-height: 18px; }
+.ck-approval-rows dt { color: var(--ck-n500); } .ck-approval-rows dd { margin: 0 8px 0 0; font-variant-numeric: tabular-nums; }
+.ck-approval-actions { grid-column: 2; grid-row: 1 / span 3; display: flex; gap: 8px; }
+.ck-approval-action { padding: 5px 14px; border-radius: 999px; font-size: 12.5px; line-height: 18px; color: var(--ck-n600);
+  box-shadow: inset 0 0 0 1px var(--ck-n200); }
+.ck-approval-action.ck-primary { background: var(--ck-n900); color: #fff; box-shadow: none; }
+@media (max-width: 639px) {
+  /* phones: the same thread, tighter; the card keeps its title and actions */
+  .ck-chat { gap: 8px; }
+  .ck-bubble { max-width: 88%; padding: 6px 11px; font-size: 13px; line-height: 17px; }
+  .ck-chat-name, .ck-approval-rows { display: none; }
+  .ck-approval { margin: 8px 0 0; padding: 10px 12px; }
+  .ck-approval-action { padding: 4px 10px; font-size: 12px; }
+  .ck-approval .ck-slide-label { grid-column: 1 / -1; } .ck-approval-actions { grid-row: 2; }
+  .ck-term pre { padding: 12px 14px 14px; font-size: 11.5px; line-height: 19px; white-space: pre-wrap; overflow-wrap: anywhere; }
+}
 .ck-bar-value { font-size: 20px; line-height: 28px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--ck-n500); text-align: right; }
 .ck-bars .ck-emphasis .ck-bar-value { color: #000; }
 .ck-bars + .ck-slide-actions { margin-top: 56px; }

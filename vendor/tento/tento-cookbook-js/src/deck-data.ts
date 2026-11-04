@@ -20,7 +20,9 @@ export type DeckBody =
   | { kind: "result"; bars: DeckBar[]; primary: Cta | null }
   | DeckLines
   | DeckProfile
-  | DeckUncertainty;
+  | DeckUncertainty
+  | DeckTerminal
+  | DeckChat;
 
 /** Chart bodies (src/deck-charts.ts). The values are supplied by the app; the deck only scales them. */
 export type DeckAxis = { label: string; min: number; max: number; ticks?: number[]; unit?: string };
@@ -55,6 +57,21 @@ export type DeckUncertainty = {
   axes: [string, string];
   target: { label: string; size: number };
   regions: { label: string; rx: number; ry: number; angle: number; emphasis?: boolean }[];
+};
+/** Conversation bodies (src/deck-convo.ts). */
+/** Shell lines in a dark card: `# …` is a comment, "" a blank line, anything
+ * else a command (shown after a `$` prompt, with its words coloured). */
+export type DeckTerminal = { kind: "terminal"; label?: string; lines: string[] };
+/** A chat between the person and one agent, drawn as iOS message bubbles.
+ * Consecutive messages from one sender form a run; `source` is a small
+ * monospace line above the text (for example the tool a claim came from).
+ * An optional approval card closes the thread; its actions are illustrative,
+ * not controls, and the first is drawn as the primary one. */
+export type DeckChat = {
+  kind: "chat";
+  agent: { name: string; avatar?: string };
+  messages: { from: "user" | "agent"; text: string; source?: string }[];
+  approval?: { label: string; title: string; rows: { label: string; value: string }[]; actions: string[] };
 };
 export type DeckSlide = {
   eyebrow: { label: string } | { icon: "mark" };

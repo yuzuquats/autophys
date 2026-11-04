@@ -118,6 +118,23 @@ export function placeholderDeck(title: string, appPath = "/app"): DeckSlide[] {
         ],
       },
     },
+    {
+      ...lead(10, "ten"),
+      body: { kind: "terminal", lines: ["# Placeholder step", "placeholder --flag 1 path/to/file", "", "# Placeholder step", "placeholder run"] },
+    },
+    {
+      ...lead(11, "eleven"),
+      body: {
+        kind: "chat",
+        agent: { name: "Agent" },
+        messages: [
+          { from: "user", text: "Placeholder request." },
+          { from: "agent", text: "Placeholder reasoning.", source: "source" },
+          { from: "agent", text: "Placeholder proposal, long enough to wrap onto a second line of the bubble." },
+        ],
+        approval: { label: "Needs approval", title: "Placeholder", rows: [{ label: "Detail", value: "Placeholder" }], actions: ["Approve", "Reject"] },
+      },
+    },
   ];
 }
 

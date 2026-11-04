@@ -3,6 +3,7 @@ import { readRoute, routeUrl } from "./src/route.ts";
 import { arrowStage, closePanel, initialPanels, Stepper, togglePanel, visiblePanels } from "./src/model.ts";
 import { clampSlide, dragOffset, swipeTarget } from "./src/deck-data.ts";
 import { deckPull, deckTransforms } from "./src/deck.ts";
+import { bubbleRadii, shellTokens } from "./src/deck-convo.ts";
 import { describeHealth, parseHealth, readHealthz } from "./src/status.ts";
 import { invert } from "./src/flip.ts";
 import { cookbookClasses, placeholderDeck } from "./src/shell.ts";
@@ -27,6 +28,8 @@ import source15 from "./src/types.ts" with { type: "text" };
 import source16 from "./src/view.ts" with { type: "text" };
 import source17 from "./demo/placeholder-app.ts" with { type: "text" };
 import source18 from "./demo/routes/index.root.ts" with { type: "text" };
+import source19 from "./src/deck-charts.ts" with { type: "text" };
+import source20 from "./src/deck-convo.ts" with { type: "text" };
 
 Deno.test("routes: landing and app paths round-trip under any base", () => {
   assertEquals(readRoute("/"), { app: false });
@@ -139,9 +142,9 @@ Deno.test("deck: edge rubber-band is symmetric, monotone and bounded", () => {
 
 Deno.test("deck: the placeholder deck is neutral, uses every body kind and fits the template", () => {
   const slides = placeholderDeck("Example", "/w");
-  assertEquals(slides.length, 9);
+  assertEquals(slides.length, 11);
   assertEquals(slides[0].title, "Example");
-  assertEquals(new Set(slides.map((s) => s.body.kind)).size, 9);
+  assertEquals(new Set(slides.map((s) => s.body.kind)).size, 11);
   for (const slide of slides) {
     if (slide.title.length > 60) throw new Error(`title too long: ${slide.title}`);
     if (slide.description.length > 120) throw new Error(`description too long: ${slide.description}`);
@@ -180,6 +183,8 @@ Deno.test("classes: every assigned shell class has a stylesheet selector", () =>
     ["src/view.ts", source16],
     ["demo/placeholder-app.ts", source17],
     ["demo/routes/index.root.ts", source18],
+    ["src/deck-charts.ts", source19],
+    ["src/deck-convo.ts", source20],
   ];
   const intentional: Record<string, string> = {
     "ck-stat": "Grouping hook for ck-stat-value and ck-stat-label; uses block flow.",
@@ -270,7 +275,7 @@ Deno.test("namespace: lib exports only Cookbook, with the old names gone", async
   assertEquals(typeof Cookbook.mount().run, "function");
   assertEquals(typeof Cookbook.View.mount, "function");
   assertEquals(Cookbook.classes.toolbar, "ck-toolbar");
-  assertEquals(Cookbook.Deck.placeholderDeck("T").length, 9);
+  assertEquals(Cookbook.Deck.placeholderDeck("T").length, 11);
   assertEquals(Cookbook.Tutorial.shellSteps.length, 3);
   for (const gone of ["cookbook", "createCookbook", "cookbookClasses", "placeholderDeck", "PlaceholderApp"]) {
     assertEquals(gone in lib, false, gone);
@@ -322,4 +327,23 @@ Deno.test("deck: Hacks endpoint pulls are symmetric and bounded at 22 percent / 
     assertEquals(first.offset > 0 && first.offset <= .22, true);
     assertEquals(first.scale >= .95 && first.scale < 1, true);
   }
+});
+
+Deno.test("deck chat: iOS bubble corners tighten only where bubbles touch", () => {
+  // Agent run: a narrow bubble, then two full-width ones. The sender side
+  // (left) always tightens between neighbours; the far side only between equal widths.
+  assertEquals(bubbleRadii([200, 400, 400], false), [
+    "18px 18px 18px 5px",
+    "5px 18px 5px 5px",
+    "5px 5px 18px 18px",
+  ]);
+  // User run on the right mirrors it; a single bubble stays fully round.
+  assertEquals(bubbleRadii([300, 150], true), ["18px 18px 5px 18px", "18px 5px 18px 18px"]);
+  assertEquals(bubbleRadii([120], true), ["18px 18px 18px 18px"]);
+});
+
+Deno.test("deck terminal: shell words get a fixed colour class", () => {
+  assertEquals(shellTokens("# a comment"), [{ kind: "comment", text: "# a comment" }]);
+  const kinds = shellTokens("./run.sh my_cell.csv --sigma 0.002 agent").filter((t) => t.kind !== "space").map((t) => t.kind);
+  assertEquals(kinds, ["cmd", "path", "flag", "num", "arg"]);
 });
