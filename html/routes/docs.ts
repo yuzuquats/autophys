@@ -2,7 +2,7 @@
  * The landing's documentation: one markdown page, drawn by tento-ui's std-documentation,
  * placed in the document flow after the viewport-height deck and before the cookbook footer,
  * so scrolling past the pitch reaches the manual. Sources: README.md, sdks/python/README.md
- * and autophys.project.docs/content (architecture.md, muse-plugin.md). Keep every claim
+ * and autophys.project.docs/content (architecture.md, muse-plugin.md, sdk.md). Keep every claim
  * checkable there; numbers that need a real run stay out of this page (the deck's TBDs cover
  * them).
  *
@@ -22,6 +22,7 @@ import { Code } from "@tento-ui/components/code/code";
 import { shellTokenizer } from "@tento-ui/components/code/languages/shell";
 import { pythonTokenizer } from "@tento-ui/components/code/languages/python";
 import { LispExampleView } from "@tento-ui/components/lisp-example/lisp-example-view";
+import { ReviewFence } from "@tento-ui/components/review-notes/review-fence";
 import type { ProseMirrorEditor } from "@tento-ui/components/prosemirror";
 import { InstanceUrl } from "@tento-core/instance-url";
 import type { Cookbook } from "@tento-cookbook/lib.ts";
@@ -125,6 +126,54 @@ It does not draw the fitted curve yet; use the battery example for curves.
 | \`plugins/muse-autophys\` | Muse Code plugin (local MCP server). |
 | \`src/\`, \`html/\` | Rust daemon and this browser workbench. |
 | \`autophys.project.docs\` | Design notes and decisions. |
+
+## How the loops nest
+
+autophys has two loops. They are nested, not concurrent: the outer loop calls the inner one.
+
+- **Investigation (inner).** One calibration: an agent fits the model, checks identifiability, ranks experiments, requests data and stops. Its strategy is a playbook, a \`SKILL.md\` file.
+- **Research (outer).** \`autophys research\` improves that playbook. It scores a playbook by running complete investigations on synthetic cases with a hidden truth, asks a researcher model for an edit, and keeps the edit only if the score improves.
+
+Each research step waits for all of its investigations before it decides. The investigations within a step are independent and run in parallel with \`--jobs\`.
+
+\`\`\`review-flow
+flowchart TB
+  B["baseline: evaluate the starting playbook<br/>on the train seeds"] --> INC["incumbent playbook<br/>and its training report"]
+  INC --> LIM{"iterations left?"}
+  LIM -->|yes| RS["researcher proposes an edit<br/>from the playbook and training report"]
+  RS --> VAL{"edit valid?"}
+  VAL -->|no: logged, iteration used| LIM
+  VAL -->|yes| EV["evaluate the candidate:<br/>one investigation per case and train seed"]
+  EV --> IMP{"score improves?<br/>correct first, then error, then cost"}
+  IMP -->|yes: becomes the incumbent| INC
+  IMP -->|no: incumbent kept| LIM
+  LIM -->|no| HO["held-out seeds: starting vs final playbook<br/>summary.json"]
+\`\`\`
+
+The score is lexicographic: the number of runs whose status and diagnosis are correct, then the mean log parameter error, then cost. The held-out seeds are kept apart from the start and only used at the end.
+
+Inside each evaluation, an investigation is not a fixed cycle. At every step the policy picks one action until it stops or a budget runs out, so the order depends on the policy. This is the scripted policy's usual order:
+
+\`\`\`review-flow
+flowchart LR
+  I["inspect_data<br/>(optional)"] -.-> F
+  F["optimize_parameters"] --> M["compare_models<br/>base vs sensor-bias variants by BIC"]
+  M --> S
+  F --> S["analyze_sensitivity<br/>log-Jacobian SVD"] --> R["rank_experiments<br/>Fisher information"]
+  R --> Q["request_experiment<br/>within budget"]
+  Q -->|new train data| F
+  S --> V["validate_predictions"] --> X["stop<br/>the code checks the claim"]
+\`\`\`
+
+| Mode | What runs | Where new data comes from |
+| --- | --- | --- |
+| \`autophys research\` | the outer loop, calling many investigations | a synthetic case's hidden truth, with no person in the loop |
+| \`autophys bench\` | investigations across policies, cases and seeds, with no playbook search | the same synthetic truth |
+| Workbench or Muse Code | one investigation at a time, on your measurements | an experiment you approve here and run on your hardware |
+
+Live model calls are off by default: \`research\` and \`bench --policy reason\` need a recorded replay, or \`AUTOPHYS_ALLOW_LIVE_REASON=1\`. With the defaults (six cases, three train seeds, two held-out seeds), a research run evaluates 18 investigations for the baseline, 18 for each valid edit, and 24 on the held-out seeds at the end.
+
+Not built yet, and under discussion in the design notes: a research journal that feeds rejected edits back to the researcher, procedurally sampled and misspecified cases, a statistical acceptance rule, and model discovery, where the agent proposes rival model structures when validation fails.
 `;
 
 /** std-documentation sizes type with Lona's cap-height scale, which tento apps get from
@@ -182,10 +231,12 @@ class StaticCodeBlockView {
   }
 }
 
-/** Documentation's default views (lisp examples, code blocks), with code blocks drawn statically. */
+/** Documentation's default views (lisp examples, code blocks), with code blocks drawn statically
+ * and review-* fences drawn by tento-ui's ReviewFence. */
 const NODE_VIEWS: Documentation.Props["nodeViews"] = {
   lisp_example: (node) => new LispExampleView(node),
-  code_block: (node) => new StaticCodeBlockView(node),
+  // review-flow (and other review-*) fences draw as diagrams; any other fence stays code.
+  code_block: (node) => ReviewFence.dispatch(node, null) ?? new StaticCodeBlockView(node),
 };
 
 /** The docs section and the shell hook that keeps it out of the open app's tab order. inert,

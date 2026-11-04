@@ -368,15 +368,15 @@ flowchart TB
   subgraph OUTER["outer: autophys research (research.py)"]
     B["baseline: evaluate playbook-000<br/>on train seeds"] --> INC["incumbent playbook<br/>and its training report"]
     INC --> LIM{"iterations left?"}
-    LIM -- "yes" --> RS["researcher proposes an edit<br/>from incumbent + training report<br/>API or muse exec"]
+    LIM -->|yes| RS["researcher proposes an edit<br/>from incumbent + training report<br/>API or muse exec"]
     RS --> VAL{"validate_edit passes?"}
-    VAL -- "no: logged, iteration used" --> LIM
-    VAL -- "yes" --> EV["evaluate candidate on train seeds<br/>cases x seeds investigations, pool of --jobs"]
+    VAL -->|no: logged, iteration used| LIM
+    VAL -->|yes| EV["evaluate candidate on train seeds<br/>cases x seeds investigations, pool of --jobs"]
     EV --> IMP{"improves, MQ-4?<br/>correct, then mean log error, then cost"}
-    IMP -- "yes: candidate becomes incumbent" --> INC
-    IMP -- "no: incumbent kept" --> LIM
+    IMP -->|yes: candidate becomes incumbent| INC
+    IMP -->|no: incumbent kept| LIM
   end
-  LIM -- "no" --> HO["held-out seeds: evaluate initial<br/>and final playbook (both always run)<br/>summary.json"]
+  LIM -->|no| HO["held-out seeds: evaluate initial<br/>and final playbook (both always run)<br/>summary.json"]
 ```
 
 Each "evaluate" box is a batch of independent investigations, each one the
@@ -392,11 +392,11 @@ available but optional; the scripted policy does not use it.
 ```review-flow
 flowchart LR
   I["inspect_data<br/>(optional)"] -.-> F
-  F["optimize_parameters"] --> M["compare_models<br/>BIC over the base and sensor-bias<br/>variants the noise config enables;<br/>fits and adopts the winner"]
+  F["optimize_parameters"] --> M["compare_models<br/>BIC over the base and sensor-bias<br/>variants the noise config enables,<br/>then fits and adopts the winner"]
   M --> S
   F --> S["analyze_sensitivity<br/>log-Jacobian SVD"] --> R["rank_experiments<br/>Fisher, min_eig or d_opt"]
   R --> Q["request_experiment<br/>budget-checked"]
-  Q -- "new train data" --> F
+  Q -->|new train data| F
   S --> V["validate_predictions"] --> X["stop<br/>guardrail checks the claim"]
   X --> O["outcome recorded in the configured store<br/>(research writes .ap-workbook files)"]
 ```
@@ -426,7 +426,7 @@ replay use.
 flowchart TB
   J["research journal: hypothesis,<br/>predicted effect, diff, score, kept"]:::new
   RS["researcher"] --> J
-  J -- "read before the next edit" --> RS
+  J -->|read before the next edit| RS
   VF["validation fails"] --> RM["propose rival model structures<br/>2RC, SoC-dependent R, hysteresis"]:::new
   RM --> DD["rank experiments that discriminate<br/>between rivals, not only by Fisher"]:::new
   DD --> SEL["choose the model on held-out validation"]:::new
