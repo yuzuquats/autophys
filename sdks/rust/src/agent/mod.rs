@@ -252,6 +252,11 @@ impl Investigation {
         policy: Box<dyn Policy>,
     ) -> crate::Result<Self> {
         let recs = record.records(None)?;
+        if recs.iter().any(|r| r.kind == "reveal") {
+            return Err(crate::Error::BadRequest(
+                "cannot resume an investigation after ground truth reveal".into(),
+            ));
+        }
         let head = recs
             .first()
             .ok_or(crate::Error::NotFound("investigation"))?;
@@ -293,6 +298,9 @@ impl Investigation {
         let mut proposals: IndexMap<String, (String, Option<String>)> = IndexMap::new();
         let mut unclaimed: Option<String> = None;
         for r in &recs[i..] {
+            if r.kind == "reveal" {
+                continue;
+            }
             let p = &r.payload;
             if r.kind == "measurement" {
                 if let Some(n) = unclaimed.take() {
@@ -514,6 +522,12 @@ impl Investigation {
         body["fit_id"] = json!(self.fit_id);
         body["model"] = json!(model);
         body["simulator"] = json!(self.variants[&model].name);
+        let measurements = self
+            .record
+            .records(Some("measurement"))
+            .map_err(|e| invalid(e.to_string()))?;
+        let body = crate::curves::run_payload(&self.variants[&model], &r, &measurements, body)
+            .map_err(|e| invalid(e.to_string()))?;
         self.write("run", body)
             .map_err(|e| invalid(e.to_string()))?;
         self.fit = Some(r);
@@ -857,7 +871,21 @@ impl Investigation {
             _ => Err(invalid("no tool for decision")),
         }
     }
+    fn check_unrevealed(&self) -> crate::Result<()> {
+        if !self.record.records(Some("reveal"))?.is_empty() {
+            return Err(crate::Error::BadRequest(
+                "cannot continue an investigation after ground truth reveal".into(),
+            ));
+        }
+        Ok(())
+    }
+    pub(crate) fn current_sensitivity(&self) -> Option<&SensitivityReport> {
+        self.sens
+            .as_ref()
+            .filter(|_| self.sens_fit == Some(self.fit_id))
+    }
     pub fn run(&mut self) -> crate::Result<Outcome> {
+        self.check_unrevealed()?;
         if self.pending.is_some() {
             return Err(crate::Error::BadRequest(
                 "awaiting data for pending proposal".into(),
@@ -1145,6 +1173,7 @@ impl Investigation {
         by: &str,
         settings: Option<Value>,
     ) -> crate::Result<crate::Appended> {
+        self.check_unrevealed()?;
         self.require_pending(pid)?;
         let mut payload = json!({"proposal_id":pid,"event":if settings.is_some() {"edited"} else {"approved"},"by":by,"via":"sdk"});
         if let Some(settings) = settings {
@@ -1184,6 +1213,7 @@ impl Investigation {
         Ok(a)
     }
     pub fn attach_data(&mut self, pid: &str, mut o: Observation) -> crate::Result<crate::Appended> {
+        self.check_unrevealed()?;
         self.require_pending(pid)?;
         o.split = "train".into();
         o.validate().map_err(err)?;

@@ -49,6 +49,7 @@ pub use workbook::{
 
 pub mod agent;
 pub mod data;
+pub mod curves;
 pub mod design;
 pub mod fit;
 pub mod models;

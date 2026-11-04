@@ -164,6 +164,103 @@ impl Evaluator {
     pub fn diagnosis_correct(&self, non: &BTreeSet<String>) -> bool {
         *non == self.expected_non_identified
     }
+    /// Harness-only truth publication. Call after `inv.run()`, as in Python.
+    /// Ordering and idempotency are enforced by the shared record store.
+    pub fn reveal(&self, inv: &crate::agent::Investigation) -> crate::Result<crate::Appended> {
+        let out = inv
+            .outcome
+            .as_ref()
+            .ok_or_else(|| crate::Error::BadRequest("reveal requires an outcome".into()))?;
+        let estimate = &out.estimate;
+        let finite = |x: f64| -> crate::Result<f64> {
+            if x.is_finite() {
+                Ok(x)
+            } else {
+                Err(crate::Error::BadRequest(
+                    "reveal values must be finite numbers".into(),
+                ))
+            }
+        };
+        for x in self.truth.values().chain(estimate.values()) {
+            finite(*x)?;
+        }
+        let mut quantities = vec![];
+        for (name, powers) in &self.combos {
+            if !powers.keys().all(|p| estimate.contains_key(p)) {
+                continue;
+            }
+            if !powers.keys().all(|p| self.truth.contains_key(p)) {
+                return Err(crate::Error::BadRequest(
+                    "reveal combination has no truth".into(),
+                ));
+            }
+            let truth = finite(self.combo_value(&self.truth, name))?;
+            let value = finite(self.combo_value(estimate, name))?;
+            let ratio = finite(value / truth)?;
+            let sigma = inv
+                .current_sensitivity()
+                .filter(|_| inv.fit.is_some())
+                .and_then(|report| {
+                    let gradient: Vec<f64> = report
+                        .params
+                        .iter()
+                        .map(|p| {
+                            let exponent = powers.get(p).copied().unwrap_or(0.);
+                            if exponent == 0. {
+                                return 0.;
+                            }
+                            let Some(spec) = inv.sim().params.get(p) else {
+                                return f64::NAN;
+                            };
+                            if spec.log() {
+                                exponent
+                            } else {
+                                let value = estimate.get(p).copied().unwrap_or(0.);
+                                if value == 0. {
+                                    f64::NAN
+                                } else {
+                                    exponent * spec.scale() / value
+                                }
+                            }
+                        })
+                        .collect();
+                    let mut variance = 0.;
+                    for direction in &report.directions {
+                        let projection: f64 = report
+                            .params
+                            .iter()
+                            .zip(&gradient)
+                            .map(|(p, g)| g * direction.vector.get(p).copied().unwrap_or(f64::NAN))
+                            .sum();
+                        if (direction.kind == "structural" || direction.singular_value <= 0.)
+                            && projection.abs() > 1e-8
+                        {
+                            return None;
+                        }
+                        if !projection.is_finite() {
+                            return None;
+                        }
+                        if direction.singular_value > 0. {
+                            variance += (projection / direction.singular_value).powi(2);
+                        }
+                    }
+                    let candidate = ratio.abs() * variance.sqrt();
+                    candidate.is_finite().then_some(candidate)
+                });
+            quantities.push(
+                json!({"name":name,"truth":truth,"estimate":value,"ratio":ratio,
+                "sigma_ratio":sigma,"within":(ratio-1.).abs() <= 0.10,
+                "identifiable":!self.expected_non_identified.contains(name)}),
+            );
+        }
+        inv.record.append(
+            "reveal",
+            json!({"source":"synthetic","tolerance":0.10,
+            "truth":self.truth,"estimate":estimate,"quantities":quantities,
+            "fit_id":inv.fit.as_ref().map(|_| inv.fit_id)}),
+            None,
+        )
+    }
     pub fn save(&self, path: impl AsRef<std::path::Path>) -> Result<()> {
         std::fs::write(
             path,

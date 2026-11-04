@@ -1,9 +1,9 @@
 # autophys-rs: the daemon's endpoints are a thin layer over a Rust library that matches the Python SDK
 
-Status: phase 1 implemented, rev 4, 2026-11-04. MQ-5 battery cases and test-hour budgets are implemented and independently reviewed (see the battery landing below). Display-manifest step 3 is implemented: `autophys::Display`, trajectory `.u`, uncounted previews and byte-identical bench manifests ([contract](display-manifest.md)); HTTP registration is outside this step. Rev 2: full API parity (AX-2 revised). Rev 3: the numerics case format, the `autophys-cli` layout, the conformance tree as committed. Operator direction (autophys/rs thread): the
+Status: local SDK implemented, rev 5, 2026-11-04. FC-1/GT-1 step 2 is implemented (see [fit-curves-and-truth.md](fit-curves-and-truth.md)): fitted/initial curves and evaluator reveal publication match the Python reference. MQ-5 battery cases and test-hour budgets are implemented and independently reviewed (see the battery landing below). Display-manifest step 3 is implemented: `autophys::Display`, trajectory `.u`, uncounted previews and byte-identical bench manifests ([contract](display-manifest.md)); HTTP registration is outside this step. Rev 2: full API parity (AX-2 revised). Rev 3: the numerics case format, the `autophys-cli` layout, the conformance tree as committed. Operator direction (autophys/rs thread): the
 Rust binary produces the app and serves the endpoints, and each endpoint
 calls a Rust library crate that is the Rust counterpart of the Python SDK, so
-Rust programs can import it directly. Phase 1 is implemented; phase 2 remains pending. It refines W-4
+Rust programs can import it directly. Phase 1 and the phase-2 numerical SDK are implemented; Remote transport remains pending. It refines W-4
 (`workbook.md`) and does not change the workbook format (`workbook-format.md`).
 
 ## The shape
@@ -409,8 +409,11 @@ Cargo/SDK attempts are blocked by the parallel implementer's uncommitted
 `sdks/rust/tests/numerics.rs` (unfinished phase-2 exports and `indexmap`);
 those files are excluded from these scoped commits and the archive.
 Task CLI is unavailable on this host, as already recorded in the project
-cover. Remaining work is the reserved phase-2 API, remote Rust transport,
-and review of RS-CURSOR-1; no format-v1 blocker remains.
+cover. At that historical cutoff, phase 2 and remote transport remained. Phase 2
+has since landed: simulator, fit, sensitivity, design, agent/policy/reasoner,
+models, display and FC-1/GT-1 are implemented. Remaining SDK implementation
+work is **Remote transport only** (`connect(http(s)://…)` still returns
+`Unsupported`); RS-CURSOR-1 remains an operator decision, not missing SDK code.
 
 ## Embedded web release (B-1)
 

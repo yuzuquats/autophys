@@ -9,7 +9,10 @@ implemented (I8c41e7a95d2f03b6c1e8). The goldens for Rust are under
 follow (rev 2)" and replaces rev 1's byte-identical curves with a tolerance
 comparison. The daemon/store portion of step 2 is implemented: outcome-gated
 single reveal, opaque reveal storage, and FC-1 run-curve shape/size validation.
-SDK curve generation, reveal writing and resume behavior remain separate work.
+The Rust SDK portion is implemented: measurement-id curves, uncounted
+truth-accuracy generation, evaluator reveal publication and resume/continuation
+refusal. Numerical curve comparisons use `rtol=1e-5, atol=1e-8`, as in the
+Python fixtures; unchanged metadata and recorded replay stay byte-identical.
 
 ## What the operator asked for
 
@@ -171,7 +174,7 @@ Step 1 settled these; Rust copies them.
 
 ```review-steps
 1. autophys/py — `curves` on `run` (train + held-out, downsampling, initial), `reveal` written by `SyntheticRunner`/bench after outcome, resume refusal, the fake store's endpoint, goldens.
-2. autophys/rs — daemon `reveal` kind and `POST /investigations/{inv}/reveal` (after outcome only), `workbook-format.md`; Rust SDK `curves` and `reveal`, byte-identical against step 1's goldens.
+2. autophys/rs — daemon `reveal` kind and `POST /investigations/{inv}/reveal` (after outcome only), `workbook-format.md`; Rust SDK `curves` and `reveal`, numerics within step 1's fixture tolerances and recorded replay byte-identical.
 3. autophys/ui — `wire.ts` maps `curves` and `reveal`; residual strip under each Fit chart; Ground truth row and page; fixtures carry both.
 ```
 
@@ -235,3 +238,33 @@ The final archived-tree rerun is recorded on rwc-dev-01 at
 `~/.cache/autophys/daemon-dm1-work/c-workspace-test.log`, using exactly
 `CARGO_TARGET_DIR=~/.cache/autophys/daemon-dm1-target cargo test --workspace`.
 That target is disposable and removed after qualification. No push or deploy.
+
+
+## Rust SDK step 2 implementation (2026-11-04)
+
+`curves::run_payload` simulates both predictions on the recorded full grids,
+then selects original indices, rounds outputs and halves the shared limit.
+The existing shared store validator checks the resulting run; its rules are
+not duplicated. `FitResult` ignores the optional curves on replay, and facts
+retain their existing shape. The agent skips reveal records and refuses
+resume, run, approve and attach_data after publication.
+
+`Evaluator::reveal(&inv)` is the harness publication API, called after
+`inv.run()`; it follows Python's evaluator-only writer rule. `SyntheticRunner`
+continues to provide measurements without exposing truth to the agent. Rust
+has no bench module to wire automatically. This follows rev 2 rather than
+introducing an additional truth-bearing runner hook. The sensitivity report
+must belong to the current fit; no residual rescaling is applied.
+
+Conformance tests regenerate both runs (2,170 output samples across fit and
+initial) from the Python workbook, check both standalone numeric fixtures,
+compare unchanged metadata canonically, and preserve the full golden record
+log and hash chain on projection rebuild. Reveal fields other than numerical
+uncertainty compare canonically exactly at the reference estimate; uncertainty
+uses the same `rtol=1e-5, atol=1e-8` numerical tolerance. Tests also exercise
+size halving, original-grid sampling, first-start ties, truth accuracy,
+zero simulation budget, uncertainty cancellation and reveal refusal.
+
+No new consequential design choice is introduced: the public evaluator hook,
+sampling, caps and numerical tolerances follow rev 2. FC-1/GT-1 remain
+**agent-chosen, pending operator review** as recorded above.
