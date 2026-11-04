@@ -22,7 +22,9 @@ export type DeckBody =
   | DeckProfile
   | DeckUncertainty
   | DeckTerminal
-  | DeckChat;
+  | DeckChat
+  | DeckBrowser
+  | DeckUses;
 
 /** Chart bodies (src/deck-charts.ts). The values are supplied by the app; the deck only scales them. */
 export type DeckAxis = { label: string; min: number; max: number; ticks?: number[]; unit?: string };
@@ -72,6 +74,17 @@ export type DeckChat = {
   agent: { name: string; avatar?: string };
   messages: { from: "user" | "agent"; text: string; source?: string }[];
   approval?: { label: string; title: string; rows: { label: string; value: string }[]; actions: string[] };
+};
+/** A browser window card: `url` in the address bar, numbered steps below,
+ * and an optional primary action under the card (deck-convo.ts). */
+export type DeckBrowser = { kind: "browser"; url: string; steps: { title: string; detail?: string }[]; primary: Cta | null };
+/** A wall of use-case cards in a masonry grid, faded out at the bottom so a
+ * long list reads as open-ended (deck-uses.ts). `icon` is trusted inner SVG
+ * markup for a 24 px stroked line icon; `live` marks cases that run today. */
+export type DeckUses = {
+  kind: "uses";
+  uses: { name: string; pair: string; choice: string; note?: string; icon?: string; live?: boolean; emphasis?: boolean }[];
+  legend?: { live: string; other: string };
 };
 export type DeckSlide = {
   eyebrow: { label: string } | { icon: "mark" };

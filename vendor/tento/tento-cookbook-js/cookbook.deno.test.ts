@@ -30,6 +30,7 @@ import source17 from "./demo/placeholder-app.ts" with { type: "text" };
 import source18 from "./demo/routes/index.root.ts" with { type: "text" };
 import source19 from "./src/deck-charts.ts" with { type: "text" };
 import source20 from "./src/deck-convo.ts" with { type: "text" };
+import source21 from "./src/deck-uses.ts" with { type: "text" };
 
 Deno.test("routes: landing and app paths round-trip under any base", () => {
   assertEquals(readRoute("/"), { app: false });
@@ -142,9 +143,9 @@ Deno.test("deck: edge rubber-band is symmetric, monotone and bounded", () => {
 
 Deno.test("deck: the placeholder deck is neutral, uses every body kind and fits the template", () => {
   const slides = placeholderDeck("Example", "/w");
-  assertEquals(slides.length, 11);
+  assertEquals(slides.length, 13);
   assertEquals(slides[0].title, "Example");
-  assertEquals(new Set(slides.map((s) => s.body.kind)).size, 11);
+  assertEquals(new Set(slides.map((s) => s.body.kind)).size, 13);
   for (const slide of slides) {
     if (slide.title.length > 60) throw new Error(`title too long: ${slide.title}`);
     if (slide.description.length > 120) throw new Error(`description too long: ${slide.description}`);
@@ -185,6 +186,7 @@ Deno.test("classes: every assigned shell class has a stylesheet selector", () =>
     ["demo/routes/index.root.ts", source18],
     ["src/deck-charts.ts", source19],
     ["src/deck-convo.ts", source20],
+    ["src/deck-uses.ts", source21],
   ];
   const intentional: Record<string, string> = {
     "ck-stat": "Grouping hook for ck-stat-value and ck-stat-label; uses block flow.",
@@ -275,7 +277,7 @@ Deno.test("namespace: lib exports only Cookbook, with the old names gone", async
   assertEquals(typeof Cookbook.mount().run, "function");
   assertEquals(typeof Cookbook.View.mount, "function");
   assertEquals(Cookbook.classes.toolbar, "ck-toolbar");
-  assertEquals(Cookbook.Deck.placeholderDeck("T").length, 11);
+  assertEquals(Cookbook.Deck.placeholderDeck("T").length, 13);
   assertEquals(Cookbook.Tutorial.shellSteps.length, 3);
   for (const gone of ["cookbook", "createCookbook", "cookbookClasses", "placeholderDeck", "PlaceholderApp"]) {
     assertEquals(gone in lib, false, gone);

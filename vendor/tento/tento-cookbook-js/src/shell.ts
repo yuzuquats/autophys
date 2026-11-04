@@ -135,6 +135,29 @@ export function placeholderDeck(title: string, appPath = "/app"): DeckSlide[] {
         approval: { label: "Needs approval", title: "Placeholder", rows: [{ label: "Detail", value: "Placeholder" }], actions: ["Approve", "Reject"] },
       },
     },
+    {
+      ...lead(12, "twelve"),
+      body: {
+        kind: "browser",
+        url: "example.com",
+        steps: [{ title: "Placeholder step", detail: "Placeholder detail" }, { title: "Placeholder step" }],
+        primary: open,
+      },
+    },
+    {
+      ...lead(13, "thirteen"),
+      body: {
+        kind: "uses",
+        uses: Array.from({ length: 9 }, (_, i) => ({
+          name: `Placeholder ${i + 1}`,
+          pair: "A ↔ B",
+          choice: "Placeholder",
+          live: i < 3,
+          emphasis: i === 0,
+        })),
+        legend: { live: "Placeholder", other: "Placeholder" },
+      },
+    },
   ];
 }
 

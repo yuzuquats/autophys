@@ -3,7 +3,7 @@
  * chat between a person and an agent that can end on an approval card.
  * Both are plain HTML; the app supplies every string (and the avatar URL).
  */
-import type { DeckChat, DeckTerminal } from "./deck-data.ts";
+import type { DeckBrowser, DeckChat, DeckTerminal } from "./deck-data.ts";
 import { h } from "./dom.ts";
 
 /** One shell line: `# …` is a comment, "" a blank line, anything else a
@@ -154,4 +154,25 @@ export function renderChat(body: DeckChat): HTMLElement {
     ),
   );
   return h("div", "ck-chat-wrap", null, chat, card);
+}
+
+/** A browser window card: the address bar names a public URL, numbered steps
+ * say what to do there, and an optional primary action links to it. */
+export function renderBrowser(body: DeckBrowser): HTMLElement {
+  const bar = h(
+    "div",
+    "ck-term-bar",
+    { "aria-hidden": "true" },
+    h("i"),
+    h("i"),
+    h("i"),
+    h("span", "ck-browser-url", null, body.url),
+  );
+  const steps = h("ol", "ck-browser-steps");
+  for (const s of body.steps) {
+    const text = h("div", "", null, h("p", "", null, s.title));
+    if (s.detail) text.append(h("p", "ck-browser-detail", null, s.detail));
+    steps.append(h("li", "", null, text));
+  }
+  return h("div", "ck-term", null, bar, steps);
 }

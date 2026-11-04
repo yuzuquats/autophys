@@ -23,6 +23,25 @@ const series = (label: string, a: number, tau: number, floor: number, emphasis =
 const g = (q: number, m: number, w: number) => Math.exp(-(((q - m) / w) ** 2));
 const info = Array.from({ length: 101 }, (_, i) => Math.min(1, 0.12 + 0.88 * g(i, 12, 7) + 0.55 * g(i, 88, 8) + 0.3 * g(i, 50, 10)));
 
+/** Line icons for the use-case wall: 24 px viewBox, drawn with the cookbook's stroke. */
+const ICONS = {
+  battery: '<rect x="3" y="7" width="16" height="10" rx="2"/><path d="M21 10.5v3M7 10v4M10 10v4"/>',
+  spring: '<path d="M12 2v3M8 5h8M8 5l8 2.5-8 2.5 8 2.5-8 2.5"/><rect x="7" y="16" width="10" height="6" rx="1.5"/>',
+  thermometer: '<path d="M10 14.5V5a2 2 0 1 1 4 0v9.5a4 4 0 1 1-4 0z"/><path d="M12 9v7"/>',
+  flask: '<path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.8 3h10.4a2 2 0 0 0 1.8-3l-5-9V3"/><path d="M7.5 15h9"/>',
+  pill: '<rect x="3" y="8.5" width="18" height="7" rx="3.5" transform="rotate(-35 12 12)"/><path d="M9.7 8.8l4.6 6.4"/>',
+  motor: '<circle cx="11" cy="12" r="7"/><circle cx="11" cy="12" r="2"/><path d="M18 12h4M11 5V3"/>',
+  bridge: '<path d="M2 18h20M4 18v-4M20 18v-4M2 14h20M6 14l6-7 6 7M12 7v7"/>',
+  exchanger: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h4c2 0 2 4 4 4s2-4 4-4 2 4 4 4h2"/>',
+  chain: '<rect x="2.5" y="9" width="8" height="6" rx="3"/><rect x="13.5" y="9" width="8" height="6" rx="3"/><path d="M8 12h8"/>',
+  stack: '<rect x="4" y="4" width="4" height="16" rx="1"/><rect x="10" y="4" width="4" height="16" rx="1"/><rect x="16" y="4" width="4" height="16" rx="1"/>',
+  layers: '<path d="M2 8h20M2 13h20M2 18h20"/><path d="M12 3v15M10 16l2 2 2-2"/>',
+  beaker: '<path d="M6 3h12M7 3v15a3 3 0 0 0 3 3h4a3 3 0 0 0 3-3V3"/><path d="M7 11h10M10 15h.01M14 17h.01M12 13.5h.01"/>',
+  fan: '<circle cx="12" cy="12" r="1.5"/><path d="M12 10.5C12 6 9 4 7.5 5.5S9 10 12 10.5zM13.5 12c4.5 0 6.5-3 5-4.5S14 9 13.5 12zM12 13.5c0 4.5 3 6.5 4.5 5S15 14 12 13.5zM10.5 12C6 12 4 15 5.5 16.5S10 15 10.5 12z"/>',
+  solar: '<path d="M5 5h14l2 10H3z"/><path d="M4 10h16M9.5 5l-1 10M14.5 5l1 10M12 15v4M8 19h8"/>',
+  tank: '<rect x="6" y="3" width="12" height="18" rx="5"/><circle cx="10.5" cy="14" r="1"/><circle cx="13.5" cy="10" r="1"/><circle cx="12" cy="17" r=".6"/>',
+};
+
 export function deck(app: Cookbook.App, appPath = "/app"): Cookbook.Deck.Slide[] {
   const open = { label: "Open the workbench", href: appPath };
   const rest = (n: number) =>
@@ -112,21 +131,17 @@ export function deck(app: Cookbook.App, appPath = "/app"): Cookbook.Deck.Slide[]
     },
     {
       eyebrow: { label: "Get started" },
-      title: "From a CSV to a verdict.",
-      description: "Python 3.10 or newer, with no accounts or keys. Bring a pulse trace and its noise level.",
+      title: "Try it in your browser.",
+      description: "Nothing to install, and no account. The hosted workbench opens a demo workspace of example investigations.",
       body: {
-        kind: "terminal",
-        lines: [
-          "# get the SDK and the battery example",
-          "git clone github.com/yuzuquats/autophys",
-          "cd autophys/examples/battery_fit",
-          "",
-          "# fit your cell; see which parameters are identified",
-          "./run.sh my_cell.csv --sigma 0.002",
-          "",
-          "# let it propose the next test; approve it in the browser",
-          "./run.sh agent",
+        kind: "browser",
+        url: "https://autophys.lona.so/app",
+        steps: [
+          { title: "Open an example investigation", detail: "Its measurements, fits and proposals are listed under it." },
+          { title: "Read the verdict", detail: "Which parameters the data pins down to ±10%, and which sit on a ridge." },
+          { title: "Approve the next test", detail: "Edit the proposed settings if you like, then approve or reject it." },
         ],
+        primary: { label: "Open the demo", href: `${appPath}?source=fixtures` },
       },
     },
     {
@@ -157,16 +172,27 @@ export function deck(app: Cookbook.App, appPath = "/app"): Cookbook.Deck.Slide[]
     {
       eyebrow: { label: "Beyond batteries" },
       title: "Any lab with a simulator and an expensive test.",
-      description: "One @ap.simulator per domain. The top three run today.",
+      description: "Each has parameters its usual tests can't tell apart. One simulator per field; the fit, checks and workbench carry over.",
       body: {
-        kind: "comparison",
-        columns: ["Tangled parameters", "Next test it picks"],
-        rows: [
-          { label: "Battery cell", before: "R1 ↔ C1", after: "Which pulse or discharge" },
-          { label: "Mechanism", before: "Mass ↔ stiffness", after: "Forcing frequency" },
-          { label: "Enclosure", before: "Capacity ↔ resistance", after: "Step or pulse heating" },
-          { label: "Kinetics", before: "A ↔ Ea", after: "Reactor temperature" },
+        kind: "uses",
+        uses: [
+          { icon: ICONS.battery, name: "Battery cells", pair: "R1 ↔ C1", choice: "Which pulse or discharge", note: "The example in this deck.", live: true, emphasis: true },
+          { icon: ICONS.spring, name: "Mechanisms", pair: "mass ↔ stiffness", choice: "Forcing frequency", live: true },
+          { icon: ICONS.thermometer, name: "Thermal enclosures", pair: "capacity ↔ resistance", choice: "Step or pulse heating", live: true },
+          { icon: ICONS.flask, name: "Reaction kinetics", pair: "A ↔ Ea", choice: "Reactor temperature" },
+          { icon: ICONS.pill, name: "Pharmacokinetics", pair: "clearance ↔ volume", choice: "When to draw samples", note: "Each sample is a blood draw." },
+          { icon: ICONS.motor, name: "Electric motors", pair: "R ↔ L", choice: "Step or frequency sweep" },
+          { icon: ICONS.bridge, name: "Structures", pair: "stiffness ↔ damping", choice: "Where to excite and sense", note: "Each setup means moving sensors." },
+          { icon: ICONS.exchanger, name: "Heat exchangers", pair: "fouling ↔ film coefficient", choice: "Which flow rate" },
+          { icon: ICONS.chain, name: "Polymers", pair: "modulus ↔ relaxation time", choice: "Load ramp rate" },
+          { icon: ICONS.stack, name: "Fuel cells", pair: "exchange current ↔ transfer coefficient", choice: "Which polarization point", note: "Each point takes minutes to settle." },
+          { icon: ICONS.layers, name: "Soil and aquifers", pair: "permeability ↔ storage", choice: "Pumping schedule" },
+          { icon: ICONS.beaker, name: "Drug formulation", pair: "dissolution ↔ permeability", choice: "Which media and pH" },
+          { icon: ICONS.fan, name: "HVAC zones", pair: "air exchange ↔ thermal mass", choice: "Setpoint step" },
+          { icon: ICONS.solar, name: "Photovoltaics", pair: "series ↔ shunt resistance", choice: "Irradiance level" },
+          { icon: ICONS.tank, name: "Bioreactors", pair: "growth rate ↔ yield", choice: "Feed rate" },
         ],
+        legend: { live: "Runs in autophys today", other: "Others need their own simulator" },
       },
     },
   ];

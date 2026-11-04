@@ -62,7 +62,9 @@ export namespace Cookbook {
     export type Uncertainty = DeckTypes.DeckUncertainty;
     export type Terminal = DeckTypes.DeckTerminal;
     export type Chat = DeckTypes.DeckChat;
-    /** Eleven neutral slides, one of each body kind; slide one carries the title. */
+    export type Browser = DeckTypes.DeckBrowser;
+    export type Uses = DeckTypes.DeckUses;
+    /** Thirteen neutral slides, one of each body kind; slide one carries the title. */
     export const placeholderDeck = placeholder;
   }
 

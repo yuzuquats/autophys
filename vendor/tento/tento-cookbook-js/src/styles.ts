@@ -251,6 +251,34 @@ html[data-ck-stage="tour"] .ck-tour-peek { opacity: 1; transition-duration: 300m
   .ck-approval .ck-slide-label { grid-column: 1 / -1; } .ck-approval-actions { grid-row: 2; }
   .ck-term pre { padding: 12px 14px 14px; font-size: 11.5px; line-height: 19px; white-space: pre-wrap; overflow-wrap: anywhere; }
 }
+.ck-term-bar .ck-browser-url { flex: 0 1 300px; min-width: 0; margin-left: 10px; padding: 2px 10px; border-radius: 6px; background: #222;
+  font: 11.5px/16px var(--ck-mono); color: #bdbdbd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ck-browser-steps { list-style: none; margin: 0; padding: 14px 20px 16px; display: flex; flex-direction: column; gap: 12px; counter-reset: ck-step; }
+.ck-browser-steps li { counter-increment: ck-step; display: grid; grid-template-columns: 20px 1fr; gap: 10px; font-size: 14px; line-height: 20px; color: #e6e6e6; }
+.ck-browser-steps li::before { content: counter(ck-step); width: 20px; height: 20px; border-radius: 50%; box-shadow: inset 0 0 0 1px #3a3a3a;
+  display: grid; place-items: center; font-size: 11px; color: #8a8a8a; }
+.ck-browser-steps p { margin: 0; }
+.ck-browser-steps .ck-browser-detail { font-size: 12.5px; line-height: 18px; color: #8a8a8a; }
+.ck-term + .ck-slide-actions { margin-top: 20px; }
+/* use-case wall (deck-uses.ts): std-grid-layout cards, faded out at the bottom */
+.ck-uses { position: relative; }
+.ck-uses-well { height: calc(var(--ck-body-h) - 8px); overflow: hidden;
+  -webkit-mask-image: linear-gradient(#000 50%, transparent 96%); mask-image: linear-gradient(#000 50%, transparent 96%); }
+/* std-grid-layout positions each card absolutely; a position here would override its slotted rule */
+.ck-use { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px 11px; border-radius: 12px; background: var(--ck-n100); }
+.ck-use-head { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; padding-right: 12px; }
+.ck-use-head svg { width: 20px; height: 20px; flex: none; fill: none; stroke: var(--ck-n600); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.ck-use-name { font-size: 14px; line-height: 20px; font-weight: 600; color: #000; }
+.ck-use-pair { font: 12px/17px var(--ck-mono); color: var(--ck-n600); }
+.ck-use-choice { font-size: 12.5px; line-height: 17px; color: var(--ck-n500); }
+.ck-use-note { margin-top: 4px; font-size: 12.5px; line-height: 17px; color: var(--ck-n600); }
+.ck-use-live { position: absolute; top: 17px; right: 12px; width: 6px; height: 6px; border-radius: 50%; background: var(--ck-n900); }
+.ck-use.ck-emphasis { background: var(--ck-n900); }
+.ck-use.ck-emphasis .ck-use-name { color: #fff; } .ck-use.ck-emphasis .ck-use-head svg { stroke: #fff; }
+.ck-use.ck-emphasis .ck-use-pair { color: #cfcfcf; } .ck-use.ck-emphasis .ck-use-choice, .ck-use.ck-emphasis .ck-use-note { color: var(--ck-n400); }
+.ck-use.ck-emphasis .ck-use-live { background: #fff; }
+.ck-uses-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: -10px 0 0; position: relative; font-size: 12px; line-height: 16px; color: var(--ck-n500); }
+.ck-uses-legend .ck-use-live { position: static; display: inline-block; margin-right: 6px; vertical-align: 1px; }
 .ck-bar-value { font-size: 20px; line-height: 28px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--ck-n500); text-align: right; }
 .ck-bars .ck-emphasis .ck-bar-value { color: #000; }
 .ck-bars + .ck-slide-actions { margin-top: 56px; }
