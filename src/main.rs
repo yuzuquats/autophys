@@ -16,6 +16,10 @@ async fn main() -> ExitCode {
             report(run(config).await)
         }
         Some("build-web") => {
+            let (args, bundle) = match autophys_cli::embedded::parse_bundle(args) {
+                Ok(parsed) => parsed,
+                Err(message) => return usage_error(&message),
+            };
             let out = match parse_build_web(args) {
                 Ok(out) => out,
                 Err(message) => return usage_error(&message),
@@ -26,11 +30,37 @@ async fn main() -> ExitCode {
             };
             match build_web(project_root(), out).await {
                 Ok(root) => {
+                    if let Some(bundle) = bundle {
+                        let packed = std::env::current_exe()
+                            .map_err(anyhow::Error::from)
+                            .and_then(|exe| {
+                                autophys_cli::embedded::pack(&exe, &root, &bundle, true)
+                            });
+                        return report(packed);
+                    }
                     println!("{}", root.display());
                     ExitCode::SUCCESS
                 }
                 Err(error) => report(Err(error)),
             }
+        }
+        Some("pack") => {
+            let args = match autophys_cli::embedded::parse_pack(args) {
+                Ok(args) => args,
+                Err(message) => return usage_error(&message),
+            };
+            report(
+                std::env::current_exe()
+                    .map_err(anyhow::Error::from)
+                    .and_then(|exe| {
+                        autophys_cli::embedded::pack(
+                            &exe,
+                            &args.web_root,
+                            &args.out,
+                            args.with_maps,
+                        )
+                    }),
+            )
         }
         Some(command @ ("pair" | "keys" | "db")) => {
             let command = command.to_string();

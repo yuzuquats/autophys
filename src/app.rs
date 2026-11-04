@@ -25,12 +25,15 @@ pub struct BuildInfo {
     pub version: String,
     /// The autophys commit `ops/deploy.sh` stamps in through `AUTOPHYS_COMMIT`.
     pub commit: String,
+    /// SHA-256 of the embedded web payload currently served, or null.
+    pub web_id: Option<String>,
 }
 
 impl BuildInfo {
     /// The Cargo version and stamped commit; a plain build reports `dev`.
     pub fn current() -> Self {
         BuildInfo {
+            web_id: None,
             version: env!("CARGO_PKG_VERSION").to_string(),
             commit: option_env!("AUTOPHYS_COMMIT").unwrap_or("dev").to_string(),
         }
@@ -56,6 +59,7 @@ struct Health<'a> {
     ok: bool,
     version: &'a str,
     commit: &'a str,
+    web_id: Option<&'a str>,
 }
 
 /// The page the cookbook's client routes answer with: the built shell.
@@ -128,6 +132,7 @@ async fn healthz(info: web::Data<BuildInfo>) -> HttpResponse {
         ok: true,
         version: &info.version,
         commit: &info.commit,
+        web_id: info.web_id.as_deref(),
     })
 }
 

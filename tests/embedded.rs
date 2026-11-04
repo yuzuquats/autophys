@@ -178,3 +178,127 @@ fn hydration_rehashes_payload_and_checks_crc() {
     file.write_all(&[byte[0] ^ 0xff]).unwrap();
     assert!(embedded::hydrate(&out, &payload, &dir.path().join("cache")).is_err());
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+#[ignore = "requires AUTOPHYS_E2E_WEB_ROOT pointing to a real build-web tree"]
+fn packed_single_file_serves_without_sources() {
+    use std::net::{TcpListener, TcpStream};
+    use std::process::{Child, Command, Stdio};
+    use std::time::{Duration, Instant};
+    struct Stop(Child);
+    impl Drop for Stop {
+        fn drop(&mut self) {
+            let _ = Command::new("kill")
+                .args(["-TERM", &self.0.id().to_string()])
+                .status();
+            let deadline = Instant::now() + Duration::from_secs(15);
+            while Instant::now() < deadline {
+                if self.0.try_wait().ok().flatten().is_some() {
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+    fn get(path: &str) -> std::io::Result<Vec<u8>> {
+        let mut socket = TcpStream::connect_timeout(
+            &"127.0.0.1:4799".parse().unwrap(),
+            Duration::from_millis(200),
+        )?;
+        socket.set_read_timeout(Some(Duration::from_secs(3)))?;
+        write!(
+            socket,
+            "GET {path} HTTP/1.1\r\nHost: 127.0.0.1:4799\r\nConnection: close\r\n\r\n"
+        )?;
+        let mut response = Vec::new();
+        socket.read_to_end(&mut response)?;
+        let end = response
+            .windows(4)
+            .position(|s| s == b"\r\n\r\n")
+            .expect("HTTP headers");
+        let headers = String::from_utf8_lossy(&response[..end]);
+        assert!(headers.starts_with("HTTP/1.1 200"), "{path}: {headers}");
+        Ok(response[end + 4..].to_vec())
+    }
+    drop(TcpListener::bind("127.0.0.1:4799").expect("e2e port must be free"));
+    let root = std::path::PathBuf::from(
+        std::env::var_os("AUTOPHYS_E2E_WEB_ROOT").expect("build-web tree"),
+    );
+    let exe = std::env::var_os("AUTOPHYS_E2E_EXE")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| env!("CARGO_BIN_EXE_autophys").into());
+    let scratch = tempfile::tempdir().unwrap();
+    let run = scratch.path().join("empty");
+    fs::create_dir(&run).unwrap();
+    let packed = run.join("autophys");
+    embedded::pack(&exe, &root, &packed, true).unwrap();
+    let payload = embedded::locate(&packed).unwrap().unwrap();
+    assert_eq!(
+        fs::read_dir(&run).unwrap().count(),
+        1,
+        "only the packed file travels"
+    );
+    let expected_js = fs::read(root.join("routes/index.root.js")).unwrap();
+    eprintln!(
+        "packed file: {} bytes, payload: {} bytes",
+        fs::metadata(&packed).unwrap().len(),
+        payload.zip_len
+    );
+    for pass in ["cold", "warm"] {
+        let started = Instant::now();
+        let child = Command::new(&packed)
+            .current_dir(&run)
+            .env_clear()
+            .env("HOME", scratch.path())
+            .env("AUTOPHYS_HOME", scratch.path().join("collection"))
+            .env("TENTO_APP_CACHE_DIR", scratch.path().join("cache"))
+            .env("TENTO_APP_DATA_DIR", scratch.path().join("data"))
+            .env(
+                "AUTOPHYS_PROJECT_ROOT",
+                scratch.path().join("absent-source"),
+            )
+            .args(["serve", "--addr", "127.0.0.1:4799"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut server = Stop(child);
+        let health = loop {
+            if let Ok(body) = get("/api/healthz") {
+                break body;
+            }
+            if let Some(status) = server.0.try_wait().unwrap() {
+                let mut stderr = String::new();
+                server
+                    .0
+                    .stderr
+                    .as_mut()
+                    .unwrap()
+                    .read_to_string(&mut stderr)
+                    .unwrap();
+                panic!("serve exited {status}: {stderr}");
+            }
+            assert!(
+                started.elapsed() < Duration::from_secs(15),
+                "serve startup timeout"
+            );
+            std::thread::sleep(Duration::from_millis(2));
+        };
+        eprintln!(
+            "{pass} first healthy response: {:.2} ms",
+            started.elapsed().as_secs_f64() * 1000.0
+        );
+        let health: serde_json::Value = serde_json::from_slice(&health).unwrap();
+        assert_eq!(health["ok"], true);
+        assert_eq!(health["web_id"], payload.id);
+        assert_eq!(health.as_object().unwrap().len(), 4);
+        assert!(!get("/").unwrap().is_empty());
+        assert_eq!(get("/index.root.js").unwrap(), expected_js);
+        assert!(!get("/app").unwrap().is_empty());
+        drop(server);
+    }
+    drop(TcpListener::bind("127.0.0.1:4799").expect("e2e server was stopped"));
+}

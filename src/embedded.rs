@@ -392,6 +392,75 @@ pub fn pack(exe: &Path, tree: &Path, out: &Path, with_maps: bool) -> Result<()> 
     }
 }
 
+/// Arguments shared by the native CLI and its tento_sh command.
+#[derive(Debug)]
+pub struct PackArgs {
+    pub web_root: PathBuf,
+    pub out: PathBuf,
+    pub with_maps: bool,
+}
+
+pub fn parse_pack(args: impl IntoIterator<Item = String>) -> Result<PackArgs, String> {
+    let mut root = None;
+    let mut out = None;
+    let mut maps = true;
+    let mut args = args.into_iter();
+    while let Some(arg) = args.next() {
+        let (key, inline) = arg
+            .split_once('=')
+            .map_or((arg.as_str(), None), |(k, v)| (k, Some(v.to_string())));
+        match key {
+            "--web-root" | "--out" => {
+                let value = inline
+                    .or_else(|| args.next())
+                    .filter(|s| !s.is_empty() && !s.starts_with("--"))
+                    .ok_or_else(|| format!("{key} needs a value"))?;
+                if key == "--web-root" {
+                    root = Some(PathBuf::from(value));
+                } else {
+                    out = Some(PathBuf::from(value));
+                }
+            }
+            "--no-maps" if inline.is_none() => maps = false,
+            _ => return Err(format!("unknown pack argument {arg:?}")),
+        }
+    }
+    Ok(PackArgs {
+        web_root: root.ok_or("pack requires --web-root DIR")?,
+        out: out.ok_or("pack requires --out FILE")?,
+        with_maps: maps,
+    })
+}
+
+/// Keep build-web's existing --out parser and add the post-build --bundle.
+pub fn parse_bundle(
+    args: impl IntoIterator<Item = String>,
+) -> Result<(Vec<String>, Option<PathBuf>), String> {
+    let mut rest = Vec::new();
+    let mut bundle = None;
+    let mut args = args.into_iter();
+    while let Some(arg) = args.next() {
+        let value = if arg == "--bundle" {
+            Some(
+                args.next()
+                    .filter(|s| !s.is_empty() && !s.starts_with("--"))
+                    .ok_or("--bundle needs a value")?,
+            )
+        } else {
+            arg.strip_prefix("--bundle=").map(str::to_string)
+        };
+        if let Some(value) = value {
+            if value.is_empty() {
+                return Err("--bundle needs a value".into());
+            }
+            bundle = Some(PathBuf::from(value));
+        } else {
+            rest.push(arg);
+        }
+    }
+    Ok((rest, bundle))
+}
+
 #[cfg(target_os = "macos")]
 mod macos {
     use super::*;

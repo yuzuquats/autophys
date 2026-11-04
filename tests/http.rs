@@ -37,6 +37,7 @@ async fn start(name: &str) -> Running {
     let info = BuildInfo {
         version: "0.1.0".into(),
         commit: "abc1234".into(),
+        web_id: None,
     };
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
@@ -81,7 +82,7 @@ async fn healthz_reports_ok_version_and_commit() {
     let json: serde_json::Value = serde_json::from_str(&body).unwrap();
     assert_eq!(
         json,
-        serde_json::json!({ "ok": true, "version": "0.1.0", "commit": "abc1234" })
+        serde_json::json!({ "ok": true, "version": "0.1.0", "commit": "abc1234", "web_id": null })
     );
 }
 

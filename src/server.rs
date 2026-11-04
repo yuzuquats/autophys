@@ -23,7 +23,8 @@ pub const DEFAULT_ADDR: &str = "127.0.0.1:4794";
 pub const USAGE: &str =
     "usage: autophys serve [--addr 127.0.0.1:4794] [--web-root DIR] [--collection DIR]
                       [--server-db FILE] [--browser-origin ORIGIN]...
-       autophys build-web [--out DIR]
+       autophys build-web [--out DIR] [--bundle FILE]
+       autophys pack --web-root DIR --out FILE [--no-maps]
        autophys pair list | pair approve <CODE> | pair deny <CODE>
        autophys keys list [--json] | keys revoke <KEY_ID>
        autophys db verify [--rebuild] [--json] [--project NAME]   (db check is the same)
@@ -352,7 +353,23 @@ pub async fn termination() {
 pub async fn run(serve_config: ServeConfig) -> Result<()> {
     let listener = std::net::TcpListener::bind(serve_config.addr)
         .with_context(|| format!("bind {}", serve_config.addr))?;
-    let build = serve_config.web_root.is_none();
+    let exe = std::env::current_exe().context("locate autophys executable")?;
+    let payload = crate::embedded::locate(&exe)?;
+    anyhow::ensure!(
+        option_env!("AUTOPHYS_RELEASE") != Some("1") || payload.is_some(),
+        "release binary has no embedded web payload; run autophys pack after stripping"
+    );
+    let (web_root, build, web_id) = match serve_config.web_root {
+        Some(root) => (root, false, None),
+        None => match payload {
+            Some(payload) => {
+                let cache = AppDirs::resolve(APP_ID)?.cache;
+                let root = crate::embedded::hydrate(&exe, &payload, &cache)?;
+                (root, false, Some(payload.id))
+            }
+            None => (default_web_root()?, true, None),
+        },
+    };
     let collection = serve_config.collection.unwrap_or_else(default_collection);
     let server_db = match serve_config.server_db {
         Some(path) => path,
@@ -372,13 +389,11 @@ pub async fn run(serve_config: ServeConfig) -> Result<()> {
     })?;
     let config = AppConfig {
         project_root: project_root(),
-        web_root: match serve_config.web_root {
-            Some(root) => root,
-            None => default_web_root()?,
-        },
+        web_root,
         store: Some(api),
     };
-    let info = BuildInfo::current();
+    let mut info = BuildInfo::current();
+    info.web_id = web_id;
     let webapp = Arc::new(webapp(&config, info.clone(), build)?);
     // Held for the server's lifetime: dropping it stops the dev watch.
     let _watch = if build {

@@ -68,6 +68,7 @@ async fn the_store_is_mounted_in_the_daemon_app() {
         store: Some(api),
     };
     let info = BuildInfo {
+        web_id: None,
         version: "0.1.0".into(),
         commit: "test".into(),
     };

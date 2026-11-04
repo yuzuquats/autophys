@@ -407,3 +407,24 @@ those files are excluded from these scoped commits and the archive.
 Task CLI is unavailable on this host, as already recorded in the project
 cover. Remaining work is the reserved phase-2 API, remote Rust transport,
 and review of RS-CURSOR-1 / RS-WAIT-1; no format-v1 blocker remains.
+
+## Embedded web release (B-1)
+
+Linux ships one native executable with a deflated ZIP and the 24-byte
+`APZIP001 | prefix u64 LE | ZIP length u64 LE` footer. macOS relinks the ZIP
+into `__AUTOPHYS,__web` with `-Wl,-sectcreate` and reads it with
+`getsectiondata`; macOS packaging requires the source checkout and remains
+untested on this Linux host. Strip Linux executables before packing.
+
+`autophys pack --web-root DIR --out FILE [--no-maps]` packs a built tree;
+`autophys build-web [--out DIR] --bundle FILE` builds and packs it.
+Serving prefers an explicit web root, then the hydrated embedded tree, then
+the dev build. A compile-time `AUTOPHYS_RELEASE=1` serve refuses a binary
+without a payload. Hydration uses the SHA-256 of the ZIP under the app cache's
+`web/embedded/<sha256>/autophys`, atomically publishes a complete tree, and
+prunes complete entries older than seven days.
+
+`GET /api/healthz` is now `{ok, version, commit, web_id}`. `web_id` is
+the payload SHA-256 when serving embedded assets and null for an explicit
+web root or a dev build. The existing routes and document session cookie
+remain in force.
