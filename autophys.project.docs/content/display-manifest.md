@@ -460,3 +460,26 @@ Task-board CLI was unavailable on rwc-dev-01 (installed `lona-console` has no
 `task` command); plan and live gate logs are in
 `~/.cache/autophys/rs-dm1-evidence/` on the owner host. No other threads were
 messaged.
+
+
+### Daemon/store validation and review receipt (2026-11-04)
+
+Implementation commits: display `b242839` (`I3239635c574aff73f583`);
+reveal/curves `e5472b3` (`I930ec3df6c116b50e969`). Both were assembled
+from HEAD blobs through private indexes; no peer uncommitted work was adopted.
+
+A `git archive` export of the combined commit passed `cargo test --workspace`:
+161 passed, 0 failed, 2 existing ignored tests. This includes 4 display route/
+stream tests and 5 reveal/curve tests, all Python workbook conformance inputs,
+and the Rust SDK suite. The initial test-only Actix macro collision was fixed
+before this passing gate.
+
+Independent review (separate GPT-6.1 Sol agent, no credits provider) found one
+P2: unrelated project broadcasts could postpone an external-writer poll.
+The stream now keeps a fixed polling deadline. A fifth display test sustains
+unrelated writes while requiring the external manifest within 1.5 seconds and
+checking scope isolation. The reviewer found no other actionable findings.
+The final archived-tree rerun is recorded on rwc-dev-01 at
+`~/.cache/autophys/daemon-dm1-work/c-workspace-test.log`, using exactly
+`CARGO_TARGET_DIR=~/.cache/autophys/daemon-dm1-target cargo test --workspace`.
+That target is disposable and removed after qualification. No push or deploy.

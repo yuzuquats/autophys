@@ -2,7 +2,7 @@
 
 Status: format spec, rev 1, 2026-11-04. It turns the operator decisions in
 [`workbook.md`](workbook.md) (W-3, W-4, W-6) into a byte-level contract. The
-reference implementation is the Rust store (`src/store`); the Python SDK
+reference implementation is the shared Rust store (`sdks/rust/src/workbook.rs`); the Python SDK
 implements the same rules in `sdks/python/src/autophys/workbook.py` with the
 standard library's `sqlite3`. `tests/conformance/` holds what both sides
 must pass.

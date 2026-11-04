@@ -14,7 +14,10 @@
 //!   (400): it names a position in one workbook only.
 //!
 //! Framing: `id: <cursor>`, `event: record`, `data: <the 8-field record>`, and
-//! a `: keep-alive` comment after 15 s without a record.
+//! a `: keep-alive` comment after 15 s without an event.
+//! Project manifests use `event: display`, data `{project_id, digest, display}`,
+//! without an id: they leave the record cursor intact. Each connection sends
+//! the latest manifest, then changed digests (including external writers).
 //!
 //! Records are always read from the workbooks, in `gseq` order per workbook.
 //! A write this server makes wakes every stream at once; records another
@@ -130,6 +133,7 @@ pub(crate) async fn stream(
         display_digests: BTreeMap::new(),
         dirty: true,
         quiet_since: Instant::now(),
+        next_poll: Instant::now() + POLL,
     };
     let events = futures_util::stream::unfold(tail, |mut t| async move {
         let chunk = t.next().await?;
@@ -160,6 +164,8 @@ struct Tail {
     /// Re-read the workbooks before waiting again.
     dirty: bool,
     quiet_since: Instant,
+    /// A fixed deadline: unrelated broadcast traffic must not postpone polling.
+    next_poll: Instant,
 }
 
 impl Tail {
@@ -203,11 +209,11 @@ impl Tail {
                 self.dirty = page.len() as i64 >= PAGE;
                 self.backlog.extend(page);
                 self.displays.extend(displays);
+                self.next_poll = Instant::now() + POLL;
                 continue;
             }
             let keep_alive = self.quiet_since + KEEP_ALIVE;
-            let wake = Instant::now() + POLL;
-            match tokio::time::timeout_at(wake.min(keep_alive), self.rx.recv()).await {
+            match tokio::time::timeout_at(self.next_poll.min(keep_alive), self.rx.recv()).await {
                 Err(_) if Instant::now() >= keep_alive => {
                     self.quiet_since = Instant::now();
                     self.dirty = true;

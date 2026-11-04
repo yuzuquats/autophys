@@ -52,7 +52,7 @@ Three rules make the layers line up:
 | `wb.investigate(dataset, runner, policy=…)` (creates and records) | `wb.investigate(dataset, runner, policy)` (phase 2) | `POST /api/v1/investigations`                    |
 | `inv.run()` (runs the loop; proposals come from `request_experiment`) | `inv.run() -> Result<Outcome>` (phase 2) | `POST …/proposals`, `…/runs`, `…/steps`, `…/measurements`, `…/outcome` |
 | `store.create_investigation(meta, record_id=)` (record only) | `wb.create_investigation(meta, record_id)`  | `POST /api/v1/investigations`                    |
-| `store.append(kind, payload, id)`      | `inv.append(kind, payload, id)`                         | `POST …/runs`, `…/steps`, `…/measurements`, `…/outcome`, `…/proposals` (by kind) |
+| `store.append(kind, payload, id)`      | `inv.append(kind, payload, id)`                         | `POST …/runs`, `…/steps`, `…/measurements`, `…/outcome`, `…/reveal` (after outcome, one distinct reveal), `…/proposals` (by kind) |
 | `inv.records(kind=None)`               | `inv.records(kind: Option<&str>)`                       | `GET …/records`                                  |
 | —                                      | `inv.records_after(gseq)` (Rust only: SSE and the daemon) | `GET …/records?after=`                         |
 | `inv.proposal(pid)`                    | `inv.proposal(pid)`                                     | `GET …/proposals/{pid}`                          |
@@ -60,6 +60,7 @@ Three rules make the layers line up:
 | `inv.reject(pid, by=, reason=)`        | `inv.reject(pid, by, reason)`                           | `POST …/proposals/{pid}/approvals` (event `rejected`) |
 | `inv.attach_data(pid, observation)`    | `inv.attach_data(pid, observation)`                     | `POST …/proposals/{pid}/data`                    |
 | `inv.wait_for_approval(proposal_id, timeout=)` | `inv.wait_for_approval(proposal_id, timeout)`                        | `GET /api/v1/stream?investigation=` (remote) or `PRAGMA data_version` (local) |
+| `store.put_display(project_id, body)` | `wb.put_display(body)`, `wb.display()` (record store) | `PUT /api/v1/projects/{pid}/display`; format 1, 256 KiB; workspace projects include display, stream emits display events |
 | `wb.config_versions()`                 | `wb.config_versions()`, `wb.put_config_version(v, body)` | `GET/PUT /api/v1/projects/{pid}/config_versions[/{v}]` |
 | `wb.verify()` → `{ok, records, investigations, chain_errors, projections_match}` | `wb.verify() -> VerifyReport` (same five fields) | `autophys db verify` |
 ```

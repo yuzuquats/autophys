@@ -254,3 +254,53 @@ async fn display_stream_reconnect_live_poll_and_project_filter() {
     let b = display_event(&mut all).await;
     assert_ne!(a["project_id"], b["project_id"]);
 }
+
+#[actix_web::test]
+async fn unrelated_wakeups_do_not_postpone_external_display_polling() {
+    let f = fixture();
+    let app = app!(f.api);
+    let key = pair(&app, &f.api, "display").await;
+    let a = f.api.client.project("quiet").unwrap();
+    let b = f.api.client.project("busy").unwrap();
+    a.put_display(br#"{"format":1,"label":"first"}"#).unwrap();
+    let response = test::call_service(
+        &app,
+        get(&format!("/stream?project={}", a.id()), Some(&key)).to_request(),
+    )
+    .await;
+    let mut body = response.into_body();
+    assert_eq!(display_event(&mut body).await["project_id"], a.id());
+    let external = autophys::connect(Some(f.api.client.root().to_str().unwrap())).unwrap();
+    external
+        .project_by_id(a.id())
+        .unwrap()
+        .put_display(br#"{"format":1,"label":"external"}"#)
+        .unwrap();
+
+    let spam = async {
+        let path = format!("/projects/{}/display", b.id());
+        // Keep unrelated wakeups arriving for longer than the allowed poll delay.
+        for i in 0..32 {
+            let bytes = serde_json::to_vec(&json!({"format":1,"iteration":i})).unwrap();
+            assert_eq!(
+                call(&app, put_raw(&path, Some(&key), &bytes).to_request())
+                    .await
+                    .0,
+                201
+            );
+            tokio::time::sleep(Duration::from_millis(60)).await;
+        }
+    };
+    let receive = async {
+        let event = tokio::time::timeout(Duration::from_millis(1500), display_event(&mut body))
+            .await
+            .expect("unrelated writes postponed the one-second external poll");
+        assert_eq!(
+            event["project_id"],
+            a.id(),
+            "unrelated display must not leak"
+        );
+        assert_eq!(event["display"]["label"], "external");
+    };
+    tokio::join!(spam, receive);
+}
