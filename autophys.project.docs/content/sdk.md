@@ -351,3 +351,90 @@ On rwc-dev-01 (Python 3.12.3, NumPy 2.5.4, SciPy 1.18.1, venv
   start MCP servers).
 - Retire the yuzuquats original and `~/.cache/modellab/venv` once the
   operator agrees.
+
+## How the loops nest (research and investigation)
+
+Added 2026-11-04 at the operator's request, to show how `autophys research`
+(M-9) relates to one investigation. It describes the code as of `f364cb5`;
+the last diagram and table mark proposals that are not built.
+
+The two loops do not run side by side. The outer loop **calls** the inner
+one: each research iteration scores a playbook by running complete
+investigations, one per case and seed, and waits for all of them before it
+decides whether to keep the edit.
+
+```review-flow
+flowchart TB
+  subgraph OUTER["outer: autophys research (research.py), N iterations in sequence"]
+    PB["playbook k<br/>SKILL.md strategy"]
+    subgraph EVAL["evaluate(playbook) on train seeds: cases x seeds, pool of --jobs"]
+      INV["one investigation per case and seed<br/>(the inner loop below)"]
+    end
+    SC["score, MQ-4<br/>correct, then mean log error, then cost"]
+    KEEP{"improves on k?"}
+    RS["researcher proposes an edit<br/>API or muse exec, then validate_edit"]
+    PB --> INV --> SC --> KEEP
+    KEEP -- "yes: becomes k" --> RS
+    KEEP -- "no: keep k" --> RS
+    RS -- "candidate k+1" --> INV
+  end
+  KEEP -. "after N iterations" .-> HO["held-out seeds:<br/>initial vs final playbook<br/>summary.json"]
+```
+
+The inner loop is not a fixed cycle. At each step the policy (scripted, or a
+reasoner reading the playbook) picks one action from the fixed contract
+(`sdks/rust/src/agent/actions.json`) until it stops or a budget runs out.
+The usual path:
+
+```review-flow
+flowchart LR
+  I["inspect_data"] --> F["optimize_parameters"] --> S["analyze_sensitivity<br/>log-Jacobian SVD"] --> R["rank_experiments<br/>Fisher, min_eig or d_opt"]
+  R --> Q["request_experiment<br/>budget-checked"]
+  Q -- "new train data" --> F
+  S --> M["compare_models<br/>variants by BIC"]
+  M --> F
+  S --> V["validate_predictions"] --> X["stop<br/>guardrail checks the claim"]
+  X --> O["outcome in .ap-workbook"]
+```
+
+Where the loops run:
+
+```review-table
+| Mode | Loops | Where the new data comes from |
+| ---- | ----- | ----------------------------- |
+| research (offline) | outer and inner | the synthetic case's hidden truth (`synthetic.CASES`); no person in the loop. Reasoner calls are replay-only until a budget is approved (MQ-2). |
+| bench | inner only, many runs | same as research, one fixed playbook |
+| lab (Muse Code / MCP) | inner only, with the playbook research produced | a person approves the proposal in the browser and runs it on hardware (MQ-1), then `attach_data` |
+```
+
+Cost follows from the nesting: one research iteration costs a whole train
+benchmark (cases × seeds × reasoner calls per investigation) plus one
+researcher call. With the six cases and three train seeds that are the
+defaults, that is 18 investigations per iteration, plus 18 for the baseline
+and 2 × 12 for the held-out comparison.
+
+### Proposed extensions (agent-proposed, not built, pending operator review)
+
+```review-flow
+flowchart TB
+  J["research journal<br/>hypothesis, predicted effect, diff, score, kept"]:::new
+  RS["researcher"] --> J
+  J -- "read before the next edit" --> RS
+  VF["validation fails"] --> RM["propose rival model structures<br/>2RC, SoC-dependent R, hysteresis"]:::new
+  RM --> DD["rank experiments that discriminate<br/>between rivals, not only by Fisher"]:::new
+  DD --> SEL["choose the model on held-out validation"]:::new
+```
+
+```review-table
+| Id | Proposal | Loop | Why | Cost to try |
+| -- | -------- | ---- | --- | ----------- |
+| AR-1 | Research journal fed back to the researcher, one row per iteration with a stated hypothesis | outer | `proposal_prompt` sends only the current playbook and failing transcripts, so rejected edits can be proposed again | small: a sidecar and a prompt field |
+| AR-2 | Procedurally sampled cases, including misspecified ones (truth 2RC, model 1RC) and cost trade-offs | both | three train seeds over six cases gives a small integer score; greedy Fisher ranking is hard to beat on well-specified cases | moderate: `synthetic.py` and goldens |
+| AR-3 | Paired, repeated evaluation with a bootstrap acceptance rule | outer | `improves` accepts any lexicographic gain, which a single noisy reasoner run can produce | small in code, multiplies reasoner cost |
+| AR-4 | A typed strategy the researcher may edit alongside the prose (criterion, starts, stop thresholds, cost weighting) | outer | the default strategy can do no better than "request the top-ranked experiment" | moderate: the contract and validators |
+| AR-5 | Model discovery: rival structures and discrimination design when validation fails | inner | extends `compare_models` (BIC over declared variants) to proposing structures; this is the part only a model can add | large: numerics in both SDKs |
+| AR-6 | `research --forever` with dollar and test-hour caps, a stop file and resumable state | outer | needed to run unattended once MQ-2 allows live calls | moderate |
+```
+
+None of these changes the workbook format. AR-5 and the live runs need
+operator decisions before dependent work starts.
