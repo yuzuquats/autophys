@@ -393,11 +393,11 @@ fn case(c: &Value) -> Value {
             v["grid"] = json!(grid);
             v
         }
-        "run" => run_case(&sim, i),
+        "run" => run_case(&sim, i, c["policy"].as_str()),
         op => panic!("unsupported numerics op {op}"),
     }
 }
-fn run_case(sim: &FunctionSimulator, i: &Value) -> Value {
+fn run_case(sim: &FunctionSimulator, i: &Value, policy: Option<&str>) -> Value {
     let temp = tempfile::tempdir().unwrap();
     let client = autophys::connect(Some(temp.path().to_str().unwrap())).unwrap();
     let mut project = Project::new("conformance", sim.clone());
@@ -421,7 +421,9 @@ fn run_case(sim: &FunctionSimulator, i: &Value) -> Value {
     };
     let ds = Dataset::new(dataset).unwrap();
     let workbook = client.project_with(project).unwrap();
-    let policy: Box<dyn Policy> = if i["script"].is_array() {
+    let policy: Box<dyn Policy> = if policy == Some("scripted") {
+        Box::new(ScriptedPolicy::default())
+    } else {
         Box::new(SequencePolicy::new(
             i["script"].as_array().unwrap().iter().map(|d| {
                 if d.get("hypothesis").is_some() {
@@ -434,8 +436,6 @@ fn run_case(sim: &FunctionSimulator, i: &Value) -> Value {
                 }
             }),
         ))
-    } else {
-        Box::new(ScriptedPolicy::default())
     };
     let result_obs = i["runner"]["observations"]
         .as_array()
