@@ -701,10 +701,13 @@ shown to the researcher.
   re-scoring its baseline. State is saved before the baseline and after each
   iteration. On resume, a partial evaluation directory is moved aside as
   `NNN.interrupted-<time>` and redone, and journal lines that `state.json` never
-  recorded go to `journal.orphaned.jsonl` and their iteration is redone. The
-  run keeps its policy model (`model_spec`): resume refuses a different one. The
-  held-out evaluations run after the stop and count toward `spent_usd`, so they
-  can take spending past `--max-usd`.
+  recorded go to `journal.orphaned.jsonl` and their iteration is redone. A
+  `reason` run keeps its policy model (`model_spec`): resume refuses a different
+  one, and refuses runs that do not record one. Every charge is appended to
+  `spend.jsonl` when it is incurred and resume recomputes spend from it, so a
+  crash loses no spend. `--max-usd` is checked before each proposal, so one
+  iteration's researcher call and candidate evaluation, and the closing held-out
+  evaluations, can take spending past it.
 - **Acceptance (AR-3).** `--acceptance lexicographic` keeps any MQ-4 gain
   (`research.improves`). `--acceptance bootstrap` (`research.paired_bootstrap`)
   pairs candidate and incumbent on the same (case, seed) units, averages

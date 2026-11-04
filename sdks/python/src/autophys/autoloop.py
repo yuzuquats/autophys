@@ -103,9 +103,10 @@ def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_se
              acceptance="auto", repeats=1, alpha=0.05, evaluate_fn=evaluate, **options) -> dict:
     """Run the autoloop in ``output_dir`` until a stop condition; return the summary.
 
-    ``max_usd`` is checked before each proposal; the closing held-out evaluations
-    run after the stop and are added to ``spent_usd``, so they can take it past
-    the cap by at most two held-out evaluations.
+    ``max_usd`` is checked before each proposal, so one iteration's researcher call
+    and candidate evaluation, and the closing held-out evaluations, can take
+    ``spent_usd`` past it. Every charge is appended to ``spend.jsonl`` when it is
+    incurred, and a resumed run recomputes its spend from that ledger.
     """
     from dataclasses import asdict
 
@@ -124,12 +125,16 @@ def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_se
         policy = config["policy"]
         acceptance, repeats, alpha = config.get("acceptance", "lexicographic"), config.get("repeats", 1), config.get("alpha", alpha)
         # Scores are only comparable under the policy model that produced the incumbent's.
-        stored = config.get("model_spec")
-        if stored is not None:
-            if spec is None:
+        if policy == "reason":
+            if "model_spec" not in config:
+                raise ValueError("this run does not record its policy model, so it cannot be resumed safely; "
+                                 "start a new run")
+            stored = config["model_spec"]
+            given = asdict(spec) if spec is not None else None
+            if given is None and stored is not None:
                 options["model_spec"] = ModelSpec(**stored)
-            elif asdict(spec) != stored:
-                raise ValueError(f"resume must use the run's policy model {stored}, not {asdict(spec)}")
+            elif given != stored:
+                raise ValueError(f"resume must use the run's policy model {stored}, not {given}")
     else:
         cases = list(cases or CASES)
         train_seeds, heldout_seeds = tuple(train_seeds), tuple(heldout_seeds)
@@ -160,8 +165,17 @@ def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_se
     def fresh(directory):
         # An interrupted evaluation leaves a partial directory; keep it aside and redo it.
         if directory.exists():
-            directory.rename(directory.with_name(f"{directory.name}.interrupted-{time.strftime('%Y%m%dT%H%M%S', time.gmtime())}"))
+            import uuid
+            stamp = time.strftime('%Y%m%dT%H%M%S', time.gmtime())
+            directory.rename(directory.with_name(f"{directory.name}.interrupted-{stamp}-{uuid.uuid4().hex[:8]}"))
         return directory
+
+    def charge(what, usd):
+        # Appended when incurred, so spend survives any crash before state.json is saved.
+        if usd:
+            with (root / "spend.jsonl").open("a", encoding="utf-8") as stream:
+                stream.write(json.dumps({"at": _now(), "what": what, "usd": usd}) + "\n")
+            state["spent_usd"] += usd
 
     def scored(path, seeds, directory):
         result = _scored(path, seeds, fresh(directory))
@@ -191,15 +205,23 @@ def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_se
 
     t0 = time.monotonic()
     wall_before = float(state.get("wall_s", 0.0))
+    if resume and "incumbent" not in state and (root / "spend.jsonl").exists():
+        state["spent_usd"] = sum(json.loads(line)["usd"] for line in (root / "spend.jsonl").read_text(encoding="utf-8")
+                                 .splitlines() if line.strip())
     if "incumbent" not in state:
         text = load_playbook(config["playbook"] if resume else playbook).data.decode("utf-8")
         path = run.playbook(0, text)
         report = scored(path, train_seeds, root / "train" / "000")
+        charge("train/000", cost(report))
         state.update(incumbent=path.name, incumbent_sha256=_sha(text), incumbent_score=report["score"],
-                     initial=path.name, spent_usd=state["spent_usd"] + cost(report))
+                     initial=path.name)
         _write_json(root / "train" / "000" / "report.json", report)
         run.save_state(state)
     else:
+        ledger = root / "spend.jsonl"
+        if ledger.exists():
+            state["spent_usd"] = sum(json.loads(line)["usd"] for line in ledger.read_text(encoding="utf-8").splitlines()
+                                     if line.strip())
         path = root / "playbooks" / state["incumbent"]
         text = path.read_text(encoding="utf-8")
         report = json.loads((root / "train" / path.stem / "report.json").read_text(encoding="utf-8"))
@@ -242,7 +264,7 @@ def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_se
             # The researcher validated its own output and it was unusable: a rejected iteration.
             proposal = error
         usage = getattr(researcher, "last_usage", None)
-        state["spent_usd"] += _usage_cost(usage)
+        charge(f"researcher/{index:03d}", _usage_cost(usage))
         entry["researcher_usage"] = usage
         events = getattr(researcher, "last_events", None)
         if isinstance(events, dict):
@@ -265,7 +287,7 @@ def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_se
             candidate = run.playbook(index, proposed)
             trial = scored(candidate, train_seeds, root / "train" / f"{index:03d}")
             _write_json(root / "train" / f"{index:03d}" / "report.json", trial)
-            state["spent_usd"] += cost(trial)
+            charge(f"train/{index:03d}", cost(trial))
             accepted, stats = decide(trial, report, index)
             entry.update(accepted=accepted, score=trial["score"], playbook=candidate.name, sha256=_sha(proposed),
                          diff=_diff(text, proposed), acceptance=stats, reason="improves on the incumbent" if accepted
@@ -283,11 +305,11 @@ def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_se
     final = root / "playbooks" / state["incumbent"]
     stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime())
     held_initial = scored(initial, heldout_seeds, root / "heldout" / f"initial-{stamp}")
-    state["spent_usd"] += cost(held_initial)
+    charge(f"heldout/initial-{stamp}", cost(held_initial))
     held_final = held_initial
     if final != initial:
         held_final = scored(final, heldout_seeds, root / "heldout" / f"final-{stamp}")
-        state["spent_usd"] += cost(held_final)
+        charge(f"heldout/final-{stamp}", cost(held_final))
     state["wall_s"] = wall_before + time.monotonic() - t0
     state["stopped"] = {"at": _now(), "reason": stop}
     run.save_state(state)

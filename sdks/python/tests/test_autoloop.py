@@ -317,6 +317,13 @@ def test_a_journal_line_without_state_is_set_aside_and_redone(tmp_path):
     assert json.loads((run / "journal.orphaned.jsonl").read_text())["iteration"] == 2
 
 
+def _reason_run(tmp_path, evaluate, **kw):
+    start = tmp_path / "start.md"
+    start.write_text(DEFAULT + "\n")
+    return autoloop(researcher=Proposer([]), output_dir=tmp_path / "run", playbook=start, policy="reason",
+                    replay="unused-by-fake-evaluator", cases=["thermal"], evaluate_fn=evaluate, **kw)
+
+
 def test_resume_keeps_the_policy_model(tmp_path):
     from autophys.reasoner import ModelSpec
     spec = ModelSpec("policy", "meta", "muse-spark-1.3", "low")
@@ -324,12 +331,19 @@ def test_resume_keeps_the_policy_model(tmp_path):
     def evaluate(path, cases, seeds, policy, directory, **kw):
         seen.append(kw["model_spec"])
         return FakeEval()(path, cases, seeds, policy, directory)
-    _run(tmp_path, Proposer([]), evaluate_fn=evaluate, model_spec=spec)
+    _reason_run(tmp_path, evaluate, model_spec=spec)
+    resume = dict(researcher=Proposer([]), output_dir=tmp_path / "run", resume=True, evaluate_fn=evaluate,
+                  replay="unused-by-fake-evaluator")
     with pytest.raises(ValueError, match="policy model"):
-        autoloop(researcher=Proposer([]), output_dir=tmp_path / "run", resume=True, evaluate_fn=evaluate,
-                 model_spec=ModelSpec("policy", "meta", "other"))
-    autoloop(researcher=Proposer([]), output_dir=tmp_path / "run", resume=True, evaluate_fn=evaluate)
+        autoloop(**resume, model_spec=ModelSpec("policy", "meta", "other"))
+    autoloop(**resume)
     assert set(seen) == {spec}
+    # A run that does not record its model (made before model tracking) cannot be resumed.
+    state = json.loads((tmp_path / "run/state.json").read_text())
+    del state["config"]["model_spec"]
+    (tmp_path / "run/state.json").write_text(json.dumps(state))
+    with pytest.raises(ValueError, match="does not record its policy model"):
+        autoloop(**resume, model_spec=spec)
 
 
 def test_null_errors_from_sidecars_compare_as_infinite():
@@ -373,3 +387,52 @@ def test_scripted_exhaustion_stops_cleanly_and_research_takes_autoloop_proposals
     out = research(researcher=Proposer(["\nImprove.\n"]), output_dir=tmp_path / "research", policy="scripted",
                    cases=["thermal"], iterations=3, evaluate_fn=FakeEval())
     assert [i["accepted"] for i in out["iterations"]] == [True]
+
+
+# --- review round 2: spend survives crashes; recovery names never collide ----------
+
+class Costly(Interrupting):
+    """Every evaluation costs $1; fails once on the given evaluation number."""
+
+    def __call__(self, path, cases, seeds, policy, directory, **kw):
+        out = super().__call__(path, cases, seeds, policy, directory, **kw)
+        return dict(out, score=dict(out["score"], cost_usd=1.0))
+
+
+def test_spend_survives_an_interrupted_heldout_evaluation(tmp_path):
+    evaluate = Costly(fail_at=4)  # baseline, candidate, held-out initial, then held-out final fails
+    with pytest.raises(KeyboardInterrupt):
+        _run(tmp_path, Proposer(["\nImprove.\n"]), evaluate_fn=evaluate, max_iterations=1)
+    summary = autoloop(researcher=Proposer([]), output_dir=tmp_path / "run", resume=True, max_iterations=1,
+                       evaluate_fn=evaluate)
+    # Five evaluations completed: baseline, candidate, held-out initial twice, held-out final.
+    assert summary["spent_usd"] == pytest.approx(5.0)
+    ledger = [json.loads(l) for l in (tmp_path / "run/spend.jsonl").read_text().splitlines()]
+    assert len(ledger) == 5
+
+
+def test_spend_of_an_orphaned_iteration_is_kept(tmp_path):
+    evaluate = Costly(fail_at=0)
+    _run(tmp_path, Proposer(["\nImprove.\n"]), evaluate_fn=evaluate, max_iterations=1)
+    run = tmp_path / "run"
+    # Simulate a crash after iteration 2's candidate was scored and journalled, before state was saved.
+    line = json.loads((run / "journal.jsonl").read_text().splitlines()[0])
+    with (run / "journal.jsonl").open("a") as stream:
+        stream.write(json.dumps(dict(line, iteration=2)) + "\n")
+    with (run / "spend.jsonl").open("a") as stream:
+        stream.write(json.dumps({"at": "t", "what": "train/002", "usd": 1.0}) + "\n")
+    summary = autoloop(researcher=Proposer([]), output_dir=run, resume=True, max_iterations=1, evaluate_fn=evaluate)
+    # 1 baseline + 1 candidate + 1 held-out initial + 1 held-out final (first run), the orphan's 1,
+    # and the resumed run's held-out initial and final.
+    assert summary["spent_usd"] == pytest.approx(7.0)
+
+
+def test_repeated_interruptions_in_one_second_do_not_collide(tmp_path):
+    evaluate = Interrupting(fail_at=1)
+    with pytest.raises(KeyboardInterrupt):
+        _run(tmp_path, Proposer([]), evaluate_fn=evaluate)
+    evaluate.fail_at = 2
+    with pytest.raises(KeyboardInterrupt):
+        autoloop(researcher=Proposer([]), output_dir=tmp_path / "run", resume=True, evaluate_fn=evaluate)
+    autoloop(researcher=Proposer([]), output_dir=tmp_path / "run", resume=True, evaluate_fn=evaluate)
+    assert len(list((tmp_path / "run/train").glob("000.interrupted-*"))) == 2
