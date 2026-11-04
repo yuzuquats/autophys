@@ -1,0 +1,48 @@
+{
+  "imports": {
+    "@tento-ui/": "../vendor/tento/tento-ui-js/",
+    "@tento-ui/ui/icons": "../vendor/tento/tento-ui-js/ui/icons.deno.ts",
+    "@tento-ui/icon-exports": "../vendor/tento/tento-ui-js/icon-exports.deno.ts",
+    "@tento-ui/llm-logger": "../vendor/tento/tento-ui-js/llm-logger.deno.ts",
+    "@tento-ui/icons/": "../vendor/tento/tento-ui-js/icons/mock-svg-dir/",
+    "@tento-core/": "../vendor/tento/tento-core-js/",
+    "@tento-cookbook/": "../vendor/tento/tento-cookbook-js/",
+    "@tento-trace": "../vendor/tento/tento-trace-js/src/lib.ts",
+    "@tento-trace/": "../vendor/tento/tento-trace-js/src/",
+    "@tento-chrono": "../vendor/tento/tento-chrono/chrono/mod.ts",
+    "@tento-chrono/": "../vendor/tento/tento-chrono/"
+  },
+  "unstable": [
+    "sloppy-imports"
+  ],
+  "lock": false,
+  "compilerOptions": {
+    "types": [
+      "../vendor/tento/tento-ui-js/types/option.d.ts",
+      "../vendor/tento/tento-core-js/types/untyped-json.d.ts",
+      "../vendor/tento/tento-core-js/types/uuid.d.ts",
+      "../vendor/tento/tento-core-js/types/identifiable.d.ts",
+      "../vendor/tento/tento-core-js/types/rfc3339.d.ts",
+      "../vendor/tento/tento-core-js/types/timeout.d.ts",
+      "../vendor/tento/tento-ui-js/types/dev.d.ts",
+      "../vendor/tento/tento-ui-js/types/empty-function.d.ts",
+      "../vendor/tento/tento-ui-js/types/factory.d.ts",
+      "../vendor/tento/tento-ui-js/types/globals.d.ts",
+      "../vendor/tento/tento-ui-js/types/html-element.d.ts",
+      "../vendor/tento/tento-ui-js/types/inset.d.ts",
+      "../vendor/tento/tento-ui-js/types/json.d.ts",
+      "../vendor/tento/tento-ui-js/types/naive-date-serialized.d.ts",
+      "../vendor/tento/tento-ui-js/types/size.d.ts",
+      "../vendor/tento/tento-ui-js/types/svg.d.ts"
+    ],
+    "lib": [
+      "deno.ns",
+      "deno.window",
+      "dom",
+      "dom.iterable"
+    ],
+    "noImplicitAny": false,
+    "noImplicitOverride": false,
+    "experimentalDecorators": true
+  }
+}
