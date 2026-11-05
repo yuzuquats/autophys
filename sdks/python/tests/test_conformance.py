@@ -78,8 +78,8 @@ def test_rust_written_workbooks_verify(path, tmp_path):
             assert wb.heads() == exp["heads"] and projection_rows(wb._conn) == exp["projections"]
 
 
-def test_generator_writes_self_consistent_cases(tmp_path):
-    for path in conformance_cases.write(tmp_path):
+def test_generator_writes_self_consistent_cases(tmp_path, current_reasoner_cassette):
+    for path in conformance_cases.write(tmp_path, replay=current_reasoner_cassette):
         exp = json.loads(path.with_suffix(".json").read_text())
         with WorkbookStore(path, readonly=True) as wb:
             assert wb.check()["ok"] and wb.heads() == exp["heads"]

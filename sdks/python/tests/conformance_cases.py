@@ -73,15 +73,14 @@ def _events_and_values(store: WorkbookStore) -> None:
     store.append(inv, "outcome", {"status": "inconclusive", "reasons": ["conformance"]})
 
 
-def _reason_replayed(store: WorkbookStore) -> None:
+def _reason_replayed(store: WorkbookStore, *, replay) -> None:
     """An offline reason run pins playbook bytes, model, prices and usage."""
     from autophys.bench import case_project
     from autophys.reasoner import ModelSpec, MUSE_SPARK, reasoner_for
     from autophys.agent import ReasonLanePolicy
     from autophys.synthetic import CASES as SYNTHETIC
-    cassette = Path(__file__).resolve().parents[3] / "tests/conformance/reasoner/spark-oscillator.jsonl"
     spec = ModelSpec("policy", "meta", MUSE_SPARK)
-    policy = ReasonLanePolicy(reasoner_for(spec, replay=cassette), model_spec=spec)
+    policy = ReasonLanePolicy(reasoner_for(spec, replay=replay), model_spec=spec)
     policy.name = "reason"
     view, _ = SYNTHETIC["oscillator"](0)
     inv = Investigation(case_project(view), view.dataset, view.runner, policy=policy, store=store)
@@ -137,8 +136,11 @@ def _write_curve_expectations(store, out):
         (out / f"thermal-curves-{label}.json").write_text(json.dumps(case, indent=1, sort_keys=True) + "\n")
 
 
-def write(out: Path, names=None) -> list[Path]:
+def write(out: Path, names=None, *, replay=None) -> list[Path]:
     out.mkdir(parents=True, exist_ok=True)
+    if replay is None and (names is None or "reason-replayed" in names):
+        from reasoner_cassette import generate
+        replay = generate(out / "reasoner.cassette.jsonl")
     written = []
     for name, build in CASES.items():
         if names is not None and name not in names:
@@ -147,7 +149,10 @@ def write(out: Path, names=None) -> list[Path]:
         for p in (path, path.with_name(path.name + "-wal"), path.with_name(path.name + "-shm")):
             p.unlink(missing_ok=True)
         with WorkbookStore(path) as store:
-            build(store)
+            if name == "reason-replayed":
+                build(store, replay=replay)
+            else:
+                build(store)
             assert store.check()["ok"]
             exp = expected(store)
             if name == "thermal-curves-reveal":

@@ -110,10 +110,10 @@ def test_trace_validation(kind, field, value, path):
     assert "payload." + path in str(exc.value)
 
 
-def test_offline_reason_bench_is_deterministic(monkeypatch):
+def test_offline_reason_bench_is_deterministic(monkeypatch, current_reasoner_cassette):
     import autophys.reasoner as module
     monkeypatch.setattr(module, "request_json", lambda *a, **k: pytest.fail("network during replay"))
-    rows = [run_case("oscillator", "reason", 0, model_spec=SPEC, replay=CASSETTE) for _ in range(2)]
+    rows = [run_case("oscillator", "reason", 0, model_spec=SPEC, replay=current_reasoner_cassette) for _ in range(2)]
     one, two = map(asdict, rows)
     one.pop("wall_s")
     two.pop("wall_s")
@@ -125,13 +125,13 @@ def test_offline_reason_bench_is_deterministic(monkeypatch):
     assert one["calls"] > 0 and one["cost_usd"] > 0
 
 
-def test_cli_replay_and_live_guard():
+def test_cli_replay_and_live_guard(current_reasoner_cassette):
     out = io.StringIO()
     assert main(["bench", "--policy", "reason", "--model", MUSE_SPARK], out=out) == 2
     assert "AUTOPHYS_ALLOW_LIVE_REASON=1" in out.getvalue()
     out = io.StringIO()
     assert main(["bench", "--policy", "reason", "--model", MUSE_SPARK, "--case", "oscillator",
-                 "--seeds", "1", "--replay", str(CASSETTE)], out=out) == 0
+                 "--seeds", "1", "--replay", str(current_reasoner_cassette)], out=out) == 0
     assert all(key in out.getvalue() for key in ("calls", "input_tokens", "output_tokens", "cost_usd"))
     assert "validatedx1" in out.getvalue()
 

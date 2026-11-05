@@ -29,9 +29,9 @@ def test_parallel_bench_identity():
         assert a == b
 
 
-def test_parallel_replay_and_record_guard(tmp_path):
+def test_parallel_replay_and_record_guard(tmp_path, current_reasoner_cassette):
     options = dict(cases=["oscillator"], policies=["reason"], seeds=1,
-                   model_spec=ModelSpec("policy", "meta", MUSE_SPARK), replay=CASSETTE)
+                   model_spec=ModelSpec("policy", "meta", MUSE_SPARK), replay=current_reasoner_cassette)
     one = asdict(run_benchmark(jobs=1, **options)[0])
     two = asdict(run_benchmark(jobs=4, **options)[0])
     one.pop("wall_s")
@@ -229,9 +229,9 @@ def test_research_accept_reject_and_heldout(tmp_path):
     assert json.loads((tmp_path / "research/summary.json").read_text())["train"]["mean_log_error"] == .1
 
 
-def test_evaluate_and_replayed_export(tmp_path):
+def test_evaluate_and_replayed_export(tmp_path, current_reasoner_cassette):
     report = evaluate(load_playbook().path, ["oscillator"], [0], "reason", tmp_path / "eval",
-                      jobs=4, model_spec=ModelSpec("policy", "meta", MUSE_SPARK), replay=CASSETTE)
+                      jobs=4, model_spec=ModelSpec("policy", "meta", MUSE_SPARK), replay=current_reasoner_cassette)
     assert report["score"]["correct"] == 1
     assert report["runs"][0]["score"]["log_errors"]
     output = io.StringIO()
