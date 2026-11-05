@@ -148,5 +148,7 @@ The tests cover:
   (8 values) × frequency (14, including 0.44 Hz) × duration (6) at the proposal's rate,
   using the fact that a linear system's information scales with A². Rate has no axis, so a
   rate edit is refused. Adding a fourth axis would exceed E-1's limit of three.
-- **UI-4, investigations start from the SDK.** The empty state now supplies an SDK recipe
-  instead of drawing a disabled "+". The UI still cannot start an investigation.
+- **UI-4, the browser can start a restricted synthetic thermal investigation.** Its
+  starter uses the pinned thermal model/configuration and supports human approval,
+  native resume and refitting. Use the SDK to supply arbitrary simulators and
+  investigation configurations; see [contributor setup](../CONTRIBUTING.md).

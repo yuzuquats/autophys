@@ -73,7 +73,12 @@ const app: Cookbook.App = {
   mount(shell) {
     ctl.shell = { download: (name, type, data) => shell.download(name, type, data), picked: () => shell.onSelect() };
     document.querySelector(".ck-header .ck-export")?.remove();
-    const removeStyles = shell.addStyles(autophysStyles(shell.scope) + placeholderStyles(shell.scope));
+    // The in-flow lowered landing must not be pulled back over fixed panels by
+    // scrollIntoView/focus scrolling the body's hidden overflow container.
+    // Clip only while open; the landing document retains its native scrolling.
+    const removeStyles = shell.addStyles(autophysStyles(shell.scope) + placeholderStyles(shell.scope) + `
+      html[data-ck-stage="tour"] body, html[data-ck-stage="app"] body { overflow: clip; }
+    `);
     const handle: typeof ctl.handle = (intent) => {
       if (intent.kind === "select" && intent.id === "devices") {
         ctl.handle(intent);

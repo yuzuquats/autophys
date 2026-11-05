@@ -322,6 +322,15 @@ function decided(raw: Raw, event: string, p: Obj, ts: number): void {
   if (event === "data_attached") prop.delivered = true;
 }
 
+/** JSON display bodies can arrive with different object-key order in a snapshot. */
+function sameDisplay(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (!a || !b || typeof a !== "object" || typeof b !== "object" || Array.isArray(a) !== Array.isArray(b)) return false;
+  const left = Object.keys(a), right = Object.keys(b);
+  return left.length === right.length && left.every((key) => Object.hasOwn(b, key) &&
+    sameDisplay((a as Obj)[key], (b as Obj)[key]));
+}
+
 // ------------------------------------------------------------------------ the model
 
 export class WireModel {
@@ -339,8 +348,13 @@ export class WireModel {
   display(event: unknown): boolean {
     const e = obj(event);
     if (typeof e.project_id !== "string" || !e.project_id || typeof e.digest !== "string" || !/^[a-f0-9]{64}$/.test(e.digest) || obj(e.display).format !== 1) return false;
-    if (this.displays.get(e.project_id)?.digest === e.digest) return false;
-    this.displays.set(e.project_id, { digest: e.digest, display: e.display, revision: ++this.displayRevision });
+    const previous = this.displays.get(e.project_id), revision = ++this.displayRevision;
+    if (previous?.digest === e.digest) {
+      // Even an unchanged receipt is newer than an already in-flight snapshot.
+      this.displays.set(e.project_id, { ...previous, revision });
+      return false;
+    }
+    this.displays.set(e.project_id, { digest: e.digest, display: e.display, revision });
     this.projects = this.projects.map((p) => p.id === e.project_id ? { ...p, display: e.display } : p);
     this.changed = true;
     return true;
@@ -357,8 +371,15 @@ export class WireModel {
   reference(w: Pick<WireWorkspace, "projects" | "config_versions">, startedAt = this.displayRevision): void {
     this.projects = w.projects.map((p) => {
       const live = this.displays.get(p.id);
-      return live && live.revision > startedAt ? { ...p, display: live.display } : p;
+      if (live && live.revision > startedAt) return { ...p, display: live.display };
+      // A remembered digest belongs to its body, not to every later snapshot.
+      // Keep it only when the snapshot installs that same presentation.
+      if (live && !sameDisplay(live.display, p.display)) this.displays.delete(p.id);
+      return p;
     });
+    for (const [id, live] of this.displays) {
+      if (live.revision <= startedAt && !w.projects.some((p) => p.id === id)) this.displays.delete(id);
+    }
     this.configs = new Map();
     for (const c of w.config_versions) this.configs.set(c.project_id, [...(this.configs.get(c.project_id) ?? []), { version: c.version, config: c.config }]);
     this.cache.clear();

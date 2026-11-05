@@ -482,5 +482,48 @@ Deno.test("daemon: reference fetch merges concurrent display metadata and record
   assertEquals([snap.gseq, store.applied.length, p.configs[0].catalog[1].label], [10, 2, "Latest display"]);
   assertEquals(p.investigations.length, 2);
   assertEquals(p.investigations[0].proposals[0].status, "approved");
+  assertEquals(p.configs.map(c => c.hash), ["v1hash", "v2hash"]);
+  let redraws = 0; store.subscribe(() => redraws++);
+  d.streams.at(-1)!.fire.display.forEach(fn => fn({ data: JSON.stringify(live), lastEventId: "" }));
+  assertEquals([redraws, store.snapshot()!.gseq, store.applied.length], [0, 10, 2]);
   store.close();
+});
+
+Deno.test("daemon: A event, snapshot B, reconnect A reconciles display identity", async () => {
+  const d = fakeDaemon(), store = new Store(daemon(d.opts));
+  await store.start();
+  const display = (label: string) => ({ format: 1, channels: { x: { label, unit: "mm" } }, settings: { frequency: { label, role: "drive" } }, experiments: { sine: { label, views: ["spectrum"] } } });
+  const a = { project_id: "p_bench", digest: "a".repeat(64), display: display("A") };
+  const fire = () => d.streams.at(-1)!.fire.display.forEach(fn => fn({ data: JSON.stringify(a), lastEventId: "" }));
+  const before = store.snapshot()!, cursor = before.gseq, hash = before.workspace.projects[0].configs[0].hash;
+  fire();
+  d.ws.projects[0].display = display("B");
+  await store.refreshWorkspace();
+  assertEquals(store.snapshot()!.workspace.projects[0].configs[0].catalog[1].label, "B");
+  let redraws = 0; store.subscribe(() => redraws++);
+  fire();
+  const current = store.snapshot()!, config = current.workspace.projects[0].configs[0], sine = config.catalog[1];
+  assertEquals([sine.label, sine.output.label, sine.output.unit, sine.viewHints], ["A", "A", "mm", ["frequency"]]);
+  assertEquals(sine.settings.find(s => s.name === "frequency")?.role, "drive");
+  assertEquals([current.gseq, store.applied.length, config.hash], [cursor, 0, hash]);
+  assertEquals(current.workspace.projects[0].investigations, before.workspace.projects[0].investigations);
+  fire(); assertEquals(redraws, 1);
+  // A snapshot with the same JSON body in a different key order preserves dedup.
+  d.ws.projects[0].display = { experiments: a.display.experiments, settings: a.display.settings, channels: a.display.channels, format: 1 };
+  await store.refreshWorkspace();
+  const afterRefresh = redraws; fire(); assertEquals(redraws, afterRefresh);
+  store.close();
+});
+
+Deno.test("wire: duplicate display receipt protects an in-flight reference without redrawing", async () => {
+  const { WireModel } = await import("./wire.ts");
+  const raw = workspace(), model = new WireModel(raw);
+  const event = { project_id: "p_bench", digest: "e".repeat(64), display: { format: 1, experiments: { sine: { label: "Current" } } } };
+  assert(model.display(event)); model.takeChanged();
+  const started = model.displayRevision;
+  assertEquals(model.display(event), false); assertEquals(model.takeChanged(), false);
+  raw.projects[0].display = { format: 1, experiments: { sine: { label: "Older snapshot" } } };
+  model.reference(raw, started);
+  assertEquals(model.workspace().projects[0].configs[0].catalog[1].label, "Current");
+  model.takeChanged(); assertEquals(model.display(event), false); assertEquals(model.takeChanged(), false);
 });
