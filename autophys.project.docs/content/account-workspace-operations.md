@@ -2,7 +2,23 @@
 
 The account selects one persisted collection. A local daemon uses its configured collection without cloud login. Cloud sessions and device keys resolve an account/workspace binding on every request; clients never select a server filesystem path. “Continue as demo” creates the normal session for the configured read-only account. It does not seed records, change data sources or start a walkthrough.
 
-Native implementation checkpoint: `82831c6`. Frontend and this record accompany that checkpoint. Production accounts, mappings, data and services were not modified.
+Native implementation checkpoint: `82831c6`; frontend checkpoint: `8f83b70`. Production was deployed on 2026-11-05 from `6efe1f3`. The implementation qualification below predates that cutover; the production result is recorded next.
+
+## Production deployment — 2026-11-05
+
+Live at https://autophys.lona.so/app. The native binary and embedded browser payload are pinned to commit `6efe1f3eb0659c27dd0f8c092f183b5826aca1a8`; later peer edits were excluded. Public `/api/healthz` reports web ID `503e4624bcd29e72e240c5fd19bea7a0c22a8cc8140badbba117f5622295ee3a`.
+
+Schema v5 repaired the demo account's read-only flag. Its existing collection at `/home/james/autophys` was registered in place: `battery_cycler_demo`, project `prj_63f1a2034c21136b`, all 29 records and their IDs were preserved. No seed import ran. James's account was assigned its own initially empty collection at `/home/james/.local/share/tento/autophys/workspaces/u_027e68487fca`. Mapping revoked previous sessions; there were no existing keys or pairings.
+
+The packaged release passed a focused real-daemon rehearsal against isolated production copies: demo writes/job starts/device approval were denied, ordinary workspace writes and a native investigation succeeded, and foreign project access was refused. Public browser checks confirmed normal demo sign-in, 29 persisted records, write denial, explicit walkthrough launch, all ten walkthrough steps using account records, and a 390 px mobile layout without document overflow. Reload restored the demo session without starting the walkthrough. The owned preview tab was closed. No test suites ran; SDK campaign acceptance remains unverified.
+
+Deployment evidence, source/build identity, qualification and owner-only SQLite backups are retained at:
+
+`/home/james/workspace/scratch/autophys-account-deploy-3e79416b743e417ba9000675932916f6.scratch-entry/content`
+
+See `deployment.json`, `build-result.json`, `release-qualification.json`, `public-browser-qualification.json` and `backups/`. The installed release is `/home/james/.local/share/tento/services/autophys/6efe1f3-20261105`; the previous release remains retained. Recovery must preserve matching ownership metadata and collection state, as described below.
+
+The exclusive native build window is closed. Its completion receipt at `~/.local/state/productionize/autophys-sdks-20261105/repair-round-1-qualification/deploy-window-completion.json` records 17.805 GiB free at handoff, unchanged native inputs and retained SDK artifacts, and no further auth Cargo/native source or target writes. The SDK owner received the handoff and must freshly check its gates before resuming.
 
 ## Configure a profile or workspace
 
@@ -74,10 +90,11 @@ The SDK campaign has separate acceptance gates. This workstream's app build does
 
 ## Native build custody
 
-At the SDK owner's request, native/Cargo builds, native source/Cargo input changes and target/dependency writes are quiet after `82831c6` until explicitly coordinated resumption. The only cache custody released is:
+Native/Cargo builds and target writes from this workstream are quiet after the completed deployment window. No new incremental cache was created. The SDK capacity-audit record at `~/.local/state/productionize/autophys-sdks-20261105/capacity-audit/` records custody release for only these two subtrees:
 
-`/home/james/ssd-mount/cargo-target-scratch/autophys-gaps/debug/incremental`
+- `/home/james/ssd-mount/cargo-target-scratch/autophys-gaps/debug/incremental` — `auth-custody-release.md/json`.
+- `/home/james/.cache/autophys/target/debug/incremental` — `auth-debug-incremental-release.md/json`.
 
-Operator approval and fresh identity/caller checks govern its deletion by the recovery delegate. No deletion was executed here. Executables, dependency artifacts, fingerprints, source, databases and evidence stay retained.
+These acceleration caches are unnecessary for the deployed release or retained debug proof. Auth has no future use planned during the cleanup window. The separately authorized cleanup delegate owns fresh identity, caller and lock checks and must serialize removal against every debug/incremental writer. No cache deletion was executed by this workstream. Executables, dependencies, build/fingerprint/release siblings, source, databases, campaign artifacts and deployment backups remain retained.
 
-The existing SDK capacity-audit record links `auth-custody-release.md` and `auth-custody-release.json`, recording source/artifact hashes, the current rusqlite 0.32.1 `backup,bundled,modern_sqlite` fingerprint, quiet-window terms and writable paths. Cargo.lock is unchanged; the older SDK dependency selection lacking `backup` must be replaced and independently qualified.
+The receipts identify current rusqlite 0.32.1 with `backup,bundled,modern_sqlite`; Cargo.lock is unchanged. The older SDK dependency selection lacking `backup` must be replaced and independently qualified. The deployment completion receipt preserves the native/dependency identity correspondence; it does not qualify the SDK campaign.

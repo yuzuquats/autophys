@@ -1,6 +1,6 @@
 # The account selects the data; the workbench stays the same
 
-Status: revision 2, approved and implemented locally (2026-11-05). The operator approved AW-1 through AW-4 with “go ahead.” Required account/workspace behavior is implemented and qualified against isolated collections; production migration and deployment have not run. See [operations and qualification](account-workspace-operations.md) for commands, evidence and remaining limits.
+Status: revision 2, approved and deployed (2026-11-05). The operator approved AW-1 through AW-4 with “go ahead.” Account/workspace behavior was qualified against isolated collections and deployed to production from `6efe1f3`, preserving the demo account's existing project and 29 records. See [operations and qualification](account-workspace-operations.md#production-deployment--2026-11-05) for the production result, commands, evidence and remaining limits.
 
 Autophys should open the active user's workspace through one workbench and one guided walkthrough. A local daemon supplies its configured collection; a cloud session supplies the signed-in account's collection. “Continue as demo” signs into a real, read-only account whose data is stored on the server. Neither authentication nor the walkthrough substitutes browser fixtures.
 
