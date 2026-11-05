@@ -563,3 +563,27 @@ starts over an unfinished project setup. Exit restores navigation, panel state
 and outer viewer scroll without replacing the Store or discarding edits/results.
 The Controller's preserveNavigation callback captures navigation only. Shared
 cookbook Back/Next/Done, keyboard navigation and dismiss remain authoritative.
+
+
+Operator's model clarification: the bundle contains tutorial instructions and UI;
+cloud demo access signs in as the demo user and loads server records. In local /
+headless daemon mode without cloud login, the same walkthrough follows the
+current daemon workspace. Absence of the injected account badge leaves the normal
+daemon Source enabled; the walkthrough has no cloud-specific data branch.
+
+Validation: Deno type-check and diff checks passed; release Cargo build and web
+bundle passed with existing warnings. No test suites ran. Live health reports
+`8724ce055a97f66d7b1f4c55b6360acfc2f443df`. Focused public browser checks traversed
+all ten lessons on seeded account records at desktop and mobile widths, including
+the pending proposal in the second investigation. One initial workspace request
+fed the walkthrough; no fixture/image resources loaded. Back reselected the
+recorded proposal, dismissal restored the original investigation and panel state,
+and no record writes were made. Anonymous entry made zero workspace requests;
+in-place demo sign-in started the account walkthrough. Browser-only empty and
+unconfigured response overrides produced two and three appropriate lessons,
+respectively, without changing server data. Mobile proposal navigation controls
+remain within the viewport. Rendered checks reported no console errors. The served
+bundle contains none of the removed fixture-worker, sample-project, source-switch,
+static-preview or chip identifiers. Local no-login daemon mode was inspected in
+code but not separately launched for this check. Owned source snapshots were
+removed after successful deployment. Concurrent SDK edits were preserved.
