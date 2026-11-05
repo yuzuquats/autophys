@@ -15,6 +15,10 @@ function mark(size: number): HTMLImageElement {
 }
 
 queueMicrotask(() => {
+  // The drawer saves/restores the landing offset. Native history restoration
+  // runs after popstate and would overwrite it (often scrolling into the docs).
+  history.scrollRestoration = "manual";
+
   // The cookbook changes fixed/document positioning and FLIPs only the wordmark.
   // Keep the deck in flow and reserve the arrow so docs and the logo never jump.
   // This app-owned override survives regeneration of vendor/tento.

@@ -51,3 +51,24 @@ Full before/candidate traces, the measurement script, and final live deployment
 receipt are retained on yuzuquats under `~/.cache/autophys/back-perf/`. Final
 verification is healthz matching the committed clone plus one live measurement
 of each back path, with the same viewport and observers. No source push.
+
+## First live receipt and browser-scroll follow-up
+
+Commit 304bb3e was live at 17:00 PST. At native CPU speed all four returns
+(app arrow, app history Back, active-tour arrow and active-tour history Back)
+measured 16.8 ms worst rAF gap, zero long tasks and CLS 0. The active-tour
+arrow fell from 6066.4 ms to 16.8 ms. Tour exit retained only about 0.0012
+raw shift from panel content moving during the exit animation.
+
+History Back exposed a second scroll owner: native history restoration ran
+after the drawer's popstate callback and moved to scrollY 900 (app) or 700
+(tour), making the newly visible docs appear in the viewport. App-owned manual
+history restoration leaves the drawer in charge. A live injected measurement
+of this correction returned to the deck with a 16.8 ms worst frame, no long
+tasks, CLS 0 and raw shift 0. The final committed deployment receipt and all
+four repeat measurements live in the evidence directory linked above.
+
+The optional 6× CPU stress run of 304bb3e retained up to a 116.6 ms frame on
+tour exit (down from 40281.8 ms); native-speed runs meet the requested 50 ms
+frame target. Those remaining throttled costs are synchronous tour redraw and
+layout, rather than the removed quadratic restore. No extra tests were run.
