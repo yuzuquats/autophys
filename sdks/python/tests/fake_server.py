@@ -369,6 +369,21 @@ class FakeAutophys:
                     return self._record(inv, body, kinds[rest])
                 if rest == "proposals" and method == "POST":
                     return self._record(inv, body, "proposal", ("proposed", "withdrawn"))
+                atomic = re.fullmatch(r"proposals/([^/]+)/attachment", rest)
+                if atomic and method == "POST":
+                    import copy
+                    logs, gseq = copy.deepcopy(fake.records), fake.gseq
+                    try:
+                        m = body["measurement"]
+                        mr = fake._append(inv, m["id"], "measurement", m["payload"])
+                        payload = body.get("attachment_payload") or {"proposal_id": atomic.group(1), "event": "data_attached", "measurement_version": mr["hash"]}
+                        if payload["proposal_id"] != atomic.group(1) or payload["event"] != "data_attached":
+                            raise WorkbookError("invalid_payload", "wrong attachment proposal")
+                        event = fake._append(inv, body["attachment_id"], "proposal", payload)
+                    except BaseException:
+                        fake.records, fake.gseq = logs, gseq
+                        raise
+                    return self._send(201 if fake.gseq != gseq else 200, {"record": fake._wire(event), "gseq": event["gseq"]})
                 m2 = re.fullmatch(r"proposals/([^/]+)(?:/(approvals|data))?", rest)
                 if m2:
                     pid, sub = m2.group(1), m2.group(2)

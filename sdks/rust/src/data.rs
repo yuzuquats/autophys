@@ -97,9 +97,9 @@ impl Observation {
             return Err(invalid("invalid split"));
         }
         for (ch, v) in &self.y {
-            if v.len() != self.t.len() || !self.sigma.get(ch).is_some_and(|s| *s > 0.0) {
+            if v.len() != self.t.len() || !self.sigma.get(ch).is_some_and(|s| s.is_finite() && *s > 0.0) {
                 return Err(invalid(format!(
-                    "channel {ch}: needs matching time grid and positive sigma"
+                    "channel {ch}: needs matching time grid and finite positive sigma"
                 )));
             }
         }

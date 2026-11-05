@@ -96,6 +96,7 @@ fn load_at(
         .or(env_server)
         .or_else(|| saved.as_ref().map(|c| c.server.clone()))
         .unwrap_or_else(|| DEFAULT_SERVER.into());
+    let resolved = super::normalize_server(&resolved)?;
     if let Some(api_key) = key {
         return Ok(Some(Credentials {
             server: resolved,
@@ -106,6 +107,9 @@ fn load_at(
         }));
     }
     if let Some(c) = &mut saved {
+        if super::normalize_server(&c.server)? != resolved {
+            return Err(Error::BadRequest("saved credentials belong to a different server; supply an explicit API key".into()));
+        }
         c.server = resolved;
     }
     Ok(saved)
@@ -277,13 +281,10 @@ mod tests {
         assert_eq!(got.server, "http://explicit");
         assert_eq!(got.api_key, "environment");
         assert_eq!(got.key_id, None);
-        assert_eq!(
-            load_at(&path, None, None, Some("http://env".into()))
-                .unwrap()
-                .unwrap()
-                .server,
-            "http://env"
-        );
+        assert!(load_at(&path, None, None, Some("http://env".into())).is_err());
+        assert!(load_at(&path, Some("http://other"), None, None).is_err());
+        let got = load_at(&path, Some("HTTP://SAVED:80/"), None, None).unwrap().unwrap();
+        assert_eq!(got.server, "http://saved");
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;

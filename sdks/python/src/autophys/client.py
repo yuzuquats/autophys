@@ -33,11 +33,13 @@ def default_home() -> Path:
 
 def connect(target: str | os.PathLike | None = None, *, api_key: str | None = None) -> "Client":
     """Open a local collection, one workbook file, or a daemon URL."""
-    if target is None:
+    if target is None or os.fspath(target) == "":
         return LocalClient(default_home())
     text = os.fspath(target)
-    if text.startswith(("http://", "https://")):
-        from .http import HttpStore, load_credentials
+    if text.lower().startswith(("http:", "https:")) or "://" in text:
+        from .http import HttpStore, load_credentials, normalize_server
+
+        text = normalize_server(text)
 
         key_id = None
         if api_key is None:
@@ -61,6 +63,14 @@ class Client:
         raise NotImplementedError
 
     def project(self, project: Project | str) -> "Workbook":
+        raise NotImplementedError
+
+    def open_project(self, name: str) -> "Workbook":
+        """Open existing only, without creating a project."""
+        return self.project(name)
+
+    def ensure_project(self, name: str) -> "Workbook":
+        """Explicitly create a record-only workbook if missing."""
         raise NotImplementedError
 
     def close(self) -> None:
@@ -101,6 +111,8 @@ class LocalClient(Client):
         return self.only if self.only is not None else self.root / (slug(name) + SUFFIX)
 
     def project(self, project: Project | str) -> "Workbook":
+        if isinstance(project, Project):
+            project.__post_init__()
         name = project.name if isinstance(project, Project) else project
         path = self.path_for(name)
         if isinstance(project, Project):
@@ -116,6 +128,14 @@ class LocalClient(Client):
         wb = Workbook(store, project if isinstance(project, Project) else None, name)
         if isinstance(project, Project):
             wb.project_id  # a new workbook records its project at once
+        return wb
+
+    def ensure_project(self, name: str) -> "Workbook":
+        store = WorkbookStore(self.path_for(name))
+        self._open.append(store)
+        store.ensure_project(name)
+        wb = Workbook(store, None, name)
+        wb.project_id
         return wb
 
     def close(self) -> None:
@@ -137,15 +157,28 @@ class RemoteClient(Client):
         return [{"id": p["id"], "name": p["name"]} for p in self.store.projects()]
 
     def project(self, project: Project | str) -> "Workbook":
+        if isinstance(project, Project):
+            project.__post_init__()
         name = project.name if isinstance(project, Project) else project
         if not isinstance(project, Project) and name not in {p["name"] for p in self.projects()}:
             raise StoreError(f"no project {name!r} on {self.store!r}")
-        workbook = Workbook(self.store, project if isinstance(project, Project) else None, name)
+        from .http import HttpStore
+        store = self.store
+        if isinstance(store, HttpStore):
+            pid = store.ensure_project(name) if isinstance(project, Project) else next(p["id"] for p in store.projects() if p["name"] == name)
+            store = store.for_project(pid, name)
+        workbook = Workbook(store, project if isinstance(project, Project) else None, name)
         if isinstance(project, Project):
             pid = workbook.project_id
             self.store.put_config_version(pid, project.config_version, project.config())
             self.store.register_display(pid, project)
         return workbook
+
+    def ensure_project(self, name: str) -> "Workbook":
+        from .http import HttpStore
+        pid = self.store.ensure_project(name)
+        store = self.store.for_project(pid, name) if isinstance(self.store, HttpStore) else self.store
+        return Workbook(store, None, name)
 
 
 class Workbook:

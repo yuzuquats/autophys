@@ -47,7 +47,7 @@ pub fn run_payload(
     let mut full = vec![];
     for record in measurements {
         let obs = Observation::from_dict(record.payload["observation"].clone()).map_err(error)?;
-        if !["train", "validation"].contains(&obs.split.as_str()) {
+        if !["train", "validation"].contains(&obs.split.as_str()) || obs.t.is_empty() {
             continue;
         }
         let mut settings = obs.settings.clone();

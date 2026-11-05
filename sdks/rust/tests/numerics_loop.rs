@@ -448,3 +448,65 @@ fn muse_policy_pins_playbook_and_retains_usage_on_invalid_replies_and_resume() {
     assert_eq!(next.usage_total["input_tokens"], 60);
     assert!(wb.verify().unwrap().ok);
 }
+
+#[test]
+fn core_finite_noise_and_fit_negative_inputs_before_simulation() {
+    use autophys::fit::{fit,FitOptions};
+    let (p,ds,truth)=input(); let train=ds.split("train");
+    let calls=p.simulator.calls();
+    for sigma in [f64::INFINITY,f64::NEG_INFINITY,f64::NAN,0.,-1.] {
+        let mut q=p.clone();q.noise.sigma=Some([("T".into(),sigma)].into_iter().collect());
+        assert!(q.validate().is_err(),"sigma {sigma}");
+        let mut o=train[0].clone();o.sigma.insert("T".into(),sigma);
+        assert!(o.validate().unwrap_err().to_string().contains("T"));
+        assert!(fit(&p.simulator,&[o],&FitOptions {initial:Some(truth.clone()),n_starts:0,..Default::default()}).is_err());
+    }
+    let mut bad=vec![];
+    let mut v=truth.clone();v.shift_remove("C");bad.push(v);
+    let mut v=truth.clone();v.insert("extra".into(),1.);bad.push(v);
+    for x in [-1.,f64::INFINITY,f64::NAN] {let mut v=truth.clone();v.insert("C".into(),x);bad.push(v);}
+    for v in bad {assert!(fit(&p.simulator,&train,&FitOptions {initial:Some(v),n_starts:0,..Default::default()}).is_err());}
+    assert!(fit(&p.simulator,&train,&FitOptions {n_starts:0,..Default::default()}).is_err());
+    let mut missing=train[0].clone();for y in missing.y.values_mut() {y.fill(f64::NAN);}
+    assert!(fit(&p.simulator,&[missing.clone()],&FitOptions {initial:Some(truth.clone()),n_starts:0,..Default::default()}).is_err());
+    assert_eq!(p.simulator.calls(),calls);
+    let temp=tempfile::tempdir().unwrap();let c=autophys::connect(Some(temp.path().to_str().unwrap())).unwrap();let wb=c.project_with(p.clone()).unwrap();
+    assert!(wb.investigate(Dataset::new([missing]).unwrap(),ProposalRunner,ScriptedPolicy::default()).is_err());
+    assert!(wb.investigations().unwrap().is_empty());
+    assert!(fit(&p.simulator,&train,&FitOptions {initial:Some(truth),n_starts:0,..Default::default()}).unwrap().n>0);
+}
+#[test]
+fn core_validation_requires_finite_samples() {
+ for kind in ["absent","empty","missing","partial","normal"] {
+  let (p,ds,_)=input();let mut obs=ds.split("train");let mut val=ds.split("validation")[0].clone();
+  if kind=="empty" {val.t.clear();for y in val.y.values_mut(){y.clear();}}
+  if kind=="missing" {for y in val.y.values_mut(){y.fill(f64::NAN);}}
+  if kind=="partial" {for y in val.y.values_mut(){for i in (0..y.len()).step_by(2){y[i]=f64::NAN;}}}
+  if kind!="absent" {obs.push(val.clone());}
+  let temp=tempfile::tempdir().unwrap();let c=autophys::connect(Some(temp.path().to_str().unwrap())).unwrap();let wb=c.project_with(p).unwrap();
+  let mut inv=wb.investigate(Dataset::new(obs).unwrap(),ProposalRunner,ScriptedPolicy::default()).unwrap();
+  inv.tool_optimize_parameters(Some(0),"linear").unwrap();
+  let out=inv.tool_validate_predictions().unwrap();
+  if ["absent","empty","missing"].contains(&kind) {assert_eq!(out,json!({"available":false,"passed":false}),"{kind}");}
+  else {assert_eq!(out["passed"],true,"{kind}: {out}");assert_eq!(out["n"],val.n_samples());}
+  assert!(wb.verify().unwrap().ok);
+ }
+}
+#[test]
+fn core_owned_and_public_configuration_drift() {
+ let (mut p,ds,_)=input();let original=p.clone();
+ let temp=tempfile::tempdir().unwrap();let c=autophys::connect(Some(temp.path().to_str().unwrap())).unwrap();let wb=c.project_with(p.clone()).unwrap();
+ let mut inv=wb.investigate(ds,ProposalRunner,script(&[("request_experiment",json!({"experiment":"step_long"}))])).unwrap();
+ p.initial.insert("C".into(),600.); // retained original cannot mutate the owned configuration
+ assert_eq!(inv.project.config_version(),original.config_version());
+ let pid=inv.run().unwrap().proposal_id.unwrap();
+ let before=inv.records(None).unwrap().len();let calls=inv.project.simulator.calls();
+ inv.project.budgets.max_steps+=1;
+ assert!(inv.run().unwrap_err().to_string().contains("pinned"));
+ assert!(inv.approve(&pid,"test",None).unwrap_err().to_string().contains("pinned"));
+ let o=inv.dataset.split("train")[0].clone();
+ assert!(inv.attach_data(&pid,o).unwrap_err().to_string().contains("pinned"));
+ assert_eq!(inv.records(None).unwrap().len(),before);assert_eq!(inv.project.simulator.calls(),calls);
+ assert!(c.project_with(inv.project.clone()).unwrap().resume(&inv.id,ProposalRunner,ScriptedPolicy::default()).is_err());
+ assert!(original.simulator.simulate(&original.initial,&original.simulator.experiment(&json!("step_short")).unwrap(),FIT_OPTIONS).is_ok());
+}

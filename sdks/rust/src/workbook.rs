@@ -802,39 +802,63 @@ impl Investigation {
     /// Returns the `data_attached` record.
     pub fn attach_data(&self, pid: &str, observation: Value) -> Result<Appended> {
         if let Some(r) = &self.wb.remote { return r.attach_data(&self.id,pid,observation); }
+        self.attach_records(pid, Envelope {
+            id: random_hex(16)?, kind: Kind::Measurement,
+            payload: serde_json::json!({"observation":observation}),
+        }, &random_hex(16)?, None)
+    }
+
+    /// Authoritative attachment operation. Existing wire record bodies/IDs are
+    /// retained; approval, global replay/conflict and both projections commit
+    /// together. `None` derives the record-API hash linkage inside the transaction.
+    pub fn attach_records(&self, pid: &str, measurement: Envelope, event_id: &str, event: Option<Value>) -> Result<Appended> {
+        if let Some(r) = &self.wb.remote { return r.attach_records(&self.id, pid, measurement, event_id, event); }
         validate::check_id("payload.proposal_id", pid)?;
-        let payload = serde_json::json!({ "observation": observation });
-        validate::payload_shape(Kind::Measurement, &payload)?;
-        let text = canonical(&payload);
-        if text.len() > validate::MAX_PAYLOAD_BYTES {
-            return Err(Error::TooLarge(validate::MAX_PAYLOAD_BYTES));
+        validate::check_id("measurement.id", &measurement.id)?;
+        validate::check_id("attachment.id", event_id)?;
+        if measurement.kind != Kind::Measurement {
+            return Err(Error::invalid("measurement.kind", "must be measurement"));
         }
+        validate::payload_shape(Kind::Measurement, &measurement.payload)?;
+        let text = canonical(&measurement.payload);
+        if text.len() > validate::MAX_PAYLOAD_BYTES { return Err(Error::TooLarge(validate::MAX_PAYLOAD_BYTES)); }
         let mut conn = self.wb.conn()?;
         let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let state = proposal_in(&tx, &self.id, pid)?.status;
-        if state != "approved" && state != "edited" {
-            return Err(Error::conflict(
-                "conflict",
-                format!("proposal is {state}; data_attached is not allowed"),
-            ));
+        let prior = replay(&tx, &measurement.id, &self.id, Kind::Measurement, &text)?;
+        // Replay is decided before transition checks, but only a complete pair
+        // can replay. Pre-existing single-record partial writes are not migrated.
+        if prior.is_none() {
+            let state = proposal_in(&tx, &self.id, pid)?.status;
+            if state != "approved" && state != "edited" {
+                return Err(Error::conflict("conflict", format!("proposal is {state}; data_attached is not allowed")));
+            }
         }
-        let m = insert_record(&tx, &self.id, &random_hex(16)?, Kind::Measurement, &text)?;
-        let payload = serde_json::json!({
-            "proposal_id": pid, "event": "data_attached", "measurement_version": m.record.hash,
-        });
-        let logged = insert_record(
-            &tx,
-            &self.id,
-            &random_hex(16)?,
-            Kind::Proposal,
-            &canonical(&payload),
-        )?;
+        let m = if let Some(m) = &prior { m.record.clone() } else {
+            insert_record(&tx, &self.id, &measurement.id, Kind::Measurement, &text)?.record
+        };
+        let payload = event.unwrap_or_else(|| serde_json::json!({
+            "proposal_id":pid,"event":"data_attached","measurement_version":m.hash
+        }));
+        validate::payload_shape(Kind::Proposal, &payload)?;
+        if payload["proposal_id"] != pid || payload["event"] != "data_attached" {
+            return Err(Error::invalid("attachment.payload", "must attach the proposal in the path"));
+        }
+        let link = &payload["measurement_version"];
+        if link != &Value::String(m.hash.clone()) && (measurement.payload.get("version").is_none() || link != &measurement.payload["version"]) {
+            return Err(Error::invalid("attachment.payload.measurement_version", "must identify this measurement"));
+        }
+        let event_text = canonical(&payload);
+        if event_text.len() > validate::MAX_PAYLOAD_BYTES { return Err(Error::TooLarge(validate::MAX_PAYLOAD_BYTES)); }
+        if let Some(out) = replay(&tx, event_id, &self.id, Kind::Proposal, &event_text)? {
+            if prior.is_none() { return Err(Error::conflict("conflict", "attachment has no matching measurement")); }
+            return Ok(out);
+        }
+        if prior.is_some() { return Err(Error::conflict("conflict", "measurement has no matching atomic attachment")); }
+        let env = Envelope { id:event_id.into(), kind:Kind::Proposal, payload };
+        projections::check(&tx, &self.id, &env)?;
+        let logged = insert_record(&tx, &self.id, event_id, Kind::Proposal, &event_text)?;
         tx.commit()?;
-        Ok(Appended {
-            record: logged.record,
-            gseq: logged.gseq,
-            created: true,
-        })
+        Ok(Appended { record:logged.record, gseq:logged.gseq, created:true })
     }
 
     /// Block until proposal `proposal_id` leaves `proposed`, whoever decides

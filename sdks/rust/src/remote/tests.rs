@@ -92,6 +92,7 @@ fn proposal(status: &str) -> String {
 #[test]
 fn http_error_fields_and_auth_classification() {
     for (status, body, code, message, is_auth) in [
+        (422, r#"{"error":"invalid_payload","message":"bad","path":"payload.x"}"#, "invalid_payload", "bad", false),
         (
             429,
             r#"{"error":"slow","message":"wait","path":"payload.x"}"#,
@@ -141,7 +142,7 @@ fn http_error_fields_and_auth_classification() {
             error.retry_after.as_deref(),
             Some("Wed, 21 Oct 2030 07:28:00 GMT")
         );
-        if status == 429 {
+        if status == 429 || status == 422 {
             assert_eq!(error.path.as_deref(), Some("payload.x"));
         }
         let requests = server.requests.lock().unwrap();
@@ -330,4 +331,28 @@ fn stalled_stream_headers_retry_within_attempt_budget() {
     );
     assert!(started.elapsed() < Duration::from_millis(500));
     assert!(opens.load(Ordering::SeqCst) >= 2);
+}
+
+#[test]
+fn paired_target_normalization_before_effects() {
+ assert_eq!(crate::connect(None).unwrap().root(),crate::connect(Some("")).unwrap().root());
+ assert_eq!(Remote::new("HTTPS://LOCALHOST:443/","key").unwrap().base(),"https://localhost/api/v1");
+ for text in ["http://localhost","HTTP://LOCALHOST:80/","http://LOCALHOST/"] {
+  assert_eq!(Remote::new(text,"key").unwrap().base(),"http://localhost/api/v1");
+ }
+ for text in ["http://user:private@localhost","http://localhost?x","http://localhost#x","http:/broken","ftp://localhost","https://localhost:99999"] {
+  let e=Remote::new(text,"key").unwrap_err();assert!(!e.to_string().contains("private"));
+ }
+ let temp=tempfile::tempdir().unwrap();let c=crate::connect(Some(temp.path().to_str().unwrap())).unwrap();
+ assert!(c.open_project("missing").is_err());assert_eq!(std::fs::read_dir(temp.path()).unwrap().count(),0);
+ let a=c.project("created").unwrap();let b=c.open_project("created").unwrap();assert_eq!(a.id(),b.id());assert_eq!(c.projects().unwrap().len(),1);
+}
+
+#[test]
+fn old_daemon_atomic_attachment_does_not_fallback() {
+ let server=Mock::new(|_,_|response(404,"application/json",r#"{"error":"not_found"}"#,""));
+ let remote=Remote::new(&server.url,"key").unwrap();
+ let e=remote.attach_data("inv_test","p_test",json!({"t":[0.],"y":{"x":[1.]}})).unwrap_err();
+ assert_eq!(e.status(),404);
+ let requests=server.requests.lock().unwrap();assert_eq!(requests.len(),1);assert!(requests[0].contains("/attachment"));
 }

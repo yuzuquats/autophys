@@ -226,6 +226,7 @@ pub fn scope(api: Api) -> actix_web::Scope {
         .route("/investigations/{inv}/outcome", web::post().to(outcome))
         .route("/investigations/{inv}/reveal", web::post().to(reveal))
         .route("/investigations/{inv}/proposals", web::post().to(proposals))
+        .route("/investigations/{inv}/proposals/{pid}/attachment", web::post().to(attachment))
         .route(
             "/investigations/{inv}/proposals/{pid}",
             web::get().to(proposal),
@@ -770,6 +771,20 @@ async fn ingest_value(
     }
     // `gseq` sits beside the record, never in it (AX-8), so a client can
     // resume `/stream?investigation=` from its own write.
+    Ok(created(out.created, json!(out)))
+}
+
+/// Additive all-or-none attachment; legacy single-record routes retain meaning.
+async fn attachment(_: Keyed, s: Data, path: web::Path<(String, String)>, b: web::Payload) -> Result<HttpResponse> {
+    let (inv, pid) = path.into_inner();
+    let body = body_json(b).await?;
+    let measurement = Envelope::from_value(body["measurement"].clone())?;
+    let event_id = body["attachment_id"].as_str().ok_or_else(|| ApiError::invalid("attachment_id", "required string"))?.to_string();
+    let event = body.get("attachment_payload").filter(|v| !v.is_null()).cloned();
+    let inv = investigation(&s, &inv).await?;
+    let project = inv.workbook().id().to_string();
+    let out = blocking(move || Ok(inv.attach_records(&pid, measurement, &event_id, event)?)).await?;
+    if out.created { s.woke(&project); }
     Ok(created(out.created, json!(out)))
 }
 

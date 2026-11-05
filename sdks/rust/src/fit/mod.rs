@@ -71,6 +71,7 @@ pub fn residuals(
     obs: &[Observation],
     options: SimOptions,
 ) -> Result<Vec<f64>> {
+    for o in obs { o.validate()?; }
     let mut r = vec![];
     for o in obs {
         let pred = sim.simulate(p, &o.settings, options)?;

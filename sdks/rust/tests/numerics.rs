@@ -488,10 +488,7 @@ fn numerics_conformance() {
     let mut files = vec![];
     walk(&root, &mut files);
     files.sort();
-    if files.is_empty() {
-        eprintln!("no shared numerics cases yet; private Python fixtures cover all three models");
-        return;
-    }
+    assert!(!files.is_empty(), "shared numerical corpus is missing or empty");
     for file in files {
         let c: Value = serde_json::from_slice(&std::fs::read(&file).unwrap()).unwrap();
         let actual = case(&c);

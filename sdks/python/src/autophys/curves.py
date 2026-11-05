@@ -20,7 +20,7 @@ def run_payload(sim, result, measurements, payload):
     full = {}
     for record in measurements:
         obs = Observation.from_dict(record.payload["observation"])
-        if obs.split not in ("train", "validation"):
+        if obs.split not in ("train", "validation") or len(obs.t) == 0:
             continue
         settings = {**obs.settings, "t": obs.t.tolist()}
         predictions = {label: sim(params, settings, options=TRUTH_OPTIONS, count=False,

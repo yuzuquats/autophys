@@ -44,12 +44,13 @@ USER_AGENT = "autophys-python/0.1"
 class HttpError(RuntimeError):
     """An HTTP error response. ``retry_after`` is the raw ``Retry-After`` header, if any."""
 
-    def __init__(self, status: int, error: str, message: str = "", *, retry_after: str | None = None) -> None:
+    def __init__(self, status: int, error: str, message: str = "", *, retry_after: str | None = None, path: str | None = None) -> None:
         super().__init__(f"HTTP {status} {error}: {message}".strip())
         self.status = status
         self.error = error
         self.message = message
         self.retry_after = retry_after
+        self.path = path
 
 
 class AuthError(HttpError):
@@ -82,7 +83,10 @@ def request_json(
 
 
 def _http_error(e: urllib.error.HTTPError) -> HttpError:
-    raw = e.read()
+    try:
+        raw = e.read()
+    finally:
+        e.close()
     try:
         j = json.loads(raw) if raw else {}
     except json.JSONDecodeError:
@@ -92,7 +96,9 @@ def _http_error(e: urllib.error.HTTPError) -> HttpError:
     err, msg = j.get("error", "http_error"), j.get("message", "")
     cls = AuthError if e.code in (401, 403) and err not in ("access_denied",) else HttpError
     retry_after = e.headers.get("Retry-After") if e.headers is not None else None
-    return cls(e.code, err, msg, retry_after=retry_after)
+    return cls(e.code, err if isinstance(err, str) else "http_error",
+               msg if isinstance(msg, str) else "", retry_after=retry_after,
+               path=j.get("path") if isinstance(j.get("path"), str) else None)
 
 
 # --------------------------------------------------------------------------
@@ -153,6 +159,27 @@ def _to_record(d: dict) -> Record:
 # Credentials
 
 
+def normalize_server(server: str) -> str:
+    """Canonical daemon identity, validated without I/O or echoing userinfo."""
+    try:
+        u = urllib.parse.urlsplit(server)
+        if (u.scheme.lower() not in ("http", "https") or not u.hostname
+                or u.username is not None or u.password is not None
+                or "?" in server or "#" in server
+                or any(c.isspace() for c in server) or "\\" in server):
+            raise ValueError()
+        host = u.hostname.lower()
+        if not host.isascii():
+            raise ValueError()
+        port = u.port
+        authority = f"[{host}]" if ":" in host else host
+        if port is not None and port != (80 if u.scheme.lower() == "http" else 443):
+            authority += f":{port}"
+        return f"{u.scheme.lower()}://{authority}{u.path.rstrip('/')}"
+    except ValueError:
+        raise StoreError("invalid daemon URL") from None
+
+
 def config_dir() -> Path:
     return Path(os.environ.get("AUTOPHYS_CONFIG_DIR") or Path.home() / ".config" / "autophys")
 
@@ -200,10 +227,12 @@ def load_credentials(server: str | None = None) -> Credentials | None:
             raise StoreError(f"{path} is readable by others (mode {mode:o}); run chmod 600")
         d = json.loads(path.read_text())
         file_creds = Credentials(d["server"], d["api_key"], d.get("key_id", ""), d.get("account", ""), d.get("device_name", ""))
-    resolved_server = server or os.environ.get("AUTOPHYS_SERVER") or (file_creds.server if file_creds else DEFAULT_SERVER)
+    resolved_server = normalize_server(server or os.environ.get("AUTOPHYS_SERVER") or (file_creds.server if file_creds else DEFAULT_SERVER))
     if env_key:
         return Credentials(resolved_server, env_key, key_id=None)
     if file_creds:
+        if normalize_server(file_creds.server) != resolved_server:
+            raise StoreError("saved credentials belong to a different server; supply an explicit API key")
         file_creds.server = resolved_server
         return file_creds
     return None
@@ -274,7 +303,7 @@ class HttpStore(Store):
     """
 
     def __init__(self, server: str, api_key: str, *, timeout: float = 30.0, stream_idle: float = 30.0, key_id: str | None = None) -> None:
-        self.base = server.rstrip("/") + API_PREFIX
+        self.base = normalize_server(server) + API_PREFIX
         self._key = api_key
         self.key_id = key_id
         self.timeout = timeout
@@ -282,6 +311,7 @@ class HttpStore(Store):
         self.cursors: dict[str, int] = {}
         self.last_wait: str | None = None
         self._project_id: str | None = None
+        self._bound_project_name: str | None = None
         self._display_warned = False
         self._reveal_warned = False
 
@@ -297,7 +327,19 @@ class HttpStore(Store):
     def _req(self, method: str, path: str, body: Any = None, **kw) -> Any:
         return request_json(method, self.base + path, body, api_key=self._key, timeout=kw.pop("timeout", self.timeout), **kw)[1]
 
+    def for_project(self, project_id: str, name: str) -> "HttpStore":
+        # Share the transport cursor map; blob ownership belongs to this handle.
+        import copy
+        bound = copy.copy(self)
+        bound._project_id = project_id
+        bound._bound_project_name = name
+        return bound
+
     def ensure_project(self, name: str) -> str:
+        if self._bound_project_name is not None:
+            if name != self._bound_project_name:
+                raise StoreError("store is bound to a different workbook")
+            return self._project_id
         self._project_id = self._req("POST", "/projects", {"name": name})["project"]["id"]
         return self._project_id
 
@@ -440,6 +482,18 @@ class HttpStore(Store):
             return None
         self._see(investigation, j)
         return _to_record(j["record"])
+
+    def attach_data(self, investigation: str, proposal_id: str, measurement: dict, attached: dict) -> Record:
+        """Commit the existing two record bodies atomically; old servers fail closed."""
+        def identity(kind, payload):
+            return hashlib.sha256(canonical({"investigation": investigation, "proposal_id": proposal_id,
+                                             "kind": kind, "payload": payload}).encode()).hexdigest()
+        inv, pid = urllib.parse.quote(investigation, safe=""), urllib.parse.quote(proposal_id, safe="")
+        body = {"measurement": {"id": identity("measurement", measurement), "kind": "measurement", "payload": measurement},
+                "attachment_id": identity("proposal", attached), "attachment_payload": attached}
+        out = self._req("POST", f"/investigations/{inv}/proposals/{pid}/attachment", body)
+        self._see(investigation, out)
+        return _to_record(out["record"])
 
     def records(self, investigation, kind=None):
         q = "?kind=" + urllib.parse.quote(kind) if kind else ""

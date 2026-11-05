@@ -219,6 +219,9 @@ class Investigation:
     ) -> None:
         self._setup(project, dataset, runner, policy=policy, reasoner=reasoner, free=free, store=store, seed=seed)
         self.project_id = self.store.ensure_project(project.name)
+        from .http import HttpStore
+        if isinstance(self.store, HttpStore):
+            self.store = self.store.for_project(self.project_id, project.name)
         self.config_version = self.store.put_config_version(self.project_id, project.config_version, project.config())
         self.store.register_display(self.project_id, project)
         meta = {
@@ -241,7 +244,14 @@ class Investigation:
     def _setup(self, project: Project, dataset: Dataset, runner: Any, *, policy: Policy | None,
                reasoner: Reasoner | None, free: list[str] | None, store: Store | None, seed: int) -> None:
         """State shared by a new and a resumed investigation; writes nothing."""
+        project.__post_init__()
+        for obs in dataset:
+            obs.validate()
+        train = dataset.split("train")
+        if train and not sum(o.n_samples for o in train):
+            raise ValueError("investigation needs finite training observations")
         self.project = project
+        self._pinned_config = project.config_version
         self.dataset = dataset
         self.runner = runner
         self.policy = policy or policy_from_config(project.policy, reasoner)
@@ -321,13 +331,16 @@ class Investigation:
         self.id = investigation_id
         self.project_id = head["project_id"]
         self.config_version = head["config_version"]
+        from .http import HttpStore
+        if isinstance(self.store, HttpStore):
+            self.store = self.store.for_project(self.project_id, project.name)
         self._replay(recs[i:])
         if getattr(self.policy, "images_enabled", False):
             import base64
             self.plot_refs = next((r.payload["images"] for r in reversed(recs)
                                    if r.kind == "step" and r.payload.get("images")), [])
             self.plot_images = [{"media_type": ref["media_type"],
-                                 "data": base64.b64encode(store.get_blob(ref["sha256"])[0]).decode("ascii")}
+                                 "data": base64.b64encode(self.store.get_blob(ref["sha256"])[0]).decode("ascii")}
                                 for ref in self.plot_refs]
             self.policy.plot_refs, self.policy.plot_images = self.plot_refs, self.plot_images
         return self
@@ -738,11 +751,15 @@ class Investigation:
     def tool_validate_predictions(self) -> dict:
         r = self._need_fit()
         val = self.dataset.split("validation")
-        if not val:
+        for obs in val:
+            obs.validate()
+        if not val or not sum(o.n_samples for o in val):
             self.validation = {"available": False, "passed": False}
         else:
             chi2, sq, cnt = 0.0, 0.0, 0
             for o in val:
+                if o.n_samples == 0:
+                    continue
                 pred = self.sim(r.params, o.settings)
                 for ch, y in o.y.items():
                     m = np.isfinite(y)
@@ -790,6 +807,7 @@ class Investigation:
     def attach_data(self, proposal_id: str, observation: Observation) -> None:
         self._check_unrevealed()
         self._require_pending(proposal_id)
+        observation.validate()
         status = self.store.proposal_status(self.id, proposal_id)["status"]
         observation.split = "train"
         if status == "data_attached":
@@ -809,14 +827,7 @@ class Investigation:
         items = [("measurement", measurement), ("proposal", attached)]
         from .http import HttpStore
         if isinstance(self.store, HttpStore):
-            # The daemon has no batch route. Stable ids let retries finish a
-            # partial two-POST attach without duplicating the measurement.
-            from .store import canonical
-            for kind, payload in items:
-                identity = canonical({"investigation": self.id, "proposal_id": proposal_id,
-                                      "kind": kind, "payload": payload})
-                rid = hashlib.sha256(identity.encode()).hexdigest()
-                self.store.append(self.id, kind, payload, record_id=rid)
+            self.store.attach_data(self.id, proposal_id, measurement, attached)
         else:
             self.store.append_batch(self.id, items)
         self.dataset.add(observation)
@@ -871,6 +882,11 @@ class Investigation:
             raise ToolError(f"{proposal_id} is not the pending proposal")
 
     def _check_unrevealed(self) -> None:
+        if self.project.config_version != self._pinned_config:
+            raise StoreError("investigation is pinned to a different config version; configuration changed")
+        self.project.__post_init__()
+        for obs in self.dataset:
+            obs.validate()
         if self.records("reveal"):
             raise StoreError("cannot continue an investigation after ground truth reveal")
 

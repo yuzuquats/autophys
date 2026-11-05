@@ -16,3 +16,20 @@ Qualification will use bounded paired negative-input checks and real-daemon atta
 Deferred without waiver: A5 ephemeral/JSONL capability, A6 visual policy, FS01/FS02 documentation discovery, PERF01 HTTP bounds, PERF02 repeated scientific measurements, and any uncompleted T04 research shard. These remain part of the campaign analogy/qualification obligation. No provider, training, frontend, deployment, push or release work is authorized by this batch.
 
 The external round packet will distinguish changed code from proven acceptance, name artifact/source identity, exact tests and resource stops, and preserve unresolved objections for five independent rejudges. The campaign is unfinished.
+
+## The additive transport preserves each existing record dialect
+
+`POST /api/v1/investigations/{inv}/proposals/{pid}/attachment` accepts `measurement: {id, kind: "measurement", payload}`, `attachment_id`, and optional `attachment_payload`. Omitting the last field derives the Rust record API's `{proposal_id,event:"data_attached",measurement_version:<measurement hash>}` inside the transaction. Python supplies its existing measurement version/dataset digest/observation payload and event digest with integer linkage. Its content-derived IDs and Rust remote's proposal-derived IDs remain unchanged. The server validates the event/proposal/linkage and both global IDs, admits only approved/edited proposals, and folds both records under one immediate transaction. Complete identical retries replay before transition checks; changed content conflicts; a legacy orphan is not repaired or migrated implicitly. Existing `/measurements` and `/data` single-record routes keep their meaning.
+
+An old daemon answers 404/405 to the new operation; the SDK surfaces the typed HTTP error and never falls back to independent writes. An upgrade is required for remote attachments. No workbook format or historical hash changes are intended.
+
+| Intent | Python | Rust | Existing behavior |
+| --- | --- | --- | --- |
+| Open a named workbook without writing | `client.project(name)` or additive `open_project(name)` | additive `client.open_project(name)` | Missing project errors on both explicit open methods |
+| Create or ensure a record workbook | additive `client.ensure_project(name)` | `client.project(name)` or `ensure_project(name)` (also returns created flag) | Existing Rust creation remains compatible |
+| Bind executable configuration | `client.project(project)` | `client.project_with(project)` | Validates then creates/opens and binds config |
+| Start/resume | `wb.investigate` / `wb.investigation` | `ProjectWorkbook.investigate` / `resume` | Same scientific concepts, language-specific signatures |
+
+Absent and empty connection targets select the default collection (`AUTOPHYS_HOME`, else `~/autophys`). Explicit `.` selects the working directory; ordinary paths, home paths and `.ap-workbook` paths remain local. HTTP(S) scheme and hostname case, default port and trailing slash are normalized, with any path prefix retained. Userinfo, query, fragment, whitespace, backslash, unsupported `://` schemes and malformed HTTP(S) are rejected without requests or filesystem creation. Automatically discovered credentials must match this normalized identity. An explicit API key or environment key deliberately authorizes the selected destination; insecure saved credential files remain refused under the existing rule.
+
+Each Python workbook/investigation gets a bound HttpStore view sharing auth/transport cursors while owning its project ID for blobs. The direct store's existing `ensure_project` selection API remains available. Resume binds from recorded project identity before restoring image references. Configuration drift checks retain the original simulator/callback and source hash, rather than copying code or rebinding the simulator budget.

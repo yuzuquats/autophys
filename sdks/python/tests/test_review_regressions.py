@@ -322,18 +322,19 @@ def test_B3_http_partial_attach_retry(monkeypatch, response_lost):
         inv.approve(pid)
         obs = view.runner.run(inv.pending_experiment)
         before = len(store.records(inv.id, "measurement"))
-        append = store.append
+        attach = inv.store.attach_data
         fail = [True]
-        def append_once(investigation, kind, payload, **kw):
-            if kind == "proposal" and payload["event"] == "data_attached" and fail[0]:
+        def attach_once(*args, **kw):
+            if fail[0]:
                 fail[0] = False
                 if response_lost:
-                    append(investigation, kind, payload, **kw)
-                raise OSError("second POST failed")
-            return append(investigation, kind, payload, **kw)
-        monkeypatch.setattr(store, "append", append_once)
+                    attach(*args, **kw)
+                raise OSError("atomic POST response failed")
+            return attach(*args, **kw)
+        monkeypatch.setattr(inv.store, "attach_data", attach_once)
         with pytest.raises(OSError):
             inv.attach_data(pid, obs)
+        assert len(store.records(inv.id, "measurement")) == before + int(response_lost)
         inv.attach_data(pid, obs)
         assert len(store.records(inv.id, "measurement")) == before + 1
         assert inv.dataset.version == before + 1 and inv.pending is None

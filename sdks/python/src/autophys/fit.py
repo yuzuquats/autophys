@@ -32,6 +32,8 @@ def residuals(
     options: SimOptions = FIT_OPTIONS,
 ) -> np.ndarray:
     """Concatenated weighted residuals (y - f) / sigma over finite samples."""
+    for obs in observations:
+        obs.validate()
     parts = []
     for obs in observations:
         pred = sim(params, obs.settings, options=options)
@@ -110,10 +112,17 @@ def fit(
     """Fit ``sim`` to ``observations``; see the module docstring for the objective."""
     if not observations:
         raise ValueError("fit needs at least one observation")
+    for obs in observations:
+        obs.validate()
+    n = n_residuals(observations)
+    if n == 0:
+        raise ValueError("fit needs finite observations")
+    if initial is None and n_starts <= 0:
+        raise ValueError("fit needs at least one start")
     lo, hi = sim.x_bounds()
     starts = []
     if initial is not None:
-        starts.append(np.clip(sim.to_x(initial), lo, hi))
+        starts.append(sim.to_x(sim.validate_params(initial)))
     starts.extend(_lhs_starts(sim, n_starts, seed))
     n = n_residuals(observations)
 

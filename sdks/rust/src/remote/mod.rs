@@ -75,19 +75,26 @@ pub(crate) fn encode(text: &str) -> String {
     }
     out
 }
+pub(crate) fn normalize_server(server: &str) -> Result<String> {
+    let bad = || Error::BadRequest("invalid daemon URL".into());
+    if server.chars().any(char::is_whitespace) || server.contains(['?', '#', '\\']) { return Err(bad()); }
+    let (scheme, rest) = server.split_once("://").ok_or_else(bad)?;
+    let scheme = scheme.to_ascii_lowercase();
+    if !matches!(scheme.as_str(), "http" | "https") { return Err(bad()); }
+    let text = format!("{scheme}://{rest}");
+    let uri: ureq::http::Uri = text.parse().map_err(|_| bad())?;
+    let authority = uri.authority().ok_or_else(bad)?;
+    if authority.as_str().contains('@') || !authority.as_str().is_ascii() { return Err(bad()); }
+    let host = uri.host().filter(|s| !s.is_empty()).ok_or_else(bad)?.to_ascii_lowercase();
+    let port = uri.port_u16();
+    // Reject an invalid/out-of-range port instead of treating it as absent.
+    if authority.port().is_some() && port.is_none() { return Err(bad()); }
+    let port = port.filter(|p| *p != if scheme == "http" {80} else {443});
+    Ok(format!("{scheme}://{host}{}{}", port.map(|p|format!(":{p}")).unwrap_or_default(), uri.path().trim_end_matches('/')))
+}
 impl Remote {
     pub fn new(server: &str, api_key: &str) -> Result<Self> {
-        let uri: ureq::http::Uri = server
-            .parse()
-            .map_err(|_| Error::BadRequest("invalid daemon URL".into()))?;
-        if !matches!(uri.scheme_str(), Some("http" | "https"))
-            || uri.authority().is_none()
-            || uri.authority().is_some_and(|a| a.as_str().contains('@'))
-            || server.contains('#')
-            || uri.query().is_some()
-        {
-            return Err(Error::BadRequest("invalid daemon URL".into()));
-        }
+        let server = normalize_server(server)?;
         Ok(Self {
             base: format!("{}{API_PREFIX}", server.trim_end_matches('/')),
             key: Arc::new(api_key.into()),

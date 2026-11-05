@@ -67,7 +67,9 @@ pub fn connect(target: Option<&str>) -> Result<Client> {
         return Ok(Client::local(default_home(), None));
     };
     let lower = text.to_ascii_lowercase();
-    if lower.starts_with("http://") || lower.starts_with("https://") {
+    if lower.starts_with("http:") || lower.starts_with("https:") || text.contains("://") {
+        let text = crate::remote::normalize_server(text)?;
+        let text = text.as_str();
         let creds = crate::remote::auth::load_credentials(Some(text))?.ok_or_else(||
             Error::BadRequest(format!("no API key for {text}: pass api_key=, set AUTOPHYS_API_KEY or run `autophys pair`")))?;
         return Client::connect_remote(text, &creds.api_key);
@@ -225,6 +227,11 @@ impl Client {
     /// Open project `name`'s workbook, creating the file when missing.
     pub fn project(&self, name: &str) -> Result<Workbook> {
         self.ensure_project(name).map(|(wb, _)| wb)
+    }
+
+    /// Open an existing named workbook without creating it.
+    pub fn open_project(&self, name: &str) -> Result<Workbook> {
+        self.workbooks()?.into_iter().find(|w| w.name() == name).ok_or(Error::NotFound("project"))
     }
 
     /// [`Client::project`], also saying whether the project was created now

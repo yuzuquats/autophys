@@ -35,17 +35,23 @@ class Observation:
             raise ValueError(f"split must be one of {SPLITS}")
         self.t = np.asarray(self.t, dtype=float)
         self.y = {k: np.asarray(v, dtype=float) for k, v in self.y.items()}
+        self.validate()
+
+    def validate(self) -> None:
+        if self.split not in SPLITS:
+            raise ValueError(f"split must be one of {SPLITS}")
         for ch, v in self.y.items():
             if v.shape != self.t.shape:
                 raise ValueError(f"channel {ch}: shape {v.shape} != t {self.t.shape}")
-            if ch not in self.sigma or not self.sigma[ch] > 0:
-                raise ValueError(f"channel {ch}: need a positive sigma")
+            if ch not in self.sigma or not np.isfinite(self.sigma[ch]) or not self.sigma[ch] > 0:
+                raise ValueError(f"channel {ch}: need a finite positive sigma")
 
     @property
     def n_samples(self) -> int:
         return int(sum(np.isfinite(v).sum() for v in self.y.values()))
 
     def to_dict(self) -> dict:
+        self.validate()
         def arr(a):
             return [None if not np.isfinite(x) else float(x) for x in a]
 
@@ -90,6 +96,7 @@ class Dataset:
             self.add(o)
 
     def add(self, obs: Observation) -> int:
+        obs.validate()
         if obs.split == "test":
             raise ValueError("the test split is evaluator-only and never enters an agent dataset")
         self._obs.append(obs)
@@ -109,6 +116,7 @@ class Dataset:
         """Median declared sigma per channel, used for candidate experiments."""
         by: dict[str, list[float]] = {}
         for o in self._obs:
+            o.validate()
             for ch, s in o.sigma.items():
                 by.setdefault(ch, []).append(s)
         return {ch: float(np.median(v)) for ch, v in by.items()}

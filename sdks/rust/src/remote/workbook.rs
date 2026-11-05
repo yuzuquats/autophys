@@ -15,29 +15,15 @@ impl Remote {
             }))
             .as_bytes()])
         };
-        let measurement_id = identity("measurement");
-        let state = self.proposal(inv, pid)?.status;
-        if state != "approved"
-            && state != "edited"
-            && !(state == "data_attached"
-                && self
-                    .records(inv, Some("measurement"))?
-                    .iter()
-                    .any(|r| r.id == measurement_id && r.payload == payload))
-        {
-            return Err(Error::conflict(
-                "conflict",
-                format!("proposal is {state}; data_attached is not allowed"),
-            ));
-        }
-        // One measurement id per proposal: concurrent writers with different
-        // observations collide before either can persist a losing measurement.
-        // Lost responses still replay both requests without duplicate records.
-        let m = self.append(inv, "measurement", payload, Some(&measurement_id))?;
-        let payload =
-            json!({"proposal_id":pid,"event":"data_attached","measurement_version":m.record.hash});
-        let event_id = identity("proposal");
-        self.append(inv, "proposal", payload, Some(&event_id))
+        self.attach_records(inv, pid, Envelope { id:identity("measurement"), kind:Kind::Measurement, payload }, &identity("proposal"), None)
+    }
+
+    pub(crate) fn attach_records(&self, inv: &str, pid: &str, measurement: Envelope, event_id: &str, event: Option<Value>) -> Result<Appended> {
+        let (status, mut out) = self.json("POST", &format!("/investigations/{}/proposals/{}/attachment", encode(inv), encode(pid)),
+            Some(&json!({"measurement":{"id":measurement.id,"kind":measurement.kind.as_str(),"payload":measurement.payload},"attachment_id":event_id,"attachment_payload":event})), None, self.timeout)?;
+        let gseq = out["gseq"].as_i64().ok_or_else(|| Error::Io("invalid daemon gseq".into()))?;
+        self.see(inv, gseq);
+        Ok(Appended { record:decode(out["record"].take())?, gseq, created:status == 201 })
     }
 
     pub(crate) fn config_versions(&self, pid: &str) -> Result<Vec<ConfigVersion>> {

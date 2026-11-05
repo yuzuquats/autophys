@@ -225,6 +225,11 @@ impl Investigation {
         title: &str,
     ) -> crate::Result<Self> {
         project.validate().map_err(err)?;
+        for o in dataset.iter() { o.validate().map_err(err)?; }
+        let train = dataset.split("train");
+        if !train.is_empty() && train.iter().map(|o| o.n_samples()).sum::<usize>() == 0 {
+            return Err(err(invalid("investigation needs finite training observations")));
+        }
         let (fr, fx) = project.resolve_free(free).map_err(err)?;
         let version = project.config_version();
         wb.put_config_version(
@@ -824,11 +829,13 @@ impl Investigation {
     pub fn tool_validate_predictions(&mut self) -> NumResult<Value> {
         let p = self.need_fit()?.params.clone();
         let val = self.dataset.split("validation");
-        let out = if val.is_empty() {
+        for o in &val { o.validate()?; }
+        let out = if val.is_empty() || val.iter().map(|o| o.n_samples()).sum::<usize>() == 0 {
             json!({"available":false,"passed":false})
         } else {
             let (mut chi, mut sq, mut n) = (0., 0., 0);
             for o in val {
+                if o.n_samples() == 0 { continue; }
                 let pred = self.sim().simulate(&p, &o.settings, FIT_OPTIONS)?;
                 for (ch, y) in &o.y {
                     let py = pred
@@ -875,6 +882,12 @@ impl Investigation {
         }
     }
     fn check_unrevealed(&self) -> crate::Result<()> {
+        self.project.validate().map_err(err)?;
+        let head = self.record.records(Some("investigation"))?;
+        if head.first().is_none_or(|r| r.payload["config_version"] != self.project.config_version()) {
+            return Err(crate::Error::BadRequest("investigation is pinned to a different config version; configuration changed".into()));
+        }
+        for o in self.dataset.iter() { o.validate().map_err(err)?; }
         if !self.record.records(Some("reveal"))?.is_empty() {
             return Err(crate::Error::BadRequest(
                 "cannot continue an investigation after ground truth reveal".into(),

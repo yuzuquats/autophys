@@ -64,8 +64,8 @@ class NoiseConfig:
         if self.bias not in BIAS_MODES:
             raise ValueError(f"bias must be one of {BIAS_MODES}")
         for ch, s in (self.sigma or {}).items():
-            if not s > 0:
-                raise ValueError(f"sigma for {ch} must be positive")
+            if not np.isfinite(s) or not s > 0:
+                raise ValueError(f"sigma for {ch} must be finite and positive")
 
 
 @dataclass(frozen=True)
@@ -101,6 +101,7 @@ class Project:
 
     def __post_init__(self) -> None:
         sim = self.simulator
+        self.noise.__post_init__()
         for k, v in self.initial.items():
             if k not in sim.params:
                 raise ValueError(f"initial value for unknown parameter {k}")
