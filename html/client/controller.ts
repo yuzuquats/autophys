@@ -33,7 +33,6 @@ import { type Decision, parseField } from "./proposal.ts";
 import type { Store } from "./store.ts";
 import type { Action } from "../ui/view-model.ts";
 import type { Intent } from "../ui/intent.ts";
-import { demoWrite, demoView } from "./tutorial.ts";
 
 export type Env = { user: string; now: () => string; daemonOrigin?: string };
 
@@ -246,7 +245,6 @@ export function reduce(
 /** The whole state as JSON: workspace (missing samples become null), selection, source. */
 export function exportDocument(snap: Snapshot, sel: Selection) {
   return {
-    demo: snap.source === "fixture",
     source: snap.source,
     gseq: snap.gseq,
     project: sel.projectId,
@@ -369,7 +367,6 @@ export class Controller {
         sections: view.details.sections.map((s) => ({ ...s, blocks: s.blocks.map((b) => b.kind === "pairing" ? { ...b, decision: pair(b.decision) } : b) })) };
 
     }
-    view = demoView(view, snap?.source ?? this.store.source.name);
     return { ...view, sidebar: { ...view.sidebar,
       creatingProject: !!this.setup,
     } };
@@ -384,14 +381,13 @@ export class Controller {
     const snap = this.store.snapshot(), sel = this.selection;
     return snap && sel
       ? exportDocument(snap, sel)
-      : { demo: true, source: this.store.source.name, loading: true };
+      : { source: this.store.source.name, loading: true };
   }
 
   /** The ui's intent handler (an arrow, so it can be passed as is). */
   handle = (intent: Intent): void => {
     const snap = this.store.snapshot(), sel = this.selection;
     if (!snap || !sel) return;
-    if (intent.kind === "action" && demoWrite(snap.source, intent.name)) return;
     if (intent.kind === "action" && intent.name === "start-investigation") {
       const project = snap.workspace.projects.find(p => p.id === sel.projectId);
       const config = project?.configs.at(-1), projects = this.store.source.projects;
@@ -437,7 +433,7 @@ export class Controller {
       if (intent.name === "setup-create" || intent.name === "setup-start") {
         const projects = this.store.source.projects;
         if (this.store.error) setup.notice = "Reconnect to the daemon before saving or starting.";
-        else if (!projects) setup.notice = "Open the live daemon to create a project. Demo data is read-only.";
+        else if (!projects) setup.notice = "This connection does not support creating projects.";
         else {
           try {
             const request = setupRequest(setup);

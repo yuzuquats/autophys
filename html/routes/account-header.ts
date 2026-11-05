@@ -57,7 +57,7 @@ export function mountAccount(onSignedIn: () => void): void {
       modal?.dismiss();
       onSignedIn();
     }, form);
-    const background = [...document.querySelectorAll<HTMLElement>(".ck-app,.ck-landing,.ck-header,.ap-landing-docs,.ck-footer,.ap-tour-chip")]
+    const background = [...document.querySelectorAll<HTMLElement>(".ck-app,.ck-landing,.ck-header,.ap-landing-docs,.ck-footer")]
       .map(node => ({ node, inert: node.inert }));
     const overflow = document.documentElement.style.overflow;
     const dialog = Dialog.makeWith({

@@ -41,7 +41,7 @@ export function mainMarkup(model: MainModel, width: number, classes: MainClasses
     body = `<div class="ap-viewer ap-empty"><p>${esc(model.body.text)}</p></div>`;
   } else if (model.body.kind === "onboarding") {
     const b = model.body;
-    body = `<section class="ap-viewer ap-onboarding"><h2>${esc(b.title)}</h2><p class="ap-intro">${esc(b.description)}</p><div class="ap-code-head"><b>Python SDK</b>${componentButton("copy-sdk", b.copyLabel)}</div><pre class="ap-code" tabindex="0" aria-label="Python SDK getting started example"><code>${esc(b.snippet)}</code></pre><p class="ap-help">${esc(b.note)}</p><p class="ap-demo-link"><a href="?source=fixtures">View demo data</a><span>Explore a recorded calibration</span></p></section>`;
+    body = `<section class="ap-viewer ap-onboarding"><h2>${esc(b.title)}</h2><p class="ap-intro">${esc(b.description)}</p><div class="ap-code-head"><b>Python SDK</b>${componentButton("copy-sdk", b.copyLabel)}</div><pre class="ap-code" tabindex="0" aria-label="Python SDK getting started example"><code>${esc(b.snippet)}</code></pre><p class="ap-help">${esc(b.note)}</p></section>`;
   } else if (model.body.kind === "loading") {
     body = `<section class="ap-viewer ap-state" aria-busy="true" role="status">${emptyMarkup(model.body.title, model.body.description)}${skeletonMarkup()}</section>`;
   } else if (model.body.kind === "signed-out") {

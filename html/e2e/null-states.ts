@@ -34,7 +34,7 @@ await withHeadless(async (browser) => {
   await boot.goto(`${base}/`, { waitUntil: "load" });
   const workspace = await boot.evaluate(async () => (await fetch("/api/v1/workspace")).json());
   await boot.close();
-  const modes = ["empty", "project-empty", "project-unconfigured", "devices-none", "pairings-pending", "switcher", "single-project", "loading", "unreachable", "reauth-failed", "missing-fit", "missing-residuals", "missing-landscape", "missing-sensitivity", "missing-outlook", "demo"];
+  const modes = ["empty", "project-empty", "project-unconfigured", "devices-none", "pairings-pending", "switcher", "single-project", "loading", "unreachable", "reauth-failed", "missing-fit", "missing-residuals", "missing-landscape", "missing-sensitivity", "missing-outlook"];
   for (const width of [1280, 390]) for (const mode of modes) {
     const page = await browser.newPage();
     const size = `${width}x${width === 390 ? 844 : 800}`;
@@ -64,7 +64,7 @@ await withHeadless(async (browser) => {
         });
       }
       const target = ["empty", "devices-none", "pairings-pending"].includes(mode) ? emptyBase : base;
-      await page.goto(`${target}/app${["demo", "switcher"].includes(mode) ? "?source=fixtures" : ""}`, { waitUntil: "load" });
+      await page.goto(`${target}/app`, { waitUntil: "load" });
       await page.waitForSelector(".ck-panels[data-ready]");
       await page.waitForSelector(".ck-tour-dismiss", { timeout: 3000 }).catch(() => null);
       if (await page.$(".ck-tour-dismiss")) await page.click(".ck-tour-dismiss");
@@ -84,9 +84,10 @@ await withHeadless(async (browser) => {
       if (mode === "switcher") {
         check(await page.$("#ap-switch") === null, `projects/${size}: no project dropdown`);
         if (width === 390) { await page.click(".ck-sidebar-toggle"); await settle(page); }
-        await page.click('pierce/[role=treeitem][data-id="config:cell-pulse-tests"] > .line');
+        const project = workspace.projects[1] ?? workspace.projects[0];
+        await page.click(`pierce/[role=treeitem][data-id="config:${project.id}"] > .line`);
         await settle(page);
-        check((await text(page, ".ap-crumb")).includes("Cell pulse tests"), `projects/${size}: selects second project Configuration`);
+        check((await text(page, ".ap-crumb")).includes(project.name), `projects/${size}: selects second project Configuration`);
       }
       if (mode.startsWith("missing-")) {
         const labels: Record<string, string> = { "missing-fit": "Fit #1", "missing-residuals": "Residuals", "missing-landscape": "Landscape", "missing-sensitivity": "Sensitivity", "missing-outlook": "Sine" };

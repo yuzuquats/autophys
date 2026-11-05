@@ -3,7 +3,7 @@
  * daemon(): the /api/v1 source against a fake fetch and a fake EventSource. Load maps the
  * daemon's workspace onto the domain; the stream resumes from its last gseq after a drop;
  * a refused POST (409) becomes the details panel's "Not saved" notice; pairings are listed
- * and decided; firstOf falls back to the fixture when the daemon does not answer.
+ * and decided; connection failures stay visible.
  */
 Deno.test("wire: optional curves map record ids and preserve downsampled times; reveal preserves evaluator results", async () => {
   const { WireModel } = await import("./wire.ts");
@@ -32,7 +32,7 @@ Deno.test("wire: optional curves map record ids and preserve downsampled times; 
 });
 
 import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
-import { ApiError, daemon, type Cursor, type DaemonOptions, type EventStream, firstOf } from "./api.ts";
+import { ApiError, daemon, type Cursor, type DaemonOptions, type EventStream } from "./api.ts";
 import { Controller } from "./controller.ts";
 import { fixtures } from "./fixtures/source.ts";
 import { Store } from "./store.ts";
@@ -250,14 +250,6 @@ Deno.test("daemon: pairings are listed and approved from the configuration panel
   assertEquals(ctl.view().details.actions?.length ?? 0, 0);
 });
 
-Deno.test("firstOf: the daemon when it answers, the fixture when it does not", async () => {
-  const up = firstOf(daemon(fakeDaemon().opts), fixtures());
-  assertEquals((await up.load()).source, "daemon");
-  assertEquals((await up.chosen).name, "daemon");
-  const down = firstOf(daemon({ fetch: () => Promise.resolve(new Response("<html>", { status: 404 })) }), fixtures());
-  const snap = await down.load();
-  assertEquals([snap.source, down.name, down.fold], ["fixture", "fixture", undefined]);
-});
 
 Deno.test("daemon: an empty daemon shows an empty workspace, not a crash", async () => {
   const d = fakeDaemon((c) => c.url === "/api/v1/workspace" ? Response.json({ cursor: 0, projects: [], config_versions: [], investigations: [], proposals: [], records: [] }) : undefined);
@@ -364,13 +356,12 @@ Deno.test("daemon: reject posts a rejected envelope and does not offer fixture-o
 });
 
 
-Deno.test("daemon: a 401 during load asks the host to reauthenticate, stays visible and never falls back to fixtures", async () => {
+Deno.test("daemon: a 401 during load asks the host to reauthenticate, stays visible", async () => {
   let reauth = 0;
-  const src = firstOf(daemon({ reauth: () => { reauth++; }, fetch: () => Promise.resolve(Response.json({ error: "unauthorized", message: "session expired" }, { status: 401 })) }), fixtures());
+  const src = daemon({ reauth: () => { reauth++; }, fetch: () => Promise.resolve(Response.json({ error: "unauthorized", message: "session expired" }, { status: 401 })) });
   const store = new Store(src), ctl = new Controller(store, { user: "james", now: () => "" });
   await store.start().catch(() => {});
   assertEquals(reauth, 1);
-  assertEquals((await src.chosen).name, "daemon");
   assertEquals(store.snapshot(), null);
   assertStringIncludes(JSON.stringify(ctl.view()), "Browser session expired");
   store.close();

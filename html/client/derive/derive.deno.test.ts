@@ -265,7 +265,6 @@ Deno.test("derive: empty, loading, project-only and demo states have explicit ki
   assertEquals(one.sidebar.switcher.kind, "none");
   assertEquals(one.sidebar.notice, undefined);
   assertEquals(one.main.body.kind, "configuration");
-  assertEquals(one.main.source, "demo");
   const failed = connectionFailure(loading, "401 session_expired", false);
   assertEquals(failed.main.body.kind, "unavailable");
   assertEquals(failed.sidebar.switcher.kind, "unavailable");

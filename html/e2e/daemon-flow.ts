@@ -1,6 +1,5 @@
 // Drives the autophys page on a running `autophys serve` in headless Chromium, both sources:
 //
-//   fixtures  /app?source=fixtures: the status line says so; Sine 0.44 Hz → Approve.
 //   daemon    /app (the daemon answers): a seeded investigation renders; tab C watches the
 //             proposal while tab B approves it and C sees "Approved by" arrive over SSE; tab A,
 //             whose stream is blocked, approves too and shows the daemon's 409 as Not saved;
@@ -122,22 +121,6 @@ const proposalRow = async (page: Page): Promise<ElementHandle<Element>> => {
 const config = ws.config_versions.find((c: { version: string }) => c.version === inv.config_version).config;
 const channel: string = config.simulator.outputs[0];
 
-
-  // ---------- fixtures ----------
-  const fx = await browser.newPage();
-  watch(fx, "fixtures");
-  await openApp(fx, "?source=fixtures");
-  await until(fx, "demo tree", async () => Boolean(await fx.$("pierce/[role=treeitem]")));
-  check(await fx.$(".ck-export") === null, "the shell header has no Export action");
-  await clickStill(await treeRow(fx, "Sine 0.44"));
-  await fx.waitForSelector("pierce/#ap-action-approve");
-  await settle(fx);
-  await snap(fx, "fixtures-proposal");
-  await clickStill((await fx.$("pierce/#ap-action-approve"))!);
-  await until(fx, "fixture approval", async () => (await text(fx, "#ap-status")).startsWith("Approved by james"));
-  check(true, "fixtures: Approve reads Approved by james");
-  await snap(fx, "fixtures-approved");
-  await fx.close();
 
   // ---------- daemon: three tabs ----------
   const a = await browser.newPage(), c = await browser.newPage(), b = await browser.newPage();

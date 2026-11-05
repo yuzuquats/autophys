@@ -63,7 +63,6 @@ export function derive(snapshot: Snapshot | null, selection: Selection, source =
     }
   }
   if (view.main.body.kind === "onboarding") view.main.body.copyLabel = selection.copyStatus === "copied" ? "Copied Python" : selection.copyStatus === "select" ? "Code selected · copy" : "Copy Python";
-  view.main.source = snapshot.source === "fixture" ? "demo" : "live";
   return view;
 }
 

@@ -117,7 +117,6 @@ export type MainBody =
   | { kind: "panels"; panels: ChartPanel[]; columns?: number };
 
 export type MainModel = {
-  source?: "demo" | "live";
   connectionError?: string;
   crumb: Crumb[];
   meta: string;

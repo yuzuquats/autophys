@@ -1,5 +1,5 @@
 /**
- * The fixture Source: a workspace built and simulated in the browser (fixtures.ts) plus a log
+ * Test-only Source: a workspace built by deterministic simulations (fixtures.ts) plus a log
  * of canned records it replays on `stream`, then any decision posted to it. It behaves like
  * the daemon will: it checks a decision against the proposal's state and refuses it with a
  * 409-style error, numbers records globally and per investigation, and streams them.

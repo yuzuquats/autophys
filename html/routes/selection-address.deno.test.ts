@@ -8,6 +8,6 @@ Deno.test("legacy selection URLs preserve slashes, measurement ids, encoded hash
     ["?selection=bench-b%2Ftruth", "", "bench-b/truth"],
     ["?select=bench-b%2Fvalidate", "", "bench-b/validate"],
     ["?selection=bench-b", "#bench-a", "bench-a"],
-    ["", "#%broken", null], ["?source=fixtures", "", null],
+    ["", "#%broken", null], ["?unused=1", "", null],
   ]) assertEquals(selectionAddress(search!, hash!), expected);
 });

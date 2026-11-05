@@ -7,11 +7,10 @@ commit-project; it adopts and completes the stopped implementer's uncommitted
 `html/` work. Scope is `html/**` and this page only; server, SDK, vendor and
 other agents' changes remain theirs.
 
-The composition root loads `daemon()` by default and shows a recovery banner when
-its load fails. `?source=fixtures` explicitly selects the demo; `?source=daemon`
-forces the daemon. The sidebar status names the source. A daemon that answers with
-no projects stays an empty workspace, including controls to approve the first
-device. It never substitutes sample investigations for an empty daemon.
+The composition root uses one `daemon()` Source and one Controller. A failed load
+shows recovery UI; an empty collection stays empty. Demo access comes from signing
+in as the configured demo account, which reads the seeded server workbooks through
+the same snapshot and record stream as other accounts.
 
 ## What is implemented
 
@@ -215,14 +214,12 @@ the scoped task receipt; no other threads were messaged.
 
 The workbench distinguishes a pending first load, an empty collection, a project
 without investigations, an interrupted connection, and a missing recorded series.
-No successful empty daemon load is replaced with demo data. Demo mode has a small
-indicator and a link back to live data. A refused connection has an in-flow alert,
-retry action and demo link. Retrying reloads the document, retaining AX-9's cookie
+A successful empty daemon load stays empty. A refused connection has an in-flow
+alert and retry action. Retrying reloads the document, retaining AX-9's cookie
 minting and UI-10's automatic reload guard.
 
 With no projects, the sidebar explains what a project is and omits the selector
-and empty investigation header. Main gives a copyable Python SDK recipe and a demo
-link; Details explains how to connect a device and shows pending approvals. The
+and empty investigation header. Main gives a copyable Python SDK recipe; Details explains how to connect a device and shows pending approvals. The
 recipe deliberately names the caller-supplied simulator and measured dataset.
 One project is a label; several use lona-js's SelectInput. A project with no
 investigations gets its own recipe and live-update explanation. UI-4 still holds:
@@ -430,171 +427,6 @@ workstream cache, with no direct task-database edits. Remaining work is the
 operator's wizard/SDK/both decision; this commit does not redesign that choice.
 
 
-### Guided tutorial — UI-TOUR-01, 2026-11-04
-
-**Agent-chosen, pending operator review.** The tour runs on demo data, uses
-Autophys-local modules, is available from the app bar's Menu and the empty
-workspace, and places previews on the left. Before this change the cookbook
-offered text and a manual Show me ring; now nine lessons select real rows,
-replay enter actions on Back, and keep Fit/Residuals inside the two-part fifth
-lesson. The other lessons follow the mock's project/configuration, investigation,
-data, sensitivity, proposed-experiment, validation and New project/Devices path.
-The final lesson highlights both entry rows. The approved Autophys-blue halo
-remains unchanged.
-
-The recommendation uses a separate fixture Controller/Store while retaining the
-user's Controller (including selection, expansions, unsent drafts, setup and data
-source). Exit restores it, panel visibility, focus and scroll in open shadow trees.
-Esc and close restore without marking seen; Done also records the per-account
-seen flag. The existing cookbook transition is completed through its dismiss
-control, then a local sheet takes over; vendor/tento is unchanged. Preview clips
-copy the live component's rendered DOM, SVG plots, computed styles and slotted
-shadow content into an inert left-hand viewport. No preview is hand-drawn.
-Approve/Reject and other decision intents are disabled for all demo data, with a
-controller guard behind the buttons. The tour has no live write-capable source.
-
-Adaptations from the approved mocks: the current UI has no header Export and no
-Demo data / Back to live data strip, so neither is recreated or targeted. A small
-amber “Demo data · tour” chip communicates the temporary source. Approve/Reject
-currently belong to the proposal's Details panel rather than the investigation
-overview; that lesson selects the actual proposal and opens Details. On phones,
-sidebar/Details lessons expose the actual target panel rather than highlighting
-hidden rows or skipping lessons: this keeps every lesson and the final pair of
-entry-row halos usable at 390×844. Main lessons show Main; desktop Fit opens
-Details alongside it. Panels reserve 212px above the 200px sheet (272px/260px on
-phones), and each enter action scrolls the live component into view.
-
-Strongest alternative: extend the shared cookbook tutorial API and use
-pre-captured image assets, with phone-only lesson skips. That would benefit other
-apps but couples this work to an upstream contract and makes previews stale as
-components change. Reversal: remove guided-tour*.ts, the pure client tutorial
-module/tests and the root integration hooks; restore the old tutorial option and
-remove the demo decision guard only if interactive demo mutations are desired.
-This is a small local presentation/controller change, without a data migration.
-Changing source choice, entry points or preview placement is similarly local.
-No other session's wizard/sidebar drafts are adopted.
-
-Validation is recorded in
-`rwc-dev-01:~/workspace/fleet/evidence/autophys/tutorial-tour-20261104/`;
-`html/e2e/tutorial-flow.ts` checks every step at 1280×800 and 390×844, actual
-selection, halo bounds, preview content, Back, all exit paths and the empty live
-workspace. Unit coverage exercises navigation/substeps, replayed Back actions,
-complete snapshot restoration and read-only demo decisions. Clean-archive
-qualification and deployment receipts accompany the captures. The installed task
-CLI is unavailable on this host; live task state is in
-`~/.cache/autophys/tutorial-tour-20261104/tasks.json`.
-
-
-UI-TOUR-01 speed follow-up (2026-11-04): remove the fixed 150ms enter delay;
-instant-scroll first, then place persistent halos and mark ready on the next
-animation frame. Halo bounds glide for 180ms with no entrance animation; tour-only
-cookbook slides finish in 200ms. Reduced motion disables these transitions.
-
-**1A — agent-chosen, pending operator review.** Hide the preview column and widen
-the lesson when every target is visible above the sheet; retain an inert live-DOM
-preview for hidden/off-screen targets. Build that preview in a cancellable frame
-after ready so heavy chart copies leave the readiness path. This recommendation
-came from a capture agent and was not operator-reviewed. Alternative **1B**: a
-full-size crop of the target. Reversing 1A restores the always-on preview, still
-built lazily after ready; this is a small local presentation change, with no data
-migration. Operator direction prioritizes delivery: touched-file type-check only,
-no unit tests, tutorial-flow e2e or scratch-daemon measurements; deploy without
-tests, then measure one public step. Task CLI is unavailable on yuzuquats; live
-state and the final timing receipt are in `~/.cache/autophys/tour-speed-20261104/`.
-
-### One cookbook tutorial — UI-TOUR-02, 2026-11-04
-
-**Agent-chosen, pending operator review** (operator asked for one cohesive tutorial that
-points at the app itself). This supersedes UI-TOUR-01's local sheet:
-- **One tour.** The Autophys tour now runs as the cookbook tutorial's source
-  (`Cookbook.Tutorial.Source`): opening the app, or Menu → Take the tour, starts it.
-  The cookbook draws the one sheet, and owns the arrows, Back/Next/Done and Esc. → past
-  the last step returns to the deck. The cookbook's generic shell steps, the second
-  sheet and Show me are gone.
-- **The cookbook additions** (committed vendor edits; 0017 has not been encoded):
-  - each step's target is highlighted automatically on the next frame, with ring nodes
-    kept so the highlight glides, clipped above the sheet;
-  - steps have enter actions, re-run on Back;
-  - a preview column appears only when the step fills it;
-  - grouped steps share a progress bar (the two-part Fit/Residuals step);
-  - the source's start() and finish({completed}) hooks;
-  - CookbookShell.startTour;
-  - the panel bodies get a bottom scroll padding, so a target scrolls clear of the sheet.
-- **Kept from UI-TOUR-01 and the tour-speed change (5c220b8):**
-  - the demo-fixture controller swap, snapshot and restore;
-  - the nine lessons;
-  - the blue halo (tour-ring.ts);
-  - previews only for out-of-sight targets;
-  - 200 ms panel slides during the tour;
-  - the demo-data chip;
-  - Menu and the empty-workspace entry.
-- **Reversal:** restore guided-tour.ts and guided-tour-styles.ts from 5c220b8, pass
-  `[...Cookbook.Tutorial.shellSteps, ...tutorial]` as the tutorial again, and drop the
-  vendored 0015/0017 changes. About an hour.
-
-
-### Static tutorial images — UI-TOUR-03, 2026-11-04
-
-**Agent-chosen, pending operator review.** The operator asked for tutorial images;
-UI-TOUR-02's conditional live-DOM clones are replaced by ten static fixture crops,
-one for every part of steps 1–9 (Fit and Residuals remain two parts of step 5).
-The old clone path could copy about 1,000 residual-chart nodes and block for 371 ms.
-Every part now inserts a preloaded eager image with explicit 320 × 166 dimensions.
-The next part starts loading in the current part's enter action; the first image
-is decoded alongside fixture loading. Target highlighting still runs on the next
-frame with the reused gliding halo and 200 ms panel slides; no enter delay returns.
-Empty, loading or failed preview slots are hidden, including the first-step grey box.
-
-The ten WebP files are **97,554 bytes total** (6,750–11,906 bytes each), captured
-at deviceScaleFactor 2 from deterministic demo fixtures. Charts show a meaningful
-left-hand region, including axes and samples, without reducing the native CSS
-font size. Desktop images use a 320 × 166 slot. Narrow screens pan the same
-native-size crop instead of shrinking labels. Assets use the existing tento-web
-static route copying, at `/tour-images/*.webp`. The live clone module remains
-available as historical source but is no longer imported by the tour.
-
-Regeneration: start an isolated source-built daemon on a free 47980–47989 port,
-then `deno run -A html/e2e/capture-tour-images.ts http://127.0.0.1:47980 <evidence-dir>`.
-The script uses withHeadless, the specified Chromium binary, --no-sandbox, and
-always closes the browser. It writes the ten assets plus an external contact
-sheet and size manifest. Current contact sheet on yuzuquats:
-`~/.cache/autophys/tour-images-20261104/contact-sheet.png`.
-
-Recommendation: static crops keep reading and paging cheap and deterministic.
-Strongest alternative: render purpose-built simplified SVG charts per part;
-that would adapt to narrower slots but adds a second visualization implementation.
-Reversal: restore UI-TOUR-02's preview import/callback and styles, then retire these
-owned assets and capture script; under an hour, no data migration or API change.
-Implementation is complete in the matching `Project: autophys` commit.
-
-Validation: `deno check --config html/deno.json` on the four touched TypeScript
-files. No tests or e2e run, per the operator's speed constraint. Deployment and
-one live browser pass (including step-change timing) are recorded externally in
-`~/.cache/autophys/tour-images-20261104/`; the final handoff reports the live SHA.
-Task-board CLI was unavailable: installed lona-console has no `task` command;
-plan/status are recorded in that same external evidence directory.
-
-
-### Known vendor regeneration gap — 2026-11-04 review
-
-The cookbook edits committed in a4990f0 (including tutorial.ts and styles.ts)
-have no corresponding fleet generator patch 0017. The fleet vendor base was lost
-with rwc-dev-01. Until that patch is encoded against a recovered or reconstructed
-base, running sync.sh would drop these changes. The committed vendor tree is the
-source of truth; preserve it when reconstructing the generator inputs. This
-review records the gap and does not claim regeneration is safe.
-
-
-Review follow-up validation: the app captures bookmark search/hash before the
-cookbook normalizes history, and applies the requested selection only to the
-user's controller. A focused scratch-daemon browser check passed for initial
-hash navigation, hash reload and query selection after tour exit. The vendor
-files were not edited. Deno checks passed for the root and the two updated browser
-drivers; those drivers were not run. The autoloop's two focused recovery tests
-passed, including a crash between recovery charging and archiving; Cargo check
-passed for autophys-cli. No full suite, push or deployment was performed.
-
-
 ## Sign-in opens without forced field focus (2026-11-05)
 
 Opening the standalone sign-in page previously focused Email immediately,
@@ -622,28 +454,6 @@ operator's build-only instruction. Native password-manager popup rendering with
 stored credentials and physical iOS Safari were not exercised.
 
 
-## First-open tutorial avoids the sign-in flash (2026-11-05)
-
-The down arrow opens the demo tutorial before any account action is needed.
-Previously its worker startup left the saved user controller visible: an
-anonymous visitor saw the sign-in card for about 520 ms, and a signed-in visitor
-saw their own project before the tutorial replaced it. Authentication was already
-resolved in the server-rendered account badge; this delay was demo preparation.
-
-The tutorial now owns all panes synchronously with the existing quiet loading
-view before yielding for the shell animation. The selected first lesson replaces
-those placeholders when ready. The immutable demo workspace also warms in its
-worker during landing-page idle time, sharing the existing promise and retry
-behavior. Sign-in remains available after leaving the anonymous tutorial, and
-cancellation restores the original controller through the existing snapshot.
-
-Validation: focused browser frame capture reproduced the original flash;
-Deno checks of both touched routes, git diff checks and the release Cargo build
-passed (existing dependency warnings). No test suites were run, following the
-operator's build-only instruction. Deployment and final live interaction results
-are recorded in task-board workstream `autophys-auth-flash`.
-
-
 ## Header sign-in uses the lona-js modal and overlay (2026-11-05)
 
 The header Sign in control now opens the shared `Dialog` and `Overlay` from
@@ -658,8 +468,7 @@ The dialog uses the same native fields, autocomplete hints and in-place auth
 submission as the workspace card. Login errors stay inline, repeated submissions
 are blocked while pending, requests time out, and a dismissed form cannot steal
 focus on a later failure. Success updates the server-rendered account badge and
-starts the user's store without navigating or restarting the tutorial. A login
-during a tour leaves the demo lesson visible until the tour exits. The normal
+starts the user's store without navigating. The normal
 login link remains a fallback for navigation without the app handler.
 
 Motion uses the shared overlay with a short dialog entrance and an opacity-only
@@ -669,6 +478,40 @@ within the viewport and uses 16 px credential inputs.
 Validation: Deno checks and web bundling passed. Isolated browser checks covered
 panel initial focus, keyboard Tab, Escape and backdrop dismissal/focus restore,
 inline invalid-credential errors, the 390×844 layout without horizontal overflow,
-and successful demo sign-in during the tutorial followed by returning to the
-user workspace. No test suites were run, per the operator's build-only direction.
+and successful demo sign-in followed by loading server records. No test suites were run, per the operator's build-only direction.
 Release and live deployment evidence is in workstream `autophys-signin-modal`.
+
+
+## Demo access and data architecture — 2026-11-05
+
+The operator established that demo access means signing in as the demo account.
+The app now has a single daemon Source and Controller. Synthetic browser workspace
+selection, controller replacement, screenshot previews, their assets and obsolete
+browser drivers have been removed. The cookbook receives an empty tutorial list;
+opening the drawer reveals the account workspace or the sign-in card immediately.
+The existing drawer movement and shared lona-js sign-in modal remain.
+
+The page's server-rendered account badge resolves initial authentication before
+client startup. Signed-out pages defer workspace API calls. The demo button posts
+to `/api/auth/demo`; the daemon selects its configured demo user, writes a normal
+session in `server.db`, and sets the HttpOnly cookie. In-place login updates the
+badge and starts the same Store. Read-only account permissions are enforced by the
+server independently of presentation.
+
+`Api::open` opens one collection and stores one SDK Client. The workspace handler
+checks authentication, then snapshots that Client's workbooks. It does not filter
+by account: all authenticated accounts currently share the deployment collection.
+The demo account is an access identity, not a project owner namespace. Per-account
+collection isolation would require a separate backend ownership/routing change.
+No seeded workbook records or account data are removed by this frontend cleanup.
+
+The record flow is SDK → workbook SQLite record log/projections → authenticated
+workspace snapshot and SSE → wire mapping → Store → Controller/derive → UI slots.
+Proposal decisions return through the API and become records in the same stream.
+The browser formats and interpolates recorded numerical results; numerical
+simulation and fitting occur in the SDK or server workbench jobs.
+
+Removal boundary: maintained app source, route assets, active documentation and
+runtime entry points. Generic shared cookbook tutorial primitives and numerical
+fixtures used only by tests remain. Git history and immutable prior qualification
+receipts retain their historical meaning and do not describe the current app.

@@ -2,14 +2,12 @@
  * The autophys page: the only place the cookbook, the view-only ui and the client meet. The
  * cookbook builds the shell; each slot gets one ui surface drawing its slice of the client's
  * view through Cookbook.View.mount; the client's Store follows a Source: the daemon's
- * /api/v1 when this page is served by `autophys serve`, with recovery if it cannot answer.
- * `?source=fixtures` or `?source=daemon` forces one. The main pane reports connection status only while disconnected.
+ * /api/v1 when this page is served by `autophys serve`, with recovery if it cannot answer. The main pane reports connection status only while disconnected.
  */
 import { Cookbook } from "@tento-cookbook/lib.ts";
-import { daemon, type Source } from "../client/api.ts";
+import { daemon } from "../client/api.ts";
 import { selectionAddress } from "./selection-address.ts";
 import { Controller } from "../client/controller.ts";
-import { browserFixtures, fixtureWorkspace } from "./browser-fixtures.ts";
 import { Store } from "../client/store.ts";
 import { hydrateComponents } from "../ui/components.ts";
 import { AutophysDetails } from "../ui/details.ts";
@@ -20,15 +18,13 @@ import { breadcrumbText } from "../ui/breadcrumb.ts";
 import { autophysStyles } from "../ui/styles.ts";
 import { placeholderStyles } from "../ui/placeholder-styles.ts";
 import { deck } from "./content.ts";
-import { mountGuidedTour } from "./guided-tour.ts";
-import { ContentTransition, contentTransitionStyles } from "./content-transition.ts";
+import { contentTransitionStyles } from "./content-transition.ts";
 import { landingDocs } from "./docs.ts";
 import { quietLoading, signedOutView } from "../client/derive/signed-out.ts";
 import { signInInPlace } from "./sign-in-in-place.ts";
 import { mountAccount } from "./account-header.ts";
 import "./brand.ts";
 import "./light-only.ts";
-import "./tour-ring.ts";
 
 // The drawer normalizes history before mounting the app. Keep the original address.
 let requestedLocation: { search: string; hash: string } | null = { search: location.search, hash: location.hash };
@@ -54,23 +50,18 @@ function reauth(): void {
   location.reload();
 }
 
-const forced = new URLSearchParams(location.search).get("source");
-const source: Source & { chosen?: Promise<Source> } = forced === "fixtures" ? browserFixtures()
-  : forced === "daemon" ? daemon({ user: USER, reauth })
-  : daemon({ user: USER, reauth });
+const source = daemon({ user: USER, reauth });
 
 const clock = () => new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-const userController = new Controller(new Store(source), { user: USER, now: clock });
-let ctl = userController;
+const ctl = new Controller(new Store(source), { user: USER, now: clock });
 // `serve --login` marks a signed-out page (the Sign in badge). The landing page stays usable:
 // the app makes no API calls (no 401, no reload) and its main pane asks to sign in.
-let SIGNED_OUT = forced !== "fixtures" && document.getElementById("ap-account")?.dataset.signedIn === "false";
+let SIGNED_OUT = document.getElementById("ap-account")?.dataset.signedIn === "false";
 const DEMO = document.getElementById("ap-account")?.dataset.demo === "true";
 const baseView = ctl.view.bind(ctl);
 ctl.view = () => SIGNED_OUT ? signedOutView(baseView(), DEMO) : quietLoading(baseView());
 
 let teardown: (() => void) | null = null;
-let guided: ReturnType<typeof mountGuidedTour> | null = null;
 let resumeSignedIn: (() => void) | undefined;
 
 const app: Cookbook.App = {
@@ -95,7 +86,7 @@ const app: Cookbook.App = {
     }
     const addressChanged = () => {
       pendingAddress = selectionAddress(location.search, location.hash);
-      if (pendingAddress && ctl === userController && ctl.store.snapshot()) {
+      if (pendingAddress && ctl.store.snapshot()) {
         const id = pendingAddress; pendingAddress = null;
         ctl.handle({ kind: "select", id });
       }
@@ -133,12 +124,7 @@ const app: Cookbook.App = {
       }
     };
     const hydrate = (host: HTMLElement) => { hydrateProjectSetup(host); hydrateComponents(host, handle); };
-    const content = new ContentTransition([shell.slots.queue, shell.slots.main, shell.slots.details]);
-    // Panel movement keeps the shell's FLIP; deferred content enters with its
-    // own reveal instead of measuring and animating the same layout three times.
-    const viewShell = { reflow: (draw: () => void) => {
-      if (content.pending || !shell.reflow) draw(); else shell.reflow(draw);
-    } };
+    const viewShell = { reflow: (draw: () => void) => shell.reflow ? shell.reflow(draw) : draw() };
     let renderedView = ctl.view();
     const views = [
       Cookbook.View.mount(viewShell, new AutophysSidebar(shell.slots.queue, handle), () => renderedView.sidebar),
@@ -146,8 +132,8 @@ const app: Cookbook.App = {
       Cookbook.View.mount(viewShell, new AutophysDetails(shell.slots.details, handle, shell.classes, hydrate), () => renderedView.details),
     ];
     // A record arrived or the selection moved: every view re-reads its model (main with FLIP).
-    const redrawNow = () => {
-      if (pendingAddress && ctl === userController && ctl.store.snapshot()) {
+    const redraw = () => {
+      if (pendingAddress && ctl.store.snapshot()) {
         const id = pendingAddress; pendingAddress = null;
         ctl.handle({ kind: "select", id });
       }
@@ -160,15 +146,12 @@ const app: Cookbook.App = {
       views.forEach((v) => v.redraw());
       shell.setCrumb?.(breadcrumbText(view.main.crumb));
     };
-    const redraw = () => { if (!content.pending) redrawNow(); };
     const reconcileMain = () => {
       const panels = shell.slots.main.closest<HTMLElement>(".ck-panels");
       const phoneSheet = matchMedia("(max-width:760px)").matches && panels?.dataset.mobile !== "main";
       shell.slots.main.inert = !panels?.hasAttribute("data-ready") || phoneSheet;
     };
-    const deferRedraw = (restored: () => void) => content.defer(redrawNow, () => { reconcileMain(); restored(); });
     const unsubscribe = ctl.subscribe(redraw);
-    guided = mountGuidedTour({ get: () => ctl, set: (next) => { ctl = next; }, redraw, deferRedraw, startTour: () => shell.startTour?.() });
     const down = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.key !== "ArrowDown" || event.repeat || event.isComposing ||
         event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
@@ -195,13 +178,13 @@ const app: Cookbook.App = {
     redraw();
     let poll: ReturnType<typeof setInterval> | undefined;
     // Store exposes the failure through the view.
-    const start = () => { void userController.store.start().catch(() => {}); poll ??= setInterval(() => { void userController.store.refreshPairings(); void userController.refresh(); }, PAIRING_POLL_MS); };
+    const start = () => { void ctl.store.start().catch(() => {}); poll ??= setInterval(() => { void ctl.store.refreshPairings(); void ctl.refresh(); }, PAIRING_POLL_MS); };
     // Signed out: the card signs in without a page load, then the workspace starts in place.
     let stopSignIn: (() => void) | undefined;
     resumeSignedIn = () => { SIGNED_OUT = false; stopSignIn?.(); start(); redraw(); };
     if (SIGNED_OUT) stopSignIn = signInInPlace(resumeSignedIn);
     else start();
-    teardown = () => { resumeSignedIn = undefined; document.removeEventListener("keydown", down, { capture: true }); content.dispose(); window.removeEventListener("hashchange", addressChanged); guided?.dispose(); guided = null; stopSignIn?.(); clearInterval(poll); unsubscribe(); views.forEach((v) => v.dispose()); removeStyles(); };
+    teardown = () => { resumeSignedIn = undefined; document.removeEventListener("keydown", down, { capture: true }); window.removeEventListener("hashchange", addressChanged); stopSignIn?.(); clearInterval(poll); unsubscribe(); views.forEach((v) => v.dispose()); removeStyles(); };
   },
   unmount() {
     teardown?.();
@@ -211,21 +194,9 @@ const app: Cookbook.App = {
 };
 
 const docs = landingDocs();
-// The cookbook tutorial is the one tour: opening the app (or the deck's Get started) runs the
-// Autophys steps on demo data, and every exit puts the user's own view back.
-const tour: Cookbook.Tutorial.Source = {
-  start: () => guided?.source.start() ?? [],
-  finish: (result) => guided?.source.finish?.(result),
-};
-Cookbook.mount({ deck, onStage: (stage) => docs.onStage(stage), tutorial: tour, status: null, labels: { sidebar: "Workspace" } }).run(app);
+Cookbook.mount({ deck, onStage: (stage) => docs.onStage(stage), tutorial: [], status: null, labels: { sidebar: "Workspace" } }).run(app);
 mountAccount(() => { SIGNED_OUT = false; resumeSignedIn?.(); });
 docs.mount();
 
 // Remove the unused hard-coded shell control before the first app open too.
 document.querySelector(".ck-header .ck-export")?.remove();
-
-// Prepare the immutable tour data off-thread while the landing is idle, rather
-// than putting worker startup and computation on the first down-arrow path.
-const warmDemo = () => { void fixtureWorkspace().catch(() => {}); };
-if (typeof requestIdleCallback === "function") requestIdleCallback(warmDemo, { timeout: 1500 });
-else requestAnimationFrame(() => setTimeout(warmDemo, 0));

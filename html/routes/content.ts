@@ -1,7 +1,6 @@
 /**
  * The product copy the cookbook shows around the app: the pitch deck on the landing, and the
- * tutorial steps, which point into the slots by the ui's stable ids and classes. (The
- * cookbook's own steps cover its chrome.)
+ * recorded experiments. The workbench opens directly on the account's server data.
  */
 import type { Cookbook } from "@tento-cookbook/lib.ts";
 import { MUSE_AVATAR } from "./loops-figure.ts";

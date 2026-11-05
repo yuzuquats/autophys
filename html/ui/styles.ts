@@ -34,8 +34,6 @@ ${w} .ap-intro { margin:0;max-width:60ch;color:var(--ap-sec);font:14px/22px var(
 ${w} .ap-code-head { display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:8px;font:12px/18px var(--ap-font); }
 ${w} .ap-code { margin:0;padding:16px;overflow:auto;max-width:100%;background:#fff;border-radius:8px;font:12px/20px var(--ck-mono);tab-size:4; }
 ${w} .ap-help { margin:0;color:var(--ap-sec);font:12px/19px var(--ap-font);max-width:70ch; }
-${w} .ap-demo-link { display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;margin:8px 0 0;font:13px/20px var(--ap-font); }
-${w} .ap-demo-link span { color:var(--ap-sec);font-size:12px; }
 ${w} a { color:var(--ap-ink);text-underline-offset:3px; }
 ${w} a:hover { text-decoration-thickness:2px; }
 ${w} .ap-connection { flex:none;margin-top:-8px;padding:12px;border-radius:0 0 8px 8px;background:var(--ck-wash);font:13px/20px var(--ap-font); }

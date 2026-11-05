@@ -1,9 +1,7 @@
 /**
- * Where the client's data comes from: one interface, three implementations. `fixtures()`
- * (fixtures/source.ts) replays a canned workspace in the browser; `daemon()` talks to
- * `autophys serve` over /api/v1 (GET /workspace, SSE /stream, POST approvals and pairing
- * decisions); `firstOf()` loads the daemon when it answers and falls back to the fixture.
- * This file holds the client's only network code; wire.ts maps what the daemon sends.
+ * The client network boundary: daemon() reads /api/v1/workspace, follows the
+ * resumable record stream, and posts decisions, project setup and pairing.
+ * wire.ts maps recorded results; tests may supply an in-memory Source.
  */
 import type { Pairing, Workspace } from "./domain.ts";
 import type { Decision } from "./proposal.ts";
@@ -256,46 +254,5 @@ export function daemon(opts: DaemonOptions = {}): Source {
         await call("POST", `/pairings/${encodeURIComponent(code)}/${approve ? "approve" : "deny"}`, {});
       },
     },
-  };
-}
-
-/** The first source whose load succeeds (the daemon, then the fixture); the others are never used. */
-export function firstOf(...sources: Source[]): Source & { readonly chosen: Promise<Source> } {
-  let active: Source | null = null;
-  const errors = new Set<(error: Error) => void>();
-  let stopErrors: (() => void) | undefined;
-  let pick: (s: Source) => void = () => {};
-  const chosen = new Promise<Source>((resolve) => (pick = resolve));
-  const need = () => {
-    if (!active) throw new Error("autophys: the source has not loaded yet");
-    return active;
-  };
-  return {
-    chosen,
-    onError(on) { errors.add(on); return () => { errors.delete(on); }; },
-    get name() { return active?.name ?? sources.map((s) => s.name).join(" or "); },
-    async load() {
-      let last: unknown = null;
-      for (const s of sources) {
-        stopErrors?.();
-        stopErrors = s.onError?.((error) => { for (const on of errors) on(error); });
-        try {
-          const snap = await s.load();
-          active = s;
-          pick(s);
-          return snap;
-        } catch (error) {
-          // A real daemon with an expired session must never turn into demo data.
-          if (error instanceof ApiError && error.status === 401) { active = s; pick(s); throw error; }
-          last = error;
-        }
-      }
-      throw last;
-    },
-    stream: (after, on, onWorkspace) => need().stream(after, on, onWorkspace),
-    post: (path, body) => need().post(path, body),
-    get fold() { return active?.fold; },
-    get pairings() { return active?.pairings; },
-    get projects() { return active?.projects; },
   };
 }

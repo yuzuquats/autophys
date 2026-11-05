@@ -1,8 +1,7 @@
 /**
  * The autophys domain: workspace → project → investigation → measurements, fits, sensitivity,
- * proposals and validation, as a Source delivers it (api.ts): today the fixture (fixtures/),
- * later the `autophys serve` daemon. Every number here was computed upstream (the SDK; the
- * fixture stands in for it): the client formats, it never simulates (AX-2). Plain JSON.
+ * proposals and validation, delivered by the daemon Source (api.ts). Every number
+ * is computed upstream by the SDK; the client formats and never simulates (AX-2). Plain JSON.
  */
 
 export type SimulatorKind = "oscillator" | "thermal" | "thevenin";
