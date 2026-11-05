@@ -101,6 +101,8 @@ export function installDrawer(parts: {
     tour.inert = next !== "tour";
     if (next === "tour") tutorial.start();
     else if (open) tutorial.clear();
+    // An empty tutorial completes synchronously and may already open the app.
+    if (own !== revision) return;
     parts.onStage?.(next);
 
     const to = transformFor(next);

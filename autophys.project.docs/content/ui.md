@@ -515,3 +515,8 @@ Removal boundary: maintained app source, route assets, active documentation and
 runtime entry points. Generic shared cookbook tutorial primitives and numerical
 fixtures used only by tests remain. Git history and immutable prior qualification
 receipts retain their historical meaning and do not describe the current app.
+
+The cookbook drawer now stops a superseded stage transition if an empty tutorial
+completes synchronously. This prevents the initial transition from overwriting
+the app position after the empty list immediately opens the workbench. The
+committed vendor delta is authoritative; preserve it during vendor regeneration.
