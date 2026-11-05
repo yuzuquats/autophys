@@ -168,38 +168,57 @@ def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_se
             return []
         return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
-    def charge(what, usd):
+    def charge(what, usd, identity=None):
         # Appended when incurred, so spend survives any crash before state.json is saved.
         if usd:
             with (root / "spend.jsonl").open("a", encoding="utf-8") as stream:
-                stream.write(json.dumps({"at": _now(), "what": what, "usd": usd}) + "\n")
+                stream.write(json.dumps({"at": _now(), "what": what, "usd": usd, "identity": identity}) + "\n")
             state["spent_usd"] += usd
 
     def fresh(directory, label):
-        # An interrupted evaluation leaves a partial directory. Charge the spend recorded in
-        # its workbooks that no ledger entry covers yet, keep it aside, and redo it.
+        # Persist an identity outside the evaluator's output directory (evaluators may
+        # require that directory not to exist). A retry gets a new identity only after
+        # its predecessor has been recovered and archived.
+        import uuid
+        attempt_path = root / "attempts" / f"{label}.json"
+        attempt_path.parent.mkdir(parents=True, exist_ok=True)
+        attempt = json.loads(attempt_path.read_text()) if attempt_path.exists() else {
+            "id": uuid.uuid4().hex, "legacy": directory.exists()}
+        def save_attempt(value):
+            tmp = attempt_path.with_suffix(".json.tmp")
+            _write_json(tmp, value)
+            tmp.replace(attempt_path)
+
+        save_attempt(attempt)
         if directory.exists():
-            import uuid
-            charged = {entry["what"] for entry in ledger()}
+            entries = ledger()
+            charged = {entry.get("identity") for entry in entries}
+            legacy = {entry["what"] for entry in entries if not entry.get("identity")}
             for workbook in sorted(directory.rglob("*.ap-workbook")):
                 part = workbook.parent.relative_to(directory).as_posix()
                 what = label if part == "." else f"{label}/{part}"
-                if what not in charged:
-                    charge(f"{what} (interrupted: {workbook.name})", _workbook_cost(workbook))
+                evaluation = f"{attempt['id']}/{part}"
+                identity = f"{evaluation}/{workbook.name}"
+                if (evaluation not in charged and identity not in charged
+                        and not (attempt["legacy"] and what in legacy)):
+                    charge(f"{what} (interrupted: {workbook.name})", _workbook_cost(workbook), identity)
             stamp = time.strftime('%Y%m%dT%H%M%S', time.gmtime())
             directory.rename(directory.with_name(f"{directory.name}.interrupted-{stamp}-{uuid.uuid4().hex[:8]}"))
+        attempt = {"id": uuid.uuid4().hex, "legacy": False}
+        save_attempt(attempt)
+        return attempt["id"]
 
     def scored(path, seeds, directory, label):
         """Evaluate and charge as it goes: each repeat is charged as soon as it completes."""
-        fresh(directory, label)
+        attempt = fresh(directory, label)
         if repeats == 1:
             result = evaluate_fn(path, cases, seeds, policy, directory, jobs=jobs, **options)
-            charge(label, cost(result))
+            charge(label, cost(result), f"{attempt}/.")
         else:
             parts = []
             for k in range(repeats):
                 part = evaluate_fn(path, cases, seeds, policy, directory / f"r{k}", jobs=jobs, **options)
-                charge(f"{label}/r{k}", cost(part))
+                charge(f"{label}/r{k}", cost(part), f"{attempt}/r{k}")
                 parts.append(part)
             runs = [dict(run, repeat=k) for k, part in enumerate(parts) for run in part["runs"]]
             result = {"runs": runs, "score": score(runs),
