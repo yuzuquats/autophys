@@ -159,6 +159,7 @@ async fn app_document(
     // `serve --login`: signed out, only the landing page is served; the API
     // stays closed. Anything else redirects to the sign-in page.
     let mut badge = None;
+    let mut issue_document_session = true;
     if let Some(api) = api.filter(|a| a.options().login) {
         match crate::http::auth::signed_in(&api, &req).await? {
             Some(user) => badge = Some(crate::login::badge(&user)),
@@ -169,6 +170,9 @@ async fn app_document(
                     .ok()
                     .flatten()
                     .is_some();
+                // The signed-out landing cannot use the browser API. Do not
+                // let anonymous visits consume authenticated document admission.
+                issue_document_session = false;
                 badge = Some(crate::login::anonymous_badge(demo))
             }
             None => {
@@ -198,39 +202,45 @@ async fn app_document(
         }
     }
     match tokio::fs::read(&shell.0).await {
-        Ok(html) => Ok(HttpResponse::Ok()
-            .cookie(sessions.document_cookie(&req)?)
-            // Retire the former /api cookie so it cannot shadow the reused /
-            // cookie on API calls after the old token's idle lease expires.
-            .cookie(
-                actix_web::cookie::Cookie::build(crate::http::auth::SESSION_COOKIE, "")
-                    .path("/api")
-                    .max_age(actix_web::cookie::time::Duration::ZERO)
-                    .finish(),
-            )
-            .insert_header((actix_web::http::header::CACHE_CONTROL, "no-store"))
-            // `serve --login` pages carry a password form: refuse framing.
-            .insert_header((
-                "x-frame-options",
-                if badge.is_some() {
-                    "DENY"
-                } else {
-                    "SAMEORIGIN"
-                },
-            ))
-            .insert_header((
-                actix_web::http::header::CONTENT_SECURITY_POLICY,
-                if badge.is_some() {
-                    "frame-ancestors 'none'"
-                } else {
-                    "frame-ancestors 'self'"
-                },
-            ))
-            .content_type("text/html; charset=utf-8")
-            .body(match badge {
-                Some(badge) => with_badge(html, &badge),
-                None => html,
-            })),
+        Ok(html) => {
+            let mut response = HttpResponse::Ok();
+            if issue_document_session {
+                response
+                    .cookie(sessions.document_cookie(&req)?)
+                    // Retire the former /api cookie so it cannot shadow the reused /
+                    // cookie on API calls after the old token's idle lease expires.
+                    .cookie(
+                        actix_web::cookie::Cookie::build(crate::http::auth::SESSION_COOKIE, "")
+                            .path("/api")
+                            .max_age(actix_web::cookie::time::Duration::ZERO)
+                            .finish(),
+                    );
+            }
+            Ok(response
+                .insert_header((actix_web::http::header::CACHE_CONTROL, "no-store"))
+                // `serve --login` pages carry a password form: refuse framing.
+                .insert_header((
+                    "x-frame-options",
+                    if badge.is_some() {
+                        "DENY"
+                    } else {
+                        "SAMEORIGIN"
+                    },
+                ))
+                .insert_header((
+                    actix_web::http::header::CONTENT_SECURITY_POLICY,
+                    if badge.is_some() {
+                        "frame-ancestors 'none'"
+                    } else {
+                        "frame-ancestors 'self'"
+                    },
+                ))
+                .content_type("text/html; charset=utf-8")
+                .body(match badge {
+                    Some(badge) => with_badge(html, &badge),
+                    None => html,
+                }))
+        }
         Err(error) => Ok(HttpResponse::InternalServerError()
             .content_type("text/plain; charset=utf-8")
             .body(format!("the built shell is missing ({error})\n"))),
