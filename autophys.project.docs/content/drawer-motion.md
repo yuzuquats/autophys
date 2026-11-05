@@ -29,3 +29,25 @@ Validate actual Up/Down, settled and interrupted returns, tour navigation,
 main height/opacity samples and phone layout. Type-check changed entry points,
 run the existing HTML suite and package/deployment gates, then verify the live
 commit and browser result. Current task: rwc-01:01m6ndqqbat4k6h676w40kepx7.
+
+## Candidate verified, 2026-11-05
+
+The implementation retains the old rendered workspace during deferred restoration,
+then replaces it without opacity or translate animations. Main is painted from
+opening onward. Closing keeps panel layout, readiness and tour content until the
+cover arrives; the app layer becomes inert immediately. Teardown still removes
+its DOM and listeners after coverage. App-owned CSS fixes main bottom to zero;
+a scroll-tail spacer and scroll padding retain access below the tutorial.
+
+Chromium frame samples of the built candidate at 1280×800 hold main height at
+708px in both directions, full opening/closing, rapid reversal and the reduced
+motion JS branch. All seven scenarios have zero blank/faded uncovered frames.
+At 390×844 the height stays 752px, sheets remain mutually exclusive/inert and
+there is no horizontal overflow. The tutorial's intentional demo/user selection
+and Details changes remain; this change removes the repeated vertical resizing
+and blank/reveal cycle, not those content changes.
+
+Deno entry-point check, web bundle, diff whitespace and the design detector pass;
+the HTML suite passes 107/107. Measurements: rwc-01
+`fleet/evidence/autophys-drawer/candidate-results.json`; built candidate and
+HTML log: yuzuquats `fleet/evidence/hacks-carousel-align/drawer-*`.

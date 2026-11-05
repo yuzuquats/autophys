@@ -75,9 +75,11 @@ export function installDrawer(parts: {
     document.documentElement.dataset.ckStage = next;
     if (open && previous === "landing") parts.onOpen();
     panels.setVisible(true);
-    panels.setOpen(open);
+    panels.el.inert = !open;
+    // Closing moves the cover, not the workbench beneath it. Keep its current
+    // layout and visibility until the landing has actually covered the app.
+    if (open) panels.setOpen(true);
     panels.setPeek(next === "tour" ? peek() : 0);
-    if (!open) panels.setReady(false);
     landing.toggleAttribute("data-lowered", open);
     // Keep the footer out of the app's tab order and scroll range. Restore it
     // before restoring scroll, so an offset at the page bottom is not clamped.
@@ -98,7 +100,7 @@ export function installDrawer(parts: {
     content.inert = open;
     tour.inert = next !== "tour";
     if (next === "tour") tutorial.start();
-    else tutorial.clear();
+    else if (open) tutorial.clear();
     parts.onStage?.(next);
 
     const to = transformFor(next);
@@ -114,6 +116,9 @@ export function installDrawer(parts: {
     animation = null;
     if (open) panels.setReady(true);
     else {
+      tutorial.clear();
+      panels.setReady(false);
+      panels.setOpen(false);
       panels.setVisible(false);
       parts.onClosed();
       trigger?.focus({ preventScroll: true });
