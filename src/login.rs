@@ -5,8 +5,6 @@
 //! ```text
 //! GET  /login                 email + password form (?next=/app/...)
 //! GET  /invite#<token>        choose a password (the token stays out of logs)
-//! GET  /signup                email + password form for a new account
-//! POST /api/auth/signup       form → new account, session cookie, 303 to next
 //! POST /api/auth/login        form → session cookie, 303 to next
 //! POST /api/auth/invite       form → password set, session cookie, 303 /app
 //! POST /api/auth/logout       end the session, 303 /login
@@ -46,13 +44,7 @@ pub fn configure(cfg: &mut web::ServiceConfig, api: Api) {
             .route("/logout", web::post().to(logout))
             .route("/me", web::get().to(me))
             .route("/badge", web::get().to(badge_fragment))
-            .route("/demo", web::post().to(demo_sign_in))
-            .route("/signup", web::post().to(signup)),
-    );
-    cfg.service(
-        web::resource("/signup")
-            .app_data(data.clone())
-            .route(web::get().to(signup_page)),
+            .route("/demo", web::post().to(demo_sign_in)),
     );
     cfg.service(
         web::resource("/login")
@@ -171,7 +163,7 @@ fn login_form(next: &str, email: &str, error: Option<&str>, demo: bool) -> Strin
     page(
         "Sign in",
         &format!(
-            "<h1>Sign in to Autophys</h1><p>Use the email you signed up or were invited with.</p>{error}\
+            "<h1>Sign in to Autophys</h1><p>Use the email you were invited with.</p>{error}\
              <form method=\"post\" action=\"/api/auth/login\">\
              <input type=\"hidden\" name=\"next\" value=\"{}\">\
              <label for=\"email\">Email</label>\
@@ -179,104 +171,11 @@ fn login_form(next: &str, email: &str, error: Option<&str>, demo: bool) -> Strin
              <label for=\"password\">Password</label>\
              <input id=\"password\" name=\"password\" type=\"password\" autocomplete=\"current-password\" required>\
              <button type=\"submit\">Sign in</button></form>{demo}\
-             <p class=\"alt\">New here? <a href=\"/signup?next={}\">Create an account</a> · <a href=\"/\">Back to the overview</a></p>",
+             <p class=\"alt\"><a href=\"/\">Back to the overview</a></p>",
             escape(next),
             escape(email),
-            escape(next),
         ),
     )
-}
-
-fn signup_form(next: &str, email: &str, error: Option<&str>) -> String {
-    let error = error
-        .map(|e| format!("<div class=\"err\" role=\"alert\">{}</div>", escape(e)))
-        .unwrap_or_default();
-    page(
-        "Create an account",
-        &format!(
-            "<h1>Create your Autophys account</h1><p>Choose an email and a password.</p>{error}\
-             <form method=\"post\" action=\"/api/auth/signup\">\
-             <input type=\"hidden\" name=\"next\" value=\"{}\">\
-             <label for=\"email\">Email</label>\
-             <input id=\"email\" name=\"email\" type=\"email\" autocomplete=\"username\" required value=\"{}\" autofocus>\
-             <label for=\"password\">Password</label>\
-             <input id=\"password\" name=\"password\" type=\"password\" autocomplete=\"new-password\" minlength=\"{MIN_PASSWORD}\" required>\
-             <label for=\"confirm\">Confirm password</label>\
-             <input id=\"confirm\" name=\"confirm\" type=\"password\" autocomplete=\"new-password\" minlength=\"{MIN_PASSWORD}\" required>\
-             <button type=\"submit\">Create account</button></form>\
-             <p class=\"alt\">Already have an account? <a href=\"/login?next={}\">Sign in</a></p>",
-            escape(next),
-            escape(email),
-            escape(next),
-        ),
-    )
-}
-
-async fn signup_page(
-    api: web::Data<Api>,
-    req: HttpRequest,
-    q: web::Query<NextQuery>,
-) -> Result<HttpResponse> {
-    let next = safe_next(q.next.as_deref());
-    if signed_in(&api, &req).await?.is_some() {
-        return Ok(see_other(&next));
-    }
-    Ok(html(
-        actix_web::http::StatusCode::OK,
-        signup_form(&next, "", None),
-    ))
-}
-
-#[derive(Deserialize)]
-struct SignupForm {
-    email: String,
-    password: String,
-    confirm: String,
-    next: Option<String>,
-}
-
-/// `POST /api/auth/signup`: create an account and sign it in. No email
-/// verification (there is no mailer); an email that already has an account,
-/// invited or active, is refused.
-async fn signup(
-    api: web::Data<Api>,
-    req: HttpRequest,
-    form: web::Form<SignupForm>,
-) -> Result<HttpResponse> {
-    form_origin(&req, api.options())?;
-    let SignupForm {
-        email,
-        password,
-        confirm,
-        next,
-    } = form.into_inner();
-    let next = safe_next(next.as_deref());
-    let again = |status, m: &str| Ok(html(status, signup_form(&next, &email, Some(m))));
-    if password != confirm {
-        return again(
-            actix_web::http::StatusCode::BAD_REQUEST,
-            "The two passwords don't match.",
-        );
-    }
-    let throttle = req
-        .app_data::<web::Data<Throttle>>()
-        .cloned()
-        .ok_or_else(|| ApiError::Internal("no sign-in throttle".into()))?;
-    let Some(_slot) = throttle.slot() else {
-        return again(
-            actix_web::http::StatusCode::TOO_MANY_REQUESTS,
-            "Autophys is busy signing people in. Try again in a moment.",
-        );
-    };
-    let keys = api.keys.clone();
-    let typed = email.clone();
-    match blocking(move || keys.users_signup(&typed, &password)).await {
-        Ok(user) => start_session(&api, user, &next).await,
-        Err(e) if e.status() < 500 => {
-            again(actix_web::http::StatusCode::BAD_REQUEST, &e.to_string())
-        }
-        Err(e) => Err(e),
-    }
 }
 
 /// Whether the sign-in page offers the demo account.
