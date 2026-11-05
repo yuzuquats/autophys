@@ -113,3 +113,11 @@ Give all app panel toggles an 8px top inset, matching the open-panel controls.
 Center the 22px demo badge in the desktop header (93px plus safe-area inset).
 The phone badge keeps its separate row above the breadcrumb to avoid overlap.
 Validate both panel states, desktop and phone, then deploy from clean master.
+
+Verified and deployed as fa4a02d-20261105 through the normal clean-master
+deployment. Native workspace and 111 HTML tests pass. Public health names
+fa4a02d; at 1280×800 the breadcrumb, both collapsed controls and demo badge
+all center at y=104px. At 390×844 both controls and the breadcrumb center at
+104px, with the badge above them. The corrected desktop layout is captured in
+the thread. Deployment log: fleet/evidence/autophys-drawer/header-alignment-deploy.log.
+No source push.
