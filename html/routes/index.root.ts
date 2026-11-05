@@ -71,6 +71,7 @@ ctl.view = () => SIGNED_OUT ? signedOutView(baseView(), DEMO) : quietLoading(bas
 
 let teardown: (() => void) | null = null;
 let guided: ReturnType<typeof mountGuidedTour> | null = null;
+let resumeSignedIn: (() => void) | undefined;
 
 const app: Cookbook.App = {
   id: "autophys",
@@ -172,7 +173,7 @@ const app: Cookbook.App = {
       if (event.defaultPrevented || event.key !== "ArrowDown" || event.repeat || event.isComposing ||
         event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
       if (event.composedPath().some(node => node instanceof HTMLElement &&
-        (node.matches("input,textarea,select,[role=textbox]") || node.isContentEditable))) return;
+        (node.matches("input,textarea,select,[role=textbox],[role=dialog],[role=alertdialog]") || node.isContentEditable))) return;
       const stage = document.documentElement.dataset.ckStage;
       if (stage !== "tour" && stage !== "app") return;
       const reveal = () => {
@@ -194,12 +195,13 @@ const app: Cookbook.App = {
     redraw();
     let poll: ReturnType<typeof setInterval> | undefined;
     // Store exposes the failure through the view.
-    const start = () => { void ctl.store.start().catch(() => {}); poll = setInterval(() => { void ctl.store.refreshPairings(); void ctl.refresh(); }, PAIRING_POLL_MS); };
+    const start = () => { void userController.store.start().catch(() => {}); poll ??= setInterval(() => { void userController.store.refreshPairings(); void userController.refresh(); }, PAIRING_POLL_MS); };
     // Signed out: the card signs in without a page load, then the workspace starts in place.
     let stopSignIn: (() => void) | undefined;
-    if (SIGNED_OUT) stopSignIn = signInInPlace(() => { SIGNED_OUT = false; start(); redraw(); });
+    resumeSignedIn = () => { SIGNED_OUT = false; stopSignIn?.(); start(); redraw(); };
+    if (SIGNED_OUT) stopSignIn = signInInPlace(resumeSignedIn);
     else start();
-    teardown = () => { document.removeEventListener("keydown", down, { capture: true }); content.dispose(); window.removeEventListener("hashchange", addressChanged); guided?.dispose(); guided = null; stopSignIn?.(); clearInterval(poll); unsubscribe(); views.forEach((v) => v.dispose()); removeStyles(); };
+    teardown = () => { resumeSignedIn = undefined; document.removeEventListener("keydown", down, { capture: true }); content.dispose(); window.removeEventListener("hashchange", addressChanged); guided?.dispose(); guided = null; stopSignIn?.(); clearInterval(poll); unsubscribe(); views.forEach((v) => v.dispose()); removeStyles(); };
   },
   unmount() {
     teardown?.();
@@ -216,7 +218,7 @@ const tour: Cookbook.Tutorial.Source = {
   finish: (result) => guided?.source.finish?.(result),
 };
 Cookbook.mount({ deck, onStage: (stage) => docs.onStage(stage), tutorial: tour, status: null, labels: { sidebar: "Workspace" } }).run(app);
-mountAccount();
+mountAccount(() => { SIGNED_OUT = false; resumeSignedIn?.(); });
 docs.mount();
 
 // Remove the unused hard-coded shell control before the first app open too.

@@ -6,11 +6,14 @@
  */
 const MISMATCH = "That email and password don't match an account.";
 
-export function signInInPlace(onSignedIn: () => void): () => void {
+export function signInInPlace(onSignedIn: () => void, target: Document | HTMLFormElement = document): () => void {
+  let listening = true;
   const onSubmit = async (event: Event) => {
     const form = event.target;
     if (!(form instanceof HTMLFormElement) || !form.classList.contains("ap-signin")) return;
     event.preventDefault();
+    if (form.getAttribute("aria-busy") === "true") return;
+    form.setAttribute("aria-busy", "true");
     const buttons = [...form.querySelectorAll<HTMLButtonElement>("button[type=submit]")];
     for (const b of buttons) b.disabled = true;
     try {
@@ -19,22 +22,24 @@ export function signInInPlace(onSignedIn: () => void): () => void {
       // "Continue as demo" posts the same form to /api/auth/demo (its formaction).
       const submitter = (event as SubmitEvent).submitter;
       const action = submitter instanceof HTMLButtonElement && submitter.hasAttribute("formaction") ? submitter.formAction : form.action;
-      const r = await fetch(action, { method: "POST", body, redirect: "manual", credentials: "same-origin" });
+      const r = await fetch(action, { method: "POST", body, redirect: "manual", credentials: "same-origin", signal: AbortSignal.timeout(15_000) });
       if (r.type === "opaqueredirect" || r.ok) {
-        document.removeEventListener("submit", onSubmit, true);
+        target.removeEventListener("submit", onSubmit, true);
         await swapBadge();
         onSignedIn();
         return;
       }
-      showError(form, r.status === 401 ? MISMATCH : "Couldn't sign in. Try again.");
+      if (listening) showError(form, r.status === 401 ? MISMATCH : r.status === 429
+        ? "Too many sign-in attempts. Wait a few minutes and try again." : "Couldn't sign in. Try again.");
     } catch {
-      showError(form, "Couldn't reach Autophys. Try again.");
+      if (listening) showError(form, "Couldn't reach Autophys. Try again.");
     } finally {
+      form.removeAttribute("aria-busy");
       for (const b of buttons) b.disabled = false;
     }
   };
-  document.addEventListener("submit", onSubmit, true);
-  return () => document.removeEventListener("submit", onSubmit, true);
+  target.addEventListener("submit", onSubmit, true);
+  return () => { listening = false; target.removeEventListener("submit", onSubmit, true); };
 }
 
 /** Replace the Sign in button with the account badge the server renders for this session. */

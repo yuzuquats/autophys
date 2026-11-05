@@ -642,3 +642,33 @@ Deno checks of both touched routes, git diff checks and the release Cargo build
 passed (existing dependency warnings). No test suites were run, following the
 operator's build-only instruction. Deployment and final live interaction results
 are recorded in task-board workstream `autophys-auth-flash`.
+
+
+## Header sign-in uses the lona-js modal and overlay (2026-11-05)
+
+The header Sign in control now opens the shared `Dialog` and `Overlay` from
+lona-js (vendored here under `@tento-ui`) over the current landing page or
+workbench. The shared panel takes initial focus, leaving credential fields
+unfocused until the user chooses them. Tab stays inside; Escape, the shared
+close control and the backdrop dismiss it and restore header focus. Background
+surfaces are inert and page scrolling is held while open. Dialog keys do not
+change the deck or drawer underneath.
+
+The dialog uses the same native fields, autocomplete hints and in-place auth
+submission as the workspace card. Login errors stay inline, repeated submissions
+are blocked while pending, requests time out, and a dismissed form cannot steal
+focus on a later failure. Success updates the server-rendered account badge and
+starts the user's store without navigating or restarting the tutorial. A login
+during a tour leaves the demo lesson visible until the tour exits. The normal
+login link remains a fallback for navigation without the app handler.
+
+Motion uses the shared overlay with a short dialog entrance and an opacity-only
+reduced-motion variant. At narrow widths the panel retains 16 px gutters, scrolls
+within the viewport and uses 16 px credential inputs.
+
+Validation: Deno checks and web bundling passed. Isolated browser checks covered
+panel initial focus, keyboard Tab, Escape and backdrop dismissal/focus restore,
+inline invalid-credential errors, the 390×844 layout without horizontal overflow,
+and successful demo sign-in during the tutorial followed by returning to the
+user workspace. No test suites were run, per the operator's build-only direction.
+Release and live deployment evidence is in workstream `autophys-signin-modal`.
