@@ -8,7 +8,7 @@ export function mountGuidedTour(host: Host) {
   const ctl = host.controller;
   const style = document.createElement("style");
   style.textContent = `
-    .ck-target-ring { box-shadow:0 0 0 1px rgb(91 142 196 / 60%),0 0 0 4px rgb(91 142 196 / 14%) !important; }
+    .ck-target-ring { transition:none; box-shadow:0 0 0 1px rgb(91 142 196 / 60%),0 0 0 4px rgb(91 142 196 / 14%) !important; }
     @media(max-width:600px) {
       .ck-tour { padding-block:14px 10px; }
       .ck-tour-bars { margin-bottom:8px; }

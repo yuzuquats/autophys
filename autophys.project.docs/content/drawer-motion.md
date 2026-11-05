@@ -121,3 +121,11 @@ all center at y=104px. At 390×844 both controls and the breadcrumb center at
 104px, with the badge above them. The corrected desktop layout is captured in
 the thread. Deployment log: fleet/evidence/autophys-drawer/header-alignment-deploy.log.
 No source push.
+
+## Static tutorial halo — 2026-11-05
+
+The operator requested removal of the halo animation. The app-owned target
+ring styling now disables the cookbook’s 180ms geometry transition. Halos
+retain their color and outline and continue following the target’s current
+bounds, including clipping above the tutorial sheet, without interpolating
+between positions or sizes. Validate computed motion and package the change.
