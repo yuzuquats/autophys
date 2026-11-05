@@ -9,7 +9,7 @@ import { Cookbook } from "@tento-cookbook/lib.ts";
 import { daemon, type Source } from "../client/api.ts";
 import { selectionAddress } from "./selection-address.ts";
 import { Controller } from "../client/controller.ts";
-import { browserFixtures } from "./browser-fixtures.ts";
+import { browserFixtures, fixtureWorkspace } from "./browser-fixtures.ts";
 import { Store } from "../client/store.ts";
 import { hydrateComponents } from "../ui/components.ts";
 import { AutophysDetails } from "../ui/details.ts";
@@ -221,3 +221,9 @@ docs.mount();
 
 // Remove the unused hard-coded shell control before the first app open too.
 document.querySelector(".ck-header .ck-export")?.remove();
+
+// Prepare the immutable tour data off-thread while the landing is idle, rather
+// than putting worker startup and computation on the first down-arrow path.
+const warmDemo = () => { void fixtureWorkspace().catch(() => {}); };
+if (typeof requestIdleCallback === "function") requestIdleCallback(warmDemo, { timeout: 1500 });
+else requestAnimationFrame(() => setTimeout(warmDemo, 0));

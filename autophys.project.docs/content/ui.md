@@ -620,3 +620,25 @@ the existing alert and left initial page focus alone. Invitation fields retained
 new-password autocomplete without autofocus. No test suites were run, per the
 operator's build-only instruction. Native password-manager popup rendering with
 stored credentials and physical iOS Safari were not exercised.
+
+
+## First-open tutorial avoids the sign-in flash (2026-11-05)
+
+The down arrow opens the demo tutorial before any account action is needed.
+Previously its worker startup left the saved user controller visible: an
+anonymous visitor saw the sign-in card for about 520 ms, and a signed-in visitor
+saw their own project before the tutorial replaced it. Authentication was already
+resolved in the server-rendered account badge; this delay was demo preparation.
+
+The tutorial now owns all panes synchronously with the existing quiet loading
+view before yielding for the shell animation. The selected first lesson replaces
+those placeholders when ready. The immutable demo workspace also warms in its
+worker during landing-page idle time, sharing the existing promise and retry
+behavior. Sign-in remains available after leaving the anonymous tutorial, and
+cancellation restores the original controller through the existing snapshot.
+
+Validation: focused browser frame capture reproduced the original flash;
+Deno checks of both touched routes, git diff checks and the release Cargo build
+passed (existing dependency warnings). No test suites were run, following the
+operator's build-only instruction. Deployment and final live interaction results
+are recorded in task-board workstream `autophys-auth-flash`.

@@ -11,6 +11,7 @@ import { Controller } from "../client/controller.ts";
 import { Store } from "../client/store.ts";
 import { browserFixtures } from "./browser-fixtures.ts";
 import { TourSnapshot } from "../client/tutorial.ts";
+import { quietLoading } from "../client/derive/signed-out.ts";
 import { tourOpeningLayout, tourSteps, type TourPart } from "./guided-tour-steps.ts";
 import { guidedTourStyles } from "./guided-tour-styles.ts";
 import { tourImages } from "./guided-tour-images.ts";
@@ -168,10 +169,18 @@ export function mountGuidedTour(host: Host) {
       // lesson before awaiting data/images, so Details never paints then closes.
       snapshot.start();
       layout(tourOpeningLayout, false);
+      // Own the panes before the first paint. The saved controller may show a
+      // sign-in form or another project; neither belongs to the loading tour.
+      const controller = new Controller(new Store(browserFixtures()), { user: "tour", now: () => "" });
+      const view = controller.view.bind(controller);
+      controller.view = () => quietLoading(view());
+      controller.shell = { download: () => {}, picked: () => {} };
+      demo = controller;
+      host.set(controller);
+      host.redraw();
       // Even a cached fixture must let the shell paint before preparing content.
       await new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
       if (disposed || own !== ended) return [];
-      const controller = new Controller(new Store(browserFixtures()), { user: "tour", now: () => "" });
       preloadImage(1);
       try {
         await Promise.all([controller.store.start(), preloadImage(0)!.decode().catch(() => {})]);
@@ -181,10 +190,7 @@ export function mountGuidedTour(host: Host) {
         return [{ title: "Demo unavailable", body: "Close the tutorial and reopen it to try again." }];
       }
       if (disposed || own !== ended) { controller.store.close(); return []; }
-      demo = controller;
-      controller.shell = { download: () => {}, picked: () => {} };
       unsubscribe = controller.subscribe(() => { if (!entering) host.redraw(); });
-      host.set(controller);
       chip.hidden = false;
       document.documentElement.dataset.apTour = "";
       // The first step selects and draws once; do not render its precursor.
