@@ -116,7 +116,12 @@ export function mountGuidedTour(host: Host) {
     } else { panel("sidebar", saved.sidebar); panel("details", saved.details); }
     host.redraw();
     // Restore immediately, and once after the renderer's layout/FLIP has settled.
-    scrollTree(saved.scroll); window.scrollTo(saved.window[0], saved.window[1]);
+    scrollTree(saved.scroll);
+    // Back has already restored the landing offset in the drawer. Only the
+    // app stage belongs to this snapshot; never overwrite the landing scroll.
+    if (document.documentElement.dataset.ckStage === "app") {
+      window.scrollTo(saved.window[0], saved.window[1]);
+    }
     const restoreScroll = () => { if (!snapshot.active && !disposed) scrollTree(saved.scroll); };
     requestAnimationFrame(restoreScroll);
     setTimeout(restoreScroll, 400);

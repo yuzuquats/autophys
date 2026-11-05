@@ -20,4 +20,26 @@ Task board unavailable: the installed tsh.lona wrapper cannot find lona, and
 no installed lona-console was found. Live steps and focused browser evidence
 are recorded under ~/.cache/autophys/r2-implementation on yuzuquats.
 
-Remaining: verify and commit R2-2 (tour Back scroll) and R2-3 (startup bookmark).
+## R2-2: let the drawer retain landing scroll on tour Back
+
+First inspected `git show ab1ff17`: that commit sets native history restoration
+to manual in brand.ts, but leaves guided-tour.ts's unconditional window restore
+unchanged. The snapshot now restores window scroll only when the destination is
+the app stage. The drawer owns the landing offset; app-internal scroll restoration
+still runs.
+
+Validation: `deno check routes/guided-tour.ts routes/index.root.ts` from html
+passed. On a scratch daemon at 127.0.0.1:47970, the withHeadless browser pass
+scrolled landing docs to 1100, entered the tour (window offset 0), pressed history
+Back, and observed landing offset **1100** after transitions settled.
+Used the requested Chromium executable and --no-sandbox. Browser and daemon
+closed in finally; no page errors. No deployment or live-service changes.
+
+The first scratch build used the existing binary's older baked-in source root;
+the corrected pass rebuilt with AUTOPHYS_PROJECT_ROOT pointing explicitly to
+the owner checkout. Both runs closed their children.
+
+`cargo check -p autophys-cli` passed with existing warnings, using
+CARGO_TARGET_DIR=~/ssd-mount/cargo-target-scratch/autophys-gaps.
+
+Remaining: commit R2-3 (startup bookmark); its browser check has passed.
