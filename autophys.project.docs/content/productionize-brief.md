@@ -1,5 +1,7 @@
 # Judge the same Autophys investigation loop on yuzuquats
 
+**Final bounded pass, 2026-11-05:** [Results and remaining work](productionize-yuzuquats/README.md) records all five final round3 reviews. The ≥9-every-dimension target is not met; production qualification remains unfinished after three repair/rejudge rounds. Earlier checkpoints below remain historical.
+
 **Current checkpoint, 2026-11-05:** all five baseline reviews completed, provisional/unverified (quality6, architecture7.4, testing6, folder8.2, performance7). The first bounded core repair is locally committed and validated; independent rejudging remains pending. See [productionize-round-1.md](productionize-round-1.md) for behavior, exact implementation revisions, decisive evidence, agent choices and remaining findings. The storage exception is approved for this campaign; earlier missing-storage/dependency claims below describe their historical checkpoint. No overall readiness verdict or score increase is made.
 
 The remainder is the original preparation/baseline brief, retained as historical context. Its then-current unstarted/no-remediation statements do not describe the checkpoint above.
