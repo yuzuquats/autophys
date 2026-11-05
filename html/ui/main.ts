@@ -77,9 +77,10 @@ export function mainMarkup(model: MainModel, width: number, classes: MainClasses
 
 /** Reuse the same card, chart and block renderers as the decision and configuration views. */
 function investigationMarkup(body: InvestigationBody, width: number): string {
-  const wide = width >= 760, inner = Math.max(160, width - 64);
-  const left = wide ? Math.floor((inner - 10) * .55) : inner;
-  const right = wide ? inner - left - 10 : inner;
+  const wide = width >= 760, available = Math.max(184, width - 40), inner = available - 24;
+  const leftOuter = Math.floor((available - 10) * .55);
+  const left = wide ? leftOuter - 24 : inner;
+  const right = wide ? available - 10 - leftOuter - 24 : inner;
   const panels = (items: ChartPanel[], w: number, key: string) => items.map((p, i) =>
     `<section class="ap-panel">${p.title ? `<h4 class="ap-panel-title">${esc(p.title)}</h4>` : ""}${p.charts.map((c, j) =>
       `<div class="ap-chart">${chartMarkup(c, w, key + "-" + i + "-" + j)}</div>`).join("")}${(p.blocks ?? []).map(blockMarkup).join("")}</section>`).join("");
@@ -91,7 +92,7 @@ function investigationMarkup(body: InvestigationBody, width: number): string {
   };
   const jumps = `<nav class="ap-jumps" aria-label="Jump to investigation section">${body.jumps.map((j, i) =>
     `<button type="button" data-ap-jump="${esc(j.target)}"${i === 0 ? ' aria-current="location"' : ""}>${esc(j.label)}</button>`).join("")}</nav>`;
-  const outcomeWidth = wide && body.outcome.length > 1 ? Math.floor((inner - 10) / 2) : inner;
+  const outcomeWidth = wide && body.outcome.length > 1 ? Math.floor((available - 10) / 2) - 24 : inner;
   const outcome = body.outcome.length ? `<div class="ap-outcome${wide ? " ap-wide" : ""}">${body.outcome.map(c => card(c, outcomeWidth)).join("")}</div>` : "";
   const rounds = body.rounds.map(r => `<details class="ap-round" id="${esc(r.id)}" data-ap-disclosure${r.open ? " open" : ""}><summary class="ap-round-head"><b>${esc(r.title)}</b><span>${esc(r.caption)}</span></summary><div class="ap-round-body">
     ${card(r.data)}
