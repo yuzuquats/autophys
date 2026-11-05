@@ -309,11 +309,19 @@ class HttpStore(Store):
         self.timeout = timeout
         self.stream_idle = stream_idle
         self.cursors: dict[str, int] = {}
-        self.last_wait: str | None = None
+        self._wait_state: dict[str, str | None] = {"last_wait": None}
         self._project_id: str | None = None
         self._bound_project_name: str | None = None
         self._display_warned = False
         self._reveal_warned = False
+
+    @property
+    def last_wait(self) -> str | None:
+        return self._wait_state["last_wait"]
+
+    @last_wait.setter
+    def last_wait(self, value: str | None) -> None:
+        self._wait_state["last_wait"] = value
 
     def _see(self, investigation: str, rec: dict) -> dict:
         g = rec.get("gseq")
