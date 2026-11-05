@@ -175,8 +175,10 @@ nothing in tento. `tento-autophys-js` is not imported.
 
 The operator requested introductions and a slide about the API/model experiments,
 plus deployment to `https://autophys.lona.so/`. Joseph Lucero’s calibration framing
-is retained from `b05127c` (cherry-picked from `cf8089e4d`). The deck now adds the
-team immediately after the title and recorded experiments after the autoloop.
+is retained from `b05127c` (cherry-picked from `cf8089e4d`). The deck adds the
+team and then the recorded experiments as its last two slides, after Beyond
+batteries (operator placement, 2026-11-04; `eaa395f` first put them after the
+title and the autoloop).
 Introductions use the operator’s supplied bios: James Kao, ex-FAANG/founder;
 Joseph Lucero, Stanford chemistry PhD student, lithium iron batteries. The existing
 user-persona bio also says PhD student.

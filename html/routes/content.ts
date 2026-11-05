@@ -10,8 +10,8 @@ import { MUSE_AVATAR } from "./loops-figure.ts";
  * Replace each mock chart with real runs before dropping its marker. */
 const MOCK = "mock data";
 
-/** The calibration pitch: hero, team, user, costly task, alternative, demo,
- * advantage, workflow, recorded experiments, then other applications. */
+/** The calibration pitch: hero, user, costly task, alternative, demo, advantage,
+ * workflow, other applications, then the team and the recorded experiments. */
 const decay = (a: number, tau: number, floor: number, until = 40) =>
   Array.from({ length: 81 }, (_, i) => i * until / 80).map((t) => [t, a * Math.exp(-t / tau) + floor] as [number, number]);
 const cross = (a: number, tau: number, floor: number, at = 10) => tau * Math.log(a / (at - floor));
@@ -81,19 +81,6 @@ export function deck(app: Cookbook.App, appPath = "/app"): Cookbook.Deck.Slide[]
           { value: "6.3×", label: "fewer test hours to a validated model" },
           { value: "12", label: "held-out cells in the benchmark" },
           { value: "±10%", label: "bar for “identified”, enforced in code" },
-        ],
-      },
-    },
-    {
-      eyebrow: { label: "Introductions" },
-      title: "Meet the team.",
-      description: "A founder and a researcher building better tools for physical modeling.",
-      body: {
-        kind: "actions",
-        primary: null,
-        stats: [
-          { value: "James Kao", label: "Ex-FAANG · Founder" },
-          { value: "Joseph Lucero", label: "Stanford chemistry PhD student · lithium iron batteries" },
         ],
       },
     },
@@ -234,23 +221,6 @@ export function deck(app: Cookbook.App, appPath = "/app"): Cookbook.Deck.Slide[]
       ],
     },
     {
-      eyebrow: { label: "APIs & model experiments · recorded runs" },
-      title: "What we ran, and what we learned.",
-      description: "Synthetic tasks, real runs. Meta’s direct API is wired; Spark has no measured result here.",
-      // Sources: project sdk.md (live Muse smoke and autoloop), train/sft/README.md.
-      // Muse used the coding plan; the autoloop's inner policy was a fake reasoner.
-      // These are capability checks, not the mock battery benchmark above.
-      body: {
-        kind: "comparison",
-        columns: ["Experiment", "Outcome"],
-        rows: [
-          { label: "Muse Code", before: "Wonder 1.0 · MCP tools & playbook edits", after: "Tools ran; one edit kept on a planted case." },
-          { label: "Modal", before: "Qwen3.5-4B · LoRA training", after: "4/8 closed-loop; never chose an experiment." },
-          { label: "Baseten Loops", before: "Qwen3.8-27B · 36 training updates", after: "Trained; not yet served or evaluated." },
-        ],
-      },
-    },
-    {
       eyebrow: { label: "Beyond batteries" },
       title: "Any lab with a simulator and an expensive test.",
       description: "Each has parameters its usual tests can't tell apart. One simulator per field; the fit, checks and workbench carry over.",
@@ -274,6 +244,36 @@ export function deck(app: Cookbook.App, appPath = "/app"): Cookbook.Deck.Slide[]
           { icon: ICONS.tank, name: "Bioreactors", pair: "growth rate ↔ yield", choice: "Feed rate" },
         ],
         legend: { live: "Runs in autophys today", other: "Others need their own simulator" },
+      },
+    },
+    {
+      eyebrow: { label: "Introductions" },
+      title: "Meet the team.",
+      description: "A founder and a researcher building better tools for physical modeling.",
+      body: {
+        kind: "actions",
+        primary: null,
+        stats: [
+          { value: "James Kao", label: "Ex-FAANG · Founder" },
+          { value: "Joseph Lucero", label: "Stanford chemistry PhD student · lithium iron batteries" },
+        ],
+      },
+    },
+    {
+      eyebrow: { label: "APIs & model experiments · recorded runs" },
+      title: "What we ran, and what we learned.",
+      description: "Synthetic tasks, real runs. Meta’s direct API is wired; Spark has no measured result here.",
+      // Sources: project sdk.md (live Muse smoke and autoloop), train/sft/README.md.
+      // Muse used the coding plan; the autoloop's inner policy was a fake reasoner.
+      // These are capability checks, not the mock battery benchmark above.
+      body: {
+        kind: "comparison",
+        columns: ["Experiment", "Outcome"],
+        rows: [
+          { label: "Muse Code", before: "Wonder 1.0 · MCP tools & playbook edits", after: "Tools ran; one edit kept on a planted case." },
+          { label: "Modal", before: "Qwen3.5-4B · LoRA training", after: "4/8 closed-loop; never chose an experiment." },
+          { label: "Baseten Loops", before: "Qwen3.8-27B · 36 training updates", after: "Trained; not yet served or evaluated." },
+        ],
       },
     },
   ];
