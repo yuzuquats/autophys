@@ -161,7 +161,7 @@ const app: Cookbook.App = {
 };
 
 const docs = landingDocs();
-// The cookbook tutorial is the one tour: opening the app (or "Take the tour") runs the
+// The cookbook tutorial is the one tour: opening the app (or the deck's Get started) runs the
 // Autophys steps on demo data, and every exit puts the user's own view back.
 const tour: Cookbook.Tutorial.Source = {
   start: () => guided?.source.start() ?? [],

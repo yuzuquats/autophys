@@ -50,9 +50,6 @@ export function mountGuidedTour(host: Host) {
   const abort = new AbortController(), { signal } = abort;
   const style = document.createElement("style"); style.textContent = guidedTourStyles; document.head.append(style);
   const chip = document.createElement("span"); chip.className = "ap-tour-chip"; chip.textContent = "Demo data · tour"; chip.hidden = true;
-  const menu = document.createElement("details"); menu.className = "ap-tour-menu";
-  menu.innerHTML = '<summary aria-label="App menu">Menu</summary><button type="button">Take the tour</button>';
-  document.querySelector(".ck-nav-links")?.append(menu);
   document.body.append(chip);
   const seenKey = "autophys.tour.seen." + (document.querySelector("#ap-account")?.textContent?.trim() ?? "local");
   const panels = () => document.querySelector<HTMLElement>(".ck-panels")!;
@@ -119,7 +116,6 @@ export function mountGuidedTour(host: Host) {
   const source: Cookbook.Tutorial.Source = {
     async start() {
       if (disposed) return [];
-      menu.open = false;
       const own = ended;
       const controller = new Controller(new Store(fixtures()), { user: "tour", now: () => "" });
       await controller.store.start();
@@ -142,21 +138,10 @@ export function mountGuidedTour(host: Host) {
     },
   };
 
-  menu.querySelector("button")!.addEventListener("click", () => { menu.open = false; host.startTour(); }, { signal });
-  const empty = document.createElement("button"); empty.type = "button"; empty.className = "ap-tour-empty"; empty.textContent = "Take the tour";
-  empty.addEventListener("click", () => host.startTour(), { signal });
-  function syncEntry() {
-    const body = host.get().view().main.body;
-    const show = !snapshot.active && ["empty", "onboarding", "signed-out"].includes(body.kind);
-    const main = document.querySelector(".ck-main");
-    if (show && main && !empty.isConnected) main.append(empty);
-    if (!show) empty.remove();
-  }
-  const observer = new MutationObserver(syncEntry);
-  observer.observe(document.querySelector(".ck-main")!, { childList: true, subtree: true });
-  syncEntry();
+  // No in-app entry point: the deck's Get started slide opens the tour; tests start it with this event.
+  document.addEventListener("ap-tour-start", () => host.startTour(), { signal });
   return {
     source,
-    dispose() { source.finish?.({ completed: false }); disposed = true; observer.disconnect(); abort.abort(); style.remove(); chip.remove(); menu.remove(); empty.remove(); },
+    dispose() { source.finish?.({ completed: false }); disposed = true; abort.abort(); style.remove(); chip.remove(); },
   };
 }

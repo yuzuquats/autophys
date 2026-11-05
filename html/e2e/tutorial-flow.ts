@@ -54,7 +54,7 @@ async function leaveTour(p: Page) {
   await until(p, () => document.documentElement.dataset.ckStage === "app");
   await settle(p); await new Promise(r => setTimeout(r, 420));
 }
-async function takeTour(p: Page, first: string) { await p.click(".ap-tour-menu summary"); await p.click(".ap-tour-menu button"); await ready(p, first); }
+async function takeTour(p: Page, first: string) { await p.evaluate(() => document.dispatchEvent(new Event("ap-tour-start"))); await ready(p, first); }
 // The crumb names the project's Configuration, or the investigation for every page inside it.
 const sequence = [
   ["Your workspace", "config:bench-oscillators", "Configuration"],
@@ -145,10 +145,10 @@ await withHeadless(async b => {
     check(await p.evaluate(() => localStorage.getItem("autophys.tour.seen.local") === "true"), `${width}: Done records the tour seen`);
     // An empty live workspace offers the tour, and leaving it puts the live view back.
     await p.goto(base + "/app", { waitUntil: "load" }); await ready(p, sequence[0][0]); await leaveTour(p);
-    await until(p, () => !!document.querySelector(".ap-tour-empty")); await settle(p);
+    await settle(p);
     const empty = await snapshot(p);
-    await p.click(".ap-tour-empty"); await ready(p, sequence[0][0]); await leaveTour(p);
-    check(JSON.stringify(await snapshot(p)) === JSON.stringify(empty), `${width}: the empty-workspace entry restores the live data source`);
+    await takeTour(p, sequence[0][0]); await leaveTour(p);
+    check(JSON.stringify(await snapshot(p)) === JSON.stringify(empty), `${width}: a tour from the live workspace restores the live data source`);
     check(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${width}: no horizontal document overflow`);
     await p.close();
   }
