@@ -597,6 +597,20 @@ impl KeyStore {
         crate::accounts::accept_commit(&mut *self.conn()?, token, &phc, Utc::now())
     }
 
+    /// Self-service signup: a new account with this email and password.
+    pub fn users_signup(&self, email: &str, password: &str) -> Result<crate::accounts::User> {
+        crate::accounts::normalize_email(email)?;
+        if password.chars().count() < crate::accounts::MIN_PASSWORD || password.len() > 1024 {
+            return Err(crate::error::ApiError::bad_request(format!(
+                "Use {} to 1024 characters for the password.",
+                crate::accounts::MIN_PASSWORD
+            )));
+        }
+        // Hash outside the lock, as users_accept does.
+        let phc = crate::accounts::password_hash(password)?;
+        crate::accounts::signup(&*self.conn()?, email, &phc, Utc::now())
+    }
+
     /// Make EMAIL the demo account (creating it; no password), or stop it being one.
     pub fn users_set_demo(&self, email: &str, demo: bool) -> Result<crate::accounts::User> {
         crate::accounts::set_demo(&mut *self.conn()?, email, demo)

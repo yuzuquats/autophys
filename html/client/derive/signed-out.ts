@@ -6,7 +6,7 @@
 import type { View } from "./index.ts";
 
 export const SIGN_IN_TITLE = "Sign in to Autophys";
-export const SIGN_IN_DESCRIPTION = "Use the email you were invited with.";
+export const SIGN_IN_DESCRIPTION = "Use the email you signed up or were invited with.";
 
 export function signedOutView(view: View, demo = false): View {
   return {

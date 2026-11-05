@@ -146,6 +146,34 @@ pub(crate) fn invite(conn: &Connection, email: &str, now: DateTime<Utc>) -> Resu
     Ok(Invite { user, token })
 }
 
+/// Self-service signup: create a new, active account with an already-hashed
+/// password. Refused (400) when any account has the email, including one
+/// invited but not yet accepted, so signup never takes over an invite.
+pub(crate) fn signup(
+    conn: &Connection,
+    email: &str,
+    phc: &str,
+    now: DateTime<Utc>,
+) -> Result<User> {
+    let email = normalize_email(email)?;
+    let id = format!("u_{}", random_hex(6)?);
+    let added = conn.execute(
+        "INSERT INTO users (id, email, created, password) VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(email) DO NOTHING",
+        params![id, email, now_text(now), phc],
+    )?;
+    if added == 0 {
+        return Err(ApiError::bad_request(
+            "An account with this email already exists. Sign in instead.",
+        ));
+    }
+    Ok(conn.query_row(
+        &format!("SELECT {USER_COLS} FROM users WHERE id = ?1"),
+        [&id],
+        user_row,
+    )?)
+}
+
 /// Who an unexpired invite token belongs to (the invite page shows it).
 pub(crate) fn invitee(conn: &Connection, token: &str, now: DateTime<Utc>) -> Result<Option<User>> {
     Ok(conn
