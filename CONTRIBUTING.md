@@ -53,10 +53,14 @@ bundler worker. It does not recover a historical dependency graph. The native
 worker receives the product config explicitly; it does not inherit the caller's
 working directory or a sibling checkout's import map.
 
-For a public cold acquisition, choose a new external `DENO_DIR` and run the
-checks above, including `html/routes/fixture-worker.root.ts`. Then repeat with
-`deno test --cached-only --frozen --allow-read --config html/deno.json html/`
-and `deno check --cached-only --frozen --config html/deno.json html/routes/index.root.ts html/routes/fixture-worker.root.ts`.
+For public cold acquisition, choose a new external `DENO_DIR` and run the
+checks above. Verify the published app entry point with these frozen commands:
+
+```sh
+deno test --cached-only --frozen --allow-read --config html/deno.json html/
+deno check --cached-only --frozen --config html/deno.json html/routes/index.root.ts
+```
+
 Use `cargo --offline` after Cargo acquisition and set
 `AUTOPHYS_BUILD_OFFLINE=1` for native `build-web` to pass `--cached-only` to
 its real worker. A frozen-lock mismatch fails rather than rewriting the lock.
