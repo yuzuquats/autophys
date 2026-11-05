@@ -42,7 +42,7 @@ Deno.test("controller: edit, refused values, approve (posted as edited), withdra
   assertEquals(src.log.at(-1)!.payload, { project: "bench-oscillators", proposal: "p1", event: "edited", by: "james", at: "10:46", fields: { amplitude: 1.5 } });
   let v = ctl.view();
   assertEquals(v.details.status.text, "Approved by james · 10:46 · edited (was 2.00)");
-  assertEquals([v.details.decision, v.details.actions!.map((a) => a.label)], [undefined, ["Withdraw approval"]]);
+  assertEquals([v.details.decision, v.details.actions!.map((a) => a.label)], [undefined, ["Withdraw approval", "Report"]]);
   const waiting = find(v.sidebar.nodes, "bench-a/data/sine_044@1")!;
   assertEquals([waiting.dim, waiting.trail], [true, { text: "awaiting" }]);
   assertEquals(find(v.sidebar.nodes, "bench-a")!.trail, { text: "waiting", tone: "muted" }, "the badge is gone");
@@ -52,7 +52,7 @@ Deno.test("controller: edit, refused values, approve (posted as edited), withdra
   ctl.handle({ kind: "action", name: "reject" });
   await settle();
   v = ctl.view();
-  assertEquals([find(v.sidebar.nodes, "bench-a/prop/p1")!.dim, v.details.actions!.map((a) => a.name)], [true, ["restore"]]);
+  assertEquals([find(v.sidebar.nodes, "bench-a/prop/p1")!.dim, v.details.actions!.map((a) => a.name)], [true, ["restore", "report"]]);
   ctl.handle({ kind: "action", name: "restore" });
   await settle();
   assertEquals(src.log.map((r) => r.payload.event), ["approved", "edited", "unapproved", "rejected", "restored"]);

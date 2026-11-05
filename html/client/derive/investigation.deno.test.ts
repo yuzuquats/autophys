@@ -80,6 +80,7 @@ Deno.test("Details decision is shared by parent and leaf selections; removed Exp
     assertEquals(d.decision?.map(a => a.name), ["approve", "reject"], id);
     assert(d.footnote?.includes("config v2"), id);
     assert(!JSON.stringify(d).includes('"Export"'));
+    assert(d.actions?.some(a => a.name === "report"));
     const removed = reduce(s, { ...snap, workspace: ws }, { kind: "action", name: "export-investigation" }, { user: "test", now: () => "" });
     assertEquals(removed.effects, []);
     const approved = reduce(s, { ...snap, workspace: ws }, { kind: "action", name: "approve" }, { user: "test", now: () => "" });

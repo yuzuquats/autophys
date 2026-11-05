@@ -75,7 +75,8 @@ function selectedDetails(s: State): DetailsModel {
   if (!proposal) return investigationDetails(project, sel.inv);
   const decision = proposalDetails(s, project, sel.inv, proposal);
   const budget = investigationDetails(project, sel.inv).sections.find(x => x.heading === "Budget used")!;
-  return { ...decision, sections: [...decision.sections, { ...budget, heading: "So far" }] };
+  return { ...decision, sections: [...decision.sections, { ...budget, heading: "So far" }],
+    actions: [...(decision.actions ?? []), { name: "report", label: "Report" }] };
 
 }
 
