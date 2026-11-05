@@ -64,3 +64,28 @@ commands/check results, task states and final outcome are under the owner-host
 campaign evidence directory, `sink-and-push-20261105/`. Read `outcome.json` for
 the latest publication state; no successful push is claimed by this initial note.
 Task-board CLI lacks `task`; the existing external JSON fallback is used.
+
+## Verified publication
+
+On 2026-11-05, the reviewed 30-change prefix was fast-forward pushed to
+`https://github.com/yuzuquats/autophys`, `refs/heads/master`, through
+`d2d6435693cda7058487611dc17e11b5ffbc4371` (tree
+`1714be12a5bf222841aeb3e576df62a451903748`). A fetch confirmed that prefix on
+the destination. The independent final agent review returned **READY** with no
+blocking findings; this is not an operator approval or production certification.
+
+The exact Change-Id/old-to-new SHA inventory is
+`sink-and-push-20261105/authorized-final-review-manifest.json` in the evidence
+directory linked above. The migration repair retains
+`I9ac73817ea7441daa1a3e52963ce3cde`; all four explicitly authorized prerequisites
+are included, with their existing authors and stable Change-Ids preserved.
+The final prefix passes 89 focused Python tests, with three expensive cases
+explicitly deselected. Native 50, Deno 105, frozen typecheck and vendor checks
+carry through independently verified identical consumed source inputs.
+
+The pure sink preserved all 75 drafts and the exact full-tip tree, shared index
+and working state. The 45 unrelated peer drafts remain local above the published
+prefix; a safety ref and index/status preimages are retained in `sink-receipt.json`.
+No deployment or release was performed. Platform, licensing/provenance, warm-load,
+live-provider and historical diagnostic qualification limits remain as recorded.
+This local closure note is bookkeeping after publication and is not another push.
