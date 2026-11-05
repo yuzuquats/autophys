@@ -3,8 +3,7 @@
  * it swaps in a controller on the demo fixture, keeping the user's own
  * controller and view to put back when it ends. Each step selects real rows
  * and opens the panels it needs (its enter action), and the cookbook
- * highlights the step's component, with a clipped copy of it on the left when
- * the live one is out of sight.
+ * highlights the step's component, with a native-size fixture image on the left.
  * The cookbook owns the sheet, the arrows, Back/Next/Done and Esc.
  */
 import type { Cookbook } from "@tento-cookbook/lib.ts";
@@ -14,7 +13,7 @@ import { fixtures } from "../client/fixtures/source.ts";
 import { TourSnapshot } from "../client/tutorial.ts";
 import { tourSteps, type TourPart } from "./guided-tour-steps.ts";
 import { guidedTourStyles } from "./guided-tour-styles.ts";
-import { previewComponent } from "./guided-tour-preview.ts";
+import { tourImages } from "./guided-tour-images.ts";
 
 type Host = { get(): Controller; set(controller: Controller): void; redraw(): void; startTour(): void };
 type Scroll = { path: number[]; top: number; left: number };
@@ -39,10 +38,6 @@ function rowElement(id: string): HTMLElement | null {
   const tree = document.querySelector("std-tree-list.ap-tree");
   return tree?.shadowRoot?.querySelector<HTMLElement>('[role="treeitem"][data-id="' + CSS.escape(id) + '"] > .line') ?? null;
 }
-function obscured(el: HTMLElement, slot: HTMLElement): boolean {
-  const r = el.getBoundingClientRect(), sheet = slot.closest(".ck-tour-peek")?.getBoundingClientRect().top ?? innerHeight;
-  return r.top < 56 || r.bottom > sheet || r.left < 0 || r.right > innerWidth;
-}
 const target = (selector: string): Cookbook.Tutorial.Target =>
   selector.startsWith("row:") ? () => rowElement(selector.slice(4)) : selector;
 
@@ -55,7 +50,21 @@ export function mountGuidedTour(host: Host) {
   const panels = () => document.querySelector<HTMLElement>(".ck-panels")!;
   let demo: Controller | null = null, unsubscribe: (() => void) | null = null, disposed = false;
   /** Bumped when a tour ends, so a start still loading the demo gives up. */
-  let ended = 0;
+  let ended = 0, activePart = -1;
+  const images = new Map<number, HTMLImageElement>();
+  function preloadImage(index: number): HTMLImageElement | undefined {
+    if (!tourImages[index]) return;
+    let image = images.get(index);
+    if (!image) {
+      image = new Image(320, 166);
+      image.className = "ap-tour-image";
+      image.loading = "eager";
+      image.alt = ""; // The adjacent title and body describe this decorative crop.
+      image.src = tourImages[index];
+      images.set(index, image);
+    }
+    return image;
+  }
 
   function panel(which: "sidebar" | "details", open: boolean) {
     const button = document.querySelector<HTMLButtonElement>(".ck-" + which + "-toggle");
@@ -97,19 +106,32 @@ export function mountGuidedTour(host: Host) {
     if (saved.focus?.isConnected) saved.focus.focus({ preventScroll: true });
   });
 
-  function toStep(part: TourPart, group: string | undefined): Cookbook.Tutorial.Step {
+  function toStep(part: TourPart, group: string | undefined, index: number): Cookbook.Tutorial.Step {
     return {
       title: part.title,
       body: part.body,
       group,
       target: part.target.map(target),
       enter() {
+        activePart = index;
+        preloadImage(index);
+        preloadImage(index + 1);
         if (!demo) return;
         if (part.select) demo.handle({ kind: "select", id: part.select });
         layout(part);
       },
-      // A preview only when the live component is out of sight (off screen or under the sheet).
-      preview: (targets, slot) => { if (targets.some(t => obscured(t, slot))) previewComponent(slot, [...targets]); },
+      // Static, already-preloaded images replace the expensive live-DOM clone.
+      preview: (_targets, slot) => {
+        const image = preloadImage(index)!;
+        slot.removeAttribute("inert"); // Permit native-size crops to pan on narrow screens.
+        const show = () => {
+          if (disposed || !snapshot.active || activePart !== index || !image.naturalWidth) return;
+          slot.replaceChildren(image);
+          slot.closest(".ck-tour")?.setAttribute("data-preview", "");
+        };
+        if (image.complete) show();
+        else image.addEventListener("load", show, { once: true });
+      },
     };
   }
 
@@ -118,7 +140,8 @@ export function mountGuidedTour(host: Host) {
       if (disposed) return [];
       const own = ended;
       const controller = new Controller(new Store(fixtures()), { user: "tour", now: () => "" });
-      await controller.store.start();
+      preloadImage(1);
+      await Promise.all([controller.store.start(), preloadImage(0)!.decode().catch(() => {})]);
       if (disposed || own !== ended) { controller.store.close(); return []; }
       snapshot.start();
       demo = controller;
@@ -129,10 +152,12 @@ export function mountGuidedTour(host: Host) {
       document.documentElement.dataset.apTour = "";
       host.redraw();
       return tourSteps(controller.store.snapshot()!.workspace)
-        .flatMap((parts, i) => parts.map(part => toStep(part, parts.length > 1 ? "step-" + i : undefined)));
+        .flatMap((parts, i) => parts.map(part => ({ part, group: parts.length > 1 ? "step-" + i : undefined })))
+        .map(({ part, group }, index) => toStep(part, group, index));
     },
     finish({ completed }) {
       ended++;
+      activePart = -1;
       if (completed) { try { localStorage.setItem(seenKey, "true"); } catch { /* usable without storage */ } }
       snapshot.finish();
     },

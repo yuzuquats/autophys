@@ -532,3 +532,44 @@ points at the app itself). This supersedes UI-TOUR-01's local sheet:
   `[...Cookbook.Tutorial.shellSteps, ...tutorial]` as the tutorial again, and drop the
   vendored 0015/0017 changes. About an hour.
 
+
+### Static tutorial images — UI-TOUR-03, 2026-11-04
+
+**Agent-chosen, pending operator review.** The operator asked for tutorial images;
+UI-TOUR-02's conditional live-DOM clones are replaced by ten static fixture crops,
+one for every part of steps 1–9 (Fit and Residuals remain two parts of step 5).
+The old clone path could copy about 1,000 residual-chart nodes and block for 371 ms.
+Every part now inserts a preloaded eager image with explicit 320 × 166 dimensions.
+The next part starts loading in the current part's enter action; the first image
+is decoded alongside fixture loading. Target highlighting still runs on the next
+frame with the reused gliding halo and 200 ms panel slides; no enter delay returns.
+Empty, loading or failed preview slots are hidden, including the first-step grey box.
+
+The ten WebP files are **97,554 bytes total** (6,750–11,906 bytes each), captured
+at deviceScaleFactor 2 from deterministic demo fixtures. Charts show a meaningful
+left-hand region, including axes and samples, without reducing the native CSS
+font size. Desktop images use a 320 × 166 slot. Narrow screens pan the same
+native-size crop instead of shrinking labels. Assets use the existing tento-web
+static route copying, at `/tour-images/*.webp`. The live clone module remains
+available as historical source but is no longer imported by the tour.
+
+Regeneration: start an isolated source-built daemon on a free 47980–47989 port,
+then `deno run -A html/e2e/capture-tour-images.ts http://127.0.0.1:47980 <evidence-dir>`.
+The script uses withHeadless, the specified Chromium binary, --no-sandbox, and
+always closes the browser. It writes the ten assets plus an external contact
+sheet and size manifest. Current contact sheet on yuzuquats:
+`~/.cache/autophys/tour-images-20261104/contact-sheet.png`.
+
+Recommendation: static crops keep reading and paging cheap and deterministic.
+Strongest alternative: render purpose-built simplified SVG charts per part;
+that would adapt to narrower slots but adds a second visualization implementation.
+Reversal: restore UI-TOUR-02's preview import/callback and styles, then retire these
+owned assets and capture script; under an hour, no data migration or API change.
+Implementation is complete in the matching `Project: autophys` commit.
+
+Validation: `deno check --config html/deno.json` on the four touched TypeScript
+files. No tests or e2e run, per the operator's speed constraint. Deployment and
+one live browser pass (including step-change timing) are recorded externally in
+`~/.cache/autophys/tour-images-20261104/`; the final handoff reports the live SHA.
+Task-board CLI was unavailable: installed lona-console has no `task` command;
+plan/status are recorded in that same external evidence directory.
