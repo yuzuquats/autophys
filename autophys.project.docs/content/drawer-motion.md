@@ -103,3 +103,13 @@ and all 111 HTML tests. Release 4fed4b5-20261105 is healthy locally and publicly
 the public browser confirms the packaged shadow and loaded image. The release
 also includes peer-authored d74d9a8 already committed on master. No source push.
 Deployment log: fleet/evidence/autophys-drawer/tutorial-shadow-deploy.log.
+
+## Header alignment — 2026-11-05
+
+The operator’s header screenshot shows collapsed panel controls above the
+breadcrumb and a higher demo badge. The app uses a 48px header, but collapsed
+32px buttons retain the cookbook’s top:0 for its original 32px toolbar.
+Give all app panel toggles an 8px top inset, matching the open-panel controls.
+Center the 22px demo badge in the desktop header (93px plus safe-area inset).
+The phone badge keeps its separate row above the breadcrumb to avoid overlap.
+Validate both panel states, desktop and phone, then deploy from clean master.

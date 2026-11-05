@@ -10,6 +10,7 @@ export function sidebarStyles(w: string): string {
   box-sizing:border-box;flex:0 0 48px;height:48px;min-height:48px;padding:0 12px;
   box-shadow:inset 0 -1px 0 var(--ap-line);align-items:center;flex-wrap:nowrap;
 }
+.ck-app[data-cookbook]:has(.ap-sidebar) .ck-toggle { top:8px; }
 .ck-app[data-cookbook]:has(.ap-sidebar) .ck-panel-heading { min-height:48px;padding-left:0;font:600 13px/18px var(--ap-font); }
 .ck-app[data-cookbook]:has(.ap-sidebar) .ck-details .ck-panel-heading { padding-right:40px; }
 .ck-app[data-cookbook]:has(.ap-sidebar) .ck-panels[data-details] .ck-details-toggle { right:8px; }
