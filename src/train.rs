@@ -11,7 +11,7 @@
 //! Provider keys are only ever checked for presence, never read or written.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::io::{BufRead, BufReader, Read};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -35,9 +35,160 @@ pub const USAGE: &str =
                            [--out DIR] [--seeds 3,4] [--case NAME]...
        autophys train runs
        (all take --train-dir DIR (AUTOPHYS_TRAIN_DIR, default <project>/train/sft)
-        and --python FILE (AUTOPHYS_TRAIN_PYTHON, default python3 on PATH))";
+        and --python FILE (AUTOPHYS_TRAIN_PYTHON, default python3 on PATH))
+       worker limits: AUTOPHYS_TRAIN_WORKER_TIMEOUT_SECONDS (default 86400;
+                      budgeted workers use provider timeout +120s unless overridden),
+                      AUTOPHYS_TRAIN_WORKER_GRACE_SECONDS (default 2),
+                      AUTOPHYS_TRAIN_WORKER_OUTPUT_BYTES (default 67108864)";
 
 const BACKENDS: &[&str] = &["loops", "modal"];
+
+/// Local launcher bounds. A remote budget still belongs to the provider;
+/// killing a local process never confirms remote cancellation.
+#[derive(Clone)]
+struct WorkerLimits {
+    deadline: std::time::Duration,
+    grace: std::time::Duration,
+    output_bytes: usize,
+    explicit_deadline: bool,
+}
+
+impl WorkerLimits {
+    fn from_env() -> Result<Self> {
+        fn seconds(key: &str, default: f64) -> Result<std::time::Duration> {
+            let value = std::env::var(key).ok();
+            let seconds = value.as_deref().unwrap_or("").parse::<f64>().ok();
+            if value.is_some() && seconds.is_none() {
+                bail!("{key} must be finite and above zero");
+            }
+            let seconds = seconds.unwrap_or(default);
+            if !seconds.is_finite() || seconds <= 0.0 {
+                bail!("{key} must be finite and above zero");
+            }
+            std::time::Duration::try_from_secs_f64(seconds).context(key.to_string())
+        }
+        let output_bytes = std::env::var("AUTOPHYS_TRAIN_WORKER_OUTPUT_BYTES")
+            .ok()
+            .map(|v| v.parse::<usize>())
+            .transpose()
+            .context("AUTOPHYS_TRAIN_WORKER_OUTPUT_BYTES must be a positive integer")?
+            .unwrap_or(64 * 1024 * 1024);
+        if output_bytes == 0 {
+            bail!("AUTOPHYS_TRAIN_WORKER_OUTPUT_BYTES must be positive");
+        }
+        Ok(Self {
+            // Long serverless jobs have no provider wall-clock flag. One day
+            // is a local default, overridable for longer intentional training.
+            deadline: seconds("AUTOPHYS_TRAIN_WORKER_TIMEOUT_SECONDS", 86400.0)?,
+            grace: seconds("AUTOPHYS_TRAIN_WORKER_GRACE_SECONDS", 2.0)?,
+            output_bytes,
+            explicit_deadline: std::env::var_os("AUTOPHYS_TRAIN_WORKER_TIMEOUT_SECONDS").is_some(),
+        })
+    }
+}
+
+#[derive(Default)]
+struct WorkerEvents {
+    steps: u64,
+    last_val_nll: Value,
+}
+
+impl WorkerEvents {
+    fn line(&mut self, bytes: &[u8]) -> Result<()> {
+        let line = std::str::from_utf8(bytes).context("reading worker stdout: invalid UTF-8")?;
+        if let Some(start) = line.find('{') {
+            if let Ok(Value::Object(event)) = serde_json::from_str::<Value>(&line[start..]) {
+                if event.contains_key("step") {
+                    self.steps += 1;
+                }
+                if let Some(value) = event.get("val_nll").filter(|v| v.is_number()) {
+                    self.last_val_nll = value.clone();
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+enum WorkerOutput {
+    Data(bool, Vec<u8>),
+    Eof,
+    Error(std::io::Error),
+}
+
+fn read_worker(mut pipe: impl Read, stdout: bool, tx: std::sync::mpsc::SyncSender<WorkerOutput>) {
+    let mut buffer = [0u8; 8192];
+    loop {
+        let message = match pipe.read(&mut buffer) {
+            Ok(0) => {
+                let _ = tx.send(WorkerOutput::Eof);
+                return;
+            }
+            Ok(n) => WorkerOutput::Data(stdout, buffer[..n].to_vec()),
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(e) => {
+                let _ = tx.send(WorkerOutput::Error(e));
+                return;
+            }
+        };
+        if tx.send(message).is_err() {
+            return;
+        }
+    }
+}
+
+fn interrupt_flag() -> Result<std::sync::Arc<std::sync::atomic::AtomicBool>> {
+    use std::sync::{Arc, OnceLock, atomic::AtomicBool};
+    static FLAG: OnceLock<Arc<AtomicBool>> = OnceLock::new();
+    if let Some(flag) = FLAG.get() {
+        return Ok(flag.clone());
+    }
+    let handle = tokio::runtime::Handle::try_current()
+        .context("training supervision needs a Tokio runtime")?;
+    let mut interrupt = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
+    let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+    let flag = Arc::new(AtomicBool::new(false));
+    let watched = flag.clone();
+    handle.spawn(async move {
+        tokio::select! { _ = interrupt.recv() => {}, _ = terminate.recv() => {} }
+        watched.store(true, std::sync::atomic::Ordering::SeqCst);
+    });
+    let _ = FLAG.set(flag.clone());
+    Ok(flag)
+}
+
+// Unix process groups keep launcher descendants in the cleanup boundary.
+// kill(2) is the only FFI here; these signal numbers are common to the supported
+// Linux/macOS targets. No new process/dependency or deletion lock is needed.
+unsafe extern "C" {
+    fn kill(pid: i32, signal: i32) -> i32;
+}
+fn signal_group(group: i32, signal: i32) -> bool {
+    // SAFETY: a negative, positive-child-derived PGID addresses only this
+    // command's new process group; no pointer or borrowed memory crosses FFI.
+    unsafe { kill(-group, signal) == 0 }
+}
+
+struct ManagedWorker {
+    child: std::process::Child,
+    grace: std::time::Duration,
+}
+
+impl Drop for ManagedWorker {
+    fn drop(&mut self) {
+        let group = self.child.id() as i32;
+        // SIGINT gives Python's finally blocks a chance to run. Escalation is
+        // local cleanup, with remote state explicitly left unconfirmed.
+        signal_group(group, 2);
+        let until = std::time::Instant::now() + self.grace;
+        while signal_group(group, 0) && std::time::Instant::now() < until {
+            let _ = self.child.try_wait();
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        signal_group(group, 9);
+        let _ = self.child.wait();
+    }
+}
 
 /// Why a train command failed. Usage errors exit 2 (with USAGE); runtime
 /// failures (worker, budget refusal, provider) exit 1. Bare `String` errors
@@ -195,6 +346,7 @@ impl Flags {
 struct Worker {
     dir: PathBuf,
     python: PathBuf,
+    limits: WorkerLimits,
 }
 
 // Return an absolute spelling without resolving the final symlink: a venv's
@@ -249,66 +401,153 @@ impl Worker {
                 dir.display()
             );
         }
-        Ok(Worker { dir, python })
+        Ok(Worker {
+            dir,
+            python,
+            limits: WorkerLimits::from_env()?,
+        })
     }
 
-    fn command(&self, script: &str, args: &[String]) -> Command {
-        let mut cmd = Command::new(&self.python);
-        cmd.arg(self.dir.join(script))
-            .args(args)
-            .current_dir(&self.dir);
-        cmd
+    fn budgeted(mut self, gate: &Value) -> Self {
+        if !self.limits.explicit_deadline {
+            if let Some(seconds) = gate["timeout_s"].as_u64() {
+                // Let the provider/worker enforce its cap and report teardown
+                // before the local supervisor interrupts the launcher.
+                self.limits.deadline = std::time::Duration::from_secs(seconds.saturating_add(120));
+            }
+        }
+        self
     }
 
-    /// Run to completion and capture stdout; stderr streams to the terminal.
-    fn capture(&self, script: &str, args: &[String]) -> Result<String> {
-        let out = self
-            .command(script, args)
+    /// Both pipes are drained through a bounded channel, independently of
+    /// line endings. The supervisor alone owns output/elapsed-time accounting.
+    fn supervise(&self, argv: &[String], capture: bool) -> Result<(bool, String, WorkerEvents)> {
+        use std::io::Write;
+        use std::os::unix::process::CommandExt;
+        use std::sync::{atomic::Ordering, mpsc};
+        use std::time::{Duration, Instant};
+        let interrupted = interrupt_flag()?;
+        if interrupted.load(Ordering::SeqCst) {
+            bail!("worker interrupted before launch");
+        }
+        let child = Command::new(&self.python)
+            .args(argv)
+            .current_dir(&self.dir)
             .stdin(Stdio::null())
-            .stderr(Stdio::inherit())
-            .output()
-            .with_context(|| format!("starting {script}"))?;
-        let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
-        if !out.status.success() {
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .process_group(0)
+            .spawn()
+            .context("starting training worker")?;
+        let mut owned = ManagedWorker {
+            child,
+            grace: self.limits.grace,
+        };
+        let (tx, rx) = mpsc::sync_channel(8);
+        let stdout = owned.child.stdout.take().expect("piped stdout");
+        let stderr = owned.child.stderr.take().expect("piped stderr");
+        let other = tx.clone();
+        let readers = [
+            std::thread::spawn(move || read_worker(stdout, true, tx)),
+            std::thread::spawn(move || read_worker(stderr, false, other)),
+        ];
+        let started = Instant::now();
+        let result = (|| -> Result<_> {
+            let mut total = 0usize;
+            let mut eof = 0;
+            let mut captured = Vec::new();
+            let mut pending = Vec::new();
+            let mut events = WorkerEvents::default();
+            loop {
+                if interrupted.load(Ordering::SeqCst) {
+                    bail!("worker interrupted; remote cancellation is unconfirmed");
+                }
+                if started.elapsed() >= self.limits.deadline {
+                    bail!("worker deadline exceeded; remote cancellation is unconfirmed");
+                }
+                if eof == 2 {
+                    if let Some(status) = owned.child.try_wait()? {
+                        if !capture && !pending.is_empty() {
+                            events.line(&pending)?;
+                        }
+                        let stdout = String::from_utf8(captured)
+                            .context("reading worker stdout: invalid UTF-8")?;
+                        return Ok((status.success(), stdout, events));
+                    }
+                }
+                match rx.recv_timeout(Duration::from_millis(20)) {
+                    Ok(WorkerOutput::Eof) => eof += 1,
+                    Ok(WorkerOutput::Error(e)) => return Err(e).context("reading worker pipe"),
+                    Ok(WorkerOutput::Data(stdout, bytes)) => {
+                        total = total
+                            .checked_add(bytes.len())
+                            .context("worker output count overflow")?;
+                        if total > self.limits.output_bytes {
+                            bail!(
+                                "worker output budget exceeded ({} bytes); remote cancellation is unconfirmed",
+                                self.limits.output_bytes
+                            );
+                        }
+                        if capture && stdout {
+                            captured.extend_from_slice(&bytes);
+                        } else {
+                            std::io::stderr()
+                                .write_all(&bytes)
+                                .context("echoing worker output")?;
+                        }
+                        if !capture && stdout {
+                            for part in bytes.split_inclusive(|b| *b == b'\n') {
+                                pending.extend_from_slice(part);
+                                if pending.len() > self.limits.output_bytes.min(1024 * 1024) {
+                                    bail!(
+                                        "worker line budget exceeded; remote cancellation is unconfirmed"
+                                    );
+                                }
+                                if part.last() == Some(&b'\n') {
+                                    events.line(&pending)?;
+                                    pending.clear();
+                                }
+                            }
+                        }
+                    }
+                    Err(mpsc::RecvTimeoutError::Timeout) => {}
+                    Err(mpsc::RecvTimeoutError::Disconnected) if eof == 2 => {
+                        std::thread::sleep(Duration::from_millis(10))
+                    }
+                    Err(e) => return Err(e).context("reading worker output channel"),
+                }
+            }
+        })();
+        // Drop the receiver first to release a reader blocked on a full queue,
+        // then kill/reap the owned process group on every exit, then join readers.
+        drop(rx);
+        drop(owned);
+        for reader in readers {
+            let _ = reader.join();
+        }
+        result
+    }
+
+    fn capture(&self, script: &str, args: &[String]) -> Result<String> {
+        let mut argv = vec![self.dir.join(script).display().to_string()];
+        argv.extend_from_slice(args);
+        let (ok, stdout, _) = self.supervise(&argv, true)?;
+        if !ok {
             eprint!("{stdout}");
-            bail!("{script} exited with {}", out.status);
+            bail!("{script} exited unsuccessfully");
         }
         Ok(stdout)
     }
 
-    /// Run while echoing stdout to stderr (stdout stays for the final JSON),
-    /// and collect every stdout line that is a JSON object.
-    fn stream(&self, script: &str, args: &[String]) -> Result<(bool, Vec<Value>)> {
+    fn stream(&self, script: &str, args: &[String]) -> Result<(bool, WorkerEvents)> {
         let mut argv = vec![self.dir.join(script).display().to_string()];
         argv.extend_from_slice(args);
         self.stream_raw(&argv)
     }
 
-    /// `stream` with the interpreter's own arguments (for `-m modal run ...`).
-    /// Modal prints container logs with its own prefixes, so JSON events are
-    /// also found after the first `{` of a line.
-    fn stream_raw(&self, argv: &[String]) -> Result<(bool, Vec<Value>)> {
-        let mut child = Command::new(&self.python)
-            .args(argv)
-            .current_dir(&self.dir)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
-            .spawn()
-            .with_context(|| format!("starting {}", argv.join(" ")))?;
-        let mut events = Vec::new();
-        let stdout = child.stdout.take().expect("piped stdout");
-        for line in BufReader::new(stdout).lines() {
-            let line = line?;
-            eprintln!("{line}");
-            if let Some(start) = line.find('{') {
-                if let Ok(value @ Value::Object(_)) = serde_json::from_str::<Value>(&line[start..])
-                {
-                    events.push(value);
-                }
-            }
-        }
-        Ok((child.wait()?.success(), events))
+    fn stream_raw(&self, argv: &[String]) -> Result<(bool, WorkerEvents)> {
+        let (ok, _, events) = self.supervise(argv, false)?;
+        Ok((ok, events))
     }
 }
 
@@ -343,10 +582,84 @@ fn write_json(path: &Path, value: &Value) -> Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, format!("{}\n", serde_json::to_string_pretty(value)?))?;
-    std::fs::rename(&tmp, path)?;
+    let tmp = path.with_extension(format!("json.tmp.{}", attempt_id()?));
+    let mut file = std::fs::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(&tmp)?;
+    file.write_all(format!("{}\n", serde_json::to_string_pretty(value)?).as_bytes())?;
+    file.sync_all()?;
+    std::fs::rename(&tmp, path).with_context(|| {
+        format!(
+            "publishing {}; retained temporary {}",
+            path.display(),
+            tmp.display()
+        )
+    })?;
+
     Ok(())
+}
+
+/// Stable advisory lock: the file remains as accountable state; the kernel
+/// releases ownership on normal exit, error, interruption or process death.
+fn reserve_run(dir: &Path) -> Result<std::fs::File> {
+    std::fs::create_dir_all(dir)?;
+    let path = dir.join("run.lock");
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(&path)?;
+    file.try_lock().map_err(|e| {
+        anyhow!(
+            "run is reserved by another invocation ({}): {e}",
+            path.display()
+        )
+    })?;
+    Ok(file)
+}
+
+fn attempt_id() -> Result<String> {
+    let mut bytes = [0u8; 16];
+    getrandom::getrandom(&mut bytes)
+        .map_err(|e| anyhow!("creating training attempt identity: {e}"))?;
+    Ok(hex::encode(bytes))
+}
+
+fn previous_manifest(path: &Path, name: &str) -> Result<Option<Vec<u8>>> {
+    let bytes = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => {
+            return Err(e).with_context(|| {
+                format!(
+                    "reading existing run {}; preserve it and choose a new --name",
+                    path.display()
+                )
+            });
+        }
+    };
+    let value: Value = serde_json::from_slice(&bytes).with_context(|| {
+        format!(
+            "malformed existing run {}; preserve it and choose a new --name",
+            path.display()
+        )
+    })?;
+    let status = value["status"].as_str().ok_or_else(|| {
+        anyhow!(
+            "malformed existing run {}: missing string status; choose a new --name",
+            path.display()
+        )
+    })?;
+    live_retry_allowed(Some(status)).map_err(|why| anyhow!("run {name:?} {why}"))?;
+    if value["name"].as_str() != Some(name) {
+        bail!(
+            "malformed existing run {}: name identity differs; preserve it and choose a new --name",
+            path.display()
+        );
+    }
+    Ok(Some(bytes))
 }
 
 /// Content identity of a dataset directory: rows and sha256 per split, plus
@@ -441,6 +754,11 @@ pub fn dataset(args: Vec<String>) -> Result<Value, Failure> {
     };
     let run = || -> Result<Value> {
         let worker = Worker::new(&flags)?;
+        let worker = if let Some(gate) = &gate {
+            worker.budgeted(gate)
+        } else {
+            worker
+        };
         let out = absolute(
             flags
                 .get("out")
@@ -662,11 +980,10 @@ pub fn run(args: Vec<String>) -> Result<Value, Failure> {
         };
         let run_dir = worker.dir.join("runs").join(&name);
         let manifest_path = run_dir.join("manifest.json");
-        if live {
-            let previous = read_json(&manifest_path).ok();
-            let status = previous.as_ref().and_then(|m| m["status"].as_str());
-            live_retry_allowed(status).map_err(|why| anyhow!("run {name:?} {why}"))?;
-        }
+        let _reservation = reserve_run(&run_dir)?;
+        // Protect provenance before even the offline planner can run.
+        let previous = previous_manifest(&manifest_path, &name)?;
+        let attempt = attempt_id()?;
         let mut argv = vec![
             "--name".to_string(),
             name.clone(),
@@ -691,6 +1008,7 @@ pub fn run(args: Vec<String>) -> Result<Value, Failure> {
         };
         let mut manifest = json!({
             "name": name,
+            "attempt_id": attempt,
             "backend": backend,
             "base_model": base_model,
             "status": "planned",
@@ -701,6 +1019,16 @@ pub fn run(args: Vec<String>) -> Result<Value, Failure> {
             "plan": plan,
             "budget": gate,
         });
+        if let Some(previous) = previous {
+            let archived = run_dir.join(format!("manifest.previous.{attempt}.json"));
+            let mut file = std::fs::OpenOptions::new()
+                .create_new(true)
+                .write(true)
+                .open(&archived)?;
+            file.write_all(&previous)?;
+            file.sync_all()?;
+            manifest["previous_manifest"] = json!(archived.file_name().unwrap().to_string_lossy());
+        }
         write_json(&manifest_path, &manifest)?;
         if !live {
             return Ok(manifest);
@@ -718,13 +1046,23 @@ pub fn run(args: Vec<String>) -> Result<Value, Failure> {
         } else if std::env::var_os("BASETEN_API_KEY").is_none_or(|v| v.is_empty()) {
             bail!("live run refused: BASETEN_API_KEY is not in this process's environment");
         }
-        // A stale record from an earlier attempt must not count as this run's.
-        let _ = std::fs::remove_file(run_dir.join("run.json"));
+        // Preserve earlier result bytes while requiring fresh evidence for this
+        // attempt. Never count an old run.json as the new worker's completion.
+        let record_path = run_dir.join("run.json");
+        match std::fs::symlink_metadata(&record_path) {
+            Ok(_) => std::fs::rename(
+                &record_path,
+                run_dir.join(format!("run.previous.{attempt}.json")),
+            )?,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e).context("inspecting previous training result"),
+        }
+        let worker = worker.budgeted(&gate);
 
         manifest["status"] = json!("running");
         manifest["started_at"] = json!(now());
         write_json(&manifest_path, &manifest)?;
-        let (ok, events) = if backend == "modal" {
+        let streamed = if backend == "modal" {
             worker.stream_raw(&[
                 "-m".into(),
                 "modal".into(),
@@ -746,7 +1084,7 @@ pub fn run(args: Vec<String>) -> Result<Value, Failure> {
                 gate["timeout_s"].to_string(),
                 "--hparams".into(),
                 hparams.to_string(),
-            ])?
+            ])
         } else {
             argv.push("--live".into());
             if dedicated {
@@ -754,22 +1092,58 @@ pub fn run(args: Vec<String>) -> Result<Value, Failure> {
                 argv.push("--max-seconds".into());
                 argv.push(gate["timeout_s"].to_string());
             }
-            worker.stream("train_sft.py", &argv)?
+            worker.stream("train_sft.py", &argv)
         };
-        let record = read_json(&run_dir.join("run.json")).ok();
+        let (ok, events, mut error) = match streamed {
+            Ok((ok, events)) => (ok, events, None),
+            Err(e) => (false, WorkerEvents::default(), Some(e)),
+        };
+        let record = match std::fs::read(&record_path) {
+            Ok(bytes) => match serde_json::from_slice::<Value>(&bytes) {
+                Ok(value)
+                    if value["run_id"].as_str().is_some_and(|s| !s.is_empty())
+                        && value["sampler_weights"]
+                            .as_str()
+                            .is_some_and(|s| !s.is_empty())
+                        && value
+                            .get("state")
+                            .is_some_and(|v| v.is_null() || v.is_string()) =>
+                {
+                    Some(value)
+                }
+                other => {
+                    let why = format!(
+                        "malformed worker result {}: {other:?}",
+                        record_path.display()
+                    );
+                    error = Some(match error.take() {
+                        Some(primary) => primary.context(why),
+                        None => anyhow!(why),
+                    });
+                    None
+                }
+            },
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+            Err(e) => {
+                error = Some(error.map_or_else(
+                    || anyhow!("reading worker result: {e}"),
+                    |primary| primary.context(format!("reading worker result also failed: {e}")),
+                ));
+                None
+            }
+        };
+        manifest["remote_status"] = json!("unconfirmed");
+        if let Some(e) = &error {
+            manifest["worker_error"] = json!(format!("{e:#}"));
+        }
         manifest["status"] = json!(if ok && record.is_some() {
             "completed"
         } else {
             "failed"
         });
         manifest["finished_at"] = json!(now());
-        manifest["steps"] = json!(events.iter().filter(|e| e.get("step").is_some()).count());
-        manifest["last_val_nll"] = events
-            .iter()
-            .rev()
-            .find_map(|e| e.get("val_nll"))
-            .cloned()
-            .unwrap_or(Value::Null);
+        manifest["steps"] = json!(events.steps);
+        manifest["last_val_nll"] = events.last_val_nll;
         if let Some(record) = &record {
             manifest["run_id"] = record["run_id"].clone();
             manifest["sampler_weights"] = record["sampler_weights"].clone();
@@ -786,7 +1160,20 @@ pub fn run(args: Vec<String>) -> Result<Value, Failure> {
                 }
             }
         }
-        write_json(&manifest_path, &manifest)?;
+        if let Err(persist) = write_json(&manifest_path, &manifest) {
+            return Err(match error {
+                Some(primary) => primary.context(format!(
+                    "also failed to persist terminal manifest: {persist:#}"
+                )),
+                None => persist,
+            });
+        }
+        if let Some(error) = error {
+            return Err(error.context(format!(
+                "training worker failed; see {}",
+                manifest_path.display()
+            )));
+        }
         if manifest["status"] != "completed" {
             bail!("training failed; see {}", manifest_path.display());
         }
@@ -886,8 +1273,9 @@ fn eval_modal(flags: &Flags, run: &str, gate: Value) -> Result<Value> {
             gate["refusal"].as_str().unwrap_or("budget gate")
         );
     }
-    let worker = Worker::new(flags)?;
+    let worker = Worker::new(flags)?.budgeted(&gate);
     let run_dir = worker.dir.join("runs").join(run);
+    let _reservation = reserve_run(&run_dir)?;
     let manifest_path = run_dir.join("manifest.json");
     let manifest = read_json(&manifest_path)
         .with_context(|| format!("run {run:?} has no manifest; train it first"))?;
@@ -1014,6 +1402,35 @@ mod tests {
 
     fn words(s: &str) -> Vec<String> {
         s.split_whitespace().map(String::from).collect()
+    }
+
+    #[test]
+    fn worker_read_failure_is_reported_and_reader_exits() {
+        struct Broken;
+        impl Read for Broken {
+            fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::other("injected pipe read failure"))
+            }
+        }
+        let (tx, rx) = std::sync::mpsc::sync_channel(1);
+        let reader = std::thread::spawn(move || read_worker(Broken, true, tx));
+        assert!(matches!(
+            rx.recv_timeout(std::time::Duration::from_secs(1)).unwrap(),
+            WorkerOutput::Error(_)
+        ));
+        reader.join().unwrap();
+    }
+
+    #[test]
+    fn worker_events_keep_only_bounded_summary() {
+        let mut events = WorkerEvents::default();
+        for _ in 0..100_000 {
+            events
+                .line(b"{\"step\": 1, \"val_nll\": 0.4, \"ignored\": [1,2,3]}\n")
+                .unwrap();
+        }
+        assert_eq!(events.steps, 100_000);
+        assert_eq!(events.last_val_nll, json!(0.4));
     }
 
     #[test]

@@ -9,8 +9,8 @@ token totals the cost estimate is based on. It never contacts Baseten.
 A live run needs ``BASETEN_API_KEY`` in the environment and the explicit
 ``--live`` flag. It trains a LoRA adapter with cross-entropy on the
 assistant (Decision JSON) tokens only, reports validation NLL, saves sampler
-weights and resumable state, writes ``runs/<name>/run.json`` and deactivates
-nothing (see README for deactivation and deployment).
+weights and resumable state, writes ``runs/<name>/run.json``, closes acquired clients and attempts to
+deactivate any assigned dedicated trainer on every exit.
 
 Training rendering = upstream template, ``system`` role, ``enable_thinking``
 false, then the target JSON and the template's own end-of-turn marker
@@ -22,6 +22,8 @@ same prompt.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
+import threading
 import json
 import math
 import os
@@ -97,7 +99,7 @@ def deactivate(deployment_id: str) -> bool:
     return False
 
 
-def guard_dedicated(allow: bool, max_seconds: float | None):
+def guard_dedicated(allow: bool, max_seconds: float | None, on_deadline):
     """A dedicated trainer bills GPU time, which the per-token budget does not
     cover. Without ``allow`` the run stops (and the trainer is deactivated) as
     soon as Loops reports one. With it, the trainer is deactivated at
@@ -112,25 +114,101 @@ def guard_dedicated(allow: bool, max_seconds: float | None):
             DEDICATED.update(id=deployment.deployment_id, run=run.get("id"), instance=(run.get("instance_type") or {}).get("id"))
             print(json.dumps({"event": "dedicated_trainer", **DEDICATED}), flush=True)
             if not allow:
-                deactivate(deployment.deployment_id)
                 raise SystemExit(f"Loops assigned a dedicated trainer (deployment {deployment.deployment_id}); it bills GPU "
-                                 "time, which the per-token budget does not cover. Deactivated before training; "
+                                 "time, which the per-token budget does not cover. Refusing training and attempting deactivation; "
                                  "a dedicated run needs --usd-per-hour and --max-usd.")
         return deployment
 
     service_client.deployment_from_run = checked
+    timer = None
     if max_seconds:
-        import threading
 
         def deadline():
             print(json.dumps({"event": "deadline", "after_s": max_seconds}), flush=True)
-            if "id" in DEDICATED:
-                deactivate(DEDICATED["id"])
-            os._exit(3)
+            try:
+                on_deadline()
+            finally:
+                os._exit(3)
 
         timer = threading.Timer(max_seconds, deadline)
         timer.daemon = True
         timer.start()
+
+    def restore():
+        if timer is not None:
+            timer.cancel()
+        if service_client.deployment_from_run is checked:
+            service_client.deployment_from_run = original
+    return restore
+
+
+@contextmanager
+def live_client(a):
+    """Own every acquired client, including failures before training starts.
+
+    Cleanup attempts are independent. A teardown failure is attached to an
+    existing BaseException (including SystemExit/KeyboardInterrupt); on success
+    it becomes an error rather than claiming a fully cleaned-up run.
+    """
+    if not a.live:
+        yield None
+        return
+    DEDICATED.clear()
+    clients, errors = [], []
+    restore = None
+    cleaned = False
+    lock = threading.RLock()
+
+    def cleanup():
+        nonlocal cleaned
+        with lock:
+            if cleaned:
+                return
+            cleaned = True
+            if restore is not None:
+                try:
+                    restore()
+                except BaseException as exc:
+                    errors.append(exc)
+            if "id" in DEDICATED:
+                try:
+                    if not deactivate(DEDICATED["id"]):
+                        raise RuntimeError("dedicated trainer deactivation was not confirmed")
+                except BaseException as exc:
+                    errors.append(exc)
+            for client in reversed(clients):
+                try:
+                    close = getattr(client, "close", None)
+                    if close is not None:
+                        close()
+                except BaseException as exc:
+                    errors.append(exc)
+            for exc in errors:
+                print(json.dumps({"event": "cleanup_failed", "error_type": type(exc).__name__}),
+                      file=sys.stderr, flush=True)
+
+    primary = None
+    try:
+        from baseten.loops import ServiceClient
+        restore = guard_dedicated(a.allow_dedicated, a.max_seconds, cleanup)
+        service = ServiceClient()
+        clients.append(service)
+        client = service.create_lora_training_client(
+            base_model=a.base_model, rank=a.rank, max_seq_len=a.max_seq_len, scope=a.scope or None,
+            seed=a.seed, name=a.name)
+        clients.append(client)
+        yield client
+    except BaseException as exc:
+        primary = exc
+        raise
+    finally:
+        cleanup()
+        if errors:
+            if primary is not None:
+                if hasattr(primary, "add_note"):
+                    primary.add_note("Training cleanup also failed; see cleanup_failed events. Remote teardown is unconfirmed.")
+            else:
+                raise RuntimeError("training cleanup failed; remote teardown is unconfirmed") from errors[0]
 
 
 def lr_at(step: int, total: int, base: float, warmup: int) -> float:
@@ -170,52 +248,44 @@ def main(argv=None) -> int:
         seen = {json.dumps(x) for x in train + val}
         overlap = {"heldout_rows": len(held), "identical_to_a_training_row": sum(json.dumps(x) in seen for x in held)}
 
-    tokenizer = client = None
     if a.live:
         if not os.environ.get("BASETEN_API_KEY"):
             p.error("--live needs BASETEN_API_KEY in the environment")
-        from baseten.loops import ServiceClient
         if a.allow_dedicated and not a.max_seconds:
             p.error("--allow-dedicated needs --max-seconds")
-        started = time.time()
-        guard_dedicated(a.allow_dedicated, a.max_seconds)
-        client = ServiceClient().create_lora_training_client(
-            base_model=a.base_model, rank=a.rank, max_seq_len=a.max_seq_len, scope=a.scope or None,
-            seed=a.seed, name=a.name)
-        tokenizer = client.get_tokenizer()
-    enc = Encoder(a.base_model, tokenizer)
-    tr = [enc.tokens(*x) for x in train]
-    va = [enc.tokens(*x) for x in val]
-    lengths = [len(p_) + len(a_) for p_, a_ in tr + va]
-    if max(lengths) > a.max_seq_len:
-        p.error(f"longest sequence {max(lengths)} exceeds --max-seq-len {a.max_seq_len}")
-    steps_per_epoch = math.ceil(len(tr) / a.batch_size)
-    total = steps_per_epoch * a.epochs
-    seq_tokens = sum(len(p_) + len(a_) for p_, a_ in tr)
-    trained = sum(len(a_) for _, a_ in tr)
-    val_tokens = sum(len(p_) + len(a_) for p_, a_ in va)
-    evals = total // a.eval_every + 2
-    summary = {
-        "base_model": a.base_model, "end_of_turn": enc.end_of_turn, "rows": {"train": len(tr), "validation": len(va)},
-        "tokens_per_sequence": {"min": min(lengths), "max": max(lengths)},
-        "trained_token_share": round(trained / seq_tokens, 4),
-        "heldout_overlap": overlap,
-        "schedule": {"updates": total, "per_epoch": steps_per_epoch, "epochs": a.epochs, "batch_size": a.batch_size,
-                     "lr": a.lr, "warmup": a.warmup, "lr_schedule": "cosine", "rank": a.rank},
-        "billed_token_estimate": {"train_forward_backward": seq_tokens * a.epochs,
-                                  "validation_forward": val_tokens * evals,
-                                  "total": seq_tokens * a.epochs + val_tokens * evals},
-    }
-    print(json.dumps(summary, indent=1))
-    if not a.live:
-        print("dry run: nothing sent to Baseten")
-        return 0
-
-    try:
+    if a.max_seconds is not None and (not math.isfinite(a.max_seconds) or a.max_seconds <= 0):
+        p.error("--max-seconds must be finite and above zero")
+    started = time.time()
+    with live_client(a) as client:
+        tokenizer = client.get_tokenizer() if client is not None else None
+        enc = Encoder(a.base_model, tokenizer)
+        tr = [enc.tokens(*x) for x in train]
+        va = [enc.tokens(*x) for x in val]
+        lengths = [len(p_) + len(a_) for p_, a_ in tr + va]
+        if max(lengths) > a.max_seq_len:
+            p.error(f"longest sequence {max(lengths)} exceeds --max-seq-len {a.max_seq_len}")
+        steps_per_epoch = math.ceil(len(tr) / a.batch_size)
+        total = steps_per_epoch * a.epochs
+        seq_tokens = sum(len(p_) + len(a_) for p_, a_ in tr)
+        trained = sum(len(a_) for _, a_ in tr)
+        val_tokens = sum(len(p_) + len(a_) for p_, a_ in va)
+        evals = total // a.eval_every + 2
+        summary = {
+            "base_model": a.base_model, "end_of_turn": enc.end_of_turn, "rows": {"train": len(tr), "validation": len(va)},
+            "tokens_per_sequence": {"min": min(lengths), "max": max(lengths)},
+            "trained_token_share": round(trained / seq_tokens, 4),
+            "heldout_overlap": overlap,
+            "schedule": {"updates": total, "per_epoch": steps_per_epoch, "epochs": a.epochs, "batch_size": a.batch_size,
+                         "lr": a.lr, "warmup": a.warmup, "lr_schedule": "cosine", "rank": a.rank},
+            "billed_token_estimate": {"train_forward_backward": seq_tokens * a.epochs,
+                                      "validation_forward": val_tokens * evals,
+                                      "total": seq_tokens * a.epochs + val_tokens * evals},
+        }
+        print(json.dumps(summary, indent=1))
+        if not a.live:
+            print("dry run: nothing sent to Baseten")
+            return 0
         return train_live(a, client, enc, tr, va, summary, started)
-    finally:
-        if "id" in DEDICATED:
-            deactivate(DEDICATED["id"])
 
 
 def train_live(a, client, enc, tr, va, summary, started):
@@ -254,7 +324,6 @@ def train_live(a, client, enc, tr, va, summary, started):
               "trainer": DEDICATED or {"kind": "serverless"}, "wall_seconds": round(time.time() - started, 1)}
     (run_dir / "run.json").write_text(json.dumps(record, indent=1, default=str) + "\n")
     print(f"run_id={client.run_id} sampler_weights={sampler.path}")
-    client.close()
     return 0
 
 
