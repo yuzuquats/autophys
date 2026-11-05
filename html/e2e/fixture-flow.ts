@@ -199,19 +199,9 @@ await withHeadless(async (browser) => {
   await settle(page);
   check(await has(page, ".ck-panels[data-sidebar]"), "sidebar reopened");
 
-  begin("export");
-  await page.evaluate(() => {
-    const saved: string[] = [];
-    (globalThis as { savedDownloads?: string[] }).savedDownloads = saved;
-    const click = HTMLAnchorElement.prototype.click;
-    HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
-      if (this.download) saved.push(this.download);
-      else click.call(this);
-    };
-  });
-  await page.click(".ck-export");
-  const saved = await page.evaluate(() => (globalThis as { savedDownloads?: string[] }).savedDownloads);
-  check(JSON.stringify(saved) === JSON.stringify([`${appId}-export.json`]), `header Export saves ${appId}-export.json via app.export()`);
+  begin("report");
+  check(!(await has(page, ".ck-export")), "the shell has no Export action");
+  check(!(await has(page, "#ap-action-export-investigation")), "investigation Details has no Export action");
 
   begin("header-home");
   await page.keyboard.press("ArrowUp");

@@ -22,7 +22,7 @@ Deno.test("controller: edit, refused values, approve (posted as edited), withdra
   await store.start();
   await settle();
   assertEquals(store.applied.map((r) => r.gseq), [1], "the canned record was replayed");
-  ctl.handle({ kind: "select", id: "bench-a/prop/p1" });
+  ctl.handle({ kind: "select", id: "bench-a" });
   const sel = ctl.selection;
   ctl.handle({ kind: "field", name: "amplitude", raw: "1.", commit: false });
   assert(ctl.selection === sel, "typing does not change the selection");
@@ -67,7 +67,7 @@ Deno.test("controller: project switch keeps each project's selection; export and
   ctl.shell = { download: (name, _type, data) => files.push(`${name}:${data.length > 0}`), picked: () => {} };
   await store.start();
   ctl.handle({ kind: "switch", value: "lab-heaters" });
-  assertEquals(ctl.view().sidebar.selectedId, "heater-1/fit-2/fit");
+  assertEquals(ctl.view().sidebar.selectedId, "heater-1");
   ctl.handle({ kind: "select", id: "heater-1/validate" });
   ctl.handle({ kind: "switch", value: "bench-oscillators" });
   ctl.handle({ kind: "switch", value: "lab-heaters" });

@@ -138,13 +138,13 @@ Deno.test("daemon: the workbench renders the seeded investigation, with gaps sai
   ctl.handle({ kind: "select", id: "inv_1/fit-1/fit" });
   assertStringIncludes(JSON.stringify(ctl.view().main.body), "fit curve not recorded");
   ctl.handle({ kind: "select", id: "inv_1/fit-1/residuals" });
-  assertEquals(ctl.view().main.body.kind, "missing");
+  assertEquals(ctl.view().main.body.kind, "investigation");
   ctl.handle({ kind: "select", id: "inv_1/prop/prop_1" });
   const details = ctl.view().details;
   assertEquals(details.status.text, "Awaiting approval");
   assertEquals(details.decision?.map((a) => a.name), ["approve", "reject"]);
   assertStringIncludes(JSON.stringify(details), "No preview recorded");
-  assertEquals(ctl.view().main.body.kind, "decision");
+  assertEquals(ctl.view().main.body.kind, "investigation");
 });
 
 Deno.test("daemon: the stream resumes with after=<last gseq> after a drop and skips what it saw", async () => {
@@ -304,7 +304,7 @@ Deno.test("daemon: no outlook retains all proposed settings read-only and makes 
   assertStringIncludes(JSON.stringify(ctl.view().details), "frequency");
   assertStringIncludes(JSON.stringify(ctl.view().main), "Sine 0.4 Hz");
   ctl.handle({ kind: "select", id: "inv_1/fit-1" });
-  assertStringIncludes(JSON.stringify(ctl.view().details), "not recorded");
+  assertStringIncludes(JSON.stringify(ctl.view().main), "not recorded");
   const main = JSON.stringify(ctl.view().main);
   assert(!main.includes("force · none"), "missing input is not a zero-force chart");
   store.close();

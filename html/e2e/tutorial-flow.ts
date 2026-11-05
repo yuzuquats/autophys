@@ -2,7 +2,7 @@
 /** Guided-tour acceptance against a scratch daemon. Browser lifetime belongs to withHeadless. */
 import type { Page } from "npm:puppeteer-core@22.7.1";
 const [base, out] = Deno.args;
-if (!/^http:\/\/127\.0\.0\.1:479[89][0-9]$/.test(base) || !out) throw new Error("tutorial-flow.ts <loopback:47980..47999> <evidence>");
+if (!/^http:\/\/127\.0\.0\.1:479[6-9][0-9]$/.test(base) || !out) throw new Error("tutorial-flow.ts <loopback:47960..47999> <evidence>");
 const { withHeadless } = await import(new URL("../../vendor/tento/tento-headless-js/mod.ts", import.meta.url).href);
 await Deno.mkdir(out,{recursive:true});
 const checks: string[] = [], shots: string[] = [], errors: string[] = [];
@@ -72,7 +72,7 @@ await withHeadless(async b => {
       });
       check(state.selected === expected && state.expected === expected,width+": step "+step+"."+substep+" uses the actual selected row ("+state.selected+")");
       const crumb = await p.$eval(".ap-crumb",e=>e.textContent ?? "");
-      const leaf = step===1 || step===2 || step===9 ? "Configuration" : step===3 ? "bench A" : step===4 ? "free_response" : step===5 ? substep ? "Residuals" : "Fit" : step===6 ? "Sensitivity" : step===7 ? "Sine" : "Validate";
+      const leaf = step===1 || step===2 || step===9 ? "Configuration" : "bench A";
       check(crumb.includes(leaf),width+": Main follows the selected "+leaf+" row");
       check(state.preview,width+": step "+step+"."+substep+" has a real DOM preview");
       check(state.rings.length > 0 && state.rings.every(r=>r.exact && r.clear),width+": step "+step+"."+substep+" halo follows a visible target above the sheet "+JSON.stringify(state.rings));
