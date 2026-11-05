@@ -434,7 +434,8 @@ function around(root: Element, keep: Element[]): Element[] {
 
 /** A slide and its builds. Every state is rendered up front and stacked in one
  * grid cell, so bodies measure and lay out while hidden. Changing build
- * crossfades the leads and bodies; shared elements move from their old place. */
+ * switches the text immediately; diagram bodies fade around shared elements
+ * that move from their old place. */
 function renderSlide(slide: DeckSlide): SlideView {
   const hook = "icon" in slide.eyebrow ? " ck-hook" : "";
   const states: DeckBuild[] = [slide, ...(slide.builds ?? [])];
@@ -489,8 +490,8 @@ function renderSlide(slide: DeckSlide): SlideView {
       const firsts = pairs.map(([o]) => o.getBoundingClientRect());
       visible(to);
       if (!animate || reducedMotion()) return;
-      // The outgoing state stays drawn (inert) while it fades.
-      leads[from].removeAttribute("data-ck-hidden");
+      // Only the outgoing diagram stays drawn (inert) while it fades.
+      // Keep the outgoing lead hidden: superimposed text is difficult to read.
       before.removeAttribute("data-ck-hidden");
       const fade = (part: Element, out: boolean) =>
         running.push(part.animate(out ? [{ opacity: 1 }, { opacity: 0 }] : [{ opacity: 0 }, { opacity: 1 }], {
@@ -499,8 +500,6 @@ function renderSlide(slide: DeckSlide): SlideView {
           easing: ease,
           fill: "both",
         }));
-      fade(leads[from], true);
-      fade(leads[to], false);
       for (const part of around(before, pairs.map(([o]) => o))) fade(part, true);
       for (const part of around(after, pairs.map(([, n]) => n))) fade(part, false);
       pairs.forEach(([o, n], i) => {

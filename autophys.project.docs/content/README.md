@@ -199,3 +199,21 @@ that public health reports the deployed commit. Task record:
 `rwc-01:01m6mmnp353yq8qg4tjxdsyv2y`. Existing workspace/home layout findings on
 yuzuquats predate these edits (including the autophys manifest entry); these
 changes add no workspace/home root entries.
+
+
+## Slide 9 build text (2026-11-05)
+
+The operator requested a cleaner switch between the autoloop and post-training
+builds. Headings and descriptions now switch immediately, with only the active
+text visible. The shared inner-loop card still moves between diagrams; the
+diagram transition and slide navigation retain their existing timing.
+
+Validation: rebuilt browser bundle and inspected desktop (1280 × 800) and phone
+(390 × 844). Frame sampling in both directions found exactly one fully opaque
+lead with no text animations. Shared-card movement, rapid reversal and animation
+cleanup passed. Design detector returned no findings. The optional per-file emit
+reported its existing Deno permission failure; the bundled route built. No test
+suites ran under the operator's speed constraint. Evidence:
+`yuzuquats:~/workspace/fleet/evidence/hacks-carousel-align/slide9-20261105/`.
+The committed vendor tree remains authoritative during the rwc-dev-01 outage;
+this runtime change must be retained when reconstructing the vendor recipe.
