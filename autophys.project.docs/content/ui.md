@@ -511,7 +511,7 @@ points at the app itself). This supersedes UI-TOUR-01's local sheet:
   The cookbook draws the one sheet, and owns the arrows, Back/Next/Done and Esc. → past
   the last step returns to the deck. The cookbook's generic shell steps, the second
   sheet and Show me are gone.
-- **The cookbook additions** (vendored patches 0015 and 0017, tento cookbook source):
+- **The cookbook additions** (committed vendor edits; 0017 has not been encoded):
   - each step's target is highlighted automatically on the next frame, with ring nodes
     kept so the highlight glides, clipped above the sheet;
   - steps have enter actions, re-run on Back;
@@ -573,3 +573,23 @@ one live browser pass (including step-change timing) are recorded externally in
 `~/.cache/autophys/tour-images-20261104/`; the final handoff reports the live SHA.
 Task-board CLI was unavailable: installed lona-console has no `task` command;
 plan/status are recorded in that same external evidence directory.
+
+
+### Known vendor regeneration gap — 2026-11-04 review
+
+The cookbook edits committed in a4990f0 (including tutorial.ts and styles.ts)
+have no corresponding fleet generator patch 0017. The fleet vendor base was lost
+with rwc-dev-01. Until that patch is encoded against a recovered or reconstructed
+base, running sync.sh would drop these changes. The committed vendor tree is the
+source of truth; preserve it when reconstructing the generator inputs. This
+review records the gap and does not claim regeneration is safe.
+
+
+Review follow-up validation: the app captures bookmark search/hash before the
+cookbook normalizes history, and applies the requested selection only to the
+user's controller. A focused scratch-daemon browser check passed for initial
+hash navigation, hash reload and query selection after tour exit. The vendor
+files were not edited. Deno checks passed for the root and the two updated browser
+drivers; those drivers were not run. The autoloop's two focused recovery tests
+passed, including a crash between recovery charging and archiving; Cargo check
+passed for autophys-cli. No full suite, push or deployment was performed.
