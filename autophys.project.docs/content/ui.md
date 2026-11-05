@@ -520,3 +520,22 @@ The cookbook drawer now stops a superseded stage transition if an empty tutorial
 completes synchronously. This prevents the initial transition from overwriting
 the app position after the empty list immediately opens the workbench. The
 committed vendor delta is authoritative; preserve it during vendor regeneration.
+
+
+Validation for account-only access: Deno type checks passed for the composition
+root, changed daemon/derive coverage and maintained browser drivers; diff checks
+passed. No test suites ran, per the operator's build-only direction. The release
+Cargo build and web bundle passed with existing dependency warnings. Live health
+reports commit `4dc81bf9baa6ae78b8377c86679b4c687f9f15ec`.
+
+Focused public browser checks at 1280×800 and 390×844 confirmed that an anonymous
+visitor sees sign-in, makes no workspace requests, and cannot select an alternate
+data source through a query parameter. Header modal demo login and in-pane demo
+login both read `battery_cycler_demo`, its two investigations and 29 stored records.
+The down arrow reaches the app with Details open on desktop; the landing cover
+finishes below the viewport and panels become ready. Mobile shows the sign-in card
+and then the stored investigation without horizontal overflow. No console errors
+were observed in the checked rendered states. Deleted worker/image URLs return
+404; the served app bundle contains none of the removed source-selector, worker,
+controller-swap, image or chip identifiers. Owned source snapshots were removed
+after deployment. No account or workbook data changed; no source push was made.
