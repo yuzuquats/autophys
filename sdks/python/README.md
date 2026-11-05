@@ -44,11 +44,12 @@ for explicit venv configuration and the built-in battery CSV path.
 
 ## Offline benchmarks, research and trajectory export
 
-The CLI entry point is `autophys.cli:main`. From `sdks/python`, use the
-installed `autophys` command or this source-checkout wrapper:
+In the activated contributor environment from [CONTRIBUTING.md](../../CONTRIBUTING.md),
+use the SDK module entry point from the repository root (the Rust daemon also
+uses the command name `autophys`):
 
 ```sh
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src ~/.cache/autophys/venv/bin/python -c   'from autophys.cli import main; import sys; sys.exit(main(sys.argv[1:]))' bench --seeds 5 --jobs 4
+PYTHONDONTWRITEBYTECODE=1 python -m autophys.cli bench --seeds 5 --jobs 4
 ```
 
 `bench --jobs N` defaults to 1. Scripted/fake units use processes; model-bound
