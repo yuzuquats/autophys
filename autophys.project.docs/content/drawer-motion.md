@@ -49,5 +49,35 @@ and blank/reveal cycle, not those content changes.
 
 Deno entry-point check, web bundle, diff whitespace and the design detector pass;
 the HTML suite passes 107/107. Measurements: rwc-01
-`fleet/evidence/autophys-drawer/candidate-results.json`; built candidate and
-HTML log: yuzuquats `fleet/evidence/hacks-carousel-align/drawer-*`.
+`fleet/evidence/autophys-drawer/candidate-results.json`; current packaged candidate and
+HTML/Rust logs: yuzuquats `fleet/evidence/autophys-drawer/`.
+
+## Live receipt
+
+Private deployment is verified at `https://autophys.lona.so/app`, release
+`56b0d1c-20261105`, native/source commit
+`56b0d1c9fde05f8cd4a7efdba39f9e7b9a0f6de1`, web id
+`a79c1e4b3bfe8cc03d211cf480ae81bb848d1f740512311dbab6657932a7b9d6`.
+Public and loopback health match. Live samples repeat both Up/Down directions,
+full return and reopening at a fixed 708px with zero blank uncovered frames.
+Trusted keys and a 390×844 viewport also retain the proper phone sheet/inert
+state and zero horizontal overflow. Native workspace gates pass: 207 passed,
+0 failed, 2 ignored. HTML gates pass: 107 passed, 0 failed.
+
+The normal deployment's broad clean-tree predicate would include a peer's
+unfinished Python test/training batch. Instead, packaging used the same native
+build, strip, web-build and pack steps on master after verifying committed
+inputs across `src`, `sql`, `html`, `vendor`, `sdks/rust`, Cargo manifests/lock,
+`tests` and `ops`, before and after building, with stable HEAD. No untracked
+compiled inputs were present. A coordinated native-source hold covered that
+interval and is released. Peer Python edits remain untouched and unpackaged.
+The service is an embedded package, not a source/watch server. No source push.
+
+The original mixed `hacks-carousel-align` evidence directory disappeared during
+qualification for an undetermined external reason. Current test logs and the
+package were rebuilt; both current measurement JSON files are retained on
+rwc-01 and yuzuquats in `fleet/evidence/autophys-drawer/`. The obsolete isolated
+server/tunnel are stopped. Its empty fixture-test database descriptors were
+preserved separately by disk-issues at
+`fleet/evidence/autophys-drawer-recovery-20261105/`; no user data was in that
+isolated store. The deployed package and current verification are unaffected.
