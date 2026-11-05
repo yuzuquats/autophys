@@ -16,7 +16,7 @@ export function tourSteps(ws: Workspace): TourStep[] {
     [{ title: "Open an investigation", body: "Its measurements, fits, sensitivity, proposals and validation are rows under it.", select: inv.id, details: false, surface: "sidebar", target: [row(inv.id)], label: "Investigation row · clipped" }],
     [{ title: "Read the measured data", body: "Measurements are the evidence each fit is tested against. Select a measurement to inspect its samples.", select: ids.measurement(inv, inv.measurements[0].id), details: false, surface: "main", target: [".ap-viewer"], label: "Measured data · clipped" }],
     [
-      { title: "Read a fit", body: "Measured points against the fitted curve. Details shows the parameters and how well each is pinned down.", select: fitId, details: true, surface: "main", target: [".ap-viewer"], label: "Fit chart · clipped · 1 of 2" },
+      { title: "Read a fit", body: "Measured points against the fitted curve. Parameters and Identifiability sit beside the fit; Details keeps the next decision.", select: fitId, details: true, surface: "main", target: [".ap-viewer"], label: "Fit chart · clipped · 1 of 2" },
       { title: "Check the residuals", body: "No structure left over means the model explains the data. A wave here means a missing term.", select: residuals, details: true, surface: "main", target: [".ap-viewer", row(residuals)], label: "Residuals · clipped · 2 of 2" },
     ],
     [{ title: "See what the data pins down", body: "Sensitivity shows which parameters the data separates, and which still move together.", select: ids.sens(inv), details: true, surface: "main", target: [".ap-viewer"], label: "Sensitivity · clipped" }],

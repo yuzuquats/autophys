@@ -1,21 +1,21 @@
 /** The main column: crumb, meta, the viewer's panels and one credit line. */
 import type { Investigation, Project, ProjectConfig, Proposal } from "../domain.ts";
-import type { BarRow, MainModel, RangesChart, Section, TableRow, TraceRow } from "../../ui/view-model.ts";
+import type { BarRow, ChartPanel, InvestigationBody, InvestigationCard, MainModel, RangesChart, Section, TableRow, TraceRow } from "../../ui/view-model.ts";
 import {
-  configPanels, edgePanels, envelopePanels, fitPanels, frequencyPanels, landscapeChart, measurementPanels, residualPanels, sensitivityPanels,
-  validationPanels, VIEW_LABEL,
+  configPanels, edgePanels, envelopePanels, fitPanels, frequencyPanels, landscapeChart, measurementPanels, sensitivityPanels,
+  validationPanels,
 } from "./charts.ts";
 import { truthPanels } from "./truth.ts";
+import { paramsTable } from "./details.ts";
+import { anchor, investigationRounds, investigationTarget, measurementAnchor, roundAnchor } from "./rounds.ts";
+import { stateOf } from "../proposal.ts";
 import { configurationSections, experimentSections, knownSection } from "./configuration.ts";
 import { simulatorLabel, specOf } from "../config.ts";
 import { engineering, int, shortHash, sig, pct } from "./fmt.ts";
 import { displayedFields, outlookAt } from "./outlook.ts";
-import { configFor, investigationLabel, defaultSelection, experimentsUsed, ids, latestConfig, latestFit, parseSel, projectOf, proposalLabel, rankOf, type State, statusText } from "./shared.ts";
+import { configFor, investigationLabel, defaultSelection, experimentsUsed, latestConfig, latestFit, parseSel, projectOf, proposalLabel, rankOf, type State, type Sel, statusText, plusMinus } from "./shared.ts";
 
 
-
-const credit = (c: ProjectConfig, inv: Investigation, measurements: string[], extra = "") =>
-  `${simulatorLabel(c)} · ${measurements.join(" + ") || "no data"} · seed ${Number.isFinite(inv.seed) ? inv.seed : "not recorded"}${extra}`;
 
 /** The ranking bars, the proposal's own row at its current (possibly edited) fields. */
 export function rankingBars(s: State, inv: Investigation, p: Proposal): BarRow[] {
@@ -84,13 +84,13 @@ export function experimentSummary(s: State, c: ProjectConfig, inv: Investigation
 }
 
 /** The experiment in prose, first on the page: what it does, why, and what it should settle. */
-function summarySection(s: State, c: ProjectConfig, inv: Investigation, p: Proposal): Section {
+export function summarySection(s: State, c: ProjectConfig, inv: Investigation, p: Proposal): Section {
   const status = p.status === "proposed" ? "awaiting approval" : p.status;
   return { heading: "Summary", caption: `Proposed at Fit #${p.atFit} · ${status}`, blocks: [{ kind: "text", text: experimentSummary(s, c, inv, p), lead: true }] };
 }
 
 /** The agent's steps that led to the proposal on a stepper: one line each, the proposing step with its evidence and expectation. */
-function reasoningSection(c: ProjectConfig, p: Proposal): Section {
+export function reasoningSection(c: ProjectConfig, p: Proposal): Section {
   const trace = p.trace ?? [];
   if (!trace.length) {
     return { heading: "Reasoning", caption: "The agent's steps that led here", blocks: [{ kind: "missing", title: "Not recorded yet", description: "The SDK recorded no agent steps for this proposal." }] };
@@ -119,78 +119,122 @@ export function mainModel(s: State): MainModel {
 function selectedMain(s: State): MainModel {
   const project = projectOf(s);
   const sel = parseSel(project, s.selected[project.id] ?? "") ?? parseSel(project, defaultSelection(project))!;
-  const invCrumb = (inv: Investigation) => ({ label: investigationLabel(project, inv), id: ids.inv(inv) });
   switch (sel.kind) {
     case "config": {
       const c = latestConfig(project);
       return { crumb: [{ label: project.name }, { label: "Configuration" }], meta: `v${c.version} · ${shortHash(c.hash)}`, actions: [],
         body: { kind: "configuration", parameters: configPanels(c)[0].charts[0] as RangesChart, experiments: experimentSections(c), sections: [knownSection(c), ...configurationSections(c).filter((section) => ["Noise", "Run limits"].includes(section.heading))].filter((s) => s !== null) }, creditLabel: `${simulatorLabel(c)} · source ${shortHash(c.simulator.sourceHash) || "unrecorded"} · config ${shortHash(c.hash)}`, credit: `${simulatorLabel(c)} · source ${c.simulator.sourceHash || "–"} · config ${c.hash}` };
     }
-    case "investigation": {
-      const c = configFor(project, sel.inv), fit = latestFit(sel.inv);
-      const panels = fit ? fitPanels({ config: c, inv: sel.inv }, fit) : sel.inv.measurements.flatMap((m) => measurementPanels(c, m));
-      return { crumb: [{ label: investigationLabel(project, sel.inv) }], meta: fit ? `Fit #${fit.n} · χ²/N ${fit.chi2N.toFixed(2)}` : statusText(sel.inv).text, actions: [],
-        body: panels.length ? { kind: "panels", panels } : { kind: "missing", title: "Not recorded yet", description: "No measurements or fits have arrived. Run the investigation from the SDK; records appear live here." }, credit: credit(c, sel.inv, fit?.measurements ?? sel.inv.measurements.map((m) => m.id), fit ? ` · fit #${fit.n}` : "") };
-    }
-    case "measurement": {
-      const c = configFor(project, sel.inv), m = sel.m;
-      return { crumb: [invCrumb(sel.inv), { label: "Measurements" }, { label: m.id }], meta: `${int(m.output.length)} samples · ${sig(m.rate, 3)} Hz`, actions: [],
-        body: { kind: "panels", panels: measurementPanels(c, m) }, credit: credit(c, sel.inv, [m.id]) };
-    }
-    case "awaiting": {
-      const c = configFor(project, sel.inv);
-      return { crumb: [invCrumb(sel.inv), { label: "Measurements" }, { label: sel.id }], meta: "awaiting data", actions: [],
-        body: { kind: "missing", title: "Not recorded yet", description: `Waiting for ${sel.id} from ${sel.proposal.dataFrom}. Attach the requested measurement through the SDK to continue.` }, credit: credit(c, sel.inv, []) };
-    }
-    case "fit": {
-      const c = configFor(project, sel.inv), ctx = { config: c, inv: sel.inv }, fit = sel.fit, view = sel.view ?? "fit";
-      const crumb = sel.view ? [invCrumb(sel.inv), { label: `Fit #${fit.n}`, id: ids.fit(sel.inv, fit) }, { label: VIEW_LABEL[view] }] : [invCrumb(sel.inv), { label: `Fit #${fit.n}` }];
-      const meta = fit.state === "running" ? `running · ${fit.evals} evals` : view === "landscape" && fit.landscape
-        ? `${fit.landscape.xs.length - 1} × ${fit.landscape.ys.length - 1} · ${fit.landscape.held} held` : `${fit.evals} evals · χ²/N ${fit.chi2N.toFixed(2)}`;
-      let body: MainModel["body"];
-      if (view === "landscape") { const chart = landscapeChart(c, fit); body = chart ? { kind: "panels", panels: [{ charts: [chart] }] } : { kind: "missing", title: "Not recorded yet", description: "No landscape recorded for this fit" }; }
-      else if (view === "residuals") {
-        const panels = residualPanels(ctx, fit);
-        body = panels.length ? { kind: "panels", panels } : { kind: "missing", title: "Not recorded yet", description: "Residuals need the fit's curve, which is not recorded for this fit" };
-      }
-      else if (view === "envelope") body = { kind: "panels", panels: envelopePanels(ctx, fit) };
-      else if (view === "frequency") body = { kind: "panels", panels: frequencyPanels(ctx, fit) };
-      else if (view === "zoom:edges") body = { kind: "panels", panels: edgePanels(ctx, fit), columns: 2 };
-      else body = { kind: "panels", panels: fitPanels(ctx, fit) };
-      return { crumb, meta, actions: [], body, credit: credit(c, sel.inv, fit.measurements, ` · fit #${fit.n}`) };
-    }
-    case "sensitivity": {
-      const c = configFor(project, sel.inv), id = sel.fit.identification;
-      if (!sel.fit.sensitivity && id) {
-        return { crumb: [invCrumb(sel.inv), { label: "Sensitivity" }], meta: `${id.identified.length} of ${id.identified.length + id.nonIdentified.length} identified · at Fit #${sel.fit.n}`, actions: [],
-          body: { kind: "missing", title: "Not recorded yet", description: `Identified: ${id.identified.join(", ") || "none"}. Not identified: ${id.nonIdentified.join(", ") || "none"}. Singular values and directions are not recorded.` },
-          credit: credit(c, sel.inv, sel.fit.measurements, ` · fit #${sel.fit.n}`) };
-      }
-      return { crumb: [invCrumb(sel.inv), { label: "Sensitivity" }], meta: `rank ${rankOf(sel.fit.sensitivity!)} of ${sel.fit.sensitivity!.names.length} · at Fit #${sel.fit.n}`, actions: [],
-        body: { kind: "panels", panels: sensitivityPanels(sel.fit) }, credit: credit(c, sel.inv, sel.fit.measurements, ` · fit #${sel.fit.n}`) };
-    }
-    case "proposal": {
-      const c = configFor(project, sel.inv), p = sel.proposal;
-      return { crumb: [invCrumb(sel.inv), { label: proposalLabel({ ...p, fields: displayedFields(s, sel.inv, p) }) }], meta: `${p.status} · ${experimentsUsed(sel.inv) + (p.status === "proposed" ? 1 : 0)} / ${c.budgets.maxExperiments} experiments`, actions: [],
-        body: { kind: "decision", cards: [summarySection(s, c, sel.inv, p), candidatesSection(s, c, sel.inv, p), reasoningSection(c, p)] }, credit: "" };
-    }
-    case "truth": return { crumb: [invCrumb(sel.inv), { label: "Ground truth" }], meta: "Revealed after outcome", actions: [],
-      body: { kind: "panels", panels: truthPanels(sel.inv.reveal!) }, credit: "Synthetic: truth was hidden from the agent until the outcome." };
-    case "validate": {
-      const c = configFor(project, sel.inv), v = sel.inv.validation;
-      if (v.state === "needs-data") return { crumb: [invCrumb(sel.inv), { label: "Validate" }], meta: "needs data", actions: [], body: { kind: "missing", title: "Not recorded yet", description: sel.inv.measurements.some((m) => m.split === "test") ? "Held-out measurements are present; no validation check recorded yet" : "Needs a held-out measurement" }, credit: credit(c, sel.inv, []) };
-      if (v.state === "summary") {
-        const fit = latestFit(sel.inv);
-        const predicted = fit && v.measurements.filter((id) => fit.curves[id]);
-        if (fit && predicted?.length) return { crumb: [invCrumb(sel.inv), { label: "Validate" }], meta: `χ²/N ${v.chi2N.toFixed(2)} · ${v.passed ? "passed" : "failed"}`, actions: [],
-          body: { kind: "panels", panels: predicted.flatMap((id) => validationPanels({ config: c, inv: sel.inv }, fit, id, fit.curves[id].fit, fit.curves[id].t)) }, credit: credit(c, sel.inv, predicted, ` · fit #${fit.n}`) };
-        return { crumb: [invCrumb(sel.inv), { label: "Validate" }], meta: `χ²/N ${v.chi2N.toFixed(2)} · ${v.passed ? "passed" : "failed"}`, actions: [],
-          body: { kind: "missing", title: "Not recorded yet", description: `Held-out check ${v.passed ? "passed" : "failed"}: χ²/N ${v.chi2N.toFixed(2)} (≤ ${sig(v.threshold, 3)})${v.measurements.length ? ` on ${v.measurements.join(", ")}` : ""}. The predicted series is not recorded.` },
-          credit: credit(c, sel.inv, v.measurements) };
-      }
-      const fit = sel.inv.fits.find((f) => f.n === v.fit)!;
-      return { crumb: [invCrumb(sel.inv), { label: "Validate" }], meta: `χ²/N ${v.chi2N.toFixed(2)} on ${v.measurement}`, actions: [],
-        body: { kind: "panels", panels: validationPanels({ config: c, inv: sel.inv }, fit, v.measurement, v.predicted) }, credit: credit(c, sel.inv, [v.measurement], ` · fit #${fit.n}`) };
-    }
+    default: return investigationPage(s, project, sel);
   }
+}
+
+const gap = (description: string): Section["blocks"][number] => ({ kind: "missing", title: "Not recorded yet", description });
+const recordedPanels = (panels: ChartPanel[], description: string): ChartPanel[] =>
+  panels.length ? panels : [{ charts: [{ kind: "missing", title: "Not recorded yet", description }] }];
+
+function validationCard(c: ProjectConfig, inv: Investigation): InvestigationCard {
+  const v = inv.validation, id = anchor(inv, "validate"), ctx = { config: c, inv };
+  if (v.state === "needs-data") return { id, heading: "Validate", caption: "Held-out check",
+    blocks: [gap(inv.measurements.some(m => m.split === "test") ? "Held-out measurements are present; no validation check recorded yet" : "Needs a held-out measurement")] };
+  const caption = `χ²/N ${sig(v.chi2N, 3)} (≤ ${sig(v.threshold, 3)}) · ${(v.state === "summary" ? v.passed : v.state === "passed") ? "passed" : "failed"}`;
+  if (v.state === "summary") {
+    const fit = latestFit(inv);
+    const panels = fit ? v.measurements.filter(id => fit.curves[id] && inv.measurements.some(m => m.id === id))
+      .flatMap(id => validationPanels(ctx, fit, id, fit.curves[id].fit, fit.curves[id].t)) : [];
+    return { id, heading: "Validate", caption, blocks: panels.length ? [] : [gap("The held-out predicted series is not recorded.")], panels };
+  }
+  const fit = inv.fits.find(f => f.n === v.fit);
+  return { id, heading: "Validate", caption, blocks: [],
+    panels: recordedPanels(fit && inv.measurements.some(m => m.id === v.measurement)
+      ? validationPanels(ctx, fit, v.measurement, v.predicted) : [], "The validation fit or measurement is not recorded.") };
+}
+
+/** One investigation page. Old leaf selections change the target, never the page. */
+export function investigationPage(s: State, project: Project, sel: Exclude<Sel, {kind:"config"}>): MainModel {
+  const inv = sel.inv, c = configFor(project, inv), rounds = investigationRounds(inv);
+  const target = investigationTarget(inv, sel, rounds), fit = latestFit(inv), latest = rounds.at(-1)!;
+  const finished = ["validated", "inconclusive"].includes(stateOf(inv));
+  const proposal = [...inv.proposals].reverse().find(p => p.status === "proposed") ?? inv.proposals.at(-1);
+  const number = (v: number) => Number.isFinite(v) ? sig(v, 3) : "not recorded";
+  const diagnosis = fit ? [
+    `Fit #${fit.n} has χ²/N ${number(fit.chi2N)}.`,
+    fit.sensitivity?.combos.length ? `The data pins ${fit.sensitivity.combos.map(x => `${x.name} (${pct(x.logStd)})`).join(" and ")}.` : "",
+    fit.sensitivity?.nonIdentified.length ? `${fit.sensitivity.nonIdentified.join(", ")} remain on a ridge.` : "",
+    fit.identification ? `Identified: ${fit.identification.identified.join(", ") || "none"}; not identified: ${fit.identification.nonIdentified.join(", ") || "none"}.` : "",
+  ].filter(Boolean).join(" ") : "No converged fit recorded yet.";
+  let summary: InvestigationCard = proposal && !finished
+    ? { ...summarySection(s, c, inv, proposal), id: anchor(inv, "summary") }
+    : { id: anchor(inv, "summary"), heading: "Summary", caption: statusText(inv).text, blocks: [] };
+  if (!finished) {
+    if (summary.blocks[0]?.kind === "text") summary.blocks[0].text = diagnosis + " " + summary.blocks[0].text;
+    else summary.blocks.push({ kind: "text", lead: true, text: diagnosis + " " + statusText(inv).text });
+  } else {
+    const v = inv.validation, verdict = inv.state === "validated" ? "Validated" : "Inconclusive";
+    const check = v.state === "needs-data" ? "No held-out check recorded."
+      : `Held-out χ²/N ${number(v.chi2N)} (≤ ${number(v.threshold)}) on ${v.state === "summary" ? v.measurements.join(", ") || "unrecorded data" : v.measurement}.`;
+    const params = fit ? c.params.map(p => {
+      const std = fit.sensitivity?.marginal[p.name], bounded = fit.sensitivity?.identified.includes(p.name);
+      return `${p.name} ${number(fit.params[p.name])} ${p.unit}${bounded && std != null && Number.isFinite(std) ? " " + plusMinus(c, p.name, std) : !fit.free.includes(p.name) ? " (fixed)" : " (uncertainty not recorded or unbounded)"}`.trim();
+    }).join("; ") : "No converged fit recorded.";
+    summary = { ...summary, caption: `${rounds.length} round${rounds.length === 1 ? "" : "s"} · ${experimentsUsed(inv)} / ${c.budgets.maxExperiments} experiments`,
+      blocks: [{ kind: "text", text: verdict, lead: true, tone: inv.state === "validated" ? "ok" : "warn" },
+        { kind: "text", text: check + " " + params, lead: true }] };
+  }
+  const outcome: InvestigationCard[] = finished || sel.kind === "validate" || sel.kind === "truth"
+    ? [validationCard(c, inv), ...(inv.reveal ? [{ id: anchor(inv, "truth"), heading: "Ground truth", caption: "Revealed after the outcome",
+      blocks: [{ kind: "text" as const, text: "Synthetic: truth was hidden from the agent until the outcome." }], panels: truthPanels(inv.reveal) }] : [])] : [];
+  const pageRounds = [...rounds].reverse().map(r => {
+    const f = r.fit, id = roundAnchor(inv, r), ctx = { config: c, inv };
+    const title = `Round ${r.n}`, proposals = r.proposals.map(p => {
+      const candidates = candidatesSection(s, c, inv, p), reasoning = reasoningSection(c, p);
+      return { id: roundAnchor(inv, r, `proposal-${encodeURIComponent(p.id)}`), heading: `Proposal · ${proposalLabel(p)}`,
+        caption: `${p.status}${p.decidedBy ? " by " + p.decidedBy : ""} · ${candidates.caption}`,
+        blocks: [...candidates.blocks, { kind: "text" as const, text: `Reasoning · ${reasoning.caption}` }, ...reasoning.blocks] };
+    });
+    const data: InvestigationCard = { id: roundAnchor(inv, r, "data"), heading: "Data", caption: "Measurements for this round · expand a row to inspect its samples",
+      blocks: r.measurements.length ? [] : [gap("No measurements recorded for this round.")],
+      rows: r.measurements.map(m => ({ id: measurementAnchor(inv, r, m.id), label: m.id,
+        meta: `${m.split === "train" ? "train" : "held out"} · ${int(m.output.length)} samples · ${number(m.rate)} Hz`,
+        open: target === measurementAnchor(inv, r, m.id), panels: measurementPanels(c, m) })) };
+    const at = f ? `At Fit #${f.n}` : "";
+    const parameters: InvestigationCard | null = f ? { id: roundAnchor(inv, r, "parameters"), heading: "Parameters", caption: at,
+      blocks: [{ kind: "table", rows: paramsTable(c, f) }] } : null;
+    const identifiability: InvestigationCard | null = f ? { id: roundAnchor(inv, r, "identifiability"), heading: "Identifiability",
+      caption: f.sensitivity ? `Rank ${rankOf(f.sensitivity)} of ${f.sensitivity.names.length} · ${at}` : at,
+      blocks: f.sensitivity ? [] : [gap(f.identification
+        ? `Identified: ${f.identification.identified.join(", ") || "none"}. Not identified: ${f.identification.nonIdentified.join(", ") || "none"}. Singular values and directions are not recorded.`
+        : "No singular values or directions recorded for this fit.")],
+      panels: f.sensitivity ? sensitivityPanels(f) : [] } : null;
+    const chart = f && landscapeChart(c, f);
+    const landscape: InvestigationCard | null = f ? { id: roundAnchor(inv, r, "landscape"), heading: "Landscape", caption: at,
+      blocks: chart ? [] : [gap("No landscape recorded for this fit.")], panels: chart ? [{ charts: [{ ...chart, height: 220 }] }] : [] } : null;
+    const extras: InvestigationCard[] = f ? [
+      ["envelope", "Envelope", envelopePanels(ctx, f)], ["frequency", "Frequency", frequencyPanels(ctx, f)], ["zoom:edges", "Edges", edgePanels(ctx, f)],
+    ].filter(([, , panels]) => (panels as ChartPanel[]).length).map(([part, heading, panels]) => ({
+      id: roundAnchor(inv, r, part as string), heading: heading as string, caption: at, blocks: [], panels: panels as ChartPanel[],
+    })) : [];
+    const quality = f ? `Fit #${f.n} · χ²/N ${number(f.chi2N)}` : "Waiting for a fit";
+    const decision = r.proposals.map(p => `${proposalLabel(p)} ${p.status}${p.decidedBy ? " by " + p.decidedBy : ""}`).join(" · ");
+    return { id, title, caption: [quality, decision || (finished && r === latest ? "outcome recorded" : f?.state)].filter(Boolean).join(" → "),
+      open: r === latest || target === id || target.startsWith(id + "-"), data,
+      fit: f ? { id: roundAnchor(inv, r, "fit"), heading: `Fit #${f.n}`,
+        caption: `${f.state} · χ²/N ${number(f.chi2N)} · ${int(f.evals)} evals · ${f.starts} starts${f.basins == null ? "" : " → " + f.basins + " basins"}`,
+        blocks: Object.entries(f.lag1).map(([id, rho]) => ({ kind: "text" as const,
+          text: `${id}: ${Math.abs(rho) > .3 ? "structured" : "white"} residuals (ρ₁ ${number(rho)})` })),
+        panels: recordedPanels(fitPanels(ctx, f), "No fitted data recorded.") } : null,
+      parameters, identifiability, landscape, proposals, extras };
+  });
+  const jumps: InvestigationBody["jumps"] = [
+    { label: "Summary", target: summary.id },
+    ...(outcome.length ? [{ label: "Outcome", target: outcome[0].id }] : []),
+    ...pageRounds.flatMap((r, i) => [{ label: r.title, target: r.id }, ...(!finished && i === 0 ? [
+      ...(r.fit ? [{ label: r.fit.heading, target: r.fit.id }] : []),
+      ...(r.identifiability ? [{ label: "Identifiability", target: r.identifiability.id }] : []),
+      ...r.proposals.map(p => ({ label: "Proposal", target: p.id })),
+    ] : [])]),
+  ];
+  return { crumb: [{ label: project.name }, { label: investigationLabel(project, inv) }],
+    meta: `${statusText(inv).text} · ${experimentsUsed(inv)} / ${c.budgets.maxExperiments} experiments`, actions: [], credit: "",
+    body: { kind: "investigation", pageId: inv.id, selectionId: s.selected[project.id] ?? inv.id, target, jumps, summary, outcome, rounds: pageRounds } };
 }

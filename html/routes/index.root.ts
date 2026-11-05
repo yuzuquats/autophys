@@ -7,6 +7,7 @@
  */
 import { Cookbook } from "@tento-cookbook/lib.ts";
 import { daemon, type Source } from "../client/api.ts";
+import { selectionAddress } from "./selection-address.ts";
 import { Controller } from "../client/controller.ts";
 import { fixtures } from "../client/fixtures/source.ts";
 import { Store } from "../client/store.ts";
@@ -79,6 +80,15 @@ const app: Cookbook.App = {
     const removeStyles = shell.addStyles(autophysStyles(shell.scope) + placeholderStyles(shell.scope) + `
       html[data-ck-stage="tour"] body, html[data-ck-stage="app"] body { overflow: clip; }
     `);
+    let pendingAddress = selectionAddress(location.search, location.hash);
+    const addressChanged = () => {
+      pendingAddress = selectionAddress(location.search, location.hash);
+      if (pendingAddress && ctl.store.snapshot()) {
+        const id = pendingAddress; pendingAddress = null;
+        ctl.handle({ kind: "select", id });
+      }
+    };
+    window.addEventListener("hashchange", addressChanged);
     const handle: typeof ctl.handle = (intent) => {
       if (intent.kind === "select" && intent.id === "devices") {
         ctl.handle(intent);
@@ -106,6 +116,9 @@ const app: Cookbook.App = {
         return;
       }
       ctl.handle(intent);
+      if (intent.kind === "select" && ctl.view().sidebar.selectedId === intent.id && intent.id !== "devices") {
+        history.replaceState(history.state, "", location.pathname + location.search + "#" + encodeURIComponent(intent.id));
+      }
     };
     const hydrate = (host: HTMLElement) => { hydrateProjectSetup(host); hydrateComponents(host, handle); };
     const views = [
@@ -115,6 +128,10 @@ const app: Cookbook.App = {
     ];
     // A record arrived or the selection moved: every view re-reads its model (main with FLIP).
     const redraw = () => {
+      if (pendingAddress && ctl.store.snapshot()) {
+        const id = pendingAddress; pendingAddress = null;
+        ctl.handle({ kind: "select", id });
+      }
       const view = ctl.view();
       const panels = shell.slots.main.closest<HTMLElement>(".ck-panels");
       const setupOnly = view.main.body.kind === "project-setup" && view.sidebar.selectedId !== "devices";
@@ -134,7 +151,7 @@ const app: Cookbook.App = {
     let stopSignIn: (() => void) | undefined;
     if (SIGNED_OUT) stopSignIn = signInInPlace(() => { SIGNED_OUT = false; start(); redraw(); });
     else start();
-    teardown = () => { guided?.dispose(); guided = null; stopSignIn?.(); clearInterval(poll); unsubscribe(); views.forEach((v) => v.dispose()); removeStyles(); };
+    teardown = () => { window.removeEventListener("hashchange", addressChanged); guided?.dispose(); guided = null; stopSignIn?.(); clearInterval(poll); unsubscribe(); views.forEach((v) => v.dispose()); removeStyles(); };
   },
   unmount() {
     teardown?.();

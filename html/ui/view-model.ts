@@ -113,6 +113,7 @@ export type MainBody =
   | { kind: "configuration"; parameters: RangesChart; experiments: Section[]; sections: Section[] }
   /** Cards stacked in one column, each a Section with its caption (a proposal: candidates, then reasoning). */
   | { kind: "decision"; cards: Section[] }
+  | InvestigationBody
   | { kind: "panels"; panels: ChartPanel[]; columns?: number };
 
 export type MainModel = {
@@ -177,4 +178,23 @@ export type DetailsModel = {
   actions?: Action[];
   /** One quiet line after everything else (provenance). */
   footnote?: string;
+};
+
+/** A document card; collapsible measurement rows live inside their round's Data card. */
+export type InvestigationCard = Section & {
+  id: string;
+  panels?: ChartPanel[];
+  rows?: { id: string; label: string; meta: string; open: boolean; panels: ChartPanel[] }[];
+};
+export type InvestigationRound = {
+  id: string; title: string; caption: string; open: boolean;
+  data: InvestigationCard; fit: InvestigationCard | null;
+  parameters: InvestigationCard | null; identifiability: InvestigationCard | null;
+  landscape: InvestigationCard | null; proposals: InvestigationCard[];
+  extras: InvestigationCard[];
+};
+export type InvestigationBody = {
+  kind: "investigation"; pageId: string; selectionId: string; target: string;
+  jumps: { label: string; target: string }[];
+  summary: InvestigationCard; outcome: InvestigationCard[]; rounds: InvestigationRound[];
 };

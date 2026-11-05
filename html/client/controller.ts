@@ -5,7 +5,7 @@
  */
 import { approvalsPath, type Snapshot } from "./api.ts";
 import type { Investigation, Project, Workspace } from "./domain.ts";
-import { latestFit, proposalLabel, statusText } from "./derive/shared.ts";
+import { latestFit, proposalLabel, statusText, decisionProposal } from "./derive/shared.ts";
 import {
   ancestors,
   connectionFailure,
@@ -121,7 +121,10 @@ export function reduce(
     sel.copyStatus && (intent.kind === "switch" || intent.kind === "select")
   ) sel = without(sel, ["copyStatus"]) as Selection;
   if (!project) return none(sel);
-  const at = parseSel(project, sel.selected[project.id] ?? "");
+  const selected = parseSel(project, sel.selected[project.id] ?? "");
+  const proposal = selected && "inv" in selected ? decisionProposal(selected.inv, selected) : null;
+  const at = proposal && selected && "inv" in selected
+    ? { kind: "proposal" as const, inv: selected.inv, proposal } : selected;
   switch (intent.kind) {
     case "select": {
       if (!parseSel(project, intent.id)) return none(sel);
@@ -190,18 +193,6 @@ export function reduce(
         };
       }
       const inv = at && "inv" in at ? at.inv : null;
-      if (inv && name === "export-investigation") {
-        return {
-          selection: sel,
-          effects: [
-            json(`autophys-${inv.id}.json`, {
-              demo: snap.source === "fixture",
-              source: snap.source,
-              investigation: inv,
-            }),
-          ],
-        };
-      }
       if (inv && name === "report") {
         return {
           selection: sel,

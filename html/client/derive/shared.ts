@@ -38,6 +38,7 @@ export const draftKey = (inv: Investigation, p: Proposal, field: string) => `${i
 export type Sel =
   | { kind: "config"; project: Project }
   | { kind: "investigation"; inv: Investigation }
+  | { kind: "data"; inv: Investigation }
   | { kind: "measurement"; inv: Investigation; m: Measurement }
   | { kind: "awaiting"; inv: Investigation; proposal: Proposal; id: string }
   | { kind: "fit"; inv: Investigation; fit: Fit; view: View | null }
@@ -77,6 +78,7 @@ export function parseSel(project: Project, id: string): Sel | null {
   const inv = project.investigations.find((i) => i.id === invId);
   if (!inv) return null;
   if (part == null) return { kind: "investigation", inv };
+  if (part === "data" && !rest.length) return { kind: "data", inv };
   if (part === "data" && rest.length) {
     const mid = rest.join("/"), m = inv.measurements.find((x) => x.id === mid);
     if (m) return { kind: "measurement", inv, m };
@@ -102,9 +104,7 @@ export function parseSel(project: Project, id: string): Sel | null {
 export function defaultSelection(project: Project): string {
   const inv = project.investigations[0];
   if (!inv) return ids.config(project);
-  const fit = latestFit(inv);
-  if (!fit) return ids.inv(inv);
-  return project.id === "bench-oscillators" ? ids.view(inv, fit, "landscape") : ids.view(inv, fit, "fit");
+  return ids.inv(inv);
 }
 
 /** The rows a selection sits under, so selecting opens them. */
@@ -155,4 +155,12 @@ export function statusText(inv: Investigation): { text: string; tone?: "ok" | "r
     case "validated": return { text: `Validated${inv.validation.state === "passed" || inv.validation.state === "failed" ? ` ${pct(inv.validation.worst.relative)}` : ""} · ${inv.updated}`, tone: "ok" };
     case "inconclusive": return { text: `Inconclusive · ${inv.updated}`, tone: "warn" };
   }
+}
+
+/** Details and controller actions must choose the same decision on every investigation anchor. */
+export function decisionProposal(inv: Investigation, selection?: Sel | null): Proposal | null {
+  if (inv.state === "validated" || inv.state === "inconclusive") return null;
+  if (selection?.kind === "proposal") return selection.proposal;
+  return [...inv.proposals].reverse().find(p => p.status === "proposed")
+    ?? inv.proposals.at(-1) ?? null;
 }
