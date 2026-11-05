@@ -208,7 +208,7 @@ Deno.test("daemon: an edit posts every proposed setting, edited ones replaced, a
   assertEquals([p.status, p.decidedBy, p.fields[0].value, p.fields[0].original], ["approved", "james", 1.5, 1]);
   d.emit(9, { id: env.id, investigation: "inv_1", seq: 8, kind: "proposal", ts: T0 + 600, payload: env.payload });
   assertEquals(store.applied.length, 1, "the stream echo of the POST's record applies once");
-  assertEquals(ctl.view().details.actions, undefined, "the daemon records no withdraw, so none is offered");
+  assertEquals(ctl.view().details.actions?.map(a => a.name), ["report"], "the daemon records no withdraw, so only Report is offered");
 });
 
 Deno.test("daemon: records that arrive out of order still all apply", async () => {
@@ -361,7 +361,7 @@ Deno.test("daemon: reject posts a rejected envelope and does not offer fixture-o
   ctl.handle({ kind: "action", name: "reject" });
   await settle(); await settle();
   assertEquals(store.snapshot()!.workspace.projects[0].investigations[0].proposals[0].status, "rejected");
-  assertEquals(ctl.view().details.actions, undefined);
+  assertEquals(ctl.view().details.actions?.map(a => a.name), ["report"]);
   store.close();
 });
 

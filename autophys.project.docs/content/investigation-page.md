@@ -55,3 +55,25 @@ target. No push or deployment is part of this work.
 Task-board CLI on yuzuquats is unavailable: tsh.lona reports "lona: No such file or
 directory". Live plan/status fallback is in the workstream's external evidence.
 No agent-board or other-thread messages are sent, per the task brief.
+
+## Implementation receipt — 2026-11-04
+
+Implemented on yuzuquats master: 18eaabf (round page, shared Details/action context,
+legacy selections), 1463c33 (regressions), b95f1d3 (Report and browser driver),
+c6fff39 (chart widths). The final forward fix handles the scroll-clamped final
+jump pill. Configuration keeps its shared provenance footer; investigation pages
+omit it because Details carries full provenance. Existing sidebar children remain.
+
+The operator narrowed verification to route typechecking and requested immediate
+delivery. No further tests, browsers, captures or tour runs are authorized.
+Before that change, a clean archive at 1463c33 passed 109 html tests and route
+typechecking; the later run found two old assertions expecting no actions where
+Report is now retained, corrected without rerunning. Browser acceptance captured
+awaiting-1440.png and found final-card jump highlighting when scroll clamps;
+fixed by treating the visible final section as current at the bottom. Acceptance
+and tour completion are deferred. Partial evidence is in
+fleet/evidence/autophys/investigation-page-20261104/yuzuquats/ on yuzuquats.
+
+The operator subsequently authorized immediate deployment through
+~/.cache/autophys/deploy-notest.sh from a local clone of the completed SHA,
+after any running invocation finishes. No source push is authorized.

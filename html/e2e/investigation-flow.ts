@@ -62,7 +62,7 @@ await withHeadless(async browser => {
     await settle(p);
     check(await p.evaluate(() => {
       const viewer = document.querySelector(".ap-viewer")!, card = viewer.querySelector<HTMLElement>('[id$="proposal-p1"]')!;
-      return Math.abs(card.getBoundingClientRect().top - viewer.getBoundingClientRect().top) < 30
+      return card.getBoundingClientRect().top < viewer.getBoundingClientRect().bottom && card.getBoundingClientRect().bottom > viewer.getBoundingClientRect().top
         && document.querySelector("[data-ap-jump][aria-current]")?.textContent === "Proposal";
     }), width + ": Proposal pill scrolls and highlights the matching card");
     await screenshot(p, "proposal-anchor-" + width + ".png");

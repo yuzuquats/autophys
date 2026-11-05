@@ -232,6 +232,16 @@ export class AutophysMain {
       const y = target.getBoundingClientRect().top - top;
       if (y <= 48 && y >= nearest) { nearest = y; active = button; }
     }
+    // The last card can be shorter than the viewport, so its anchor clamps at the
+    // bottom of the scroller. It still owns the highlighted pill while visible.
+    if (viewer.scrollHeight > viewer.clientHeight + 2 && viewer.scrollTop + viewer.clientHeight >= viewer.scrollHeight - 2) {
+      for (const button of buttons) {
+        const target = this.host.querySelector<HTMLElement>(`[id="${CSS.escape(button.dataset.apJump!)}"]`);
+        if (!target?.getClientRects().length) continue;
+        const rect = target.getBoundingClientRect();
+        if (rect.bottom > top && rect.top < viewer.getBoundingClientRect().bottom) active = button;
+      }
+    }
     for (const button of buttons) {
       if (button === active) button.setAttribute("aria-current", "location");
       else button.removeAttribute("aria-current");
