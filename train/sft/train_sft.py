@@ -124,9 +124,11 @@ def guard_dedicated(allow: bool, max_seconds: float | None, on_deadline):
     if max_seconds:
 
         def deadline():
-            print(json.dumps({"event": "deadline", "after_s": max_seconds}), flush=True)
             try:
-                on_deadline()
+                try:
+                    print(json.dumps({"event": "deadline", "after_s": max_seconds}), flush=True)
+                finally:
+                    on_deadline()
             finally:
                 os._exit(3)
 
@@ -184,8 +186,13 @@ def live_client(a):
                 except BaseException as exc:
                     errors.append(exc)
             for exc in errors:
-                print(json.dumps({"event": "cleanup_failed", "error_type": type(exc).__name__}),
-                      file=sys.stderr, flush=True)
+                try:
+                    print(json.dumps({"event": "cleanup_failed", "error_type": type(exc).__name__}),
+                          file=sys.stderr, flush=True)
+                except BaseException:
+                    # A broken diagnostic pipe must not replace the primary
+                    # error or stop another resource's cleanup.
+                    pass
 
     primary = None
     try:

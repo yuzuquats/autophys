@@ -191,3 +191,30 @@ def test_invalid_dedicated_setup_acquires_nothing(lab):
     i = lab.argv.index("--max-seconds")
     with pytest.raises(SystemExit): sft.main(lab.argv[:i] + lab.argv[i+2:])
     assert "service" not in lab.calls
+
+
+def test_broken_cleanup_diagnostic_preserves_primary(lab, monkeypatch):
+    lab.fault.update(at="train", cleanup="both")
+    original_print = print
+    def broken(*args, **kwargs):
+        if args and '"event": "cleanup_failed"' in str(args[0]):
+            raise BrokenPipeError("diagnostic pipe closed")
+        return original_print(*args, **kwargs)
+    monkeypatch.setattr(sft, "print", broken, raising=False)
+    with pytest.raises(PrimaryError, match="train"):
+        sft.main(lab.argv)
+    assert lab.calls.count("client-close") == lab.calls.count("service-close") == lab.calls.count("deactivate") == 1
+
+
+def test_broken_deadline_diagnostic_cannot_skip_teardown_or_exit(lab, monkeypatch):
+    lab.fault["at"] = "deadline"
+    original_print = print
+    def broken(*args, **kwargs):
+        if args and '"event": "deadline"' in str(args[0]):
+            raise BrokenPipeError("deadline pipe closed")
+        return original_print(*args, **kwargs)
+    monkeypatch.setattr(sft, "print", broken, raising=False)
+    with pytest.raises(DeadlineExit):
+        sft.main(lab.argv)
+    assert lab.calls.count("client-close") == lab.calls.count("service-close") == lab.calls.count("deactivate") == 1
+    assert lab.service_client.deployment_from_run is lab.original
