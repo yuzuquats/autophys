@@ -12,7 +12,7 @@ default to thinking on. The patched template:
 It then *verifies* that the SDK's message shape renders byte-identically to
 the training rendering (``system`` role, thinking off), using the real SDK
 prompt from ``data/train.jsonl``, and writes ``serving/<model>.jinja``.
-Downloads only the public template file from Hugging Face.
+Reads only prepared, hash-identified local model assets.
 """
 
 from __future__ import annotations
@@ -20,7 +20,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-import urllib.request
 from pathlib import Path
 
 from render import render_prompt, template_env
@@ -36,15 +35,9 @@ PATCHES = [
 ]
 
 
-def fetch(model: str) -> str:
-    for name in ("chat_template.jinja",):
-        try:
-            with urllib.request.urlopen(f"https://huggingface.co/{model}/resolve/main/{name}", timeout=60) as r:
-                return r.read().decode()
-        except OSError:
-            pass
-    with urllib.request.urlopen(f"https://huggingface.co/{model}/resolve/main/tokenizer_config.json", timeout=60) as r:
-        return json.load(r)["chat_template"]
+def fetch(model: str, assets=None) -> str:
+    from model_assets import ModelAssets
+    return (assets or ModelAssets(model)).template
 
 
 def patch(text: str) -> str:
@@ -59,20 +52,23 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     p.add_argument("--model", default="Qwen/Qwen3.6-35B-A3B")
     p.add_argument("--data", type=Path, default=HERE / "data" / "train.jsonl")
+    p.add_argument("--model-assets", type=Path, help="prepared model_assets.py directory (no network)")
     a = p.parse_args(argv)
-    upstream = fetch(a.model)
+    from model_assets import ModelAssets
+    assets = ModelAssets(a.model, a.model_assets)
+    upstream = fetch(a.model, assets)
     patched = patch(upstream)
     rows = [json.loads(line) for line in a.data.open()]
     for row in rows:
         system, user = row["messages"][0]["content"], row["messages"][1]["content"]
         trained = render_prompt(upstream, [{"role": "system", "content": system}, {"role": "user", "content": user}],
-                                enable_thinking=False)
-        served = render_prompt(patched, [{"role": "developer", "content": system}, {"role": "user", "content": user}])
+                                enable_thinking=False, **assets.special)
+        served = render_prompt(patched, [{"role": "developer", "content": system}, {"role": "user", "content": user}], **assets.special)
         assert served == trained, "patched template does not reproduce the training prompt"
         assert system.strip() in served and user.strip() in served
     # Unpatched behaviour, for the record.
     try:
-        up = render_prompt(upstream, [{"role": "developer", "content": "S"}, {"role": "user", "content": "U"}])
+        up = render_prompt(upstream, [{"role": "developer", "content": "S"}, {"role": "user", "content": "U"}], **assets.special)
         upstream_note = "renders developer" + ("" if "S" in up else " but DROPS its content")
     except Exception as e:  # noqa: BLE001 - jinja raise_exception
         upstream_note = f"rejects developer: {e}"

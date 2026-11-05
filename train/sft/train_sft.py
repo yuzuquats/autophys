@@ -2,7 +2,7 @@
 """LoRA SFT of an autophys decision policy on Baseten Loops.
 
 ``--dry-run`` (the default) is offline: it renders every row with the base
-model's own chat template and tokenizer (both public, from Hugging Face),
+model's own chat template and tokenizer from verified local model assets,
 checks lengths, and prints the trained-token share, the schedule and the
 token totals the cost estimate is based on. It never contacts Baseten.
 
@@ -30,9 +30,9 @@ import os
 import random
 import sys
 import time
-import urllib.request
 from pathlib import Path
 
+from model_assets import ModelAssets
 from patch_chat_template import fetch
 from render import end_of_turn, render_prompt, special_tokens
 
@@ -50,21 +50,47 @@ def load(path: Path) -> list[tuple[str, str]]:
 
 
 class Encoder:
-    def __init__(self, model: str, tokenizer=None):
-        self.template = fetch(model)
-        self.special = special_tokens(model)
+    def __init__(self, model: str, tokenizer=None, assets=None):
+        if assets is None and tokenizer is not None:
+            # Existing transformer-based remote helpers already provide an
+            # acquired tokenizer. Read its own in-memory template/IDs; never
+            # acquire another mutable template behind its back.
+            from render import special_tokens_from_config
+            import hashlib
+            template = tokenizer.chat_template
+            if not isinstance(template, str):
+                raise ValueError("the supplied tokenizer needs one explicit chat template")
+            self.template = template
+            self.special = special_tokens_from_config(tokenizer.special_tokens_map)
+            self.end_of_turn = end_of_turn(template, **self.special)
+            self.encode = lambda text: list(tokenizer.encode(text, add_special_tokens=False))
+            self.identity = {"model": model, "source": "provided-tokenizer", "template_sha256": hashlib.sha256(template.encode()).hexdigest(),
+                             "tokenizer_sha256": hashlib.sha256(tokenizer.backend_tokenizer.to_str().encode()).hexdigest()}
+            self.remote_tokenizer = None
+            return
+        assets = assets or ModelAssets(model)
+        self.template = fetch(model, assets)
+        self.special = special_tokens(model, assets)
+        self.identity = assets.identity
         self.end_of_turn = end_of_turn(self.template, **self.special)
-        if tokenizer is None:  # offline: public tokenizer.json only
-            from tokenizers import Tokenizer
-            with urllib.request.urlopen(f"https://huggingface.co/{model}/resolve/main/tokenizer.json", timeout=120) as r:
-                tok = Tokenizer.from_str(r.read().decode())
-            self.encode = lambda s: tok.encode(s, add_special_tokens=False).ids
-        else:
-            self.encode = lambda s: tokenizer.encode(s, add_special_tokens=False)
+        self.encode = assets.encode
+        # For the existing transformer-based backend, reject inconsistent IDs;
+        # local Loops preparation uses verify_tokenizer after owned acquisition.
+        self.remote_tokenizer = tokenizer
+
+    def verify_tokenizer(self, tokenizer, rows):
+        for system, user, answer in rows:
+            prompt = render_prompt(self.template, [{"role": "system", "content": system}, {"role": "user", "content": user}],
+                                   enable_thinking=False, **self.special)
+            for text in (prompt, answer + self.end_of_turn):
+                if list(tokenizer.encode(text, add_special_tokens=False)) != self.encode(text):
+                    raise ValueError("provider tokenizer differs from the planned local model assets; refusing training")
 
     def tokens(self, system: str, user: str, answer: str) -> tuple[list[int], list[int]]:
         prompt = render_prompt(self.template, [{"role": "system", "content": system}, {"role": "user", "content": user}],
                                enable_thinking=False, **self.special)
+        if self.remote_tokenizer is not None:
+            self.verify_tokenizer(self.remote_tokenizer, [(system, user, answer)])
         return self.encode(prompt), self.encode(answer + self.end_of_turn)
 
 
@@ -229,6 +255,8 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     p.add_argument("--base-model", default="Qwen/Qwen3.6-35B-A3B")
     p.add_argument("--data", type=Path, default=HERE / "data")
+    p.add_argument("--model-assets", type=Path, help="prepared local model assets; no implicit downloads")
+    p.add_argument("--expected-assets-sha256", help="planner manifest digest required for a live launch")
     p.add_argument("--rank", type=int, default=32)
     p.add_argument("--max-seq-len", type=int, default=2048)
     p.add_argument("--lr", type=float, default=2e-4)
@@ -262,10 +290,15 @@ def main(argv=None) -> int:
             p.error("--allow-dedicated needs --max-seconds")
     if a.max_seconds is not None and (not math.isfinite(a.max_seconds) or a.max_seconds <= 0):
         p.error("--max-seconds must be finite and above zero")
+    # Validate every local input before creating a remote service/training client.
+    assets = ModelAssets(a.base_model, a.model_assets)
+    if a.expected_assets_sha256 and assets.identity["manifest_sha256"] != a.expected_assets_sha256:
+        p.error("model asset identity changed after planning; refusing remote acquisition")
+    enc = Encoder(a.base_model, assets=assets)
     started = time.time()
     with live_client(a) as client:
-        tokenizer = client.get_tokenizer() if client is not None else None
-        enc = Encoder(a.base_model, tokenizer)
+        if client is not None:
+            enc.verify_tokenizer(client.get_tokenizer(), train + val)
         tr = [enc.tokens(*x) for x in train]
         va = [enc.tokens(*x) for x in val]
         lengths = [len(p_) + len(a_) for p_, a_ in tr + va]
@@ -278,7 +311,7 @@ def main(argv=None) -> int:
         val_tokens = sum(len(p_) + len(a_) for p_, a_ in va)
         evals = total // a.eval_every + 2
         summary = {
-            "base_model": a.base_model, "end_of_turn": enc.end_of_turn, "rows": {"train": len(tr), "validation": len(va)},
+            "base_model": a.base_model, "model_assets": enc.identity, "end_of_turn": enc.end_of_turn, "rows": {"train": len(tr), "validation": len(va)},
             "tokens_per_sequence": {"min": min(lengths), "max": max(lengths)},
             "trained_token_share": round(trained / seq_tokens, 4),
             "heldout_overlap": overlap,

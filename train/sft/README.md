@@ -43,7 +43,7 @@ evaluation and history. These scripts are its worker. All commands take
 | command | what it does |
 |---|---|
 | `autophys train dataset [--out DIR] [--train-seeds 0,1,2] [--case NAME]...` | Builds train/validation/held-out rows. `--backend local` (default) is offline and free. `--backend modal --usd-per-hour X --max-usd Y` builds one case per CPU container and writes byte-identical files (`modal_app.py::dataset_main`). Returns per-split rows and sha256 plus the system-prompt hash. |
-| `autophys train run --name N --base-model HF_ID --data DIR` | Always plans first: an offline dry run (token counts, schedule) written to `runs/N/manifest.json`. Trains only with `--live`. Any Hugging Face chat model works: the end-of-turn marker is read from the model's own template (`render.end_of_turn`), not hardcoded. |
+| `autophys train run --name N --base-model HF_ID --data DIR --model-assets DIR` | Always plans first: an offline dry run (token counts, schedule) written to `runs/N/manifest.json`. Trains only with `--live`. Any Hugging Face chat model works: the end-of-turn marker is read from the model's own template (`render.end_of_turn`), not hardcoded. |
 | `autophys train eval ...` | Held-out closed-loop benchmark, reason vs scripted (`eval_heldout.py`). For a Modal-trained adapter, `modal_app.py::eval_main` serves it on 127.0.0.1 inside one GPU container and runs the benchmark there (see below). |
 | `autophys train runs` | Every run manifest, newest first: status, backend, model, rows, budget, held-out scores. |
 
@@ -183,8 +183,14 @@ From the repository root, with Python 3.10 or newer:
 ```sh
 python3 -m venv .venv-train
 . .venv-train/bin/activate
-python -m pip install ./sdks/python baseten-loops tokenizers jinja2
+python -m pip install ./sdks/python baseten-loops
+python -m pip install -r train/sft/requirements-planning.txt
 export AUTOPHYS_TRAIN_PYTHON="$VIRTUAL_ENV/bin/python"
+# Deliberate public asset acquisition, separate from planning. Choose an
+# immutable model commit in MODEL_REVISION; neither a branch nor "main" is accepted.
+python train/sft/model_assets.py acquire --model Qwen/Qwen3.6-35B-A3B \
+  --revision "$MODEL_REVISION" --output /absolute/path/to/model-assets
+export AUTOPHYS_TRAIN_MODEL_ASSETS=/absolute/path/to/model-assets
 cd train/sft
 python build_dataset.py           # offline, writes data/
 python patch_chat_template.py     # writes a serving template
@@ -233,3 +239,35 @@ autophys bench --policy reason --policy scripted --route baseten --model "$AUTOP
 ```
 
 Replay offline afterwards with `--replay partner.cassette.jsonl` instead of `--record`. `--seeds 5` runs seeds 0–4. Seeds 0–2 are training seeds, so only 3,4 count as held-out.
+
+## Local planning assets and diagnostic delivery
+
+A dry run does not download anything. Supply `--model-assets DIR` to the native
+CLI or Python worker, or set `AUTOPHYS_TRAIN_MODEL_ASSETS` to a prepared directory.
+The directory contains `tokenizer.json`, `tokenizer_config.json`,
+`chat_template.jinja` and a schema-1 `manifest.json` recording the model,
+revision and SHA-256 of each file. `model_assets.py acquire` is the separate,
+intentional public download command; it requires an immutable 40-hex model
+commit and refuses an existing output directory. Local prepared assets may
+also identify an original/synthetic model revision. Missing, altered or
+wrong-model inputs fail before any remote client is acquired. The planning
+requirements file identifies Jinja/tokenizers dependencies; no provider SDK is
+required for a dry run.
+
+The plan records full asset identity. The native Loops launch passes its
+manifest digest back to the live worker, which rejects changed assets before
+remote acquisition and compares the provider tokenizer's numeric IDs with the
+local encoder for every training/validation prompt and answer before training.
+The same local encoder supplies both planning and training IDs. Public model
+weights are not downloaded by planning. Transformer-based remote helpers can
+still use an explicitly supplied, already-acquired tokenizer and its own
+in-memory template; their cloud execution and plan-to-remote asset binding are
+not qualified by the local Loops checks.
+
+Worker diagnostics are best effort: full stderr pipes/terminals may drop output
+rather than suspend the deadline, local cleanup or terminal manifest. A broken
+sink fails the attempt; final train-error delivery is also nonblocking and can
+be omitted when the sink cannot accept it. No writer thread or queue is kept.
+The pipe-backpressure guarantee does not bound kernel/filesystem stalls when
+stderr is redirected to a regular file. Local worker termination still never
+confirms provider cancellation or billing cessation.

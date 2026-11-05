@@ -20,6 +20,12 @@ phase = os.environ.get('FAULT_PHASE', 'live')
 if (live and phase == 'live') or (not live and phase == 'plan'):
     if mode == 'slow-plan':
         while not (root / 'release').exists(): time.sleep(.01)
+    elif mode == 'blocked-sink':
+        os.write(2 if phase == 'plan' else 1, b'x' * 262144)
+        (root / 'forwarded').write_text('worker pipes drained')
+        time.sleep(600)
+    elif mode == 'normal-output':
+        print('worker diagnostic marker', file=sys.stderr, flush=True)
     elif mode == 'stall': time.sleep(600)
     elif mode == 'no-newline':
         while True: os.write(1, b'x' * 8192)
@@ -356,4 +362,108 @@ fn interrupt_finalizes_local_failure_and_reaps_worker_without_claiming_remote_ca
             .contains("interrupted")
     );
     lab.reaped();
+}
+
+// Keep stderr's read end open but never read it, including while waiting for
+// terminal state and exit. The polling watchdog runs outside the CLI. It kills
+// only task-owned processes on regression, so a failing test cannot hang CI.
+fn undrained(phase: &str, interrupt: bool, closed: bool) {
+    let lab = Lab::new();
+    let mut child = lab
+        .command("sink", phase == "live", "blocked-sink", phase)
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let pipe = child.stderr.take().unwrap();
+    let held_pipe = if closed {
+        drop(pipe);
+        None
+    } else {
+        Some(pipe)
+    };
+    let started = Instant::now();
+    let mut sent = false;
+    let status = loop {
+        if interrupt && !sent && lab.root.path().join("forwarded").exists() {
+            assert_eq!(unsafe { kill(child.id() as i32, 2) }, 0);
+            sent = true;
+        }
+        if let Some(status) = child.try_wait().unwrap() {
+            break Some(status);
+        }
+        if started.elapsed() >= Duration::from_secs(9) {
+            break None;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    };
+    if status.is_none() {
+        if let Ok(text) = std::fs::read_to_string(lab.root.path().join("worker.pid")) {
+            let pid: i32 = text.parse().unwrap();
+            unsafe {
+                kill(-pid, 9);
+            }
+        }
+        child.kill().unwrap();
+        child.wait().unwrap();
+    }
+    assert!(
+        status.is_some(),
+        "CLI blocked with undrained stderr: {phase}"
+    );
+    assert_eq!(status.unwrap().code(), Some(1));
+    assert!(started.elapsed() < Duration::from_secs(if interrupt || closed { 4 } else { 8 }));
+    if interrupt {
+        assert!(sent, "interruption must reach output boundary");
+    }
+    if phase == "live" {
+        let manifest = lab.manifest("sink");
+        assert_eq!(manifest["status"], "failed");
+        assert_eq!(manifest["remote_status"], "unconfirmed");
+        let error = manifest["worker_error"].as_str().unwrap();
+        assert!(
+            error.contains(if closed {
+                "echoing"
+            } else if interrupt {
+                "interrupted"
+            } else {
+                "deadline"
+            }),
+            "{error}"
+        );
+    } else {
+        assert!(!lab.dir("sink").join("manifest.json").exists());
+    }
+    lab.reaped();
+    // The held sink is released only after CLI exit, state and reaping checks.
+    drop(held_pipe);
+}
+
+#[test]
+fn undrained_stderr_cannot_suspend_planner_or_live_deadline_or_cli_exit() {
+    for phase in ["plan", "live"] {
+        undrained(phase, false, false);
+    }
+}
+
+#[test]
+fn interruption_at_saturated_stderr_and_closed_pipes_reap_and_exit() {
+    for phase in ["plan", "live"] {
+        undrained(phase, true, false);
+        undrained(phase, false, true);
+    }
+}
+
+#[test]
+fn normal_worker_diagnostics_remain_visible() {
+    for phase in ["plan", "live"] {
+        let lab = Lab::new();
+        let out = lab
+            .command("normal", phase == "live", "normal-output", phase)
+            .output()
+            .unwrap();
+        checked(&out);
+        assert!(String::from_utf8_lossy(&out.stderr).contains("worker diagnostic marker"));
+        lab.reaped();
+    }
 }

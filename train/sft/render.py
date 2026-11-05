@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import re
-import urllib.request
 
 from jinja2.exceptions import TemplateError
 from jinja2.sandbox import ImmutableSandboxedEnvironment
@@ -31,14 +30,8 @@ def compile_template(template: str):
     return template_env().from_string(_GENERATION_TAG.sub("", template))
 
 
-def special_tokens(model: str) -> dict[str, str]:
-    """``bos_token``/``eos_token`` as Hugging Face passes them to templates
-    (some, such as Mistral's, reference them). Public tokenizer_config.json only."""
-    try:
-        with urllib.request.urlopen(f"https://huggingface.co/{model}/resolve/main/tokenizer_config.json", timeout=60) as r:
-            config = json.load(r)
-    except OSError:
-        return {}
+def special_tokens_from_config(config: dict) -> dict[str, str]:
+    """Read the special token strings from verified local tokenizer config."""
     out = {}
     for key in ("bos_token", "eos_token"):
         value = config.get(key)
@@ -47,6 +40,11 @@ def special_tokens(model: str) -> dict[str, str]:
         if isinstance(value, str):
             out[key] = value
     return out
+
+
+def special_tokens(model: str, assets=None) -> dict[str, str]:
+    from model_assets import ModelAssets
+    return (assets or ModelAssets(model)).special
 
 
 def render_prompt(template: str, messages: list[dict], **kwargs) -> str:

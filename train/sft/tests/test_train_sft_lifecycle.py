@@ -13,11 +13,13 @@ HERE = Path(__file__).resolve().parents[1]
 from unittest.mock import patch
 render = types.ModuleType("render")
 render.end_of_turn = render.render_prompt = render.special_tokens = lambda *a, **kw: None
+asset_module = types.ModuleType("model_assets")
+asset_module.ModelAssets = object
 patcher = types.ModuleType("patch_chat_template")
 patcher.fetch = lambda model: None
 spec = importlib.util.spec_from_file_location("train_sft_lifecycle_subject", HERE / "train_sft.py")
 sft = importlib.util.module_from_spec(spec)
-with patch.dict(sys.modules, {"render": render, "patch_chat_template": patcher}):
+with patch.dict(sys.modules, {"render": render, "patch_chat_template": patcher, "model_assets": asset_module}):
     spec.loader.exec_module(sft)
 
 
@@ -97,9 +99,9 @@ def lab(tmp_path, monkeypatch):
     monkeypatch.setenv("BASETEN_API_KEY", "synthetic-offline-key")
     monkeypatch.setattr(sft.threading, "Timer", Timer)
     monkeypatch.setattr(sft, "HERE", tmp_path)
-    def fetch(model): hit("template"); return "offline-template"
+    def fetch(model, assets=None): hit("template"); return "offline-template"
     monkeypatch.setattr(sft, "fetch", fetch)
-    monkeypatch.setattr(sft, "special_tokens", lambda model: {})
+    monkeypatch.setattr(sft, "special_tokens", lambda *a, **kw: {})
     monkeypatch.setattr(sft, "end_of_turn", lambda *a, **kw: "END")
     monkeypatch.setattr(sft, "render_prompt", lambda *a, **kw: "PROMPT")
     monkeypatch.setattr(sft, "datum", lambda p, a: (p, a))
@@ -110,7 +112,11 @@ def lab(tmp_path, monkeypatch):
         return fault["cleanup"] != "deactivate"
     monkeypatch.setattr(sft, "deactivate", deactivate)
     monkeypatch.setattr(sft.os, "_exit", lambda code: (_ for _ in ()).throw(DeadlineExit(code)))
-    monkeypatch.setattr(sft.urllib.request, "urlopen", lambda *a, **kw: pytest.fail("asset download"))
+    class Assets:
+        identity = {"manifest_sha256": "offline-assets"}
+        def __init__(self, *a): pass
+        def encode(self, text): return Tokenizer().encode(text)
+    monkeypatch.setattr(sft, "ModelAssets", Assets)
     data = tmp_path / "data"; data.mkdir()
     row = {"messages": [{"role": r, "content": r} for r in ["system", "user", "assistant"]]}
     for split in ["train", "validation"]: (data / (split + ".jsonl")).write_text(json.dumps(row) + "\n")
@@ -126,9 +132,13 @@ def test_every_acquired_client_closes_on_failure(lab, at):
     lab.fault["at"] = at
     expected = KeyboardInterrupt if at == "interrupt" else SystemExit if at in ("overlength", "system-exit") else PrimaryError
     with pytest.raises(expected): sft.main(lab.argv)
-    assert lab.calls.count("client-close") == lab.calls.count("service-close") == 1
-    assert lab.calls.count("deactivate") == 1
-    assert lab.timers[0].cancelled
+    if at == "template":
+        assert "service" not in lab.calls
+        assert not lab.timers
+    else:
+        assert lab.calls.count("client-close") == lab.calls.count("service-close") == 1
+        assert lab.calls.count("deactivate") == 1
+        assert lab.timers[0].cancelled
     assert lab.service_client.deployment_from_run is lab.original
     if at in ("tokenizer", "template", "tokenization", "overlength", "interrupt", "system-exit"):
         assert "train" not in lab.calls and "validation" not in lab.calls

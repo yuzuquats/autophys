@@ -24,7 +24,7 @@ pub const USAGE: &str =
                                [--heldout-seeds 3,4] [--case NAME]... [--playbook NAME]
                                [--backend local|modal --usd-per-hour X --max-usd Y]
        autophys train run --name NAME --base-model HF_ID --data DIR [--backend loops|modal]
-                          [--rank N] [--epochs N] [--batch-size N] [--lr X] [--max-seq-len N]
+                          [--model-assets DIR] [--rank N] [--epochs N] [--batch-size N] [--lr X] [--max-seq-len N]
                           [--warmup N] [--eval-every N] [--seed N] [--scope S]
                           loops: [--usd-per-mtok X --max-usd Y --live]   (serverless, billed per token)
                           loops: [--usd-per-hour X --max-usd Y --live]   (dedicated trainer, billed by GPU time)
@@ -104,6 +104,66 @@ impl WorkerEvents {
                 if let Some(value) = event.get("val_nll").filter(|v| v.is_number()) {
                     self.last_val_nll = value.clone();
                 }
+            }
+        }
+        Ok(())
+    }
+}
+
+// Open a separate nonblocking description: never change stderr's shared flags
+// (the parent/logger can share them). Full sinks discard the remaining chunk;
+// a closed/broken sink fails this worker attempt. There is no forwarding queue
+// or writer thread to retain or join. Non-reopenable sinks fail closed.
+struct Diagnostics(std::fs::File);
+
+impl Diagnostics {
+    fn open() -> std::io::Result<Self> {
+        use std::os::fd::AsRawFd;
+        use std::os::unix::fs::OpenOptionsExt;
+        #[cfg(target_os = "linux")]
+        const NONBLOCK: i32 = 0x800;
+        #[cfg(not(target_os = "linux"))]
+        const NONBLOCK: i32 = 0x4; // Darwin O_NONBLOCK
+        let file = std::fs::OpenOptions::new()
+            .append(true)
+            .custom_flags(NONBLOCK)
+            .open("/dev/stderr")?;
+        unsafe extern "C" {
+            fn fcntl(fd: i32, command: i32, ...) -> i32;
+        }
+        if file.metadata()?.is_file() {
+            // Preserve a redirected file's shared offset with stdout. A regular
+            // filesystem write is byte-bounded, but kernel/storage stalls are
+            // outside the pipe/terminal backpressure guarantee.
+            let fd = unsafe { std::os::fd::BorrowedFd::borrow_raw(2) };
+            return Ok(Self(fd.try_clone_to_owned()?.into()));
+        }
+        // F_GETFL is 3 on supported Unix targets. Some /dev/fd implementations
+        // duplicate the original description and ignore open flags: do not
+        // write if nonblocking mode was not honored.
+        if unsafe { fcntl(file.as_raw_fd(), 3) } & NONBLOCK == 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                "stderr does not support independent nonblocking diagnostics",
+            ));
+        }
+        Ok(Self(file))
+    }
+
+    fn forward(&mut self, mut bytes: &[u8]) -> std::io::Result<()> {
+        while !bytes.is_empty() {
+            match self.0.write(bytes) {
+                Ok(0) => break,
+                Ok(n) => bytes = &bytes[n..],
+                Err(e)
+                    if matches!(
+                        e.kind(),
+                        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::Interrupted
+                    ) =>
+                {
+                    break;
+                }
+                Err(e) => return Err(e),
             }
         }
         Ok(())
@@ -200,6 +260,15 @@ pub enum Failure {
 }
 
 impl Failure {
+    /// The train-only CLI caller uses the same best-effort output boundary as
+    /// workers. Even a final error must not wait for a stopped log collector.
+    pub fn report(&self) {
+        if let Ok(mut sink) = Diagnostics::open() {
+            let message = format!("autophys: {}\n", self.message());
+            let _ = sink.forward(&message.as_bytes()[..message.len().min(16 * 1024)]);
+        }
+    }
+
     pub fn code(&self) -> i32 {
         match self {
             Failure::Usage(_) => 2,
@@ -422,7 +491,6 @@ impl Worker {
     /// Both pipes are drained through a bounded channel, independently of
     /// line endings. The supervisor alone owns output/elapsed-time accounting.
     fn supervise(&self, argv: &[String], capture: bool) -> Result<(bool, String, WorkerEvents)> {
-        use std::io::Write;
         use std::os::unix::process::CommandExt;
         use std::sync::{atomic::Ordering, mpsc};
         use std::time::{Duration, Instant};
@@ -430,6 +498,8 @@ impl Worker {
         if interrupted.load(Ordering::SeqCst) {
             bail!("worker interrupted before launch");
         }
+        let mut diagnostics =
+            Diagnostics::open().context("opening nonblocking worker diagnostics")?;
         let child = Command::new(&self.python)
             .args(argv)
             .current_dir(&self.dir)
@@ -491,8 +561,8 @@ impl Worker {
                         if capture && stdout {
                             captured.extend_from_slice(&bytes);
                         } else {
-                            std::io::stderr()
-                                .write_all(&bytes)
+                            diagnostics
+                                .forward(&bytes)
                                 .context("echoing worker output")?;
                         }
                         if !capture && stdout {
@@ -947,6 +1017,7 @@ pub fn run(args: Vec<String>) -> Result<Value, Failure> {
         "usd-per-hour",
         "gpu",
         "max-usd",
+        "model-assets",
     ];
     valued.extend(HYPERPARAMETERS);
     let flags = Flags::parse(args, &valued, &["live"])?;
@@ -993,6 +1064,15 @@ pub fn run(args: Vec<String>) -> Result<Value, Failure> {
             data.display().to_string(),
         ];
         argv.extend(flags.passthrough(HYPERPARAMETERS));
+        if let Some(assets) = flags.get("model-assets") {
+            let assets = PathBuf::from(assets);
+            let assets = if assets.is_absolute() {
+                assets
+            } else {
+                std::env::current_dir()?.join(assets)
+            };
+            argv.extend(["--model-assets".into(), assets.display().to_string()]);
+        }
 
         let plan = first_json(&worker.capture("train_sft.py", &argv)?)?;
         let tokens = plan
@@ -1087,6 +1167,12 @@ pub fn run(args: Vec<String>) -> Result<Value, Failure> {
             ])
         } else {
             argv.push("--live".into());
+            if let Some(identity) = plan
+                .pointer("/model_assets/manifest_sha256")
+                .and_then(Value::as_str)
+            {
+                argv.extend(["--expected-assets-sha256".into(), identity.into()]);
+            }
             if dedicated {
                 argv.push("--allow-dedicated".into());
                 argv.push("--max-seconds".into());

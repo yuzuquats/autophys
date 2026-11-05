@@ -68,7 +68,7 @@ fn train_result(result: Result<Value, crate::train::Failure>) -> tento_sh::Resul
         Ok(value) => Ok(value),
         Err(failure) => {
             let _ = std::io::stdout().flush();
-            eprintln!("autophys: {}", failure.message());
+            failure.report();
             std::process::exit(failure.code());
         }
     }
