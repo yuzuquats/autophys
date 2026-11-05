@@ -68,7 +68,13 @@ The checker verifies current vendor bytes, reverses the one patch to its
 hashed affected-file preimage, then replays it to the hashed postimage. It
 requires no Git objects, private paths or sibling checkout. This is bounded
 patch replay/current-tree verification, **not full upstream regeneration**.
-The manifest intentionally pins this retained vendor tree: future intentional
-vendor changes must update their provenance and the affected manifest rows.
+The original manifest intentionally pins the historical retained vendor tree.
+`provenance.json` also pins one complete publication variant: eight cookbook
+files retain their exact bytes at public base `189a4ddd12f618882bcea00417dad8c9a026ffe5`,
+while the bundler patch stays identical. This lets the reviewed app changes ship
+without importing unrelated unpublished tour, deck or drawer work. The checker
+accepts either complete manifest and rejects mixtures, missing files and other
+changes. It does not infer provenance from a reachable host or mutable branch.
+Future intentional vendor changes must update their provenance and manifest.
 This mechanism neither repairs the inherited provenance gap nor supplies any
 missing license grant. Existing attribution and release blockers above remain.

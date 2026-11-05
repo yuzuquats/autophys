@@ -11,5 +11,44 @@
   "patch_sha256": "380376544855a07037b5eca894f6b65e955cf77fb2a61e6f89dfc045eb853495",
   "manifest_canonicalization": "UTF-8 JSON sorted keys, compact separators, original row order, trailing LF",
   "retained_base_manifest_sha256": "9e6295473c6645bc9d7defcc626ad9a76b0d6a149829b3373abf945ab3e5cb07",
-  "current_manifest_sha256": "75d21aa60fdfd295552847a791291b284aef7a2cbd2cb7179c6e9f97124f300a"
+  "current_manifest_sha256": "75d21aa60fdfd295552847a791291b284aef7a2cbd2cb7179c6e9f97124f300a",
+  "publication_variant": {
+    "base_commit": "189a4ddd12f618882bcea00417dad8c9a026ffe5",
+    "description": "Exact public-base cookbook bytes, with the same app-owned bundler postimage. Peer UI changes are excluded from this publication prefix; historical retained manifest remains unchanged.",
+    "overrides": [
+      {
+        "path": "vendor/tento/tento-cookbook-js/cookbook.deno.test.ts",
+        "sha256": "c104f5e56da87098c248def9550e125746ab5a2e79de1b0ef4ebb1b7f4650591"
+      },
+      {
+        "path": "vendor/tento/tento-cookbook-js/src/cookbook.ts",
+        "sha256": "24008f1c24fa773ab81d6e254fdc5675f563f8fa6deedc4492265c9e6907068a"
+      },
+      {
+        "path": "vendor/tento/tento-cookbook-js/src/deck.ts",
+        "sha256": "83a30a40bec6db1e24d8a46b50e6528c2540817c00dba2bb02ebbc4e97d596e0"
+      },
+      {
+        "path": "vendor/tento/tento-cookbook-js/src/drawer.ts",
+        "sha256": "804e7fdee0e2ed7809f9d99257be15fbb5ea87403aa9031b5a39c115981d5989"
+      },
+      {
+        "path": "vendor/tento/tento-cookbook-js/src/shell.ts",
+        "sha256": "cee9b455ce70a410f5aa3f612eb604a86555cfbcdcc5c3c3065fefc53addb949"
+      },
+      {
+        "path": "vendor/tento/tento-cookbook-js/src/styles.ts",
+        "sha256": "f00e4ff53718c6adf5f75a7c8690a13da571c951644b66f5d9d516c7d16b3550"
+      },
+      {
+        "path": "vendor/tento/tento-cookbook-js/src/tutorial.ts",
+        "sha256": "ef1c6fb03f5afdb242cb5efb51d2bd1f7211f50962b8367e5e27f34ca7c117e3"
+      },
+      {
+        "path": "vendor/tento/tento-cookbook-js/src/types.ts",
+        "sha256": "efe039b14dcd0b8d65b97a1b596d82fc54919cd0a5301a4dc32431344d0b5552"
+      }
+    ],
+    "manifest_sha256": "f3735d777e63c976d9a02441bcea02d1f1e2d702c7c259cd1b85685d32e021dd"
+  }
 }

@@ -26,8 +26,19 @@ canonical = lambda x: (json.dumps(x, sort_keys=True, separators=(",", ":")) + "\
 assert hashlib.sha256(canonical(rows)).hexdigest() == meta["current_manifest_sha256"], "current tree manifest"
 base = [dict(row, sha256=meta["preimage_sha256"]) if row["path"] == meta["file"] else row for row in rows]
 assert hashlib.sha256(canonical(base)).hexdigest() == meta["retained_base_manifest_sha256"], "retained recovery base manifest"
-for row in rows:
-    assert sha(root / row["path"]) == row["sha256"], row["path"]
+# Accept two complete, explicitly pinned trees, never arbitrary combinations.
+# The original manifest remains the historical campaign input; the alternate
+# retains cookbook bytes already public before the selected bundler change.
+variant = meta["publication_variant"]
+overrides = {row["path"]: row for row in variant["overrides"]}
+assert len(overrides) == len(variant["overrides"]), "duplicate publication override"
+assert overrides.keys() <= {row["path"] for row in rows}, "unknown publication path"
+publication = [overrides.get(row["path"], row) for row in rows]
+assert hashlib.sha256(canonical(publication)).hexdigest() == variant["manifest_sha256"], "publication manifest"
+actual = {row["path"]: sha(root / row["path"]) for row in rows}
+matching = [name for name, manifest in [("retained", rows), ("publication", publication)]
+            if all(actual[row["path"]] == row["sha256"] for row in manifest)]
+assert matching, "vendor bytes do not match either complete pinned manifest"
 for reverse, source, out, expected in [
     (True, root / meta["file"], work / "preimage.rs", meta["preimage_sha256"]),
     (False, work / "preimage.rs", work / "postimage.rs", meta["postimage_sha256"]),
@@ -35,4 +46,4 @@ for reverse, source, out, expected in [
     subprocess.run(["patch", "--batch", "--silent", "--reverse" if reverse else "--forward",
                     "--output", str(out), str(source), str(here / "context.patch")], check=True)
     assert sha(out) == expected, str(out)
-print(f"VENDOR_PATCH_PASS reverse+forward; {len(rows)} retained current vendor files verified; inherited upstream delta NOT regenerated")
+print(f"VENDOR_PATCH_PASS reverse+forward; {len(rows)} vendor files verified ({matching[0]}); inherited upstream delta NOT regenerated")
