@@ -25,9 +25,9 @@ mod display;
 mod sse;
 mod workbench;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use actix_web::http::StatusCode;
 use actix_web::web::{self, Bytes};
@@ -61,7 +61,14 @@ pub struct Api {
     pub sessions: auth::BrowserSessions,
     wake: broadcast::Sender<String>,
     workbench: workbench::Jobs,
+    runtimes: Arc<Mutex<HashMap<String, Runtime>>>,
+    pub(crate) context: Option<crate::workspaces::AppContext>,
+    pub(crate) owner: Option<String>,
+    credential: Option<auth::Credential>,
 }
+
+#[derive(Clone)]
+struct Runtime { client: Client, wake: broadcast::Sender<String>, jobs: workbench::Jobs }
 
 impl std::fmt::Debug for Api {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -81,16 +88,60 @@ impl Api {
             sessions: auth::BrowserSessions::default(),
             wake,
             workbench: workbench::Jobs::default(),
+            runtimes: Arc::new(Mutex::new(HashMap::new())),
+            context: None, owner: None, credential: None,
         }
     }
 
     /// The collection at `collection` and the server database at `server_db`.
     pub fn open(collection: &Path, server_db: &Path, opts: Options) -> Result<Api> {
-        let text = collection
+        let absolute = if collection.is_absolute() { collection.to_path_buf() } else { std::env::current_dir().map_err(|e| ApiError::Internal(e.to_string()))?.join(collection) };
+        let dir = if absolute.extension().is_some_and(|e| e == "ap-workbook") { absolute.parent().unwrap() } else { &absolute };
+        std::fs::create_dir_all(dir).map_err(|e| ApiError::Internal(e.to_string()))?;
+        let canonical = std::fs::canonicalize(dir).map_err(|e| ApiError::Internal(e.to_string()))?;
+        let absolute = if absolute.extension().is_some_and(|e| e == "ap-workbook") { canonical.join(absolute.file_name().unwrap()) } else { canonical };
+        let text = absolute
             .to_str()
             .ok_or_else(|| ApiError::Internal(format!("{} is not UTF-8", collection.display())))?;
         let client = autophys::connect(Some(text))?;
         Ok(Api::new(client, KeyStore::open_with(server_db, opts)?))
+    }
+
+    pub(crate) fn scoped(&self, caller: &Caller, credential: auth::Credential) -> Result<Api> {
+        let resolved = self.keys.resolve_workspace(caller, self.client.root())?;
+        let id = resolved.context.workspace.as_ref().unwrap().id.clone();
+        let mut runtimes = self.runtimes.lock().map_err(|_| ApiError::Internal("workspace runtimes poisoned".into()))?;
+        let runtime = match runtimes.get(&id).filter(|r| r.client.root() == resolved.root) {
+            Some(r) => r.clone(),
+            None => {
+                let (wake, _) = broadcast::channel(1024);
+                let runtime = Runtime { client: if resolved.owner == "local" { self.client.clone() } else { autophys::connect(resolved.root.to_str())? }, wake, jobs: self.workbench.clone() };
+                runtimes.insert(id, runtime.clone());
+                runtime
+            }
+        };
+        let mut api = self.clone();
+        api.client = runtime.client; api.wake = runtime.wake; api.workbench = runtime.jobs;
+        api.context = Some(resolved.context); api.owner = Some(resolved.owner); api.credential = Some(credential);
+        Ok(api)
+    }
+
+    /// Long-lived streams/jobs re-resolve access; no copied grant survives revocation.
+    pub(crate) async fn check_access(&self, write: bool) -> Result<()> {
+        let api = self.clone();
+        blocking(move || {
+            let caller = match api.credential.as_ref().ok_or(ApiError::Unauthorized)? {
+                auth::Credential::Local => Caller::Browser,
+                auth::Credential::Session(token) => Caller::Member(api.keys.session_user(token)?.ok_or(ApiError::Unauthorized)?),
+                auth::Credential::Key(token) => Caller::Key(api.keys.authenticate(token)?.ok_or(ApiError::Unauthorized)?),
+            };
+            let resolved = api.keys.resolve_workspace(&caller, api.client.root())?;
+            if resolved.root != api.client.root() || resolved.context.workspace.as_ref().map(|w| &w.id) != api.context.as_ref().and_then(|c| c.workspace.as_ref()).map(|w| &w.id) {
+                return Err(ApiError::Forbidden("Workspace assignment changed.".into()));
+            }
+            if write && !resolved.writable { return Err(ApiError::Forbidden("This account is read-only.".into())); }
+            Ok(())
+        }).await
     }
 
     pub fn options(&self) -> &Options {
@@ -145,6 +196,7 @@ pub fn scope(api: Api) -> actix_web::Scope {
         )
         .route("/pairings/{user_code}/deny", web::post().to(pairing_deny))
         .route("/whoami", web::get().to(whoami))
+        .route("/context", web::get().to(app_context))
         .route("/workbench/projects", web::post().to(workbench::create))
         .route("/workbench/projects/{pid}/investigations", web::post().to(workbench::start))
         .route("/workspace", web::get().to(workspace))
@@ -189,7 +241,28 @@ pub fn scope(api: Api) -> actix_web::Scope {
         .default_service(web::to(not_found))
 }
 
-type Data = web::Data<Api>;
+/// All data handlers extract a caller-scoped Api. Only the unauthenticated
+/// device-code exchange uses raw app data; adding a data route cannot silently
+/// fall back to the process collection.
+pub(crate) struct Data(Api);
+impl std::ops::Deref for Data { type Target = Api; fn deref(&self) -> &Api { &self.0 } }
+impl Data { fn get_ref(&self) -> &Api { &self.0 } }
+impl actix_web::FromRequest for Data {
+    type Error = ApiError;
+    type Future = futures_util::future::LocalBoxFuture<'static, Result<Self>>;
+    fn from_request(req: &HttpRequest, _: &mut actix_web::dev::Payload) -> Self::Future {
+        let req = req.clone();
+        Box::pin(async move { Ok(Self(auth::request_scope(&req, false).await?.1)) })
+    }
+}
+
+async fn app_context(api: web::Data<Api>, req: HttpRequest) -> Result<HttpResponse> {
+    if !req.headers().contains_key("authorization") { auth::browser(&req, &api)?; }
+    let context = if api.options().login && !req.headers().contains_key("authorization") && auth::signed_in(&api, &req).await?.is_none() {
+        api.keys.anonymous_context()?
+    } else { auth::request_scope(&req, false).await?.1.context.unwrap() };
+    Ok(HttpResponse::Ok().insert_header(("cache-control", "no-store")).json(context))
+}
 
 async fn read_body(body: web::Payload) -> Result<Bytes> {
     match body.to_bytes_limited(BODY_LIMIT).await {
@@ -248,7 +321,7 @@ async fn workbook(api: &Api, pid: &str) -> Result<Workbook> {
 
 // --- pairing (no key) -------------------------------------------------------
 
-async fn pair_start(api: Data, body: web::Payload) -> Result<HttpResponse> {
+async fn pair_start(api: web::Data<Api>, body: web::Payload) -> Result<HttpResponse> {
     let v = body_json(body).await?;
     let device = v
         .get("device_name")
@@ -266,7 +339,7 @@ async fn pair_start(api: Data, body: web::Payload) -> Result<HttpResponse> {
     )))
 }
 
-async fn pair_poll(api: Data, body: web::Payload) -> Result<HttpResponse> {
+async fn pair_poll(api: web::Data<Api>, body: web::Payload) -> Result<HttpResponse> {
     let v = body_json(body).await?;
     let code = v
         .get("device_code")
@@ -277,9 +350,14 @@ async fn pair_poll(api: Data, body: web::Payload) -> Result<HttpResponse> {
     Ok(ok(json!(blocking(move || keys.pair_poll(&code)).await?)))
 }
 
-async fn pairings(_: KeyOrBrowser, api: Data) -> Result<HttpResponse> {
+#[derive(Deserialize)]
+struct PairQuery { code: Option<String> }
+
+async fn pairings(_: KeyOrBrowser, api: Data, q: web::Query<PairQuery>) -> Result<HttpResponse> {
     let keys = api.keys.clone();
-    let list = blocking(move || keys.pairings_pending()).await?;
+    let owner = api.owner.clone().unwrap();
+    let code = q.into_inner().code;
+    let list = blocking(move || keys.scoped_pairings(&owner, code.as_deref())).await?;
     Ok(ok(json!({ "pairings": list })))
 }
 
@@ -289,20 +367,24 @@ async fn pairing_approve(
     code: web::Path<String>,
 ) -> Result<HttpResponse> {
     let keys = api.keys.clone();
-    let p = blocking(move || keys.pair_approve(&code)).await?;
+    let owner = api.owner.clone().unwrap();
+    let workspace = api.context.as_ref().unwrap().workspace.as_ref().unwrap().id.clone();
+    let p = blocking(move || keys.scoped_pair_decide(&code, true, &owner, &workspace)).await?;
     Ok(ok(json!({ "pairing": p })))
 }
 
 async fn pairing_deny(_: KeyOrBrowser, api: Data, code: web::Path<String>) -> Result<HttpResponse> {
     let keys = api.keys.clone();
-    let p = blocking(move || keys.pair_deny(&code)).await?;
+    let owner = api.owner.clone().unwrap();
+    let workspace = api.context.as_ref().unwrap().workspace.as_ref().unwrap().id.clone();
+    let p = blocking(move || keys.scoped_pair_decide(&code, false, &owner, &workspace)).await?;
     Ok(ok(json!({ "pairing": p })))
 }
 
 async fn whoami(Keyed(key): Keyed, api: Data) -> HttpResponse {
-    let opts = api.options();
+    let context = api.context.as_ref().unwrap();
     ok(json!({
-        "account": opts.account, "workspace": opts.workspace,
+        "account": context.principal.as_ref().map(|p| p.email.as_deref().unwrap_or(&p.display_name)), "workspace": context.workspace.as_ref().map(|w| &w.id),
         "key_id": key.id, "device_name": key.device,
     }))
 }
@@ -384,6 +466,8 @@ async fn workspace(
         json!(cursor_token(&cursors))
     };
     Ok(ok(json!({
+        "workspace_id": api.context.as_ref().and_then(|c| c.workspace.as_ref()).map(|w| &w.id),
+        "principal_id": api.context.as_ref().and_then(|c| c.principal.as_ref()).map(|p| &p.id),
         "cursor": cursor,
         "cursors": cursors,
         "projects": projects,

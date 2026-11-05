@@ -156,50 +156,44 @@ async fn app_document(
     sessions: web::Data<crate::http::auth::BrowserSessions>,
     api: Option<web::Data<Api>>,
 ) -> Result<HttpResponse, crate::error::ApiError> {
-    // `serve --login`: signed out, only the landing page is served; the API
-    // stays closed. Anything else redirects to the sign-in page.
     let mut badge = None;
+    let mut bootstrap = None;
     let mut issue_document_session = true;
-    if let Some(api) = api.filter(|a| a.options().login) {
-        match crate::http::auth::signed_in(&api, &req).await? {
-            Some(user) => badge = Some(crate::login::badge(&user)),
-            None if req.path() == "/" => {
-                let keys = api.keys.clone();
-                let demo = crate::http::blocking(move || keys.users_demo())
-                    .await
-                    .ok()
-                    .flatten()
-                    .is_some();
-                // The signed-out landing cannot use the browser API. Do not
-                // let anonymous visits consume authenticated document admission.
-                issue_document_session = false;
-                badge = Some(crate::login::anonymous_badge(demo))
+    if let Some(api) = api {
+        let caller = if api.options().login {
+            crate::http::auth::signed_in(&api, &req)
+                .await?
+                .map(crate::http::Caller::Member)
+        } else {
+            Some(crate::http::Caller::Browser)
+        };
+        let context = match caller {
+            Some(caller) => {
+                let api = api.get_ref().clone();
+                crate::http::blocking(move || {
+                    Ok(api
+                        .scoped(&caller, crate::http::auth::Credential::Local)?
+                        .context
+                        .unwrap())
+                })
+                .await?
             }
             None => {
-                let path = req.uri().path_and_query().map_or("/app", |p| p.as_str());
-                let next: String = path
-                    .bytes()
-                    .map(|b| match b {
-                        b'A'..=b'Z'
-                        | b'a'..=b'z'
-                        | b'0'..=b'9'
-                        | b'-'
-                        | b'_'
-                        | b'.'
-                        | b'~'
-                        | b'/' => (b as char).to_string(),
-                        b => format!("%{b:02X}"),
-                    })
-                    .collect();
-                return Ok(HttpResponse::SeeOther()
-                    .insert_header((
-                        actix_web::http::header::LOCATION,
-                        format!("/login?next={next}"),
-                    ))
-                    .insert_header((actix_web::http::header::CACHE_CONTROL, "no-store"))
-                    .finish());
+                issue_document_session = false;
+                api.keys.anonymous_context()?
             }
-        }
+        };
+        badge = Some(crate::login::account_control(&context));
+        // JSON is data, never inline executable code. Escape HTML delimiters so
+        // an account/profile string cannot end its script element.
+        let json = serde_json::to_string(&context)
+            .map_err(|e| crate::error::ApiError::Internal(e.to_string()))?
+            .replace('<', "\\u003c")
+            .replace('>', "\\u003e")
+            .replace('&', "\\u0026");
+        bootstrap = Some(format!(
+            "<script id=\"ap-context\" type=\"application/json\">{json}</script>"
+        ));
     }
     match tokio::fs::read(&shell.0).await {
         Ok(html) => {
@@ -237,7 +231,9 @@ async fn app_document(
                 ))
                 .content_type("text/html; charset=utf-8")
                 .body(match badge {
-                    Some(badge) => with_badge(html, &badge),
+                    Some(badge) => {
+                        with_badge(html, &format!("{badge}{}", bootstrap.unwrap_or_default()))
+                    }
                     None => html,
                 }))
         }

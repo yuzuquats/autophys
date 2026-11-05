@@ -296,12 +296,28 @@ async fn login(
             ),
         ));
     };
-    start_session(&api, user, &next).await
+    start_session(&api, &req, user, &next).await
 }
 
-async fn start_session(api: &Api, user: User, to: &str) -> Result<HttpResponse> {
+async fn start_session(api: &Api, req: &HttpRequest, user: User, to: &str) -> Result<HttpResponse> {
+    let resolver = api.clone();
+    let account = user.clone();
+    blocking(move || {
+        resolver.scoped(
+            &crate::http::Caller::Member(account),
+            crate::http::auth::Credential::Local,
+        )
+    })
+    .await?;
     let keys = api.keys.clone();
-    let token = blocking(move || keys.session_start(&user)).await?;
+    let previous = req.cookie(LOGIN_COOKIE).map(|c| c.value().to_string());
+    let token = blocking(move || {
+        if let Some(token) = previous {
+            keys.session_end(&token)?;
+        }
+        keys.session_start(&user)
+    })
+    .await?;
     let mut resp = see_other(to);
     resp.add_cookie(&session_cookie(api, token))
         .map_err(|e| ApiError::Internal(format!("set cookie: {e}")))?;
@@ -323,7 +339,7 @@ async fn demo_sign_in(
     let next = safe_next(form.next.as_deref());
     let keys = api.keys.clone();
     match blocking(move || keys.users_demo()).await? {
-        Some(user) => start_session(&api, user, &next).await,
+        Some(user) => start_session(&api, &req, user, &next).await,
         None => Err(ApiError::not_found("demo account")),
     }
 }
@@ -360,7 +376,7 @@ async fn accept(
     }
     let keys = api.keys.clone();
     match blocking(move || keys.users_accept(&token, &password)).await {
-        Ok(user) => start_session(&api, user, "/app").await,
+        Ok(user) => start_session(&api, &req, user, "/app").await,
         Err(e) if e.status() == 404 => again(
             "This invite link has expired or was already used. Ask whoever invited \
              you for a new one.",
@@ -459,7 +475,20 @@ async fn badge_fragment(api: web::Data<Api>, req: HttpRequest) -> Result<HttpRes
         Some(user) => Ok(HttpResponse::Ok()
             .insert_header((header::CACHE_CONTROL, "no-store"))
             .content_type("text/html; charset=utf-8")
-            .body(badge(&user))),
+            .body({
+                let raw = api.get_ref().clone();
+                let context = blocking(move || {
+                    Ok(raw
+                        .scoped(
+                            &crate::http::Caller::Member(user),
+                            crate::http::auth::Credential::Local,
+                        )?
+                        .context
+                        .unwrap())
+                })
+                .await?;
+                account_control(&context)
+            })),
         None => Err(ApiError::Unauthorized),
     }
 }
@@ -467,72 +496,95 @@ async fn badge_fragment(api: web::Data<Api>, req: HttpRequest) -> Result<HttpRes
 /// The account control's stylesheet, scoped to `#ap-account`. Until the page
 /// script moves the control into the cookbook header (`account-header.ts`) it
 /// is pinned where the header's right end is.
-const ACCOUNT_STYLE: &str = "<style>\
-#ap-account{position:fixed;top:22px;right:24px;z-index:2147483000;\
-font:13px/1.3 system-ui,-apple-system,sans-serif;color:#141414}\
-.ck-nav-links #ap-account{position:relative;top:auto;right:auto;z-index:auto;margin-left:12px}\
-#ap-account .ap-acct-btn,#ap-account.ap-acct-btn{display:grid;place-items:center;width:36px;height:36px;padding:0;border:0;\
-border-radius:50%;background:transparent;color:inherit;cursor:pointer;text-decoration:none}\
-#ap-account .ap-acct-btn:hover,#ap-account .ap-acct-btn:focus-visible,#ap-account.ap-acct-btn:hover,#ap-account.ap-acct-btn:focus-visible{background:rgb(0 0 0/8%)}\
-#ap-account .ap-acct-btn:focus-visible,#ap-account.ap-acct-btn:focus-visible{outline:2px solid #141414;outline-offset:1px}\
-#ap-account svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;\
-stroke-linecap:round;stroke-linejoin:round}\
-#ap-account .ap-acct-avatar{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;\
-background:#141414;color:#fff;font-size:12px;font-weight:600}\
-#ap-account .ap-acct-tip{position:absolute;right:0;top:100%;padding-top:8px;min-width:200px;\
-opacity:0;visibility:hidden;transform:translateY(-4px);\
-transition:opacity .14s ease,transform .14s ease,visibility 0s linear .14s}\
-#ap-account:hover .ap-acct-tip,#ap-account:focus-within .ap-acct-tip{opacity:1;visibility:visible;\
-transform:none;transition-delay:0s}\
-#ap-account .ap-acct-card{background:#fff;border-radius:10px;padding:10px 12px;\
-box-shadow:0 8px 24px rgb(0 0 0/12%),0 0 0 1px rgb(0 0 0/5%);display:grid;gap:8px}\
-#ap-account .ap-acct-email{color:#5b5b5b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px}\
-#ap-account .ap-acct-mode{justify-self:start;font-size:11px;font-weight:600;color:#7a4a05;background:#fff3d6;border-radius:5px;padding:2px 6px}\
-#ap-account .ap-acct-card form{margin:0}\
-#ap-account .ap-acct-card button{width:100%;border:0;border-radius:7px;background:#f1f1f1;color:#141414;\
-font:600 13px/1 inherit;font-family:inherit;padding:8px 10px;cursor:pointer;text-align:left}\
-#ap-account .ap-acct-card button:hover{background:#e6e6e6}\
-@media (prefers-reduced-motion:reduce){#ap-account .ap-acct-tip{transition:none}}\
-</style>";
+const ACCOUNT_STYLE: &str = r#"<style>
+#ap-account{position:relative;display:inline-flex;align-items:center;font:13px/1.45 var(--ap-font,system-ui)}
+#ap-account summary{list-style:none}#ap-account summary::-webkit-details-marker{display:none}
+#ap-account .ap-acct-btn{display:grid;place-items:center;width:36px;height:36px;padding:0;border:0;border-radius:50%;background:#efefef;color:#333;text-decoration:none;cursor:pointer;position:relative}
+#ap-account .ap-acct-btn:hover{background:#e5e5e5}#ap-account .ap-acct-btn:focus-visible{outline:2px solid #141414;outline-offset:3px}
+#ap-account .ap-acct-avatar{position:relative;width:32px;height:32px;display:grid;place-items:center;border-radius:50%;overflow:hidden;font-weight:600}
+#ap-account img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}#ap-account img[hidden]{display:none}
+#ap-account svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.4}
+#ap-account .ap-acct-card{position:absolute;z-index:120;right:0;top:calc(100% + 10px);width:max-content;min-width:190px;max-width:min(300px,calc(100vw - 32px));padding:16px;display:grid;gap:8px;background:#fff;border-radius:12px;box-shadow:0 8px 30px rgb(0 0 0 / 16%);color:#141414;overflow-wrap:anywhere}
+#ap-account .ap-acct-name{font-weight:600}#ap-account .ap-acct-email,#ap-account .ap-acct-mode{color:#666;font-size:12px}
+#ap-account form{margin:4px 0 0}#ap-account form button{width:100%;border:0;border-radius:7px;background:#f1f1f1;color:#141414;font:600 13px/1.4 var(--ap-font,system-ui);padding:9px 10px;cursor:pointer;text-align:left}
+#ap-account form button:hover{background:#e6e6e6}
+</style>"#;
 
-/// The account control the app document carries while signed in: an avatar
-/// icon in the header; hovering or focusing it shows the email and Sign out.
-pub fn badge(user: &User) -> String {
-    let email = escape(&user.email);
+/// Shared photo/initial control for local and account sessions. No deployment badge.
+pub fn account_control(context: &crate::workspaces::AppContext) -> String {
+    let Some(profile) = &context.principal else {
+        return anonymous_badge(context.auth.allow_demo);
+    };
+    let name = escape(&profile.display_name);
     let initial = escape(
-        &user
-            .email
+        &profile
+            .display_name
             .chars()
-            .next()
+            .find(|c| !c.is_whitespace())
             .unwrap_or('?')
             .to_uppercase()
             .to_string(),
     );
-    let mode = match (user.demo, user.read_only) {
-        (true, true) => "<span class=\"ap-acct-mode\">Demo · read-only</span>",
-        (true, false) => "<span class=\"ap-acct-mode\">Demo account</span>",
-        (false, true) => "<span class=\"ap-acct-mode\">Read-only</span>",
-        (false, false) => "",
+    let image = profile
+        .avatar_url
+        .as_ref()
+        .map(|url| {
+            format!(
+                "<img src=\"{}\" alt=\"\" referrerpolicy=\"no-referrer\" decoding=\"async\">",
+                escape(url)
+            )
+        })
+        .unwrap_or_default();
+    let email = profile
+        .email
+        .as_ref()
+        .map(|email| format!("<span class=\"ap-acct-email\">{}</span>", escape(email)))
+        .unwrap_or_default();
+    let permission = if context.capabilities.create_project {
+        ""
+    } else {
+        "<span class=\"ap-acct-mode\">Read-only</span>"
+    };
+    let logout = if context.auth.can_sign_out {
+        "<form method=\"post\" action=\"/api/auth/logout\"><button type=\"submit\">Sign out</button></form>"
+    } else {
+        ""
     };
     format!(
-        "<div id=\"ap-account\" data-signed-in=\"true\">\
-         <button type=\"button\" class=\"ap-acct-btn\" aria-label=\"Account: {email}\" aria-haspopup=\"true\">\
-         <span class=\"ap-acct-avatar\" aria-hidden=\"true\">{initial}</span></button>\
-         <div class=\"ap-acct-tip\"><div class=\"ap-acct-card\">\
-         <span class=\"ap-acct-email\" title=\"{email}\">{email}</span>{mode}\
-         <form method=\"post\" action=\"/api/auth/logout\"><button type=\"submit\">Sign out</button></form>\
-         </div></div></div>{ACCOUNT_STYLE}"
+        "<details id=\"ap-account\" data-signed-in=\"true\"><summary class=\"ap-acct-btn\" aria-label=\"Account: {name}\"><span class=\"ap-acct-avatar\" aria-hidden=\"true\">{initial}{image}</span></summary><div class=\"ap-acct-card\"><span class=\"ap-acct-name\">{name}</span>{email}{permission}{logout}</div></details>{ACCOUNT_STYLE}"
     )
 }
 
-/// What a signed-out visitor sees where the account control goes
-/// (`serve --login`): an icon-only Sign in button.
+/// Compatibility helper; app documents resolve the persisted profile first.
+pub fn badge(user: &User) -> String {
+    use crate::workspaces::*;
+    let write = !user.read_only && !user.demo;
+    account_control(&AppContext {
+        principal: Some(Profile {
+            id: user.id.clone(),
+            display_name: user.email.clone(),
+            email: Some(user.email.clone()),
+            avatar_url: None,
+        }),
+        workspace: None,
+        capabilities: Capabilities {
+            read: true,
+            create_project: write,
+            start_investigation: write,
+            approve_proposal: write,
+            manage_devices: write,
+        },
+        auth: AuthOptions {
+            can_sign_in: false,
+            can_sign_out: true,
+            allow_demo: false,
+        },
+    })
+}
+
 pub fn anonymous_badge(demo: bool) -> String {
     format!(
-        "<a id=\"ap-account\" data-signed-in=\"false\" data-demo=\"{demo}\" class=\"ap-acct-btn\" href=\"/login?next=/app\" \
-         aria-label=\"Sign in\" title=\"Sign in\">\
-         <svg viewBox=\"0 0 20 20\" aria-hidden=\"true\"><circle cx=\"10\" cy=\"7\" r=\"3.25\"/>\
-         <path d=\"M3.75 16.5c.9-3 3.3-4.5 6.25-4.5s5.35 1.5 6.25 4.5\"/></svg></a>{ACCOUNT_STYLE}"
+        "<a id=\"ap-account\" data-signed-in=\"false\" data-demo=\"{demo}\" class=\"ap-acct-btn\" href=\"/login?next=/app\" aria-label=\"Sign in\" title=\"Sign in\"><svg viewBox=\"0 0 20 20\" aria-hidden=\"true\"><circle cx=\"10\" cy=\"7\" r=\"3.25\"/><path d=\"M3.75 16.5c.9-3 3.3-4.5 6.25-4.5s5.35 1.5 6.25 4.5\"/></svg></a>{ACCOUNT_STYLE}"
     )
 }
 

@@ -155,55 +155,69 @@ async fn by_key(api: Api, token: String) -> Result<KeyInfo, ApiError> {
         .ok_or(ApiError::Unauthorized)
 }
 
+/// Kept only in memory for revalidating long-lived work; never serialized or logged.
+#[derive(Clone)]
+pub(crate) enum Credential {
+    Local,
+    Session(String),
+    Key(String),
+}
+
+pub(crate) async fn request_scope(
+    req: &HttpRequest,
+    keys_only: bool,
+) -> Result<(Caller, Api), ApiError> {
+    let api = api_of(req)?;
+    let (caller, credential) = if let Some(token) = bearer(req) {
+        (
+            Caller::Key(by_key(api.clone(), token.clone()).await?),
+            Credential::Key(token),
+        )
+    } else {
+        if keys_only {
+            return Err(ApiError::Unauthorized);
+        }
+        browser(req, &api)?;
+        if api.options().login {
+            let user = signed_in(&api, req).await?.ok_or(ApiError::Unauthorized)?;
+            let token = req
+                .cookie(LOGIN_COOKIE)
+                .ok_or(ApiError::Unauthorized)?
+                .value()
+                .to_string();
+            (Caller::Member(user), Credential::Session(token))
+        } else {
+            (Caller::Browser, Credential::Local)
+        }
+    };
+    let saved = caller.clone();
+    let scoped = blocking(move || api.scoped(&saved, credential)).await?;
+    if !matches!(*req.method(), Method::GET | Method::HEAD)
+        && !scoped.context.as_ref().unwrap().capabilities.create_project
+    {
+        return Err(ApiError::Forbidden("This account is read-only.".into()));
+    }
+    Ok((caller, scoped))
+}
 impl FromRequest for Keyed {
     type Error = ApiError;
     type Future = LocalBoxFuture<'static, Result<Self, ApiError>>;
-
     fn from_request(req: &HttpRequest, _: &mut Payload) -> Self::Future {
-        let store = api_of(req);
-        let token = bearer(req);
+        let req = req.clone();
         Box::pin(async move {
-            let token = token.ok_or(ApiError::Unauthorized)?;
-            Ok(Keyed(by_key(store?, token).await?))
+            match request_scope(&req, true).await?.0 {
+                Caller::Key(key) => Ok(Self(key)),
+                _ => Err(ApiError::Unauthorized),
+            }
         })
     }
 }
-
 impl FromRequest for KeyOrBrowser {
     type Error = ApiError;
     type Future = LocalBoxFuture<'static, Result<Self, ApiError>>;
-
     fn from_request(req: &HttpRequest, _: &mut Payload) -> Self::Future {
-        let store = api_of(req);
-        let token = bearer(req);
-        let keyless = match (&store, &token) {
-            (Ok(a), None) => Some(browser(req, a)),
-            _ => None,
-        };
         let req = req.clone();
-        Box::pin(async move {
-            let store = store?;
-            match (token, keyless) {
-                (Some(token), _) => Ok(KeyOrBrowser(Caller::Key(by_key(store, token).await?))),
-                (None, Some(verdict)) => {
-                    verdict?;
-                    if !store.options().login {
-                        return Ok(KeyOrBrowser(Caller::Browser));
-                    }
-                    match signed_in(&store, &req).await? {
-                        Some(user)
-                            if user.read_only
-                                && !matches!(*req.method(), Method::GET | Method::HEAD) =>
-                        {
-                            Err(ApiError::Forbidden("This account is read-only.".into()))
-                        }
-                        Some(user) => Ok(KeyOrBrowser(Caller::Member(user))),
-                        None => Err(ApiError::Unauthorized),
-                    }
-                }
-                (None, None) => Err(ApiError::Unauthorized),
-            }
-        })
+        Box::pin(async move { Ok(Self(request_scope(&req, false).await?.0)) })
     }
 }
 

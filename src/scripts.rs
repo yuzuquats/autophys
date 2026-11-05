@@ -13,6 +13,7 @@ pub fn scripts() -> Scripts<()> {
         .add_command(serve)
         .add_command(build_web)
         .add_command(pack)
+        .add_command(workspace)
         .add_subcommand("pair", pair_commands())
         .add_subcommand("keys", keys_commands())
         .add_subcommand("users", users_commands())
@@ -566,4 +567,12 @@ pub async fn run(mut argv: Vec<String>, out: &mut impl Write) -> u8 {
             }
         }
     }
+}
+
+#[command(
+    name = "workspace",
+    description = "Inspect or explicitly bind account collections and keys; dry-run unless --apply. list | bind EMAIL --collection DIR | key KEY_ID EMAIL [--write] | seed EMAIL --from DIR --version V | profile local/EMAIL --name NAME [--avatar URL]; --server-db FILE"
+)]
+async fn workspace(_: (), args: Option<Vec<String>>) -> tento_sh::Result<Value> {
+    crate::workspaces::admin(args.unwrap_or_default()).map_err(|e| usage(e.to_string()))
 }

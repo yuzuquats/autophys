@@ -51,7 +51,7 @@ pub(crate) struct After {
 
 pub(crate) async fn stream(
     _: KeyOrBrowser,
-    api: web::Data<Api>,
+    api: super::Data,
     q: web::Query<After>,
     req: HttpRequest,
 ) -> Result<HttpResponse> {
@@ -134,6 +134,7 @@ pub(crate) async fn stream(
         dirty: true,
         quiet_since: Instant::now(),
         next_poll: Instant::now() + POLL,
+        next_auth: Instant::now(),
     };
     let events = futures_util::stream::unfold(tail, |mut t| async move {
         let chunk = t.next().await?;
@@ -166,11 +167,16 @@ struct Tail {
     quiet_since: Instant,
     /// A fixed deadline: unrelated broadcast traffic must not postpone polling.
     next_poll: Instant,
+    next_auth: Instant,
 }
 
 impl Tail {
     async fn next(&mut self) -> Option<Bytes> {
         loop {
+            if Instant::now() >= self.next_auth {
+                self.api.check_access(false).await.ok()?;
+                self.next_auth = Instant::now() + POLL;
+            }
             if let Some((pid, l)) = self.backlog.pop_front() {
                 let cursor = self.cursors.entry(pid).or_insert(0);
                 if l.gseq <= *cursor {

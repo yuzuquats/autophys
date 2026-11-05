@@ -226,6 +226,16 @@ pub(crate) fn pair_poll(
             }
         }
         "approved" => {
+            let binding: (Option<String>, Option<String>) = tx.query_row(
+                "SELECT owner_id, workspace_id FROM pairings WHERE device_code_sha256 = ?1",
+                [&sha],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )?;
+            if let (Some(owner), Some(workspace)) = (&binding.0, &binding.1) {
+                if owner != "local" && !tx.query_row("SELECT EXISTS(SELECT 1 FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.user_id = ?1 AND m.workspace_id = ?2 AND u.read_only = 0 AND u.demo = 0 AND u.password IS NOT NULL)", params![owner,workspace], |r| r.get::<_,bool>(0))? {
+                    return Err(ApiError::Pairing("access_denied"));
+                }
+            }
             let api_key = format!("{KEY_PREFIX}{}", random_hex(32)?);
             let key_id = format!("k_{}", random_hex(6)?);
             tx.execute(
@@ -237,6 +247,9 @@ pub(crate) fn pair_poll(
                     now_text(now)
                 ],
             )?;
+            if let (Some(owner), Some(workspace)) = (&binding.0, &binding.1) {
+                tx.execute("INSERT INTO key_access (key_id, owner_id, workspace_id, can_write) VALUES (?1,?2,?3,1)", params![key_id,owner,workspace])?;
+            }
             tx.execute(
                 include_str!("../sql/keys/finish_pairing.sql"),
                 params![sha, key_id],
@@ -245,8 +258,8 @@ pub(crate) fn pair_poll(
             Ok(IssuedKey {
                 api_key,
                 key_id,
-                account: p.account.to_string(),
-                workspace: p.workspace.to_string(),
+                account: binding.0.unwrap_or_else(|| p.account.to_string()),
+                workspace: binding.1.unwrap_or_else(|| p.workspace.to_string()),
             })
         }
         other => Err(ApiError::Internal(format!(
@@ -370,6 +383,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../sql/keys/schema_v2.sql"),
     include_str!("../sql/keys/schema_v3.sql"),
     include_str!("../sql/keys/schema_v4.sql"),
+    include_str!("../sql/keys/schema_v5.sql"),
 ];
 
 fn migrate(conn: &mut Connection) -> Result<()> {
@@ -488,7 +502,7 @@ impl KeyStore {
         &self.opts
     }
 
-    fn conn(&self) -> Result<MutexGuard<'_, Connection>> {
+    pub(crate) fn conn(&self) -> Result<MutexGuard<'_, Connection>> {
         self.conn
             .lock()
             .map_err(|_| ApiError::Internal("server database connection poisoned".into()))
@@ -520,6 +534,13 @@ impl KeyStore {
     /// Poll a pairing (`POST /pair/poll`). `Err(Pairing(code))` until
     /// approved; then the key, exactly once.
     pub fn pair_poll(&self, device_code: &str) -> Result<IssuedKey> {
+        if self.opts.login {
+            let conn = self.conn()?;
+            let unbound: bool = conn.query_row("SELECT EXISTS(SELECT 1 FROM pairings WHERE device_code_sha256 = ?1 AND state = 'approved' AND (owner_id IS NULL OR workspace_id IS NULL OR owner_id = 'local'))", [sha256_hex([device_code.as_bytes()])], |r| r.get(0))?;
+            if unbound {
+                return Err(ApiError::Pairing("access_denied"));
+            }
+        }
         pair_poll(
             &mut *self.conn()?,
             device_code,
@@ -580,7 +601,15 @@ impl KeyStore {
 
     /// `autophys users add EMAIL`: create or re-invite; the token is the link.
     pub fn users_invite(&self, email: &str) -> Result<crate::accounts::Invite> {
-        crate::accounts::invite(&*self.conn()?, email, Utc::now())
+        let existed = self
+            .users_list()?
+            .iter()
+            .any(|u| u.email == email.trim().to_lowercase());
+        let invite = crate::accounts::invite(&*self.conn()?, email, Utc::now())?;
+        if !existed {
+            self.provision_workspace(&invite.user)?;
+        }
+        Ok(invite)
     }
 
     /// Who an unexpired invite token was issued to.
@@ -599,7 +628,15 @@ impl KeyStore {
 
     /// Make EMAIL the demo account (creating it; no password), or stop it being one.
     pub fn users_set_demo(&self, email: &str, demo: bool) -> Result<crate::accounts::User> {
-        crate::accounts::set_demo(&mut *self.conn()?, email, demo)
+        let existed = self
+            .users_list()?
+            .iter()
+            .any(|u| u.email == email.trim().to_lowercase());
+        let user = crate::accounts::set_demo(&mut *self.conn()?, email, demo)?;
+        if !existed {
+            self.provision_workspace(&user)?;
+        }
+        Ok(user)
     }
 
     /// The demo account, if one is set.

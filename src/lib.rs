@@ -19,6 +19,7 @@ pub mod login;
 pub mod scripts;
 pub mod server;
 pub mod train;
+pub mod workspaces;
 
 pub use app::{APP_ID, AppConfig, BuildInfo, TENTO, domain};
 pub use server::{

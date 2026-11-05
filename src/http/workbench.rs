@@ -170,7 +170,12 @@ pub(super) async fn start(
         .as_str()
         .ok_or_else(|| ApiError::invalid("config_version", "required string"))?
         .to_string();
-    let lease = api.workbench.reserve(&pid)?;
+    let job_key = format!(
+        "{}:{}",
+        api.context.as_ref().unwrap().workspace.as_ref().unwrap().id,
+        pid
+    );
+    let lease = api.workbench.reserve(&job_key)?;
     let wb = workbook(&api, &pid).await?;
     let agent = blocking(move || {
         let config = wb
@@ -205,7 +210,9 @@ pub(super) async fn start(
     actix_web::rt::spawn(async move {
         let _lease = lease;
         let result = drive(worker_api.clone(), agent).await;
-        if let Err(error) = result {
+        if let Err(error) = result
+            && worker_api.check_access(true).await.is_ok()
+        {
             let message = error.to_string();
             let _ = blocking(move || Ok(record.append("outcome", json!({
                 "status":"inconclusive","reasons":[message],"summary":"Daemon run stopped. Start a new investigation to retry."
@@ -222,6 +229,7 @@ async fn drive(api: Api, mut inv: agent::Investigation) -> Result<()> {
     let project_id = inv.record.workbook().id().to_string();
     let mut synthetic = runner(&inv.project, 43);
     loop {
+        api.check_access(true).await?;
         inv = blocking(move || {
             inv.run()?;
             Ok(inv)
@@ -232,6 +240,7 @@ async fn drive(api: Api, mut inv: agent::Investigation) -> Result<()> {
             return Ok(());
         };
         loop {
+            api.check_access(true).await?;
             if Instant::now() >= deadline {
                 return Err(ApiError::bad_request(
                     "Approval timed out after 30 minutes.",

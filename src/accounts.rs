@@ -109,7 +109,7 @@ fn user_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<User> {
         email: r.get(1)?,
         created: r.get(2)?,
         active: r.get::<_, Option<String>>(3)?.is_some() || r.get::<_, i64>(5)? != 0,
-        read_only: r.get::<_, i64>(4)? != 0,
+        read_only: r.get::<_, i64>(4)? != 0 || r.get::<_, i64>(5)? != 0,
         demo: r.get::<_, i64>(5)? != 0,
     })
 }
@@ -272,6 +272,12 @@ pub(crate) fn check_password(
 pub(crate) fn set_demo(conn: &mut Connection, email: &str, demo: bool) -> Result<User> {
     let email = normalize_email(email)?;
     let tx = conn.transaction()?;
+    // Reconfiguring public access ends both the old and new demo sessions.
+    tx.execute(
+        "DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE demo = 1 OR email = ?1)",
+        [&email],
+    )?;
+    tx.execute("UPDATE keys SET revoked = ?1 WHERE id IN (SELECT key_id FROM key_access WHERE owner_id IN (SELECT id FROM users WHERE demo = 1 OR email = ?2))", params![now_text(Utc::now()), email])?;
     if demo {
         tx.execute(
             "INSERT INTO users (id, email, created) VALUES (?1, ?2, ?3) ON CONFLICT(email) DO NOTHING",
@@ -282,7 +288,7 @@ pub(crate) fn set_demo(conn: &mut Connection, email: &str, demo: bool) -> Result
             [&email],
         )?;
         tx.execute(
-            "UPDATE users SET demo = 1, password = NULL, invite_sha256 = NULL, invite_expires = NULL
+            "UPDATE users SET demo = 1, read_only = 1, password = NULL, invite_sha256 = NULL, invite_expires = NULL
              WHERE email = ?1",
             [&email],
         )?;
@@ -320,6 +326,19 @@ pub(crate) fn demo_user(conn: &Connection) -> Result<Option<User>> {
 /// Mark an account read-only, or read-write again.
 pub(crate) fn set_read_only(conn: &Connection, email: &str, read_only: bool) -> Result<User> {
     let email = normalize_email(email)?;
+    if !read_only
+        && conn
+            .query_row("SELECT demo FROM users WHERE email = ?1", [&email], |r| {
+                r.get::<_, i64>(0)
+            })
+            .optional()?
+            .unwrap_or(0)
+            != 0
+    {
+        return Err(ApiError::bad_request(
+            "Disable demo sign-in before granting write access.",
+        ));
+    }
     let n = conn.execute(
         "UPDATE users SET read_only = ?2 WHERE email = ?1",
         params![email, read_only as i64],
