@@ -4,7 +4,7 @@
 export const guidedTourStyles = `
 html[data-ap-tour] .ck-tour { max-width:1000px; gap:20px; }
 html[data-ap-tour] .ck-tour[data-preview] { grid-template-columns:32px 320px minmax(0,1fr); }
-html[data-ap-tour] .ck-tour-preview { height:166px; background:transparent; box-shadow:none; }
+html[data-ap-tour] .ck-tour-preview { height:166px; background:transparent; box-shadow:0 2px 4px rgb(0 0 0 / 6%), 0 8px 20px rgb(0 0 0 / 10%); }
 /* Empty or failed images never leave the cookbook's grey placeholder visible. */
 html[data-ap-tour] .ck-tour-preview:empty { display:none !important; }
 .ap-tour-image { display:block; width:320px; height:166px; max-width:none; }

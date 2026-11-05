@@ -81,3 +81,12 @@ server/tunnel are stopped. Its empty fixture-test database descriptors were
 preserved separately by disk-issues at
 `fleet/evidence/autophys-drawer-recovery-20261105/`; no user data was in that
 isolated store. The deployed package and current verification are unaffected.
+
+## Tutorial image depth — 2026-11-05
+
+The operator requested a little shadow on the tutorial images. Replace the
+preview frame’s explicit shadow suppression with a soft two-layer shadow
+(2px/4px at 6%, 8px/20px at 10%). Applying elevation to the frame preserves
+its rounded clipping and the narrow-screen image panning. Image dimensions,
+drawer geometry and transition behavior stay unchanged. Validate the rendered
+desktop and phone previews, then package and deploy from clean owner master.
