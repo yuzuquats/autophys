@@ -70,3 +70,12 @@ The wrapper resolves its config and canonical playbook beside itself; it keeps
 the workspace/lab working directory unchanged. Relative workbook/root paths
 therefore still refer to the lab. Rebuild and reinstall older generated bundles
 whose manifest used `sh mcp-stdio.sh` or relative resource arguments.
+
+Generated local and SSH launchers pass `--expected-playbook-sha256`, binding
+MCP to the exact strategy bytes copied into the package. The remote SDK must
+support that option. Before importing a lab project or opening a workbook it
+refuses an ambient/default playbook with a different digest. A custom package
+does not silently upload or replace remote strategy files: install those exact
+bytes yourself and select them with `playbook` in the remote lab's
+`.autophys-mcp.json`. Rebuild/reinstall after an intentional strategy change;
+resuming an investigation still requires its recorded pinned strategy.

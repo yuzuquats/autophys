@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 from ..agent import Decision, Investigation, ProposalRunner, ToolError
-from .playbook import load_playbook
+from .playbook import load_playbook, require_digest
 from ..client import connect
 from ..data import Dataset
 from ..models.battery import battery_ecm
@@ -50,14 +50,24 @@ class MCPPolicy:
 
 class MCPSession:
     def __init__(self, project: Project, target: str | None = None, *, root: str | Path = ".",
-                 investigation: str | None = None, playbook: str | Path | None = None):
+                 investigation: str | None = None, playbook: str | Path | None = None,
+                 expected_playbook_sha256: str | None = None):
         self.project = project
         self.root = Path(root).expanduser().resolve()
-        self.client = connect(target)
-        self.workbook = self.client.project(project)
         self.policy = MCPPolicy(playbook)
+        require_digest(self.policy.playbook, expected_playbook_sha256)
+        self.client = connect(target)
+        try:
+            self.workbook = self.client.project(project)
+            self.inv = self.workbook.investigation(investigation, policy=self.policy) if investigation else None
+        except BaseException as primary:
+            try:
+                self.client.close()
+            except BaseException:
+                if hasattr(primary, "add_note"):
+                    primary.add_note("MCP client cleanup also failed after session refusal")
+            raise
         self.lock = threading.RLock()
-        self.inv = self.workbook.investigation(investigation, policy=self.policy) if investigation else None
         self.target = str(getattr(self.workbook.store, "path", target or self.root))
         self.approval = {"workbook": self.target, "instruction":
                          "Open this workbook in the autophys browser viewer and approve or edit the proposal there."}

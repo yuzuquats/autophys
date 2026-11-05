@@ -240,8 +240,11 @@ def test_plugin_builder_keeps_canonical_skill_and_paths_in_config(tmp_path):
     assert json.loads((result / "playbook.json").read_text())["sha256"] == hashlib.sha256(data).hexdigest()
     manifest = json.loads((result / ".muse-plugin/plugin.json").read_text())
     argv = manifest["capabilities"]["mcpServers"][0]["command"]
-    assert argv == [str(Path(sys.executable).absolute()), "-m", "autophys.cli", "mcp",
-                    "--config", "mcp-config.json", "--playbook", "skills/autophys/SKILL.md"]
+    assert argv == ["./mcp-stdio.sh"]
+    script = (result / "mcp-stdio.sh").read_text()
+    assert '--config "$plugin_root/mcp-config.json"' in script
+    assert '--playbook "$plugin_root/skills/autophys/SKILL.md"' in script
+    assert "--expected-playbook-sha256 " + canonical.sha256 in script
     assert json.loads((result / "mcp-config.json").read_text())["root"] == str(tmp_path)
     with pytest.raises(FileExistsError):
         build(result)
@@ -255,11 +258,11 @@ def test_ssh_bundle_keeps_simulator_on_remote_host_and_quotes_paths(tmp_path):
         pytest.skip("plugin sources are not part of the Python wheel")
     build = runpy.run_path(str(source / "build.py"))["build"]
     result = build(tmp_path / "ssh", python="/remote/venv/bin/python", project="battery_ecm",
-                   root="/remote/my lab", workbook="/remote/my books", ssh_host="rwc-dev-01",
+                   root="/remote/my lab", workbook="/remote/my books", ssh_host="offline-lab",
                    source_root="/remote/sdk/src")
     script = (result / "mcp-stdio.sh").read_text().splitlines()[1]
     local_args = shlex.split(script)
-    assert local_args[:3] == ["exec", "ssh", "rwc-dev-01"]
+    assert local_args[:3] == ["exec", "ssh", "offline-lab"]
     remote_args = shlex.split(local_args[3])
     assert remote_args[:4] == ["env", "PYTHONDONTWRITEBYTECODE=1", "PYTHONPATH=/remote/sdk/src",
                               "/remote/venv/bin/python"]
@@ -349,5 +352,114 @@ def test_plugin_launchers_resolve_installed_resources_and_keep_lab_cwd(tmp_path)
     assert shlex.split(received["argv"][1]) == [
         "env", "PYTHONDONTWRITEBYTECODE=1", "PYTHONPATH=/remote/sdk src",
         "/remote/my venv/python", "-m", "autophys.cli", "mcp",
+        "--expected-playbook-sha256", load_playbook().sha256,
         "--project", "user_sim:project", "--workbook", "relative books", "--root", "relative lab"]
     assert (installed_remote / "skills/autophys/SKILL.md").read_bytes() == load_playbook().data
+
+
+def test_mcp_digest_refusal_precedes_project_import_and_workbook_mutation(tmp_path, monkeypatch):
+    from autophys.mcp import cli
+    from types import SimpleNamespace
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cli, "load_project", lambda *a: pytest.fail("project imported before identity validation"))
+    args = SimpleNamespace(config=None, root=None, project="missing:project", workbook=str(tmp_path / "must not exist"),
+                           investigation=None, playbook=None, expected_playbook_sha256="0" * 64)
+    with pytest.raises(ValueError, match="playbook digest mismatch"):
+        cli.run(args)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_remote_wrapper_executes_agreement_and_refuses_distinct_ambient_strategy(tmp_path):
+    import hashlib
+    import runpy
+    import shlex
+    source = Path(__file__).resolve().parents[3] / "plugins/muse-autophys"
+    if not source.exists():
+        pytest.skip("plugin sources are not part of the Python wheel")
+    build = runpy.run_path(str(source / "build.py"))["build"]
+    lab = tmp_path / "remote lab ' quoted"; lab.mkdir()
+    bins = tmp_path / "offline bins"; bins.mkdir()
+    # Execute the remote shell command locally. This executable cannot invoke
+    # ssh and never resolves/connects to a host; all stdio remains Unix pipes.
+    ssh = bins / "ssh"
+    ssh.write_text("#!/usr/bin/env python3\nimport os,sys\nassert sys.argv[1]=='offline-lab'\nos.execv('/bin/sh',['/bin/sh','-c',sys.argv[2]])\n")
+    ssh.chmod(0o755)
+    default = load_playbook()
+    custom = lab / "custom strategy.md"
+    custom.write_bytes(default.data + b"\nLocal strategy identity probe.\n")
+    env = {**child_env(), "PATH": str(bins) + os.pathsep + os.environ["PATH"]}
+    # Different packaged custom and ambient default: fail before creating books.
+    refused = build(tmp_path / "refused", python=sys.executable, project="battery_ecm", root=str(lab),
+                    workbook=str(lab / "must not exist"), playbook=custom, ssh_host="offline-lab")
+    result = subprocess.run([str(refused / "mcp-stdio.sh")], input="", cwd=lab, env=env,
+                            text=True, capture_output=True, timeout=15)
+    assert result.returncode != 0
+    assert "playbook digest mismatch" in result.stderr
+    assert not (lab / "must not exist").exists()
+    # Ambient explicit custom selection agrees exactly; exercise the real MCP
+    # process from the same relocated shell wrapper, including cwd/config paths.
+    config = {"playbook": str(custom)}
+    (lab / ".autophys-mcp.json").write_text(json.dumps(config))
+    async def check():
+        from mcp import ClientSession, StdioServerParameters
+        from mcp.client.stdio import stdio_client
+        params = StdioServerParameters(command=str(refused / "mcp-stdio.sh"), env=env, cwd=str(lab))
+        async with stdio_client(params) as (read, write):
+            async with ClientSession(read, write) as client:
+                await client.initialize()
+                assert (await call(client, "describe_project"))["csv_root"] == str(lab)
+    invoke(check())
+    assert json.loads((refused / "playbook.json").read_text())["sha256"] == hashlib.sha256(custom.read_bytes()).hexdigest()
+
+
+def test_digest_bound_resume_uses_pinned_strategy_and_refuses_mismatch(session, tmp_path, monkeypatch):
+    session.import_measurements("pulses.csv", "pulse_2A", sigma={"v": 0.002})
+    book = session.policy.playbook
+    before = session.inv.records()
+    resumed = MCPSession(session.project, session.target, root=tmp_path,
+                         investigation=session.inv.id, expected_playbook_sha256=book.sha256)
+    try:
+        assert resumed.policy.playbook.sha256 == before[0].payload["playbook"]["sha256"]
+        assert resumed.inv.records() == before
+    finally: resumed.close()
+    import autophys.mcp.session as module
+    monkeypatch.setattr(module, "connect", lambda *a: pytest.fail("opened workbook before refusal"))
+    with pytest.raises(ValueError, match="playbook digest mismatch"):
+        MCPSession(session.project, session.target, root=tmp_path,
+                   investigation=session.inv.id, expected_playbook_sha256="0" * 64)
+
+
+def test_custom_strategy_resume_pins_bytes_and_rejected_resume_closes_client(tmp_path, monkeypatch):
+    import autophys.mcp.session as module
+    default = load_playbook()
+    custom = tmp_path / "custom skill.md"
+    custom.write_bytes(default.data + b"\nCustom strategy resume probe.\n")
+    strategy = load_playbook(custom)
+    project = load_project("battery_ecm")
+    write_csv(tmp_path / "pulses.csv", project, "pulse_2A")
+    target = str(tmp_path / "books")
+    original = MCPSession(project, target, root=tmp_path, playbook=custom, expected_playbook_sha256=strategy.sha256)
+    try:
+        original.import_measurements("pulses.csv", "pulse_2A", sigma={"v": 0.002})
+        investigation = original.inv.id
+        before = original.inv.records()
+        resumed = MCPSession(project, target, root=tmp_path, investigation=investigation,
+                             playbook=custom, expected_playbook_sha256=strategy.sha256)
+        try: assert resumed.inv.records() == before
+        finally: resumed.close()
+        real_connect = module.connect
+        closed = []
+        def tracked(*args):
+            client = real_connect(*args)
+            real_close = client.close
+            def close(): closed.append(True); return real_close()
+            client.close = close
+            return client
+        monkeypatch.setattr(module, "connect", tracked)
+        from autophys.store import StoreError
+        with pytest.raises(StoreError, match="playbook"):
+            MCPSession(project, target, root=tmp_path, investigation=investigation,
+                       expected_playbook_sha256=default.sha256)
+        assert closed == [True]
+        assert original.inv.records() == before
+    finally: original.close()

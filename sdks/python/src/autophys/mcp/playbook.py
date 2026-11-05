@@ -50,3 +50,10 @@ def load_playbook(path: str | Path | None = None):
         raise ValueError("playbook snapshot requires string name and version")
     return SkillSnapshot(metadata["name"], metadata["version"], hashlib.sha256(data).hexdigest(),
                          data, path.resolve())
+
+
+def require_digest(book, expected: str | None):
+    """Bind a launcher to exact strategy bytes, without selecting replacements."""
+    if expected is not None and book.sha256 != expected:
+        raise ValueError(f"playbook digest mismatch: packaged strategy requires {expected}, remote/local selected {book.sha256}; install the matching playbook or configure --playbook explicitly before retrying")
+    return book

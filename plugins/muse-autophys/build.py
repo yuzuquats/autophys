@@ -36,7 +36,7 @@ def build(output, *, python="autophys", project=None, workbook=None, root=None, 
         if python == "autophys":
             raise SystemExit("--ssh-host requires --python with the remote SDK interpreter path")
         # The wrapper is a normal hashed plugin source. It carries no credentials.
-        remote = [python, "-m", "autophys.cli", "mcp"]
+        remote = [python, "-m", "autophys.cli", "mcp", "--expected-playbook-sha256", hashlib.sha256(skill.read_bytes()).hexdigest()]
         for key, value in config.items():
             remote += ["--" + key, value]
         env = ["env", "PYTHONDONTWRITEBYTECODE=1"]
@@ -56,7 +56,7 @@ def build(output, *, python="autophys", project=None, workbook=None, root=None, 
         script += "exec " + shlex.join(command)
         if config:
             script += ' --config "$plugin_root/mcp-config.json"'
-        script += ' --playbook "$plugin_root/skills/autophys/SKILL.md"\n'
+        script += ' --playbook "$plugin_root/skills/autophys/SKILL.md" --expected-playbook-sha256 ' + hashlib.sha256(skill.read_bytes()).hexdigest() + '\n'
         (output / "mcp-stdio.sh").write_text(script)
     (output / "mcp-stdio.sh").chmod(0o755)
     command = ["./mcp-stdio.sh"]
