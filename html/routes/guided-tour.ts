@@ -36,12 +36,7 @@ export function mountGuidedTour(host: Host) {
     async start() {
       const own = ++generation;
       if (disposed || !host.signedIn() || ctl.view().main.body.kind === "project-setup") return [];
-      // Reuse the in-flight account read. The drawer moves while it resolves.
-      try { await ctl.store.start(); } catch { return []; }
-      if (disposed || own !== generation || !host.signedIn()) return [];
-      const snap = ctl.store.snapshot();
-      if (!snap) return [];
-      const restoreNavigation = ctl.preserveNavigation();
+      let restoreNavigation = () => {};
       const sidebar = document.querySelector(".ck-sidebar-toggle")?.getAttribute("aria-pressed") === "true";
       const details = document.querySelector(".ck-details-toggle")?.getAttribute("aria-pressed") === "true";
       const mobile = panels()?.dataset.mobile ?? "main";
@@ -64,6 +59,14 @@ export function mountGuidedTour(host: Host) {
         }
         if (focus?.isConnected) focus.focus({ preventScroll: true });
       };
+      // Set the first lesson's panels before yielding, so initial load cannot
+      // briefly show Details and then close it when the workspace arrives.
+      layout("sidebar", false);
+      try { await ctl.store.start(); } catch { return []; }
+      if (disposed || own !== generation || !host.signedIn()) return [];
+      const snap = ctl.store.snapshot();
+      if (!snap) return [];
+      restoreNavigation = ctl.preserveNavigation();
       return tourSteps(snap.workspace, ctl.selection).map(part => ({
         title: part.title, body: part.body, group: part.group, target: part.target,
         enter() {
