@@ -1,0 +1,15 @@
+{
+  "format": 1,
+  "base": "Retained recovered Autophys vendor source, not reconstructed pristine upstream plus historical patches",
+  "base_head": "bbef202f353e1afbf4f45c05bf8e59318aba59dd",
+  "retained_vendor_tree": "60c5053b1973594d3f9790d6b3be1b415b018510",
+  "historical_upstream_reference": "56389ac9d80c5b1ce5704bc2d9cacc89fd2def12",
+  "historical_limit": "Missing generator and fifteen historical patch inputs; inherited delta remains unproven. No license grant.",
+  "file": "vendor/tento/tento-web/src/client/bundler.rs",
+  "preimage_sha256": "3b5f6dd0515e10c9f8443aa793b2e38dc5b8998d07a3a96b51de435f1faae41b",
+  "postimage_sha256": "e7be3e82543a304e55a022a27f265a5b50e15accdb4b349d34e5fe2a701d32f5",
+  "patch_sha256": "380376544855a07037b5eca894f6b65e955cf77fb2a61e6f89dfc045eb853495",
+  "manifest_canonicalization": "UTF-8 JSON sorted keys, compact separators, original row order, trailing LF",
+  "retained_base_manifest_sha256": "9e6295473c6645bc9d7defcc626ad9a76b0d6a149829b3373abf945ab3e5cb07",
+  "current_manifest_sha256": "75d21aa60fdfd295552847a791291b284aef7a2cbd2cb7179c6e9f97124f300a"
+}

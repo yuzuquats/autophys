@@ -248,7 +248,11 @@ fn bundler(project_root: &Path) -> Result<Bundler> {
         })
         .context("locate tento-web; set TENTO_WEB if it is not at the project root's TENTO path")?;
     let tento_web = Arc::new(TentoWeb(tento_web_root));
-    let esbuild = Arc::new(EsbuildClient::new(tento_web.clone()).context("start esbuild")?);
+    let esbuild = Arc::new(EsbuildClient::with_deno_config(
+        tento_web.clone(),
+        &project_root.join("html/deno.json"),
+        std::env::var("AUTOPHYS_BUILD_OFFLINE").as_deref() == Ok("1"),
+    ).context("start esbuild with frozen product dependencies")?);
     Ok(Bundler::new(esbuild, tento_web))
 }
 

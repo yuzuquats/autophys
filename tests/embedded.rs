@@ -183,7 +183,8 @@ fn hydration_rehashes_payload_and_checks_crc() {
 #[cfg(target_os = "linux")]
 #[ignore = "requires AUTOPHYS_E2E_WEB_ROOT pointing to a real build-web tree"]
 fn packed_single_file_serves_without_sources() {
-    use std::net::{TcpListener, TcpStream};
+    use std::net::{SocketAddr, TcpListener, TcpStream};
+    use std::io::{BufRead, BufReader};
     use std::process::{Child, Command, Stdio};
     use std::time::{Duration, Instant};
     struct Stop(Child);
@@ -203,15 +204,15 @@ fn packed_single_file_serves_without_sources() {
             let _ = self.0.wait();
         }
     }
-    fn get(path: &str) -> std::io::Result<Vec<u8>> {
+    fn get(addr: SocketAddr, path: &str) -> std::io::Result<Vec<u8>> {
         let mut socket = TcpStream::connect_timeout(
-            &"127.0.0.1:4799".parse().unwrap(),
+            &addr,
             Duration::from_millis(200),
         )?;
         socket.set_read_timeout(Some(Duration::from_secs(3)))?;
         write!(
             socket,
-            "GET {path} HTTP/1.1\r\nHost: 127.0.0.1:4799\r\nConnection: close\r\n\r\n"
+            "GET {path} HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\n\r\n"
         )?;
         let mut response = Vec::new();
         socket.read_to_end(&mut response)?;
@@ -223,7 +224,6 @@ fn packed_single_file_serves_without_sources() {
         assert!(headers.starts_with("HTTP/1.1 200"), "{path}: {headers}");
         Ok(response[end + 4..].to_vec())
     }
-    drop(TcpListener::bind("127.0.0.1:4799").expect("e2e port must be free"));
     let root = std::path::PathBuf::from(
         std::env::var_os("AUTOPHYS_E2E_WEB_ROOT").expect("build-web tree"),
     );
@@ -260,26 +260,33 @@ fn packed_single_file_serves_without_sources() {
                 "AUTOPHYS_PROJECT_ROOT",
                 scratch.path().join("absent-source"),
             )
-            .args(["serve", "--addr", "127.0.0.1:4799"])
+            .args(["serve", "--addr", "127.0.0.1:0"])
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
             .spawn()
             .unwrap();
         let mut server = Stop(child);
+        // The daemon owns the port-0 listener continuously. Its startup receipt
+        // transfers the assigned address; there is no bind/drop/rebind race.
+        let stderr = server.0.stderr.take().unwrap();
+        let (send, recv) = std::sync::mpsc::channel();
+        let diagnostics = std::thread::spawn(move || {
+            for line in BufReader::new(stderr).lines() {
+                let line = line.unwrap();
+                if let Some((_, url)) = line.rsplit_once(" on http://") {
+                    if let Ok(addr) = url.parse::<SocketAddr>() { let _ = send.send(addr); }
+                }
+                eprintln!("{line}");
+            }
+        });
+        let addr = recv.recv_timeout(Duration::from_secs(15)).expect("daemon's owned listener address");
+        assert!(addr.ip().is_loopback() && addr.port() != 0);
         let health = loop {
-            if let Ok(body) = get("/api/healthz") {
+            if let Ok(body) = get(addr, "/api/healthz") {
                 break body;
             }
             if let Some(status) = server.0.try_wait().unwrap() {
-                let mut stderr = String::new();
-                server
-                    .0
-                    .stderr
-                    .as_mut()
-                    .unwrap()
-                    .read_to_string(&mut stderr)
-                    .unwrap();
-                panic!("serve exited {status}: {stderr}");
+                panic!("serve exited {status}; see captured diagnostics");
             }
             assert!(
                 started.elapsed() < Duration::from_secs(15),
@@ -295,10 +302,11 @@ fn packed_single_file_serves_without_sources() {
         assert_eq!(health["ok"], true);
         assert_eq!(health["web_id"], payload.id);
         assert_eq!(health.as_object().unwrap().len(), 4);
-        assert!(!get("/").unwrap().is_empty());
-        assert_eq!(get("/index.root.js").unwrap(), expected_js);
-        assert!(!get("/app").unwrap().is_empty());
+        assert!(!get(addr, "/").unwrap().is_empty());
+        assert_eq!(get(addr, "/index.root.js").unwrap(), expected_js);
+        assert!(!get(addr, "/app").unwrap().is_empty());
         drop(server);
+        diagnostics.join().unwrap();
+        drop(TcpListener::bind(addr).expect("owned ephemeral listener was stopped"));
     }
-    drop(TcpListener::bind("127.0.0.1:4799").expect("e2e server was stopped"));
 }

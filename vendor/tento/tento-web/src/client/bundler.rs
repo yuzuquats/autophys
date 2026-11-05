@@ -900,12 +900,28 @@ pub struct EsbuildClient {
 
 impl EsbuildClient {
   pub fn new(tento_web: Arc<TentoWeb>) -> anyhow::Result<Self> {
+    Self::configured(tento_web, None)
+  }
+
+  /// Use the application's immutable dependency graph for the actual RPC worker.
+  /// The default constructor retains upstream config discovery for other users.
+  pub fn with_deno_config(tento_web: Arc<TentoWeb>, config: &Path, cached_only: bool) -> anyhow::Result<Self> {
+    let config = config.canonicalize().context("resolve application Deno config")?;
+    ensure!(config.is_file(), "application Deno config is not a file: {}", config.display());
+    Self::configured(tento_web, Some((config, cached_only)))
+  }
+
+  fn configured(tento_web: Arc<TentoWeb>, context: Option<(PathBuf, bool)>) -> anyhow::Result<Self> {
     let client_dir = tento_web.path("src/client")?;
     Ok(EsbuildClient {
       subprocess: SubprocessRpc::new("Bundler".to_string(), move || {
         let mut c = tokio::process::Command::new("deno");
+        c.arg("run");
+        if let Some((config, cached_only)) = &context {
+          c.arg("--config").arg(config).arg("--frozen").arg("--node-modules-dir=none");
+          if *cached_only { c.arg("--cached-only"); }
+        }
         c.args([
-          "run",
           "--allow-sys",
           "--allow-read",
           "--allow-env",

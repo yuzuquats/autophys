@@ -40,3 +40,35 @@ vendored source and provide the appropriate grants/notices/provenance. No licens
 choice, source publication or permission to redistribute is implied by this
 cleanup. Broader extraction/pruning of upstream libraries is a separate design
 change; it must retain their actual transitive closure and existing notices.
+
+## App-owned bundler context patch (Round 2)
+
+The historical snapshot generator, fifteen-patch series and `vendor.lock` are
+unavailable on permitted retained references. Round 2 uses the **current retained
+vendor source** as an acknowledged recovery base, not a pristine upstream tree.
+The surviving upstream object `56389ac9d80c5b1ce5704bc2d9cacc89fd2def12`
+is a provenance reference; it does not reconstruct the inherited delta.
+
+`patches/autophys-bundler-context/` contains one inspectable app-owned patch,
+preimage/postimage and patch digests, the retained Git-tree reference and a
+SHA256 manifest of the current vendor source. Only
+`tento-web/src/client/bundler.rs` changes. The new public constructor accepts
+an explicit product Deno config and offline flag; the existing constructor
+retains its previous behavior for other callers. Autophys supplies its own
+config, frozen lock and node-module policy to the real bundler subprocess.
+All other inherited vendor bytes, including cookbook deck/drawer, are retained.
+
+From a standalone source archive, with Python 3 and POSIX `patch`:
+
+```sh
+python3 vendor/patches/autophys-bundler-context/verify.py /absolute/external/replay-work
+```
+
+The checker verifies current vendor bytes, reverses the one patch to its
+hashed affected-file preimage, then replays it to the hashed postimage. It
+requires no Git objects, private paths or sibling checkout. This is bounded
+patch replay/current-tree verification, **not full upstream regeneration**.
+The manifest intentionally pins this retained vendor tree: future intentional
+vendor changes must update their provenance and the affected manifest rows.
+This mechanism neither repairs the inherited provenance gap nor supplies any
+missing license grant. Existing attribution and release blockers above remain.

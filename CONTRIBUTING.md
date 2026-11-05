@@ -2,7 +2,7 @@
 
 Use Python 3.10+, Rust with edition 2024 support (the owner currently uses
 Cargo 1.98 nightly), Deno 2 (currently checked with 2.9.8), and a C toolchain
-for bundled SQLite. Linux ARM64 is the current verification host. Native
+for bundled SQLite. Linux x86_64 is the Round 2 verification host. Native
 macOS packaging still needs its own qualification. No fleet tool, sibling
 checkout, private hostname or service registration is needed.
 
@@ -46,13 +46,29 @@ deno check --config html/deno.json html/routes/index.root.ts
 cargo build --locked --bin autophys
 ```
 
-Cargo downloads registry crates; Deno/esbuild fetch public modules and platform
-binaries on the first build. A cold build needs network access or a preseeded
-cache. To refuse network use after acquisition, use `cargo --offline` and
-`deno --cached-only` on the relevant subcommands. `vendor/` contains local
-Tento source and patched crates, not every registry/npm/JSR dependency. There
-is currently no product-owned CI workflow or Deno dependency lock; cached
-checks do not prove a reproducible cold dependency download.
+Cargo downloads registry crates; Deno/esbuild fetch public modules and the esbuild
+platform executable on the first build. `html/deno.lock` is a newly resolved
+immutable graph, enforced by `html/deno.json` for checks and the actual native
+bundler worker. It does not recover a historical dependency graph. The native
+worker receives the product config explicitly; it does not inherit the caller's
+working directory or a sibling checkout's import map.
+
+For a public cold acquisition, choose a new external `DENO_DIR` and run the
+checks above, including `html/routes/fixture-worker.root.ts`. Then repeat with
+`deno test --cached-only --frozen --allow-read --config html/deno.json html/`
+and `deno check --cached-only --frozen --config html/deno.json html/routes/index.root.ts html/routes/fixture-worker.root.ts`.
+Use `cargo --offline` after Cargo acquisition and set
+`AUTOPHYS_BUILD_OFFLINE=1` for native `build-web` to pass `--cached-only` to
+its real worker. A frozen-lock mismatch fails rather than rewriting the lock.
+Keep `DENO_DIR` and `XDG_CACHE_HOME` under owned external storage: esbuild's
+platform executable is a separate runtime download/cache and is not covered
+by Deno module integrity alone. Preserve its version and digest with release
+qualification inputs. `vendor/` includes local source and patched crates,
+not every registry/npm/JSR dependency. No product CI service is implied.
+
+The bounded app-owned bundler patch and its source-only replay verification
+are documented in [vendor/README.md](vendor/README.md). Checked-in vendor,
+config and lock bytes suffice without lost workspace scripts or Git objects.
 
 For isolated development, create a fresh writable state directory and start
 the loopback daemon (this builds and watches `html/`):
