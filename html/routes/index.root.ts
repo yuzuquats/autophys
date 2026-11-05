@@ -30,7 +30,7 @@ import "./light-only.ts";
 import "./tour-ring.ts";
 
 // The drawer normalizes history before mounting the app. Keep the original address.
-const requestedLocation = { search: location.search, hash: location.hash };
+let requestedLocation: { search: string; hash: string } | null = { search: location.search, hash: location.hash };
 const USER = "james";
 /** How often the open app re-reads the devices waiting to pair (pairings have no stream). */
 const PAIRING_POLL_MS = 5000;
@@ -83,8 +83,14 @@ const app: Cookbook.App = {
     const removeStyles = shell.addStyles(autophysStyles(shell.scope) + placeholderStyles(shell.scope) + `
       html[data-ck-stage="tour"] body, html[data-ck-stage="app"] body { overflow: clip; }
     `);
-    let pendingAddress = selectionAddress(requestedLocation.search, requestedLocation.hash);
-    history.replaceState(history.state, "", location.pathname + requestedLocation.search + requestedLocation.hash);
+    const startupLocation = requestedLocation;
+    requestedLocation = null;
+    let pendingAddress = startupLocation
+      ? selectionAddress(startupLocation.search, startupLocation.hash)
+      : null;
+    if (startupLocation) {
+      history.replaceState(history.state, "", location.pathname + startupLocation.search + startupLocation.hash);
+    }
     const addressChanged = () => {
       pendingAddress = selectionAddress(location.search, location.hash);
       if (pendingAddress && ctl === userController && ctl.store.snapshot()) {

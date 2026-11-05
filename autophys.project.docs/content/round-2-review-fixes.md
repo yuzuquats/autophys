@@ -42,4 +42,18 @@ the owner checkout. Both runs closed their children.
 `cargo check -p autophys-cli` passed with existing warnings, using
 CARGO_TARGET_DIR=~/ssd-mount/cargo-target-scratch/autophys-gaps.
 
-Remaining: commit R2-3 (startup bookmark); its browser check has passed.
+## R2-3: consume the captured startup address once
+
+The first app mount consumes the pre-normalization address and restores it.
+Later mounts retain the controller's current selection and leave the current
+address alone, rather than applying the original bookmark again.
+
+Validation: the same focused scratch-browser pass loaded #bench-b, dismissed
+the tour, selected bench-a, returned to the landing page, reopened the app and
+dismissed its tour. The selection remained **bench-a**, and the address was
+/app with no stale #bench-b. Both touched routes passed deno check.
+No page errors.
+
+All three findings are verified and committed as new scoped commits above
+ab1ff17. No push, deployment, history rewrite or full suites. The task-board
+fallback record is reconciled in the external evidence directory above.
