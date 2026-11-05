@@ -90,3 +90,16 @@ preview frame’s explicit shadow suppression with a soft two-layer shadow
 its rounded clipping and the narrow-screen image panning. Image dimensions,
 drawer geometry and transition behavior stay unchanged. Validate the rendered
 desktop and phone previews, then package and deploy from clean owner master.
+
+Validation and deployment: the preview remains 320×166px at 1280×800; at
+390×844 it retains the native image with a pannable 113px frame and no page
+overflow. Both renders show the soft shadow. The first packaging gate exposed
+a stale store-mount test expecting the former /api session cookie. Its scoped
+repair now checks the live root cookie’s HttpOnly/Strict attributes and expiry
+of the old /api cookie, independent of Set-Cookie order.
+
+The normal clean-master deployment passed native workspace tests (two ignored)
+and all 111 HTML tests. Release 4fed4b5-20261105 is healthy locally and publicly;
+the public browser confirms the packaged shadow and loaded image. The release
+also includes peer-authored d74d9a8 already committed on master. No source push.
+Deployment log: fleet/evidence/autophys-drawer/tutorial-shadow-deploy.log.
