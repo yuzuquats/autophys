@@ -129,3 +129,14 @@ ring styling now disables the cookbook’s 180ms geometry transition. Halos
 retain their color and outline and continue following the target’s current
 bounds, including clipping above the tutorial sheet, without interpolating
 between positions or sizes. Validate computed motion and package the change.
+
+Deployed as 5130812-20261105. Native workspace checks and 107 HTML tests pass.
+A public-site step change sampled over 20 frames reports transition:none and
+zero halo animations; public health confirms 5130812. Evidence and packaging
+log: fleet/evidence/autophys-drawer/static-halo-{live.json,deploy.log}.
+
+Packaging uses the normal deployment steps, with its clean-input predicate
+excluding only the project documentation directory: a peer’s SDK brief remains
+dirty and untouched. All compiled source was committed on owner master, which
+stayed at 5130812 throughout packaging. The exact deployment script is retained
+beside the log. No source push.
