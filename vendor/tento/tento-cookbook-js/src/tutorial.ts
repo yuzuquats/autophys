@@ -1,5 +1,5 @@
 import { Stepper } from "./model.ts";
-import { ease, h, reducedMotion, settleIn } from "./dom.ts";
+import { h, settleIn } from "./dom.ts";
 
 /** What a step points at: selectors (the first visible match of each), or
  * functions for elements a selector cannot reach, such as rows inside a
@@ -63,10 +63,6 @@ export type Tutorial = {
   onDone: (() => void) | null;
 };
 
-/** The highlight follows each step's targets about this long after the step
- * shows, so a selection the step made moves first. */
-const FOLLOW_MS = 150;
-
 /** The tour, drawn on the lowered deck surface's peek. Each step points at
  * its part of the app directly: it runs its enter action, scrolls its targets
  * into view and highlights them, with an optional preview on the left. */
@@ -83,7 +79,9 @@ export function createTutorial(source: TutorialSource): Tutorial {
     body = q<HTMLElement>(".ck-tour-body"),
     preview = q<HTMLElement>(".ck-tour-preview");
   const back = q<HTMLButtonElement>(".ck-tour-back"), next = q<HTMLButtonElement>(".ck-tour-next");
-  const rings = new TargetRings();
+  // A highlight stops above the sheet the tutorial sits on, so it marks only
+  // the part of its target the reader can see.
+  const rings = new TargetRings(() => el.parentElement?.getBoundingClientRect().top ?? innerHeight);
   let steps: readonly TutorialStep[] = [];
   let stepper: Stepper<TutorialStep> | null = null;
   let active = false, completed = false;
@@ -93,9 +91,7 @@ export function createTutorial(source: TutorialSource): Tutorial {
   function render(animate: boolean): void {
     if (!stepper) return;
     const step = stepper.step, own = ++shown;
-    rings.hide();
     preview.replaceChildren();
-    el.toggleAttribute("data-preview", !!step.preview);
     const { bar, count, fill } = progress(steps, stepper.index);
     bars.dataset.count = String(count);
     bars.setAttribute("aria-label", `Step ${bar + 1} of ${count}`);
@@ -110,17 +106,16 @@ export function createTutorial(source: TutorialSource): Tutorial {
     next.textContent = stepper.last ? "Done" : "Next →";
     if (animate) { for (const target of [title, body]) settleIn(target); }
     step.enter?.();
-    // Let the enter action's selection and layout settle, bring the targets
-    // into view, then follow them with the highlight and the preview.
+    // On the next frame (the enter action's selection and layout applied),
+    // bring the targets into view and move the highlight onto them. The
+    // preview column shows only when the step filled it.
     requestAnimationFrame(() => {
       if (own !== shown || !active) return;
-      for (const target of targetsOf(step)) target.scrollIntoView({ block: "nearest", inline: "nearest" });
-      setTimeout(() => {
-        if (own !== shown || !active) return;
-        const found = targetsOf(step);
-        rings.show(found);
-        step.preview?.(found, preview);
-      }, reducedMotion() ? 0 : FOLLOW_MS);
+      const found = targetsOf(step);
+      for (const target of found) target.scrollIntoView({ block: "nearest", inline: "nearest" });
+      rings.show(found);
+      step.preview?.(found, preview);
+      el.toggleAttribute("data-preview", preview.childElementCount > 0);
     });
   }
 
@@ -234,36 +229,42 @@ function targetsOf(step: TutorialStep): HTMLElement[] {
   return [...found];
 }
 
-/** One ring per target, following its element every frame until hidden. */
+/** One ring per target, following its element every frame until hidden,
+ * clipped at `limit` (the top of the tutorial's sheet). Ring nodes are kept
+ * from step to step, so a highlight glides to its next target (CSS). */
 class TargetRings {
   private rings: HTMLElement[] = [];
   private frame = 0;
+  constructor(private limit: () => number) {}
 
   show(targets: readonly HTMLElement[]): void {
-    this.hide();
-    const pairs = targets.map((target) => {
+    cancelAnimationFrame(this.frame);
+    while (this.rings.length > targets.length) this.rings.pop()!.remove();
+    while (this.rings.length < targets.length) {
+      // A new ring appears in place; only later moves glide.
       const ring = h("div", "ck-target-ring", { "aria-hidden": "true" });
+      ring.style.transition = "none";
+      document.body.append(ring);
+      this.rings.push(ring);
+      requestAnimationFrame(() => requestAnimationFrame(() => ring.style.transition = ""));
+    }
+    const pairs = targets.map((target, i) => {
+      const ring = this.rings[i];
       const radius = parseFloat(getComputedStyle(target).borderTopLeftRadius) || 8;
       ring.style.borderRadius = `${radius + 4}px`;
-      document.body.append(ring);
-      if (!reducedMotion()) {
-        ring.animate([{ opacity: 0, transform: "scale(1.06)" }, { opacity: 1, transform: "scale(1)" }], {
-          duration: 260,
-          easing: ease,
-        });
-      }
       return [target, ring] as const;
     });
-    this.rings = pairs.map(([, ring]) => ring);
     const place = () => {
+      const limit = this.limit() - 6;
       for (const [target, ring] of pairs) {
         const r = target.getBoundingClientRect();
-        ring.hidden = !target.isConnected || r.width === 0;
+        const top = r.top - 4, bottom = Math.min(r.bottom + 4, limit);
+        ring.hidden = !target.isConnected || r.width === 0 || bottom - top < 8;
         Object.assign(ring.style, {
           left: `${r.left - 4}px`,
-          top: `${r.top - 4}px`,
+          top: `${top}px`,
           width: `${r.width + 8}px`,
-          height: `${r.height + 8}px`,
+          height: `${bottom - top}px`,
         });
       }
       this.frame = requestAnimationFrame(place);

@@ -501,3 +501,34 @@ migration. Operator direction prioritizes delivery: touched-file type-check only
 no unit tests, tutorial-flow e2e or scratch-daemon measurements; deploy without
 tests, then measure one public step. Task CLI is unavailable on yuzuquats; live
 state and the final timing receipt are in `~/.cache/autophys/tour-speed-20261104/`.
+
+### One cookbook tutorial — UI-TOUR-02, 2026-11-04
+
+**Agent-chosen, pending operator review** (operator asked for one cohesive tutorial that
+points at the app itself). This supersedes UI-TOUR-01's local sheet:
+- **One tour.** The Autophys tour now runs as the cookbook tutorial's source
+  (`Cookbook.Tutorial.Source`): opening the app, or Menu → Take the tour, starts it.
+  The cookbook draws the one sheet, and owns the arrows, Back/Next/Done and Esc. → past
+  the last step returns to the deck. The cookbook's generic shell steps, the second
+  sheet and Show me are gone.
+- **The cookbook additions** (vendored patches 0015 and 0017, tento cookbook source):
+  - each step's target is highlighted automatically on the next frame, with ring nodes
+    kept so the highlight glides, clipped above the sheet;
+  - steps have enter actions, re-run on Back;
+  - a preview column appears only when the step fills it;
+  - grouped steps share a progress bar (the two-part Fit/Residuals step);
+  - the source's start() and finish({completed}) hooks;
+  - CookbookShell.startTour;
+  - the panel bodies get a bottom scroll padding, so a target scrolls clear of the sheet.
+- **Kept from UI-TOUR-01 and the tour-speed change (5c220b8):**
+  - the demo-fixture controller swap, snapshot and restore;
+  - the nine lessons;
+  - the blue halo (tour-ring.ts);
+  - previews only for out-of-sight targets;
+  - 200 ms panel slides during the tour;
+  - the demo-data chip;
+  - Menu and the empty-workspace entry.
+- **Reversal:** restore guided-tour.ts and guided-tour-styles.ts from 5c220b8, pass
+  `[...Cookbook.Tutorial.shellSteps, ...tutorial]` as the tutorial again, and drop the
+  vendored 0015/0017 changes. About an hour.
+

@@ -19,7 +19,7 @@ import { AutophysSidebar } from "../ui/sidebar.ts";
 import { breadcrumbText } from "../ui/breadcrumb.ts";
 import { autophysStyles } from "../ui/styles.ts";
 import { placeholderStyles } from "../ui/placeholder-styles.ts";
-import { deck, tutorial } from "./content.ts";
+import { deck } from "./content.ts";
 import { mountGuidedTour } from "./guided-tour.ts";
 import { landingDocs } from "./docs.ts";
 import { quietLoading, signedOutView } from "../client/derive/signed-out.ts";
@@ -142,7 +142,7 @@ const app: Cookbook.App = {
       shell.setCrumb?.(breadcrumbText(view.main.crumb));
     };
     const unsubscribe = ctl.subscribe(redraw);
-    guided = mountGuidedTour({ get: () => ctl, set: (next) => { ctl = next; }, redraw });
+    guided = mountGuidedTour({ get: () => ctl, set: (next) => { ctl = next; }, redraw, startTour: () => shell.startTour?.() });
     redraw();
     let poll: ReturnType<typeof setInterval> | undefined;
     // Store exposes the failure through the view.
@@ -161,7 +161,13 @@ const app: Cookbook.App = {
 };
 
 const docs = landingDocs();
-Cookbook.mount({ deck, onStage: (stage) => { docs.onStage(stage); if (stage === "tour") queueMicrotask(() => guided?.offer()); }, tutorial: [...Cookbook.Tutorial.shellSteps, ...tutorial], status: null, labels: { sidebar: "Workspace" } }).run(app);
+// The cookbook tutorial is the one tour: opening the app (or "Take the tour") runs the
+// Autophys steps on demo data, and every exit puts the user's own view back.
+const tour: Cookbook.Tutorial.Source = {
+  start: () => guided?.source.start() ?? [],
+  finish: (result) => guided?.source.finish?.(result),
+};
+Cookbook.mount({ deck, onStage: (stage) => docs.onStage(stage), tutorial: tour, status: null, labels: { sidebar: "Workspace" } }).run(app);
 mountAccount();
 docs.mount();
 

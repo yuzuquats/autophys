@@ -1,42 +1,11 @@
-/** Pure tour navigation and reversible session ownership; the host supplies enter/restore. */
-export type TourPosition = { step: number; substep: number };
-export class TourPager {
-  position: TourPosition = { step: 0, substep: 0 };
-  constructor(readonly parts: readonly number[]) {
-    if (!parts.length || parts.some(n => n < 1 || !Number.isInteger(n))) throw new Error("Each tour step needs a part");
-  }
-  get last(): boolean { return this.position.step === this.parts.length - 1 && this.position.substep === this.parts.at(-1)! - 1; }
-  get first(): boolean { return this.position.step === 0 && this.position.substep === 0; }
-  get progress(): number { return (this.position.substep + 1) / this.parts[this.position.step]; }
-  move(delta: 1 | -1): boolean {
-    const { step, substep } = this.position;
-    if (delta > 0) {
-      if (this.last) return false;
-      this.position = substep + 1 < this.parts[step] ? { step, substep: substep + 1 } : { step: step + 1, substep: 0 };
-    } else {
-      if (this.first) return false;
-      this.position = substep ? { step, substep: substep - 1 } : { step: step - 1, substep: this.parts[step - 1] - 1 };
-    }
-    return true;
-  }
-}
-export class TourSession<T> {
-  readonly pager: TourPager;
+/** Keeps the user's state while a tour runs: start() takes it once, finish()
+ * puts it back once. The cookbook tutorial pages the steps; the host swaps data. */
+export class TourSnapshot<T> {
   private saved: { value: T } | null = null;
-  constructor(parts: readonly number[], private capture: () => T, private restore: (value: T) => void, private enter: (position: TourPosition) => void) {
-    this.pager = new TourPager(parts);
-  }
+  constructor(private capture: () => T, private restore: (value: T) => void) {}
   get active(): boolean { return this.saved !== null; }
   start(): void {
-    if (this.active) return;
-    this.saved = { value: this.capture() };
-    this.pager.position = { step: 0, substep: 0 };
-    this.enter(this.pager.position);
-  }
-  move(delta: 1 | -1): boolean {
-    if (!this.active || !this.pager.move(delta)) return false;
-    this.enter(this.pager.position); // Back runs the same enter actions as Next.
-    return true;
+    if (!this.saved) this.saved = { value: this.capture() };
   }
   finish(): void {
     if (!this.saved) return;
