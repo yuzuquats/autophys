@@ -17,11 +17,18 @@ async function pick(p: Page, id: string) {
   }, id);
   await settle(p);
 }
-async function open(p: Page, suffix = "") {
-  await p.goto(base + "/app?source=fixtures" + suffix, { waitUntil: "load" });
+async function dismissOpeningTour(p: Page) {
   await p.waitForSelector(".ck-panels[data-ready]");
+  await p.waitForFunction(() => document.documentElement.dataset.ckStage === "tour" &&
+    !!document.querySelector(".ck-tour-title")?.textContent);
+  await p.click(".ck-tour-dismiss");
+  await p.waitForFunction(() => document.documentElement.dataset.ckStage === "app");
   await p.waitForSelector(".ap-investigation-view");
   await settle(p);
+}
+async function open(p: Page, suffix = "") {
+  await p.goto(base + "/app?source=fixtures" + suffix, { waitUntil: "load" });
+  await dismissOpeningTour(p);
 }
 async function screenshot(p: Page, name: string) { await p.screenshot({path:out + "/" + name}); shots.push(name); }
 await withHeadless(async browser => {
@@ -88,7 +95,7 @@ await withHeadless(async browser => {
     }), width + ": residuals anchor lands on Fit");
     await pick(p, "bench-b/data/free_response@1");
     check(await p.$eval('[id="ap-bench-b-round-1-measurement-free_response%401"]', e => e.hasAttribute("open")), width + ": legacy measurement expands its row in the older round");
-    await p.reload({waitUntil:"load"}); await p.waitForSelector(".ap-investigation-view"); await settle(p);
+    await p.reload({waitUntil:"load"}); await dismissOpeningTour(p);
     check(await p.$eval('[id="ap-bench-b-round-1-measurement-free_response%401"]', e => e.hasAttribute("open")), width + ": bookmarked measurement URL survives reload");
     await open(p, "#bench-b%2Ffit-1%2Flandscape");
     check(await p.$eval('[id="ap-bench-b-round-1"]', e => e.hasAttribute("open")), width + ": direct legacy hash opens its older round");

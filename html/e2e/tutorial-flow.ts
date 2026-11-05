@@ -24,7 +24,10 @@ const stage = (p: Page) => p.evaluate(() => document.documentElement.dataset.ckS
 async function ready(p: Page, title: string) {
   await until(p, (t: string) => document.querySelector(".ck-tour-title")?.textContent === t &&
     document.querySelectorAll(".ck-target-ring").length > 0 &&
-    !!document.querySelector(".ck-tour-preview .ap-tour-preview-clip")?.children.length, title);
+    (() => {
+      const image = document.querySelector<HTMLImageElement>(".ck-tour-preview img.ap-tour-image");
+      return !!image?.complete && image.naturalWidth > 0;
+    })(), title);
   await settle(p);
 }
 async function snapshot(p: Page) {
