@@ -98,6 +98,48 @@ class _Run:
         return path
 
 
+def _preledger_coverage(root: Path, state: dict) -> list[str]:
+    """Bind an old scalar total only to evaluations proved complete by its state.
+
+    A summary does not record held-out directory names. Multiple retained attempts
+    therefore cannot be assigned to that total safely; do not guess from timestamps.
+    """
+    covered = set()
+    completed_cost = 0.0
+    for directory in sorted((root / "train").glob("*")):
+        if (directory.is_dir() and directory.name.isdigit() and "incumbent" in state
+                and int(directory.name) <= state["iteration"]
+                and (directory / "report.json").exists()):
+            report = json.loads((directory / "report.json").read_text())
+            completed_cost += report["score"].get("cost_usd") or 0.0
+            covered.update(directory.rglob("*.ap-workbook"))
+    heldout = [p for p in (root / "heldout").glob("*") if p.is_dir()]
+    workbooks = {w for p in heldout for w in p.rglob("*.ap-workbook")}
+    if workbooks:
+        summary_path = root / "summary.json"
+        summary = json.loads(summary_path.read_text()) if summary_path.exists() else {}
+        expected = ["initial"] + (["final"] if state.get("initial") != state.get("incumbent") else [])
+        complete = (bool(state.get("stopped")) and summary.get("spent_usd") == state["spent_usd"]
+                    and summary.get("iterations") == state["iteration"]
+                    and summary.get("initial_playbook") == state.get("initial")
+                    and summary.get("final_playbook") == state.get("incumbent"))
+        directories = []
+        for kind in expected:
+            matches = [p for p in heldout if p.name.startswith(kind + "-")]
+            complete = complete and len(matches) == 1 and ".interrupted-" not in matches[0].name
+            directories.extend(matches)
+        if not complete or set(directories) != set(heldout):
+            raise ValueError("cannot bind pre-ledger held-out workbooks to recorded spend; "
+                             "restore the original spend ledger or start a new run")
+        for kind in expected:
+            completed_cost += summary["heldout_" + kind].get("cost_usd") or 0.0
+        covered.update(workbooks)
+    if completed_cost > state["spent_usd"] + 1e-9:
+        raise ValueError("pre-ledger completed evaluations exceed recorded spend; "
+                         "restore the original spend ledger or start a new run")
+    return sorted(p.relative_to(root).as_posix() for p in covered)
+
+
 def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_seeds=(0, 1, 2), heldout_seeds=(3, 4),
              policy="reason", jobs=1, max_iterations=10, patience=3, max_usd=None, max_wall_s=None, resume=False,
              acceptance="auto", repeats=1, alpha=0.05, evaluate_fn=evaluate, **options) -> dict:
@@ -182,8 +224,10 @@ def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_se
         import uuid
         attempt_path = root / "attempts" / f"{label}.json"
         attempt_path.parent.mkdir(parents=True, exist_ok=True)
+        migrated = [entry.get("coverage_attempts", {}).get(label) for entry in ledger()]
+        migrated_id = next((value for value in migrated if value), None)
         attempt = json.loads(attempt_path.read_text()) if attempt_path.exists() else {
-            "id": uuid.uuid4().hex, "legacy": directory.exists()}
+            "id": migrated_id or uuid.uuid4().hex, "legacy": directory.exists()}
         def save_attempt(value):
             tmp = attempt_path.with_suffix(".json.tmp")
             _write_json(tmp, value)
@@ -194,13 +238,17 @@ def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_se
             entries = ledger()
             charged = {entry.get("identity") for entry in entries}
             legacy = {entry["what"] for entry in entries if not entry.get("identity")}
+            covered = {path for entry in entries
+                       if entry.get("coverage_attempts", {}).get(label) == attempt["id"]
+                       for path in entry.get("covered_workbooks", [])}
             for workbook in sorted(directory.rglob("*.ap-workbook")):
                 part = workbook.parent.relative_to(directory).as_posix()
                 what = label if part == "." else f"{label}/{part}"
                 evaluation = f"{attempt['id']}/{part}"
                 identity = f"{evaluation}/{workbook.name}"
                 if (evaluation not in charged and identity not in charged
-                        and not (attempt["legacy"] and what in legacy)):
+                        and workbook.relative_to(root).as_posix() not in covered
+                        and not (attempt["legacy"] and (label in legacy or what in legacy))):
                     charge(f"{what} (interrupted: {workbook.name})", _workbook_cost(workbook), identity)
         return save_attempt
 
@@ -246,10 +294,23 @@ def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_se
     t0 = time.monotonic()
     wall_before = float(state.get("wall_s", 0.0))
     if resume:
-        # The ledger is the spend of record. A run from before the ledger starts it with its
-        # recorded total, so adopting the ledger never drops earlier spending.
-        if not (root / "spend.jsonl").exists() and state["spent_usd"]:
-            charge("before the spend ledger", state["spent_usd"])
+        # Publish the scalar total and its workbook coverage together. A crash before
+        # replace leaves no ledger; a crash afterwards reuses exactly the same coverage.
+        if not (root / "spend.jsonl").exists():
+            covered = _preledger_coverage(root, state)
+            if state["spent_usd"] or covered:
+                import uuid
+                labels = {"/".join(path.split("/")[:2]) for path in covered}
+                attempts = {}
+                for label in sorted(labels):
+                    metadata = root / "attempts" / f"{label}.json"
+                    attempts[label] = (json.loads(metadata.read_text())["id"] if metadata.exists()
+                                       else uuid.uuid4().hex)
+                entry = {"at": _now(), "what": "before the spend ledger", "usd": state["spent_usd"],
+                         "identity": None, "covered_workbooks": covered, "coverage_attempts": attempts}
+                pending = root / "spend.jsonl.tmp"
+                pending.write_text(json.dumps(entry) + "\n", encoding="utf-8")
+                pending.replace(root / "spend.jsonl")
         state["spent_usd"] = sum(entry["usd"] for entry in ledger())
         # Held-out labels contain timestamps, so the next evaluation may never
         # revisit a previous directory. Recover all retained attempts first,

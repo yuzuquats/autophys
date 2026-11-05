@@ -29,11 +29,28 @@ It adds metadata/checker logic only. Reversal is a small forward metadata/checke
 change once the chosen publication tree is settled; original manifests and
 provenance remain available. All earlier rights/provenance limitations stand.
 
-The existing peer test-only correction `4fed4b5` fixes the cookie migration's
-stale `tests/store_mount.rs` assertion. Its explicit publication scope is a
-separate pending operator decision; it is not silently adopted. The overflow
-CSS can be reapplied against public shell composition without the peer drawer
-helper; that changed patch requires final prefix validation and independent review.
+The operator explicitly authorized four completed peer prerequisites: `27a6161`
+(cassette-route and spend binding), `0d82371` and `4c0befa` (interrupted-spend
+follow-ups), and `4fed4b5` (the cookie-migration test correction). Other UI,
+deck, drawer and unrelated drafts remain excluded and preserved above the
+publication prefix. The test commit's final trailer block is normalized without
+changing its author, Change-Id or implementation.
+
+Final review also found legacy repeated evaluations could be charged twice.
+Recovery now recognizes both aggregate and per-repeat legacy charges. Pre-ledger
+migration atomically binds the recorded total to completed workbook attempts;
+replacement attempts retain independent identities. Completed training reports
+and an unambiguous matching summary establish coverage. Ambiguous retained
+held-out histories stop before mutation with a recovery error instead of guessing
+which paid work was covered. Restoring an original ledger or starting a new run
+is required for that exceptional legacy case. Migration tests include crashes on
+both sides of the atomic write, repeated resume, interrupted costs and replacement
+attempts. The focused owner check passes 42 tests, with three expensive tests
+explicitly deselected; it is not a fresh full SDK run.
+
+The overflow CSS is applied against public shell composition without the peer
+drawer helper. Final review must inspect that resolved patch and the complete
+prefix in its public-base context.
 
 The initial object-only prefix passes 105 Deno tests, but its original vendor
 checker fails as expected. These are publication diagnostics, not a replacement
