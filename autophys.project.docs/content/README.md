@@ -21,6 +21,8 @@ cover, moved and renamed), [sdk.md](sdk.md), [display-manifest.md](display-manif
 [improvements.md](improvements.md) (a running list of improvements not yet scheduled), [train.md](train.md) (the fine-tuning pipeline), and the batch-1
 verification pages.
 
+The proposed [account-backed workspace spec](account-workspace.md) defines local/cloud profiles, read-only demo sign-in, workspace isolation and a walkthrough of the active account. Read it first for this UI/auth workstream; its agreed contract and proposed implementation choices are distinguished explicitly.
+
 ## Shape after the restructure
 
 ```
