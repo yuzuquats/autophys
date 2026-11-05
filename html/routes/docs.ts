@@ -555,16 +555,27 @@ const NODE_VIEWS: Documentation.Props["nodeViews"] = {
       : ReviewFence.dispatch(node, null) ?? new StaticCodeBlockView(node),
 };
 
-/** The docs section and the shell hook that keeps it out of the open app's tab order. inert,
- * not hidden: onStage runs after the drawer restores the landing's scroll offset, and removing
- * the section from layout first would clamp an offset inside it. */
+/** Keep the closed landing's docs out of rendering, focus and accessibility while
+ * preserving their exact layout height for the drawer's scroll restoration.
+ * Toggling inherited inert on this large shadow tree restyled thousands of nodes.
+ * content-visibility hides the contents without propagating an inherited change.
+ */
 export function landingDocs(): { onStage(stage: Cookbook.Stage): void; mount(): void } {
   const section = document.createElement("section");
   section.className = "ap-landing-docs";
   section.setAttribute("aria-label", "Documentation");
   return {
     onStage(stage) {
-      section.inert = stage !== "landing";
+      if (stage !== "landing") {
+        if (section.style.contentVisibility !== "hidden") {
+          const css = getComputedStyle(section);
+          const contentHeight = section.getBoundingClientRect().height
+            - parseFloat(css.paddingTop) - parseFloat(css.paddingBottom)
+            - parseFloat(css.borderTopWidth) - parseFloat(css.borderBottomWidth);
+          section.style.containIntrinsicBlockSize = `${Math.max(0, contentHeight)}px`;
+          section.style.contentVisibility = "hidden";
+        }
+      } else section.style.contentVisibility = "visible";
     },
     mount() {
       if (!InstanceUrl.hasStaticBase()) InstanceUrl.setStaticBase("");

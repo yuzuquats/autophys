@@ -17,20 +17,37 @@ import { tourImages } from "./guided-tour-images.ts";
 
 type Host = { get(): Controller; set(controller: Controller): void; redraw(): void; startTour(): void };
 type Scroll = { path: number[]; top: number; left: number };
-/** Child indexes include -1 at an open shadow root; survives redraws of the same view. */
+/** App-only child indexes include -1 at an open shadow root; survives redraws.
+ * Resolve saved paths directly. Searching every saved path for every document
+ * element was quadratic, and also restored the unrelated landing/docs scroll.
+ * Window scroll is captured separately by the tour snapshot.
+ */
 function scrollTree(restore?: Scroll[]): Scroll[] {
   const positions: Scroll[] = [];
-  const walk = (root: Element | ShadowRoot, path: number[]) => {
-    if (root instanceof HTMLElement) {
-      if (restore) {
-        const saved = restore.find(s => s.path.join("/") === path.join("/"));
-        if (saved) { root.scrollTop = saved.top; root.scrollLeft = saved.left; }
-      } else positions.push({ path, top: root.scrollTop, left: root.scrollLeft });
+  const app = document.querySelector<HTMLElement>(".ck-app");
+  if (!app) return positions;
+  if (restore) {
+    for (const saved of restore) {
+      let node: Element | ShadowRoot | null = app;
+      for (const index of saved.path) {
+        node = index === -1
+          ? node instanceof Element ? node.shadowRoot : null
+          : node?.children.item(index) ?? null;
+        if (!node) break;
+      }
+      if (node instanceof HTMLElement) {
+        if (node.scrollTop !== saved.top) node.scrollTop = saved.top;
+        if (node.scrollLeft !== saved.left) node.scrollLeft = saved.left;
+      }
     }
+    return positions;
+  }
+  const walk = (root: Element | ShadowRoot, path: number[]) => {
+    if (root instanceof HTMLElement) positions.push({ path, top: root.scrollTop, left: root.scrollLeft });
     if (root instanceof Element && root.shadowRoot) walk(root.shadowRoot, [...path, -1]);
     [...root.children].forEach((el, i) => walk(el, [...path, i]));
   };
-  walk(document.documentElement, []);
+  walk(app, []);
   return positions;
 }
 /** A sidebar row by id; rows live in the tree's shadow root, out of a selector's reach. */
