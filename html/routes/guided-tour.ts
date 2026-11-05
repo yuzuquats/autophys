@@ -9,7 +9,7 @@
 import type { Cookbook } from "@tento-cookbook/lib.ts";
 import { Controller } from "../client/controller.ts";
 import { Store } from "../client/store.ts";
-import { fixtures } from "../client/fixtures/source.ts";
+import { browserFixtures } from "./browser-fixtures.ts";
 import { TourSnapshot } from "../client/tutorial.ts";
 import { tourOpeningLayout, tourSteps, type TourPart } from "./guided-tour-steps.ts";
 import { guidedTourStyles } from "./guided-tour-styles.ts";
@@ -67,7 +67,7 @@ export function mountGuidedTour(host: Host) {
   const panels = () => document.querySelector<HTMLElement>(".ck-panels")!;
   let demo: Controller | null = null, unsubscribe: (() => void) | null = null, disposed = false;
   /** Bumped when a tour ends, so a start still loading the demo gives up. */
-  let ended = 0, activePart = -1;
+  let ended = 0, activePart = -1, entering = false;
   const images = new Map<number, HTMLImageElement>();
   function preloadImage(index: number): HTMLImageElement | undefined {
     if (!tourImages[index]) return;
@@ -87,7 +87,7 @@ export function mountGuidedTour(host: Host) {
     const button = document.querySelector<HTMLButtonElement>(".ck-" + which + "-toggle");
     if (button && (button.getAttribute("aria-pressed") === "true") !== open) button.click();
   }
-  function layout(part: Pick<TourPart, "surface" | "details">) {
+  function layout(part: Pick<TourPart, "surface" | "details">, redraw = true) {
     if (matchMedia("(max-width:760px)").matches) {
       // Phone panels are mutually exclusive. Expose the actual targeted surface.
       const mobile = panels().dataset.mobile;
@@ -97,7 +97,7 @@ export function mountGuidedTour(host: Host) {
       panel("sidebar", true);
       panel("details", part.details);
     }
-    host.redraw(); // Also reconcile the app's inert Details state after a shell toggle.
+    if (redraw) host.redraw(); // Also reconcile the app's inert Details state after a shell toggle.
   }
   const snapshot = new TourSnapshot(() => ({
     controller: host.get(), scroll: scrollTree(), focus: document.activeElement as HTMLElement | null,
@@ -138,8 +138,12 @@ export function mountGuidedTour(host: Host) {
         preloadImage(index);
         preloadImage(index + 1);
         if (!demo) return;
-        if (part.select) demo.handle({ kind: "select", id: part.select });
-        layout(part);
+        entering = true;
+        try {
+          if (part.select) demo.handle({ kind: "select", id: part.select });
+          layout(part, false);
+        } finally { entering = false; }
+        host.redraw();
       },
       // Static, already-preloaded images replace the expensive live-DOM clone.
       preview: (_targets, slot) => {
@@ -163,18 +167,27 @@ export function mountGuidedTour(host: Host) {
       // The shell opens in this task. Save the user’s layout and apply the first
       // lesson before awaiting data/images, so Details never paints then closes.
       snapshot.start();
-      layout(tourOpeningLayout);
-      const controller = new Controller(new Store(fixtures()), { user: "tour", now: () => "" });
+      layout(tourOpeningLayout, false);
+      // Even a cached fixture must let the shell paint before preparing content.
+      await new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+      if (disposed || own !== ended) return [];
+      const controller = new Controller(new Store(browserFixtures()), { user: "tour", now: () => "" });
       preloadImage(1);
-      await Promise.all([controller.store.start(), preloadImage(0)!.decode().catch(() => {})]);
+      try {
+        await Promise.all([controller.store.start(), preloadImage(0)!.decode().catch(() => {})]);
+      } catch {
+        controller.store.close();
+        if (disposed || own !== ended) return [];
+        return [{ title: "Demo unavailable", body: "Close the tutorial and reopen it to try again." }];
+      }
       if (disposed || own !== ended) { controller.store.close(); return []; }
       demo = controller;
       controller.shell = { download: () => {}, picked: () => {} };
-      unsubscribe = controller.subscribe(host.redraw);
+      unsubscribe = controller.subscribe(() => { if (!entering) host.redraw(); });
       host.set(controller);
       chip.hidden = false;
       document.documentElement.dataset.apTour = "";
-      host.redraw();
+      // The first step selects and draws once; do not render its precursor.
       return tourSteps(controller.store.snapshot()!.workspace)
         .flatMap((parts, i) => parts.map(part => ({ part, group: parts.length > 1 ? "step-" + i : undefined })))
         .map(({ part, group }, index) => toStep(part, group, index));

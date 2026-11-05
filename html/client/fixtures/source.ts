@@ -17,12 +17,12 @@ export const CANNED: { project: string; investigation: string; proposal: string;
 
 export type FixtureSource = Omit<Source, "post" | "stream"> & { readonly log: readonly DecisionRec[]; stream(after: Cursor, on: (r: DecisionRec) => void): () => void; post(path: string, body: unknown): Promise<DecisionRec> };
 
-export function fixtures(canned = CANNED): FixtureSource {
+export function fixtures(canned = CANNED, workspace?: Workspace): FixtureSource {
   let base: Workspace | null = null, current: Workspace | null = null;
   const log: DecisionRec[] = [], listeners = new Set<(r: DecisionRec) => void>();
   const ready = () => {
     if (current) return current;
-    current = base = buildWorkspace();
+    current = base = workspace ?? buildWorkspace();
     for (const c of canned) append(c.project, c.investigation, c.proposal, c.decision, c.ts);
     return current;
   };

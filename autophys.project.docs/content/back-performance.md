@@ -126,3 +126,43 @@ current content and no pending markers; Back during deferred rendering settled
 on the landing with no pending content or late tour revival. Deno type checks,
 diff whitespace checks and the Impeccable detector passed. No test suites run,
 preserving the operator's build-only instruction.
+
+## Remaining tour-entry stall and surface finish — 2026-11-05
+
+The follow-up measurement found the earlier fix covered tour exit but left
+entry blocked by seeded scientific computation. Live ArrowDown from the landing
+took 553 ms; ArrowUp from the app took 482–509 ms before its first frame.
+The fixture Source built its simulations synchronously inside Store.start().
+Returning to the landing also removed shadow and radius immediately.
+
+Browser fixture consumers now share a dedicated worker's computed workspace.
+Each Source retains its own record stream and decisions; the worker terminates
+after completion, and failed loads can retry. The pure fixture Source accepts
+an optional precomputed workspace and retains its existing default. Tour entry
+yields a paint even with cached data, coalesces selection/layout into one draw,
+and no longer draws an intermediate controller state. Each workspace redraw
+derives the three surfaces once rather than four times. Opening an already
+rendered Details panel no longer rebuilds its content.
+
+The surface retains its 32 px corners and full shadow throughout a return.
+An app-owned observer waits for the actual transform animation to finish,
+then lets radius and shadow dissipate over 650 ms. Reversals invalidate the old
+completion callback. Reduced motion keeps the immediate final state.
+
+Focused browser measurements at 1280×800 on the final isolated build:
+
+| Transition | Handler | First frame | Worst frame gap | Long tasks |
+| --- | ---: | ---: | ---: | ---: |
+| Landing → tour (cold worker) | 10.3 ms | 10.5 ms | 44.4 ms | 0 |
+| Tour → app | 4.1 ms | 9.5 ms | 21.4 ms | 0 |
+| App → tour (cached worker) | 1.6 ms | 3.9 ms | 24.0 ms | 0 |
+| Tour → landing | 4.2 ms | 13.5 ms | 31.2 ms | 0 |
+
+Frame sampling held radius at 32 px while the return transform was nonzero.
+Only at y=0 did it begin reducing (28 px, 14 px, 4 px, then 0), with the shadow's
+opacity decreasing alongside it. Desktop and 390×844 mobile visual checks,
+reversal during ascent, leaving while worker execution was delayed, cached
+reentry and unavailable-worker retry passed. Delayed completion did not revive
+the tour, and its worker terminated. The zero-duration reduced-motion branch
+settled at y=0 without retaining the returning flag. Deno checks, web bundling,
+diff whitespace and the design detector passed. No test suites run.

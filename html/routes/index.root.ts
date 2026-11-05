@@ -9,7 +9,7 @@ import { Cookbook } from "@tento-cookbook/lib.ts";
 import { daemon, type Source } from "../client/api.ts";
 import { selectionAddress } from "./selection-address.ts";
 import { Controller } from "../client/controller.ts";
-import { fixtures } from "../client/fixtures/source.ts";
+import { browserFixtures } from "./browser-fixtures.ts";
 import { Store } from "../client/store.ts";
 import { hydrateComponents } from "../ui/components.ts";
 import { AutophysDetails } from "../ui/details.ts";
@@ -55,7 +55,7 @@ function reauth(): void {
 }
 
 const forced = new URLSearchParams(location.search).get("source");
-const source: Source & { chosen?: Promise<Source> } = forced === "fixtures" ? fixtures() as Source
+const source: Source & { chosen?: Promise<Source> } = forced === "fixtures" ? browserFixtures()
   : forced === "daemon" ? daemon({ user: USER, reauth })
   : daemon({ user: USER, reauth });
 
@@ -138,10 +138,11 @@ const app: Cookbook.App = {
     const viewShell = { reflow: (draw: () => void) => {
       if (content.pending || !shell.reflow) draw(); else shell.reflow(draw);
     } };
+    let renderedView = ctl.view();
     const views = [
-      Cookbook.View.mount(viewShell, new AutophysSidebar(shell.slots.queue, handle), () => ctl.view().sidebar),
-      Cookbook.View.mount(viewShell, new AutophysMain(shell.slots.main, handle, shell.classes, hydrate), () => ctl.view().main),
-      Cookbook.View.mount(viewShell, new AutophysDetails(shell.slots.details, handle, shell.classes, hydrate), () => ctl.view().details),
+      Cookbook.View.mount(viewShell, new AutophysSidebar(shell.slots.queue, handle), () => renderedView.sidebar),
+      Cookbook.View.mount(viewShell, new AutophysMain(shell.slots.main, handle, shell.classes, hydrate), () => renderedView.main),
+      Cookbook.View.mount(viewShell, new AutophysDetails(shell.slots.details, handle, shell.classes, hydrate), () => renderedView.details),
     ];
     // A record arrived or the selection moved: every view re-reads its model (main with FLIP).
     const redrawNow = () => {
@@ -149,7 +150,7 @@ const app: Cookbook.App = {
         const id = pendingAddress; pendingAddress = null;
         ctl.handle({ kind: "select", id });
       }
-      const view = ctl.view();
+      const view = renderedView = ctl.view();
       const panels = shell.slots.main.closest<HTMLElement>(".ck-panels");
       const setupOnly = view.main.body.kind === "project-setup" && view.sidebar.selectedId !== "devices";
       panels?.toggleAttribute("data-ap-setup-only", setupOnly);
@@ -181,7 +182,6 @@ const app: Cookbook.App = {
         const phone = matchMedia("(max-width:760px)").matches;
         const open = phone ? panels?.dataset.mobile === "details" : panels?.hasAttribute("data-details");
         if (!open) {
-          if (!content.pending) deferRedraw(() => {});
           panels?.querySelector<HTMLButtonElement>(".ck-details-toggle")?.click();
         }
         reconcileMain();

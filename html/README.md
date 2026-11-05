@@ -34,7 +34,7 @@ client/       the logic the ui refuses to hold; imports only ui's view-model and
                 charts, outlook interpolation); no simulation (AX-2)
   controller.ts Intent → selection change, a POST through the store, or a download
   fixtures/     a Source that loads a computed workspace and replays canned records, plus the
-                simulators that compute it at build time
+                simulators that compute it in a dedicated browser worker
 e2e/          headless browser drivers, using vendored tento-headless-js
 routes/       the composition root: index.root.ts (+ index.anon.html, content.ts); tento-web
               bundles it by file name

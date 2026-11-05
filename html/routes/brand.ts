@@ -1,3 +1,5 @@
+import { installSurfaceFinish, surfaceFinishStyles } from "./surface-finish.ts";
+
 /** App-owned header branding; the first slide starts directly with its title.
  * The shell mounts synchronously after this module's import. One microtask
  * applies branding before the first paint; drawer navigation keeps these nodes.
@@ -25,11 +27,13 @@ queueMicrotask(() => {
   const navigationStyle = document.createElement("style");
   navigationStyle.textContent = `
     .ck-landing[data-lowered] { position: relative; inset: auto; }
-    .ck-landing { transition: none; }
+    ${surfaceFinishStyles}
     .ck-header { --ck-gutter: 28px; }
     .ck-header .ck-brand { padding-left: 28px; }
   `;
   document.head.append(navigationStyle);
+  const landing = document.querySelector<HTMLElement>(".ck-landing");
+  if (landing) installSurfaceFinish(landing);
 
   const wordmark = document.querySelector(".ck-brand .ck-wordmark");
   if (
