@@ -71,8 +71,9 @@ export function deck(app: Cookbook.App, appPath = "/app"): Cookbook.Deck.Slide[]
   return [
     {
       eyebrow: { icon: "mark" },
-      title: `${app.title}: battery models in fewer test hours`,
-      description: `Runs only the tests that pin down your cell model. Muse Spark directs it, and code checks every claim. (Figures in this deck: ${MOCK}.)`,
+      title: `${app.title}: Intelligent Physical Modeling from Minimal Data`,
+      description: `Runs only the tests that pin down your physical model. Muse Spark directs it, and code checks every claim.
+      (Figures in this deck: ${MOCK}.)`,
       body: {
         kind: "actions",
         primary: open,
@@ -85,28 +86,28 @@ export function deck(app: Cookbook.App, appPath = "/app"): Cookbook.Deck.Slide[]
     },
     {
       eyebrow: { label: "The user" },
-      title: "Battery researchers who fit a model to every new cell.",
-      description: "A pack design or BMS can't use the model until it's trusted, so every new cell is characterized first.",
-      body: { kind: "person", name: "A Stanford battery researcher", role: "Physics PhD, Stanford · our teammate" },
+      title: "Engineers and scientists who rely on physics-based models.",
+      description: "Before these models can guide design or control, they must be calibrated and validated for each new system, material, or operating regime.",
+      body: { kind: "person", name: "Joseph Lucero", role: "Chemistry PhD, Stanford · lithium-ion battery models · our teammate" },
     },
     {
       eyebrow: { label: `The costly task · ${MOCK}` },
-      title: "Pulse-test grids that spend most of their hours resting.",
-      description: "An HPPC run pulses the cell at a fixed ladder of charge levels and rests before each pulse. Every step runs, whatever it shows.",
+      title: "Physics-based models are calibrated on expensive experiments.",
+      description: "Characterizing these models takes time, effort, and money. Reducing experiments to the minimum set needed creates direct savings for any company that relies on them.",
       body: {
         kind: "breakdown",
         stats: [
-          { value: "38 h", label: "per HPPC grid" },
-          { value: "72%", label: "of it resting" },
-          { value: "4", label: "grids per cell" },
+          { value: ">24 h", label: "to characterize battery behavior across states of charge" },
+          { value: ">75%", label: "of that time spent resting" },
+          { value: "≥3", label: "temperatures requiring characterization" },
         ],
         segments: ribbon,
       },
     },
     {
       eyebrow: { label: `The existing alternative · ${MOCK}` },
-      title: "Today: run the full grid, then fit it in PyBaMM or MATLAB.",
-      description: "Standard, comparable across labs, and the tools are mature. But the grid is fixed before the first pulse comes back.",
+      title: "Today: run a fixed experimental campaign, then calibrate the model.",
+      description: "The process is standard, comparable, and supported by mature tools. But every condition is fixed before the first measurement reveals what the model still needs.",
       body: {
         kind: "profile",
         axis: ["0% SOC", "50%", "100% SOC"],
@@ -117,22 +118,22 @@ export function deck(app: Cookbook.App, appPath = "/app"): Cookbook.Deck.Slide[]
     },
     {
       eyebrow: { label: `The demo · ${MOCK}` },
-      title: "One pulse in: “R1 and C1 are tied.” One more: validated.",
-      description: "Fisher ranking scores the next pulse, and Muse Spark explains and requests it. You edit it, watch it re-score, and approve.",
+      title: "One experiment reveals which physical parameters remain confounded. The next identifies them.",
+      description: "Fisher ranking scores the next experiment, and Muse Spark explains which physical uncertainty it resolves. You edit the proposal, watch it re-score, and approve.",
       body: {
         kind: "uncertainty",
-        axes: ["R1", "C1"],
+        axes: ["Diffusivity", "Reaction rate"],
         target: { label: "±10%", size: 0.34 },
         regions: [
-          { label: "After pulse 1: tied (ρ 0.96)", rx: 0.96, ry: 0.12, angle: 40 },
-          { label: "After pulse 2: identified", rx: 0.24, ry: 0.17, angle: 15, emphasis: true },
+          { label: "After experiment 1: confounded (ρ 0.96)", rx: 0.96, ry: 0.12, angle: 40 },
+          { label: "After experiment 2: identified", rx: 0.24, ry: 0.17, angle: 15, emphasis: true },
         ],
       },
     },
     {
       eyebrow: { label: `The advantage · ${MOCK}` },
-      title: "Fewer test hours to the same validated model.",
-      description: "Four approaches on the same held-out cells, with the truth hidden from the agent. Done means every parameter within ±10%.",
+      title: "Fewer experimental hours to the same parameter certainty.",
+      description: "Four approaches face the same held-out systems, with ground truth hidden from the agent. Success means every target parameter is within ±10%.",
       body: {
         kind: "lines",
         x: { label: "Test hours", min: 0, max: 40, ticks: [0, 10, 20, 30, 40], unit: " h" },
@@ -191,7 +192,7 @@ export function deck(app: Cookbook.App, appPath = "/app"): Cookbook.Deck.Slide[]
     {
       eyebrow: { label: "The autoloop" },
       title: "Two loops: one investigates, one improves it.",
-      description: "The inner loop calibrates a cell. The outer loop edits its playbook and keeps only the edits that score better.",
+      description: "The inner loop calibrates a physics-based model. The outer loop edits its playbook and keeps only the edits that score better.",
       body: {
         kind: "loops",
         inner: INVESTIGATION,
@@ -226,8 +227,8 @@ export function deck(app: Cookbook.App, appPath = "/app"): Cookbook.Deck.Slide[]
       body: {
         kind: "uses",
         uses: [
-          { icon: ICONS.battery, name: "Battery cells", pair: "R1 ↔ C1", choice: "Which pulse or discharge", note: "The example in this deck.", live: true, emphasis: true },
-          { icon: ICONS.spring, name: "Mechanisms", pair: "mass ↔ stiffness", choice: "Forcing frequency", live: true },
+          { icon: ICONS.spring, name: "Mechanisms", pair: "mass ↔ stiffness", choice: "Forcing frequency", live: true, emphasis: true},
+          { icon: ICONS.battery, name: "Battery cells", pair: "R1 ↔ C1", choice: "Which pulse or discharge", note: "The example in this deck.", live: true },
           { icon: ICONS.thermometer, name: "Thermal enclosures", pair: "capacity ↔ resistance", choice: "Step or pulse heating", live: true },
           { icon: ICONS.flask, name: "Reaction kinetics", pair: "A ↔ Ea", choice: "Reactor temperature" },
           { icon: ICONS.pill, name: "Pharmacokinetics", pair: "clearance ↔ volume", choice: "When to draw samples", note: "Each sample is a blood draw." },
