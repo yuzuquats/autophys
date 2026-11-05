@@ -1,3 +1,4 @@
+import type { AppContext } from "../client/context.ts";
 /** Account control in the header; sign-in stays over the current page. */
 import { initHtmlElement } from "@tento-ui/init/html-element.global";
 import { Dialog } from "@tento-ui/components/dialog/dialog";
@@ -32,13 +33,30 @@ const formStyles = `
 }
 `;
 
-export function mountAccount(onSignedIn: () => void): void {
+export function mountAccount(onSignedIn: (context: AppContext) => void): void {
   initHtmlElement();
   const account = document.getElementById("ap-account");
   const links = document.querySelector(".ck-header .ck-nav-links");
   if (account && links && account.parentElement !== links) links.append(account);
-  if (account?.dataset.signedIn !== "false") return;
-  account.setAttribute("aria-haspopup", "dialog");
+  const hideBrokenImages = () => {
+    for (const img of document.querySelectorAll<HTMLImageElement>("#ap-account img")) {
+      if (img.complete && !img.naturalWidth) img.hidden = true;
+      img.addEventListener("error", () => { img.hidden = true; }, { once: true });
+    }
+  };
+  hideBrokenImages();
+  document.addEventListener("click", event => {
+    const details = document.querySelector<HTMLDetailsElement>("details#ap-account");
+    if (details?.open && !event.composedPath().includes(details)) details.open = false;
+  });
+  document.addEventListener("keydown", event => {
+    const details = document.querySelector<HTMLDetailsElement>("details#ap-account");
+    if (event.key === "Escape" && details?.open) {
+      event.stopPropagation(); event.preventDefault(); details.open = false;
+      details.querySelector<HTMLElement>("summary")?.focus({ preventScroll: true });
+    }
+  }, { capture: true });
+  if (account?.dataset.signedIn === "false") account.setAttribute("aria-haspopup", "dialog");
   const overlayStyle = document.createElement("style");
   overlayStyle.textContent = "body { --bg-overlay:rgb(0 0 0 / 32%); }";
   document.head.append(overlayStyle);
@@ -53,9 +71,9 @@ export function mountAccount(onSignedIn: () => void): void {
     form.method = "post";
     form.action = "/api/auth/login";
     form.innerHTML = signInFields(trigger.dataset.demo === "true");
-    const stopSignIn = signInInPlace(() => {
-      modal?.dismiss();
-      onSignedIn();
+    const stopSignIn = signInInPlace(context => {
+      hideBrokenImages(); modal?.dismiss();
+      onSignedIn(context);
     }, form);
     const background = [...document.querySelectorAll<HTMLElement>(".ck-app,.ck-landing,.ck-header,.ap-landing-docs,.ck-footer")]
       .map(node => ({ node, inert: node.inert }));
@@ -70,7 +88,7 @@ export function mountAccount(onSignedIn: () => void): void {
         modal = null;
         // The shared restore ran while the header was inert. Restore after
         // releasing it, including the new badge when sign-in replaced it.
-        const focus = trigger.isConnected ? trigger : document.querySelector<HTMLElement>("#ap-account button");
+        const focus = trigger.isConnected ? trigger : document.querySelector<HTMLElement>("#ap-account summary,#ap-account button");
         focus?.focus({ preventScroll: true });
       },
     });

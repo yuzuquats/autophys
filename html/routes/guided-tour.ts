@@ -67,7 +67,7 @@ export function mountGuidedTour(host: Host) {
       const snap = ctl.store.snapshot();
       if (!snap) return [];
       restoreNavigation = ctl.preserveNavigation();
-      return tourSteps(snap.workspace, ctl.selection).map(part => ({
+      return tourSteps(snap.workspace, ctl.selection, !ctl.view().sidebar.readOnly).map(part => ({
         title: part.title, body: part.body, group: part.group, target: part.target,
         enter() {
           if (disposed || own !== generation) return;

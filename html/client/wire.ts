@@ -18,7 +18,7 @@ export type WireRecord = { id: string; investigation: string; seq: number; kind:
 export type WireProject = { id: string; name: string; display?: unknown };
 export type WireConfig = { project_id: string; version: string; config: unknown };
 /** `GET /workspace`: one consistent snapshot; resume the stream from `cursor`. */
-export type WireWorkspace = { cursor: number | string; projects: WireProject[]; config_versions: WireConfig[]; records: WireRecord[] };
+export type WireWorkspace = { workspace_id?: string; principal_id?: string; cursor: number | string; projects: WireProject[]; config_versions: WireConfig[]; records: WireRecord[] };
 /** `GET /pairings` rows. */
 export type WirePairing = { user_code: string; device_name: string; client: string; expires: string };
 

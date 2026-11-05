@@ -4,6 +4,7 @@
  * view through Cookbook.View.mount; the client's Store follows a Source: the daemon's
  * /api/v1 when this page is served by `autophys serve`, with recovery if it cannot answer. The main pane reports connection status only while disconnected.
  */
+import { bootstrapContext, readContext, type AppContext } from "../client/context.ts";
 import { Cookbook } from "@tento-cookbook/lib.ts";
 import { daemon } from "../client/api.ts";
 import { selectionAddress } from "./selection-address.ts";
@@ -29,7 +30,14 @@ import "./light-only.ts";
 
 // The drawer normalizes history before mounting the app. Keep the original address.
 let requestedLocation: { search: string; hash: string } | null = { search: location.search, hash: location.hash };
-const USER = "james";
+let context = bootstrapContext();
+const identity = () => context?.principal?.email ?? context?.principal?.displayName ?? "browser";
+const environment = () => ({ user: identity(), now: clock, capabilities: context?.capabilities });
+let sourceEpoch = 0;
+const makeStore = () => {
+  const epoch = ++sourceEpoch;
+  return new Store(daemon({ user: identity(), workspaceId: context?.workspace?.id, principalId: context?.principal?.id, reauth: () => { if (epoch === sourceEpoch) reauth(); } }));
+};
 /** How often the open app re-reads the devices waiting to pair (pairings have no stream). */
 const PAIRING_POLL_MS = 5000;
 
@@ -39,7 +47,9 @@ const REAUTH_WINDOW_MS = 30_000;
 function reauth(): void {
   // `serve --login` (the page carries the account badge): a 401 means the session ended, so
   // sign in again and come back here rather than reloading into the same 401.
-  if (document.getElementById("ap-account")) {
+  ctl.store.close();
+  guided?.dispose();
+  if (context?.auth.canSignOut || context?.auth.canSignIn) {
     location.assign(`/login?next=${encodeURIComponent(location.pathname + location.search)}`);
     return;
   }
@@ -51,17 +61,15 @@ function reauth(): void {
   location.reload();
 }
 
-const source = daemon({ user: USER, reauth });
-
 const clock = () => new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-const ctl = new Controller(new Store(source), { user: USER, now: clock });
+const ctl = new Controller(makeStore(), environment());
 // `serve --login` marks a signed-out page (the Sign in badge). The landing page stays usable:
 // the app makes no API calls (no 401, no reload) and its main pane asks to sign in.
-let SIGNED_OUT = document.getElementById("ap-account")?.dataset.signedIn === "false";
-const DEMO = document.getElementById("ap-account")?.dataset.demo === "true";
+let SIGNED_OUT = !!context?.auth.canSignIn && !context.principal;
+let walkthroughRequested = false;
 const baseView = ctl.view.bind(ctl);
 ctl.view = () => {
-  if (SIGNED_OUT) return signedOutView(baseView(), DEMO);
+  if (SIGNED_OUT) return signedOutView(baseView(), context?.auth.allowDemo);
   const view = quietLoading(baseView());
   if (view.main.body.kind === "project-setup") return view;
   return { ...view, main: { ...view.main, actions: [...view.main.actions, { name: "walkthrough", label: "Walkthrough" }] } };
@@ -108,8 +116,8 @@ const app: Cookbook.App = {
         if (toggle && !open) toggle.click();
         return;
       }
-      if (intent.kind === "action" && intent.name === "sign-in") { location.assign("/login?next=/app"); return; }
-      if (intent.kind === "action" && intent.name === "walkthrough") { shell.startTour?.(); return; }
+      if (intent.kind === "action" && intent.name === "sign-in") { document.getElementById("ap-account")?.click(); return; }
+      if (intent.kind === "action" && intent.name === "walkthrough") { walkthroughRequested = true; shell.startTour?.(); return; }
       if (SIGNED_OUT) return; // Nothing else works without an account; the main pane says so.
       if (intent.kind === "action" && intent.name === "retry") { location.reload(); return; }
       if (intent.kind === "action" && intent.name === "copy-sdk") {
@@ -187,12 +195,25 @@ const app: Cookbook.App = {
     redraw();
     let poll: ReturnType<typeof setInterval> | undefined;
     // Store exposes the failure through the view.
-    const start = () => { void ctl.store.start().catch(() => {}); poll ??= setInterval(() => { void ctl.store.refreshPairings(); void ctl.refresh(); }, PAIRING_POLL_MS); };
+    const start = () => { const store = ctl.store; void store.start().catch(() => {}); poll ??= setInterval(() => {
+      void ctl.store.refreshPairings(); void ctl.refresh();
+      void readContext().then(next => {
+        if (ctl.store !== store) return;
+        if (next.principal?.id !== context?.principal?.id || next.workspace?.id !== context?.workspace?.id) { reauth(); return; }
+        context = next; ctl.updateAccess(identity(), next.capabilities);
+      }).catch(() => {});
+    }, PAIRING_POLL_MS); };
     // Signed out: the card signs in without a page load, then the workspace starts in place.
     let stopSignIn: (() => void) | undefined;
-    resumeSignedIn = () => { SIGNED_OUT = false; stopSignIn?.(); start(); redraw(); shell.startTour?.(); };
-    if (SIGNED_OUT) stopSignIn = signInInPlace(resumeSignedIn);
-    else start();
+    resumeSignedIn = () => {
+      stopSignIn?.(); guided?.dispose(); clearInterval(poll); poll = undefined;
+      SIGNED_OUT = false; ctl.reset(makeStore(), environment());
+      guided = mountGuidedTour({ controller: ctl, signedIn: () => !SIGNED_OUT, redraw });
+      pendingAddress = null; start(); redraw();
+    };
+    if (SIGNED_OUT) stopSignIn = signInInPlace(onSignedIn);
+    else if (context) start();
+    else void readContext().then(next => { context = next; SIGNED_OUT = !next.principal; if (!SIGNED_OUT) resumeSignedIn?.(); else redraw(); }).catch(error => { ctl.store.error = error.message; redraw(); });
     teardown = () => { resumeSignedIn = undefined; document.removeEventListener("keydown", down, { capture: true }); window.removeEventListener("hashchange", addressChanged); guided?.dispose(); guided = undefined; stopSignIn?.(); clearInterval(poll); unsubscribe(); views.forEach((v) => v.dispose()); removeStyles(); };
   },
   unmount() {
@@ -203,8 +224,9 @@ const app: Cookbook.App = {
 };
 
 const docs = landingDocs();
-Cookbook.mount({ deck, onStage: (stage) => docs.onStage(stage), tutorial: { start: () => guided?.source.start() ?? [], finish: result => guided?.source.finish?.(result) }, status: null, labels: { sidebar: "Workspace" } }).run(app);
-mountAccount(() => { SIGNED_OUT = false; resumeSignedIn?.(); });
+Cookbook.mount({ deck, onStage: (stage) => docs.onStage(stage), tutorial: { start: () => { if (!walkthroughRequested) return []; walkthroughRequested = false; return guided?.source.start() ?? []; }, finish: result => guided?.source.finish?.(result) }, status: null, labels: { sidebar: "Workspace" } }).run(app);
+function onSignedIn(next: AppContext): void { context = next; SIGNED_OUT = false; if (resumeSignedIn) resumeSignedIn(); else ctl.reset(makeStore(), environment()); }
+mountAccount(onSignedIn);
 docs.mount();
 
 // Remove the unused hard-coded shell control before the first app open too.

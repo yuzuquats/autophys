@@ -139,7 +139,7 @@ export type TableRow = { cells: Cell[]; dim?: boolean; strong?: boolean };
 export type TraceRow = { title: string; marker?: string; meta?: string; text?: string; evidence?: string[]; expected?: string; current?: boolean; tone?: Tone };
 export type Meter = { label: string; value: string; fraction: number; tone?: Tone };
 /** An editable value. `value` is the raw text shown; `invalid` marks the field with a message. */
-export type Field = { name: string; label: string; value: string; unit?: string; invalid?: string };
+export type Field = { inputMode?: "text" | "decimal"; name: string; label: string; value: string; unit?: string; invalid?: string };
 export type Link = { label: string; id: string };
 
 /** Proposal identity and ranking provenance are separate navigation relationships. */

@@ -3,6 +3,8 @@
  * pick happened. `reduce` is pure; `Controller` holds the selection, runs the effects against
  * the Store and tells subscribers to redraw. It imports the ui's Intent type only.
  */
+import { accessibleView, canHandle } from "./access.ts";
+import type { Capabilities } from "./context.ts";
 import { approvalsPath, type Snapshot } from "./api.ts";
 import type { Investigation, Project, Workspace } from "./domain.ts";
 import { latestFit, proposalLabel, statusText, decisionProposal } from "./derive/shared.ts";
@@ -34,7 +36,7 @@ import type { Store } from "./store.ts";
 import type { Action } from "../ui/view-model.ts";
 import type { Intent } from "../ui/intent.ts";
 
-export type Env = { user: string; now: () => string; daemonOrigin?: string };
+export type Env = { user: string; now: () => string; daemonOrigin?: string; capabilities?: Capabilities };
 
 export type Effect =
   | { kind: "post"; path: string; body: Decision }
@@ -297,6 +299,7 @@ export class Controller {
   private devicesActive = false;
   private startingRun = false;
   private setupDevices = false;
+  private pairingCode = "";
   private subs = new Set<() => void>();
   /** The last refused write; the details panel shows it (selection.notice) until the next pick. */
   error: string | null = null;
@@ -305,8 +308,23 @@ export class Controller {
     picked(): void;
   } = { download: () => {}, picked: () => {} };
 
-  constructor(readonly store: Store, private env: Env) {
-    store.subscribe(() => this.notify());
+  private unsubscribeStore: () => void;
+  constructor(public store: Store, private env: Env) {
+    this.unsubscribeStore = store.subscribe(() => this.notify());
+  }
+
+  updateAccess(user: string, capabilities: Capabilities): void {
+    this.env = { ...this.env, user, capabilities }; this.notify();
+  }
+
+  /** Identity changes discard every cursor, edit, pending selection and subscription. */
+  reset(store: Store, env: Env): void {
+    this.unsubscribeStore(); this.store.close();
+    this.store = store; this.env = env;
+    this.sel = null; this.setup = null; this.devicesActive = false;
+    this.startingRun = false; this.setupDevices = false; this.pairingCode = ""; this.error = null;
+    this.unsubscribeStore = store.subscribe(() => this.notify());
+    this.notify();
   }
 
   get selection(): Selection | null {
@@ -374,6 +392,15 @@ export class Controller {
       sidebar: { ...view.sidebar, selectedId: "devices" },
       details: empty(snap.source, snap.pairings, sel?.notice).details,
     };
+    if (this.devicesActive && snap && this.env.capabilities?.manageDevices) {
+      view.details = { ...view.details,
+        sections: [{ heading: "Connect a device", blocks: [
+          { kind: "text", text: "Enter the code shown by your SDK. Verify the device name before approving access." },
+          { kind: "fields", fields: [{ name: "pairing-code", label: "Device code", value: this.pairingCode, inputMode: "text" }] },
+        ] }, ...view.details.sections],
+        actions: [...(view.details.actions ?? []), { name: "lookup-pairing", label: "Look up device" }],
+      };
+    }
     if (error) {
       const pause = (a: Action): Action => /^(pair-(approve|deny):|approve$|reject$|withdraw$|restore$)/.test(a.name)
         ? { ...a, disabled: true, title: "Approvals are paused until the daemon reconnects" } : a;
@@ -382,9 +409,8 @@ export class Controller {
         sections: view.details.sections.map((s) => ({ ...s, blocks: s.blocks.map((b) => b.kind === "pairing" ? { ...b, decision: pair(b.decision) } : b) })) };
 
     }
-    return { ...view, sidebar: { ...view.sidebar,
-      creatingProject: !!this.setup,
-    } };
+    const final = { ...view, sidebar: { ...view.sidebar, creatingProject: !!this.setup } };
+    return this.env.capabilities ? accessibleView(final, this.env.capabilities) : final;
   }
 
   /** Host-owned polling retries a failed workspace read. Setup writes refresh explicitly. */
@@ -401,8 +427,14 @@ export class Controller {
 
   /** The ui's intent handler (an arrow, so it can be passed as is). */
   handle = (intent: Intent): void => {
-    const snap = this.store.snapshot(), sel = this.selection;
+    if (this.env.capabilities && !canHandle(intent, this.env.capabilities)) return;
+    const store = this.store, snap = store.snapshot(), sel = this.selection;
     if (!snap || !sel) return;
+    if (intent.kind === "field" && intent.name === "pairing-code") { this.pairingCode = intent.raw; return; }
+    if (intent.kind === "action" && intent.name === "lookup-pairing") {
+      const code = this.pairingCode.toUpperCase().replace(/[^A-Z0-9]/g, "");
+      this.settle(this.store.lookupPairing(code), "Device not found"); return;
+    }
     if (intent.kind === "action" && intent.name === "start-investigation") {
       const project = snap.workspace.projects.find(p => p.id === sel.projectId);
       const config = project?.configs.at(-1), projects = this.store.source.projects;
@@ -411,12 +443,14 @@ export class Controller {
       this.settle((async () => {
         try {
           const { id } = await projects.start(project.id, config.hash);
-          await this.store.refreshWorkspace();
+          if (this.store !== store) return;
+          await store.refreshWorkspace();
+          if (this.store !== store) return;
           if (this.sel) this.sel = { ...this.sel, projectId: project.id,
             selected: { ...this.sel.selected, [project.id]: id },
             expanded: { ...this.sel.expanded, [project.id]: [`project:${project.id}`, id] } };
           this.shell.picked();
-        } finally { this.startingRun = false; this.notify(); }
+        } finally { if (this.store === store) { this.startingRun = false; this.notify(); } }
       })(), "Investigation not started");
       this.notify();
       return;
@@ -457,12 +491,15 @@ export class Controller {
               try {
                 if (intent.name === "setup-create") {
                   setup.created = await projects.create(request);
+                  if (this.store !== store) return;
                   setup.step = 3;
-                  await this.store.refreshWorkspace();
+                  await store.refreshWorkspace();
                 } else if (setup.created) {
                   const { project_id, config_version } = setup.created;
                   const { id } = await projects.start(project_id, config_version);
-                  await this.store.refreshWorkspace();
+                  if (this.store !== store) return;
+                  await store.refreshWorkspace();
+                  if (this.store !== store) return;
                   if (this.setup === setup && this.sel) {
                     this.sel = { ...this.sel, projectId: project_id,
                       selected: { ...this.sel.selected, [project_id]: id },
@@ -472,7 +509,7 @@ export class Controller {
                   }
                 }
               } catch (error) { setup.notice = String((error as Error)?.message ?? error); }
-              finally { setup.busy = false; this.notify(); }
+              finally { setup.busy = false; if (this.store === store) this.notify(); }
             })();
           } catch (error) { setup.notice = String((error as Error)?.message ?? error); }
         }
@@ -527,13 +564,16 @@ export class Controller {
 
   /** A write's outcome: a refusal becomes the visible notice; success clears it. */
   private settle(write: Promise<unknown>, what: string): void {
+    const store = this.store;
     write.then(() => {
+      if (this.store !== store) return;
       this.error = null;
       if (this.sel?.notice) {
         this.sel = without(this.sel, ["notice"]) as Selection;
         this.notify();
       }
     }, (err) => {
+      if (this.store !== store) return;
       this.error = `${what}: ${String(err?.message ?? err)}`;
       if (this.sel) this.sel = { ...this.sel, notice: this.error };
       this.notify();

@@ -1,3 +1,4 @@
+import { readContext, type AppContext } from "../client/context.ts";
 /**
  * `serve --login`, signed out: the main pane's sign-in card submits in place. A full page load
  * would boot on the landing page and replay the drawer's landing-to-app slide, the panel entry
@@ -6,7 +7,7 @@
  */
 const MISMATCH = "That email and password don't match an account.";
 
-export function signInInPlace(onSignedIn: () => void, target: Document | HTMLFormElement = document): () => void {
+export function signInInPlace(onSignedIn: (context: AppContext) => void, target: Document | HTMLFormElement = document): () => void {
   let listening = true;
   const onSubmit = async (event: Event) => {
     const form = event.target;
@@ -24,9 +25,13 @@ export function signInInPlace(onSignedIn: () => void, target: Document | HTMLFor
       const action = submitter instanceof HTMLButtonElement && submitter.hasAttribute("formaction") ? submitter.formAction : form.action;
       const r = await fetch(action, { method: "POST", body, redirect: "manual", credentials: "same-origin", signal: AbortSignal.timeout(15_000) });
       if (r.type === "opaqueredirect" || r.ok) {
-        target.removeEventListener("submit", onSubmit, true);
+        const context = await readContext();
+        if (!context.principal) throw new Error("Session did not resolve an account");
+        if (!listening) return;
         await swapBadge();
-        onSignedIn();
+        if (!listening) return;
+        target.removeEventListener("submit", onSubmit, true);
+        onSignedIn(context);
         return;
       }
       if (listening) showError(form, r.status === 401 ? MISMATCH : r.status === 429

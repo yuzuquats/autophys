@@ -33,7 +33,7 @@ export function mainMarkup(model: MainModel, width: number, classes: MainClasses
     if (last) return `<b title="${esc(c.label)}" aria-current="page">${esc(c.label)}</b>`;
     return c.id ? `<button type="button" title="${esc(c.label)}" ${ATTR.role}="select" ${ATTR.id}="${esc(c.id)}">${esc(c.label)}</button>` : `<span title="${esc(c.label)}">${esc(c.label)}</span>`;
   }).join(sep);
-  const toolbar = `<div class="${esc([classes.toolbar ?? "", "ap-toolbar"].filter(Boolean).join(" "))}"><nav class="ap-crumb" aria-label="Selection" title="${esc(breadcrumbText(model.crumb))}">${crumb}</nav><div class="ap-right"><span class="ap-meta" id="ap-meta">${esc(model.meta)}</span>${model.actions.map((a) => buttonMarkup(a, classes)).join("")}</div></div>`;
+  const toolbar = `<div class="${esc([classes.toolbar ?? "", "ap-toolbar"].filter(Boolean).join(" "))}"><nav class="ap-crumb" aria-label="Selection" title="${esc(breadcrumbText(model.crumb))}">${crumb}</nav><div class="ap-right"><span class="ap-meta" id="ap-meta" title="${esc(model.meta)}">${esc(model.meta)}</span>${model.actions.map((a) => buttonMarkup(a, classes)).join("")}</div></div>`;
   let body: string;
   if (model.body.kind === "project-setup") {
     body = newProjectMarkup(model.body);

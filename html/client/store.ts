@@ -27,6 +27,7 @@ export class Store {
   /** Load once, then follow the stream. */
   start(): Promise<void> {
     return this.starting ??= this.source.load().then((snap) => {
+      if (this.closed) return;
       this.snap = snap;
       this.stop = this.follow(snap.gseq);
       this.notify();
@@ -107,10 +108,19 @@ export class Store {
     if (!pairings || !this.snap) return;
     try {
       const list = await pairings.list();
+      if (this.closed || !this.snap) return;
       if (JSON.stringify(list) === JSON.stringify(this.snap.pairings ?? [])) return;
       this.snap = { ...this.snap, pairings: list };
       this.notify();
     } catch { /* keep what we had */ }
+  }
+
+  async lookupPairing(code: string): Promise<void> {
+    if (!this.source.pairings || !this.snap) return;
+    const pairings = await this.source.pairings.list(code);
+    if (this.closed) return;
+    this.snap = { ...this.snap!, pairings }; this.notify();
+    if (!pairings.length) throw new Error("No pending device matches that code. Check the code and its expiry.");
   }
 
   /** Approve or deny a pairing, then re-read the list. Rejects with the source error. */
@@ -127,9 +137,11 @@ export class Store {
 
   close(): void {
     this.closed = true;
+    this.snap = null; this.seen.clear(); this.applied.length = 0;
     this.stop?.();
     this.stop = null;
     this.stopErrors?.();
+    this.notify();
   }
 
   private notify(): void {

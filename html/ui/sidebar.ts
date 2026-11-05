@@ -98,7 +98,8 @@ export class AutophysSidebar {
     const scrollTop = this.rail.bodyScrollTop;
     const create = this.footer.querySelector("button")!;
     create.setAttribute("aria-pressed", String(!!model.creatingProject && model.selectedId !== "devices"));
-    create.disabled = model.switcher.kind === "loading" || model.switcher.kind === "unavailable";
+    create.title = model.readOnly ? "Your account has read-only access." : "";
+    create.disabled = !!model.readOnly || model.switcher.kind === "loading" || model.switcher.kind === "unavailable";
     const head = JSON.stringify([model.section, model.notice]);
     if (head !== this.keys.head) {
       this.keys.head = head;

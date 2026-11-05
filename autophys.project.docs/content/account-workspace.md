@@ -1,10 +1,10 @@
 # The account selects the data; the workbench stays the same
 
-Status: revision 1, proposed implementation (2026-11-05). The user-facing contract below is agreed. The workspace context, storage migration and delivery choices are recommendations awaiting review. This change writes the spec only.
+Status: revision 2, approved and implemented locally (2026-11-05). The operator approved AW-1 through AW-4 with “go ahead.” Required account/workspace behavior is implemented and qualified against isolated collections; production migration and deployment have not run. See [operations and qualification](account-workspace-operations.md) for commands, evidence and remaining limits.
 
 Autophys should open the active user's workspace through one workbench and one guided walkthrough. A local daemon supplies its configured collection; a cloud session supplies the signed-in account's collection. “Continue as demo” signs into a real, read-only account whose data is stored on the server. Neither authentication nor the walkthrough substitutes browser fixtures.
 
-## What the current code actually does
+## Baseline before implementation
 
 The operator's constraints are explicit:
 
@@ -12,7 +12,7 @@ The operator's constraints are explicit:
 >
 > “no ‘this computer’ or ‘cloud computer’. we need a profile picture bubble for both. ‘continue as demo’ is the allow demo affordance and all it does is log into the demo user's account as read-only”
 
-Code evidence was checked against `59f64a7` in the owner checkout. These findings describe source, rather than a fresh production inspection.
+The baseline was checked against `59f64a7` in the owner checkout. This table records the original gaps; the implemented behavior and runtime checks are recorded in [operations and qualification](account-workspace-operations.md). It does not describe current production.
 
 | Source | Current mechanism | Remaining gap |
 | --- | --- | --- |
@@ -42,7 +42,7 @@ The mock's Local/Cloud scenario controls belong to the design artifact. They do 
 
 ## One server context supplies identity, access and workspace
 
-**Recommendation AW-1 — agent-chosen, pending operator review:** introduce a server-resolved workspace context. Start with one default workspace per cloud account, plus one configured workspace for a local daemon. A minimal membership table supports the association; a team-management interface and workspace switcher are deferred.
+**Decision AW-1 — approved by the operator:** introduce a server-resolved workspace context. Start with one default workspace per cloud account, plus one configured workspace for a local daemon. A minimal membership table supports the association; a team-management interface and workspace switcher are deferred.
 
 ```text
 Local document session ─→ local profile + configured collection ─┐
@@ -80,9 +80,9 @@ A signed-out cloud document has no principal or workspace and no data capabiliti
 
 Use a single resolver for bootstrap and API responses to prevent contradictory initial states. The server remains authoritative; the serialized context is presentation input. A cloud account with missing membership fails closed with an account-configuration error, rather than opening a shared or demo collection.
 
-**Recommendation AW-2 — agent-chosen, pending operator review:** keep optional display name and avatar reference in the server profile store for both identity types. Configure the local profile through the daemon's configuration/CLI initially. Render initials when no photo exists or loading fails. Do not use a stock portrait or an external avatar service as a default. Cloud avatar references must be validated HTTPS URLs or owned same-origin assets; never accept arbitrary HTML or filesystem paths. Photo upload and crop controls are deferred.
+**Decision AW-2 — approved by the operator:** keep optional display name and avatar reference in the server profile store for both identity types. Configure the local profile through the daemon's configuration/CLI initially. Render initials when no photo exists or loading fails. Do not use a stock portrait or an external avatar service as a default. Cloud avatar references must be validated HTTPS URLs or owned same-origin assets; never accept arbitrary HTML or filesystem paths. Photo upload and crop controls are deferred.
 
-A collection per workspace is recommended because the existing Client already scopes reads and writes to a root. The strongest alternative is one collection with ownership checks on every record; that introduces a second boundary inside the existing workbook API. Replacing the proposed registry is inexpensive before migration; changing it after data adoption requires another migration and SDK review. Neither recommendation is implemented by this spec.
+A collection per workspace is recommended because the existing Client already scopes reads and writes to a root. The strongest alternative is one collection with ownership checks on every record; that introduces a second boundary inside the existing workbook API. Replacing the proposed registry is inexpensive before migration; changing it after data adoption requires another migration and SDK review. Both choices are implemented in the server workspace registry and profile CLI.
 
 ## Demo access is a read-only session
 
@@ -116,11 +116,11 @@ Keep the existing Store/Controller and adaptive step generation. Tutorial naviga
 
 Use the selected investigation when it contains the relevant evidence. When a lesson selects another investigation, name that project/investigation in the step so the transition is understandable. Omit lessons without an appropriate record. Empty workspaces explain how to begin; read-only empty workspaces explain the absence without offering an impossible create action. A connection failure offers retry rather than pretending the workspace is empty.
 
-**Recommendation AW-3 — agent-chosen, pending operator review:** launch the walkthrough only from the Walkthrough action, including after demo sign-in. This removes tutorial startup from normal authentication and matches the latest mock. The user approved keeping an account-backed walkthrough; automatic versus explicit launch remains a separate product choice. Keeping automatic launch is the strongest alternative for first-time discovery. Reversal is small before adding persistent onboarding state; no such state is proposed here.
+**Decision AW-3 — approved by the operator:** launch the walkthrough only from the Walkthrough action, including after demo sign-in. This removes tutorial startup from normal authentication and matches the latest mock. The approved launch policy is explicit: signing into any account does not start the walkthrough. Keeping automatic launch is the strongest alternative for first-time discovery. Reversal is small before adding persistent onboarding state; no such state is proposed here.
 
 ## Migration preserves records and removes shared fallbacks
 
-**Recommendation AW-4 — agent-chosen, pending operator review:** introduce workspace ownership through an explicit operator-reviewed mapping of existing accounts, collections, keys and devices. Do not infer ownership from a username, workbook filename or the fact that a demo account exists.
+**Decision AW-4 — approved by the operator:** introduce workspace ownership through an explicit operator-reviewed mapping of existing accounts, collections, keys and devices. Do not infer ownership from a username, workbook filename or the fact that a demo account exists.
 
 Inventory the current collection and server database first. Produce a dry-run mapping and backup/recovery receipt before any data migration. Register the existing collection once, preserve project/record IDs and cursors, and assign its intended workspace membership deliberately. Place demo seed records in the designated demo collection; provision ordinary accounts with empty collections unless an explicit import/membership says otherwise. If records must be split, perform a verified workbook copy/import without deleting originals as an implicit step.
 
@@ -153,14 +153,14 @@ For implementation, follow the standing validation approach: build Rust/web arti
 - Desktop/mobile, broken/missing avatar and reduced motion: usable account menu and modal, no overflow or unreachable controls.
 - Seed replay and migration dry run: no duplicates, preserved IDs/counts, explicit credential disposition and demonstrated recovery mapping.
 
-The spec itself requires only source-reference, Markdown-link and diff review. It does not authorize migration, implementation or deployment.
+The operator subsequently authorized implementation. This workstream has not changed production accounts, mapped production collections, seeded production, or deployed a build.
 
-## Limits and choices still to review
+## Scope and remaining limits
 
-The fixed contract is profile bubbles in both modes, read-only demo authentication and one current-workspace walkthrough. AW-1 through AW-4 record proposed implementation/product choices separately so they can be accepted or changed specifically. The unresolved operational choice is who owns the demo seed and when its content is refreshed; recommend an operator-run versioned seed with no automatic reset.
+The fixed contract is profile bubbles in both modes, read-only demo authentication and one current-workspace walkthrough. AW-1 through AW-4 are approved implementation/product choices. The unresolved operational choice is who owns the demo seed and when its content is refreshed; recommend an operator-run versioned seed with no automatic reset.
 
 No new collaboration UI, local-to-cloud synchronization, benchmark claims, SDK numerical behavior or experiment policy is included. Workbook storage remains owned by the existing collection/SDK layer; this work adds server identity, access and collection selection around it.
 
-This source inspection does not prove that the deployed demo account is read-only, that local mode has passed runtime qualification, or that collection-per-workspace scaling is sufficient. Measure Client/job resource use before expanding beyond the initial deployment. If the existing SDK requires a process-global collection for correctness, revisit AW-1 before migration; do not hide that limitation behind a browser-only account switch.
+Isolated qualification confirms local mode and read-only demo behavior. It does not establish production account state or collection-per-workspace scaling. Measure Client/job resource use before expanding beyond the initial deployment. If the existing SDK requires a process-global collection for correctness, revisit AW-1 before migration; do not hide that limitation behind a browser-only account switch.
 
-Documentation review: cited source paths and the new cover link resolve; Markdown fences are balanced and the scoped diff passes whitespace checks. No application build or runtime qualification was needed for this docs-only change. The review-tool fence validator is absent at its documented owner-checkout path, so parser validation is not claimed. The host layout audit still reports existing workspace/home inventory violations outside this spec; no layout entries were changed.
+Implementation validation: Rust binary build, Deno entry check, web build, isolated API/migration checks and collaborative-browser qualification passed. No test suites ran. The shared checkout also contains concurrent SDK/UI work; only owned changes are committed by this workstream. Existing host layout findings remain outside scope. The landing still shares the composition bundle; separating its labeled illustration assets remains a follow-up, and complete asset splitting is not claimed.

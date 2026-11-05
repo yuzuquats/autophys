@@ -80,8 +80,8 @@ ${w} .ap-crumb button:hover { background:var(--bg-hover,#ececec);color:var(--ap-
 ${w} .ap-crumb b { padding:2px 4px;color:var(--ap-ink);font-weight:600; }
 ${w} .ap-sep { flex:none;white-space:pre;color:var(--ap-ter); }
 ${w} .ap-crumb > :not(.ap-sep) { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
-${w} .ap-right { display:flex;align-items:center;gap:8px; }
-${w} .ap-meta { font:12px/16px var(--ap-font);color:var(--ap-sec);font-variant-numeric:tabular-nums; }
+${w} .ap-right { display:flex;align-items:center;gap:8px;min-width:0; }
+${w} .ap-meta { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:12px/16px var(--ap-font);color:var(--ap-sec);font-variant-numeric:tabular-nums; }
 ${w} .ap-viewer { flex:1 1 auto;overflow:auto;display:grid;grid-template-columns:repeat(var(--ap-cols,1),minmax(0,1fr));gap:12px;align-content:start;padding:12px;border-radius:12px;background:var(--ap-stage);min-height:0; }
 ${w} .ap-viewer.ap-empty { place-items:center;align-content:center;color:var(--ap-ter);font:13px/18px var(--ap-font); }
 ${w} .ap-viewer.ap-empty p { margin:0; }

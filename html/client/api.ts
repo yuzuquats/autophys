@@ -55,7 +55,7 @@ export interface Source {
    */
   readonly fold?: (ws: Workspace, r: Rec) => Workspace | null;
   /** Pending device pairings and the operator's decision on one (O-3). */
-  readonly pairings?: { list(): Promise<Pairing[]>; decide(code: string, approve: boolean): Promise<void> };
+  readonly pairings?: { list(code?: string): Promise<Pairing[]>; decide(code: string, approve: boolean): Promise<void> };
 }
 
 export const approvalsPath = (investigation: string, proposal: string) => `/investigations/${investigation}/proposals/${proposal}/approvals`;
@@ -86,6 +86,8 @@ export type DaemonOptions = {
   /** A fresh client record id (the envelope id and Idempotency-Key). */
   newId?: () => string;
   user?: string;
+  workspaceId?: string;
+  principalId?: string;
   /** The host may reload the document to renew its HttpOnly session (AX-9). */
   reauth?: () => void;
 };
@@ -106,6 +108,7 @@ export function daemon(opts: DaemonOptions = {}): Source {
   const updates = new Set<(ws: Workspace) => void>();
   const errors = new Set<(error: Error) => void>();
   let authFailed = false;
+  let pairingCode: string | undefined;
 
   async function call<T>(method: "GET" | "POST", path: string, body?: unknown, headers: Record<string, string> = {}): Promise<T> {
     let res: Response;
@@ -138,6 +141,13 @@ export function daemon(opts: DaemonOptions = {}): Source {
     return json as T;
   }
 
+  function verifyScope(value: { workspace_id?: string; principal_id?: string }): void {
+    if (opts.workspaceId && value.workspace_id !== opts.workspaceId || opts.principalId && value.principal_id !== opts.principalId) {
+      authFailed = true; opts.reauth?.();
+      throw new ApiError(401, "workspace_changed", "The active account or workspace changed. Reconnecting.");
+    }
+  }
+
   const recOf = (gseq: Cursor, record: WireRecord): DaemonRec =>
     ({ gseq, id: record.id, investigation: record.investigation, seq: record.seq, kind: "record", ts: String(record.ts), record });
 
@@ -146,6 +156,7 @@ export function daemon(opts: DaemonOptions = {}): Source {
     if (refreshing || !model) return;
     const target = model, revision = target.displayRevision;
     refreshing = call<WireWorkspace>("GET", "/workspace").then((w) => {
+      verifyScope(w);
       if (model !== target) return;
       target.reference(w, revision);
       for (const rec of w.records) target.add(rec);
@@ -161,6 +172,7 @@ export function daemon(opts: DaemonOptions = {}): Source {
     async load() {
       const target = model, revision = target?.displayRevision ?? 0;
       const w = await call<WireWorkspace>("GET", "/workspace");
+      verifyScope(w);
       if (!w || !Array.isArray(w.projects) || !Array.isArray(w.records) || !(typeof w.cursor === "number" || typeof w.cursor === "string")) throw new ApiError(200, "not_a_workspace", "/workspace did not answer a workspace");
       if (target && model === target) {
         target.reference(w, revision);
@@ -215,7 +227,9 @@ export function daemon(opts: DaemonOptions = {}): Source {
           es = null;
           // Native EventSource hides the response status. Probe a small cookie-
           // protected read to distinguish an expired session from a dropped connection.
-          void call("GET", "/pairings").catch(() => {}).finally(() => {
+          void call<{ workspace: { id: string } | null; principal: { id: string } | null }>("GET", "/context")
+            .then(c => verifyScope({ workspace_id: c.workspace?.id, principal_id: c.principal?.id }))
+            .catch(() => {}).finally(() => {
             if (live && !authFailed) timer = setTimer(open, backoff(failures++));
           });
         });
@@ -246,8 +260,10 @@ export function daemon(opts: DaemonOptions = {}): Source {
       start: (pid, config_version) => call("POST", `/workbench/projects/${encodeURIComponent(pid)}/investigations`, { config_version }),
     },
     pairings: {
-      async list() {
-        const out = await call<{ pairings: WirePairing[] }>("GET", "/pairings");
+      async list(code) {
+        if (code !== undefined) pairingCode = code;
+        const path = pairingCode ? `/pairings?code=${encodeURIComponent(pairingCode)}` : "/pairings";
+        const out = await call<{ pairings: WirePairing[] }>("GET", path);
         return (out.pairings ?? []).map(pairingOf);
       },
       async decide(code, approve) {
