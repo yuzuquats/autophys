@@ -175,7 +175,7 @@ def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_se
                 stream.write(json.dumps({"at": _now(), "what": what, "usd": usd, "identity": identity}) + "\n")
             state["spent_usd"] += usd
 
-    def fresh(directory, label):
+    def recover(directory, label):
         # Persist an identity outside the evaluator's output directory (evaluators may
         # require that directory not to exist). A retry gets a new identity only after
         # its predecessor has been recovered and archived.
@@ -202,6 +202,12 @@ def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_se
                 if (evaluation not in charged and identity not in charged
                         and not (attempt["legacy"] and what in legacy)):
                     charge(f"{what} (interrupted: {workbook.name})", _workbook_cost(workbook), identity)
+        return save_attempt
+
+    def fresh(directory, label):
+        import uuid
+        save_attempt = recover(directory, label)
+        if directory.exists():
             stamp = time.strftime('%Y%m%dT%H%M%S', time.gmtime())
             directory.rename(directory.with_name(f"{directory.name}.interrupted-{stamp}-{uuid.uuid4().hex[:8]}"))
         attempt = {"id": uuid.uuid4().hex, "legacy": False}
@@ -245,6 +251,13 @@ def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_se
         if not (root / "spend.jsonl").exists() and state["spent_usd"]:
             charge("before the spend ledger", state["spent_usd"])
         state["spent_usd"] = sum(entry["usd"] for entry in ledger())
+        # Held-out labels contain timestamps, so the next evaluation may never
+        # revisit a previous directory. Recover all retained attempts first,
+        # using their persisted identities to skip already charged workbooks.
+        for directory in sorted((root / "heldout").glob("*")):
+            if (directory.is_dir() and directory.name.startswith(("initial-", "final-"))
+                    and ".interrupted-" not in directory.name):
+                recover(directory, f"heldout/{directory.name}")
     if "incumbent" not in state:
         text = load_playbook(config["playbook"] if resume else playbook).data.decode("utf-8")
         path = run.playbook(0, text)
