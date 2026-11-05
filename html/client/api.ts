@@ -47,7 +47,7 @@ export interface Source {
   /** GET /api/v1/workspace. */
   load(): Promise<Snapshot>;
   /** SSE /api/v1/stream?after=<gseq>: every record after the cursor, then live ones. Returns a stop. */
-  stream(after: Cursor, on: (r: Rec) => void): () => void;
+  stream(after: Cursor, on: (r: Rec) => void, onWorkspace?: (ws: Workspace) => void): () => void;
   /** POST a decision; resolves with the record it became, rejects (an ApiError) when the state forbids it. */
   post(path: string, body: unknown): Promise<Rec>;
   /**
@@ -72,7 +72,7 @@ export class ApiError extends Error {
 
 /** The part of EventSource the daemon source uses (so tests can fake it). */
 export type EventStream = {
-  addEventListener(type: "record", fn: (e: { data: string; lastEventId: string }) => void): void;
+  addEventListener(type: "record" | "display", fn: (e: { data: string; lastEventId: string }) => void): void;
   addEventListener(type: "open" | "error", fn: () => void): void;
   close(): void;
 };
@@ -105,7 +105,7 @@ export function daemon(opts: DaemonOptions = {}): Source {
   const newId = opts.newId ?? (() => `ui-${crypto.randomUUID()}`);
   let model: WireModel | null = null;
   let refreshing: Promise<void> | null = null;
-  const listeners = new Set<(r: Rec) => void>();
+  const updates = new Set<(ws: Workspace) => void>();
   const errors = new Set<(error: Error) => void>();
   let authFailed = false;
 
@@ -144,11 +144,16 @@ export function daemon(opts: DaemonOptions = {}): Source {
     ({ gseq, id: record.id, investigation: record.investigation, seq: record.seq, kind: "record", ts: String(record.ts), record });
 
   /** A record pinned to a project or config version loaded after us: refetch the reference data, then re-fold. */
-  function refresh(r: Rec): void {
-    refreshing ??= call<WireWorkspace>("GET", "/workspace").then((w) => {
-      model?.reference(w);
-      for (const rec of w.records) model?.add(rec);
-      for (const l of listeners) l(r);
+  function refresh(): void {
+    if (refreshing || !model) return;
+    const target = model, revision = target.displayRevision;
+    refreshing = call<WireWorkspace>("GET", "/workspace").then((w) => {
+      if (model !== target) return;
+      target.reference(w, revision);
+      for (const rec of w.records) target.add(rec);
+      target.takeChanged();
+      const ws = target.workspace();
+      for (const update of updates) update(ws);
     }).catch(() => {}).finally(() => { refreshing = null; });
   }
 
@@ -156,9 +161,13 @@ export function daemon(opts: DaemonOptions = {}): Source {
     name: "daemon",
     onError(on) { errors.add(on); return () => { errors.delete(on); }; },
     async load() {
+      const target = model, revision = target?.displayRevision ?? 0;
       const w = await call<WireWorkspace>("GET", "/workspace");
       if (!w || !Array.isArray(w.projects) || !Array.isArray(w.records) || !(typeof w.cursor === "number" || typeof w.cursor === "string")) throw new ApiError(200, "not_a_workspace", "/workspace did not answer a workspace");
-      model = new WireModel(w, opts.user);
+      if (target && model === target) {
+        target.reference(w, revision);
+        for (const rec of w.records) target.add(rec);
+      } else model = new WireModel(w, opts.user);
       const workspace = model.workspace();
       model.takeChanged();
       return { source: "daemon", workspace, gseq: w.cursor, events: RECORDED, pairings: [] };
@@ -168,17 +177,26 @@ export function daemon(opts: DaemonOptions = {}): Source {
       model.add(r.record);
       if (!model.takeChanged()) return null;
       const ws = model.workspace();
-      if (model.stale) refresh(r);
+      if (model.stale) refresh();
       return ws;
     },
-    stream(after, on) {
+    stream(after, on, onWorkspace) {
       let cursor = after, failures = 0, live = true, es: EventStream | null = null, timer: unknown = null;
-      listeners.add(on);
+      if (onWorkspace) updates.add(onWorkspace);
       const open = () => {
         timer = null;
         if (!live) return;
         const s = es = openStream(`${base}/stream?after=${encodeURIComponent(String(cursor))}`);
-        s.addEventListener("open", () => { failures = 0; });
+        s.addEventListener("open", () => { if (live && es === s) failures = 0; });
+        s.addEventListener("display", (e) => {
+          if (!live || es !== s || !model) return;
+          let event: unknown;
+          try { event = JSON.parse(e.data); } catch { return; }
+          if (!model.display(event)) return;
+          model.takeChanged();
+          const ws = model.workspace();
+          for (const update of updates) update(ws);
+        });
         s.addEventListener("record", (e) => {
           if (!live || es !== s || !e.lastEventId) return;
           // Unscoped event ids are opaque collection cursors. A POST gseq belongs
@@ -194,7 +212,7 @@ export function daemon(opts: DaemonOptions = {}): Source {
         // EventSource retries by itself with Last-Event-ID, but gives up on an HTTP error;
         // reopen ourselves from the last gseq seen, with a growing delay.
         s.addEventListener("error", () => {
-          if (es !== s) return;
+          if (!live || es !== s) return;
           s.close();
           es = null;
           // Native EventSource hides the response status. Probe a small cookie-
@@ -207,7 +225,7 @@ export function daemon(opts: DaemonOptions = {}): Source {
       open();
       return () => {
         live = false;
-        listeners.delete(on);
+        if (onWorkspace) updates.delete(onWorkspace);
         es?.close();
         if (timer != null) clearTimer(timer);
       };
@@ -274,7 +292,7 @@ export function firstOf(...sources: Source[]): Source & { readonly chosen: Promi
       }
       throw last;
     },
-    stream: (after, on) => need().stream(after, on),
+    stream: (after, on, onWorkspace) => need().stream(after, on, onWorkspace),
     post: (path, body) => need().post(path, body),
     get fold() { return active?.fold; },
     get pairings() { return active?.pairings; },

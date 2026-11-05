@@ -28,7 +28,7 @@ export class Store {
   start(): Promise<void> {
     return this.starting ??= this.source.load().then((snap) => {
       this.snap = snap;
-      this.stop = this.source.stream(snap.gseq, (r) => this.apply(r));
+      this.stop = this.follow(snap.gseq);
       this.notify();
       void this.refreshPairings();
     }).catch((error) => {
@@ -54,10 +54,19 @@ export class Store {
       } catch (error) {
         this.error = String((error as Error)?.message ?? error);
       } finally {
-        if (!this.closed && this.snap) this.stop = this.source.stream(this.snap.gseq, (r) => this.apply(r));
+        if (!this.closed && this.snap) this.stop = this.follow(this.snap.gseq);
         if (!this.closed) this.notify();
       }
     })().finally(() => { this.refreshing = null; });
+  }
+
+  /** Presentation/reference updates do not append records or advance a cursor. */
+  private follow(cursor: Snapshot["gseq"]): () => void {
+    return this.source.stream(cursor, (r) => this.apply(r), (workspace) => {
+      if (this.closed || !this.snap) return;
+      this.snap = { ...this.snap, workspace };
+      this.notify();
+    });
   }
 
   snapshot(): Snapshot | null {

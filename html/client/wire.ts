@@ -331,6 +331,20 @@ export class WireModel {
   private seen = new Set<string>();
   private cache = new Map<string, ReturnType<typeof mapInvestigation>>();
   private changed = true;
+  /** Monotonic local receipt order, independent of record cursors. */
+  displayRevision = 0;
+  private displays = new Map<string, { digest: string; display: unknown; revision: number }>();
+
+  /** The server validates format-1 manifests; reject malformed stream envelopes here. */
+  display(event: unknown): boolean {
+    const e = obj(event);
+    if (typeof e.project_id !== "string" || !e.project_id || typeof e.digest !== "string" || !/^[a-f0-9]{64}$/.test(e.digest) || obj(e.display).format !== 1) return false;
+    if (this.displays.get(e.project_id)?.digest === e.digest) return false;
+    this.displays.set(e.project_id, { digest: e.digest, display: e.display, revision: ++this.displayRevision });
+    this.projects = this.projects.map((p) => p.id === e.project_id ? { ...p, display: e.display } : p);
+    this.changed = true;
+    return true;
+  }
   /** Set when a record pins a project or config version the reference data lacks: refetch it. */
   stale = false;
 
@@ -340,8 +354,11 @@ export class WireModel {
   }
 
   /** Replace the projects and config versions (from a fresh `GET /workspace`). */
-  reference(w: Pick<WireWorkspace, "projects" | "config_versions">): void {
-    this.projects = w.projects;
+  reference(w: Pick<WireWorkspace, "projects" | "config_versions">, startedAt = this.displayRevision): void {
+    this.projects = w.projects.map((p) => {
+      const live = this.displays.get(p.id);
+      return live && live.revision > startedAt ? { ...p, display: live.display } : p;
+    });
     this.configs = new Map();
     for (const c of w.config_versions) this.configs.set(c.project_id, [...(this.configs.get(c.project_id) ?? []), { version: c.version, config: c.config }]);
     this.cache.clear();

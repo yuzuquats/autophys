@@ -431,3 +431,56 @@ Deno.test("daemon: first investigation refreshes a registered project's missing 
   assertEquals(store.snapshot()!.workspace.projects[0].investigations.length, 1);
   assertEquals(ctl.view().sidebar.nodes.length, 1);
 });
+
+Deno.test("daemon: display events redraw an open store without advancing or duplicating records", async () => {
+  const d = fakeDaemon(), store = new Store(daemon(d.opts));
+  await store.start();
+  let redraws = 0;
+  store.subscribe(() => redraws++);
+  const cursor = store.snapshot()!.gseq, before = store.snapshot()!.workspace.projects[0];
+  const display = { format: 1, channels: { x: { label: "Displacement", unit: "mm" } }, settings: { frequency: { label: "Drive frequency", unit: "Hz", role: "drive" } }, experiments: { sine: { label: "Driven sine", views: ["spectrum"] } } };
+  const fire = (event: unknown) => d.streams.at(-1)!.fire.display?.forEach((fn) => fn({ data: JSON.stringify(event), lastEventId: "" }));
+  for (const invalid of [null, {}, { project_id: "p_bench", digest: "bad", display }, { project_id: "p_bench", digest: "a".repeat(64), display: { format: 9 } }]) fire(invalid);
+  assertEquals(redraws, 0);
+  const event = { project_id: "p_bench", digest: "a".repeat(64), display };
+  fire(event); fire(event);
+  const p = store.snapshot()!.workspace.projects[0], c = p.configs[0], sine = c.catalog.find((e) => e.id === "sine")!;
+  assertEquals([redraws, store.snapshot()!.gseq, store.applied.length], [1, cursor, 0]);
+  assertEquals([c.hash, p.investigations], [before.configs[0].hash, before.investigations]);
+  assertEquals([sine.label, sine.output.label, sine.output.unit, sine.viewHints], ["Driven sine", "Displacement", "mm", ["frequency"]]);
+  assertEquals(sine.settings.find((s) => s.name === "frequency")?.role, "drive");
+  d.emit(9, rec("proposal", { proposal_id: "prop_1", event: "approved", by: "writer" }));
+  assertEquals(store.applied.length, 1);
+  const old = d.streams[0]; d.drop(); await settle();
+  assert(old.closed);
+  // A queued callback belonging to the old connection may not repaint or append.
+  old.fire.display.forEach((fn) => fn({ data: JSON.stringify({ ...event, digest: "b".repeat(64), display: { format: 1 } }), lastEventId: "" }));
+  old.fire.record.forEach((fn) => fn({ data: JSON.stringify(rec("outcome", { status: "failed" })), lastEventId: "10" }));
+  assertEquals([store.snapshot()!.gseq, store.applied.length, redraws], [9, 1, 2]);
+  fire({ ...event, digest: "c".repeat(64), display: { ...display, experiments: { sine: { label: "Reconnected sine", views: ["edges"] } } } });
+  assertEquals(store.snapshot()!.workspace.projects[0].configs[0].catalog[1].label, "Reconnected sine");
+  store.close();
+  assert(d.streams.every((s) => s.closed));
+});
+
+Deno.test("daemon: reference fetch merges concurrent display metadata and records", async () => {
+  const d = fakeDaemon(), rawFetch = d.opts.fetch!;
+  let resolve!: (r: Response) => void, refresh = false;
+  d.opts.fetch = (input, init) => refresh && String(input).endsWith("/workspace")
+    ? new Promise<Response>((r) => { resolve = r; }) : rawFetch(input, init);
+  const store = new Store(daemon(d.opts)); await store.start(); refresh = true;
+  const newer = rec("investigation", { project_id: "p_bench", config_version: "v2hash", title: "new config", seed: 1 }, "inv_2");
+  d.emit(9, newer); // Starts a reference request containing an older display snapshot.
+  await settle();
+  const live = { project_id: "p_bench", digest: "d".repeat(64), display: { format: 1, experiments: { sine: { label: "Latest display" } } } };
+  d.streams.at(-1)!.fire.display.forEach((fn) => fn({ data: JSON.stringify(live), lastEventId: "" }));
+  const decision = rec("proposal", { proposal_id: "prop_1", event: "approved", by: "concurrent" });
+  d.emit(10, decision);
+  resolve(Response.json({ ...d.ws, config_versions: [...d.ws.config_versions, { ...d.ws.config_versions[0], version: "v2hash" }] }));
+  await settle(); await settle();
+  const snap = store.snapshot()!, p = snap.workspace.projects[0];
+  assertEquals([snap.gseq, store.applied.length, p.configs[0].catalog[1].label], [10, 2, "Latest display"]);
+  assertEquals(p.investigations.length, 2);
+  assertEquals(p.investigations[0].proposals[0].status, "approved");
+  store.close();
+});
