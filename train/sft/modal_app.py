@@ -166,16 +166,44 @@ def _summary(scores: list[dict]) -> dict:
 
 @app.function(image=gpu_image, gpu="L40S", timeout=600, volumes={"/vol": volume})
 def train_lora(cfg: dict, train_rows: list, val_rows: list, held_rows: list, held_meta: list | None = None) -> dict:
+    sys.path.insert(0, "/work")
+    tok, enc = bound_training_inputs(cfg, train_rows + val_rows + held_rows)
+    return _train_lora(cfg, train_rows, val_rows, held_rows, held_meta, tok, enc)
+
+
+def bound_training_inputs(cfg, rows):
+    """Refuse plan drift before model acquisition or any training body."""
+    from model_assets import ModelAssets
+    from render import special_tokens_from_config
+    from train_sft import Encoder
+    assets = ModelAssets.from_modal_payload(
+        cfg["base_model"], cfg.get("model_assets_payload"), cfg.get("planned_assets"))
+    revision = assets.identity["revision"]
+    from transformers import AutoTokenizer
+    tok = AutoTokenizer.from_pretrained(cfg["base_model"], revision=revision, trust_remote_code=False)
+    if getattr(tok, "init_kwargs", {}).get("_commit_hash") != revision:
+        raise ValueError("Modal tokenizer revision differs from the planned model commit")
+    if tok.chat_template != assets.template or special_tokens_from_config(tok.special_tokens_map) != assets.special:
+        raise ValueError("Modal tokenizer template/special tokens differ from the planned assets")
+    backend = getattr(tok, "backend_tokenizer", None)
+    if backend is None or json.loads(backend.to_str()) != json.loads(assets.tokenizer.to_str()):
+        raise ValueError("Modal tokenizer bytes/IDs differ from the planned assets")
+    enc = Encoder(cfg["base_model"], tokenizer=tok, assets=assets)
+    enc.verify_tokenizer(tok, rows)
+    return tok, enc
+
+
+def _train_lora(cfg, train_rows, val_rows, held_rows, held_meta, tok, enc):
     import math
     import random
 
     import torch
     from peft import LoraConfig, get_peft_model
-    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from transformers import AutoModelForCausalLM
 
     sys.path.insert(0, "/work")
     from autophys.reasoner import parse_json_content
-    from train_sft import Encoder, lr_at
+    from train_sft import lr_at
 
     def emit(**entry):
         print(json.dumps(entry), flush=True)
@@ -183,8 +211,6 @@ def train_lora(cfg: dict, train_rows: list, val_rows: list, held_rows: list, hel
     started = time.time()
     name, base = cfg["name"], cfg["base_model"]
     torch.manual_seed(cfg["seed"])
-    tok = AutoTokenizer.from_pretrained(base)
-    enc = Encoder(base, tok)
     tr = [enc.tokens(*r) for r in train_rows]
     va = [enc.tokens(*r) for r in val_rows]
     ho = [enc.tokens(*r) for r in held_rows]
@@ -192,7 +218,11 @@ def train_lora(cfg: dict, train_rows: list, val_rows: list, held_rows: list, hel
     if longest > cfg["max_seq_len"]:
         raise SystemExit(f"longest sequence {longest} exceeds max_seq_len {cfg['max_seq_len']}")
 
-    model = AutoModelForCausalLM.from_pretrained(base, dtype=torch.bfloat16, device_map="cuda")
+    revision = enc.identity["revision"]
+    model = AutoModelForCausalLM.from_pretrained(
+        base, revision=revision, trust_remote_code=False, dtype=torch.bfloat16, device_map="cuda")
+    if model.config._commit_hash != revision:
+        raise ValueError("Modal model revision differs from the planned model commit")
     model.gradient_checkpointing_enable()
     model.enable_input_require_grads()
     model = get_peft_model(model, LoraConfig(r=cfg["rank"], lora_alpha=cfg["rank"], lora_dropout=0.0,
@@ -274,7 +304,8 @@ def train_lora(cfg: dict, train_rows: list, val_rows: list, held_rows: list, hel
     adapter = f"/vol/runs/{name}/adapter"
     model.save_pretrained(adapter)
     record = {"run_id": f"modal:{name}", "sampler_weights": f"modal-volume://autophys-train/runs/{name}/adapter",
-              "state": None, "config": cfg, "end_of_turn": enc.end_of_turn, "trainable_params": trainable,
+              "state": None, "config": {k: v for k, v in cfg.items() if k != "model_assets_payload"},
+              "model_assets": enc.identity, "model_revision": revision, "end_of_turn": enc.end_of_turn, "trainable_params": trainable,
               "heldout_decisions": {"base": before, "trained": after},
               "heldout_rows": {"base": before_rows, "trained": after_rows}, "log": log,
               "gpu_seconds": round(time.time() - started, 1)}
@@ -284,7 +315,8 @@ def train_lora(cfg: dict, train_rows: list, val_rows: list, held_rows: list, hel
 
 
 @app.local_entrypoint()
-def train_main(name: str, base_model: str, data: str, gpu: str, timeout: int, hparams: str = "{}"):
+def train_main(name: str, base_model: str, data: str, gpu: str, timeout: int, hparams: str = "{}",
+               model_assets: str = "", planned_assets: str = "{}"):
     sys.path.insert(0, str(HERE))
     from train_sft import load
 
@@ -292,6 +324,15 @@ def train_main(name: str, base_model: str, data: str, gpu: str, timeout: int, hp
     cfg = {"name": name, "base_model": base_model, "rank": 32, "max_seq_len": 2048, "lr": 2e-4, "warmup": 5,
            "batch_size": 8, "epochs": 4, "eval_every": 10, "seed": 0}
     cfg.update(json.loads(hparams))
+    # Identity fields cannot be overridden by hparams. Validate before even
+    # obtaining a remote call handle, then revalidate inside train_lora.
+    from model_assets import ModelAssets
+    expected = json.loads(planned_assets)
+    assets = ModelAssets(base_model, model_assets or None)
+    cfg["planned_assets"] = expected
+    cfg["model_assets_payload"] = assets.modal_payload(expected)
+    if cfg["base_model"] != base_model or cfg["name"] != name:
+        raise ValueError("Modal hparams cannot override run/model identity")
     held, held_meta = d / "heldout.jsonl", d / "heldout.meta.jsonl"
     meta = [json.loads(line) for line in held_meta.open()] if held_meta.exists() else None
     rows = load(held) if held.exists() else []

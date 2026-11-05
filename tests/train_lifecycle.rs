@@ -33,6 +33,13 @@ if (live and phase == 'live') or (not live and phase == 'plan'):
         while True: os.write(2, b'x' * 8192)
     elif mode == 'json-flood':
         while True: os.write(1, b'{"step":1,"val_nll":0.4}\n' * 256)
+    elif mode == 'nonzero-small':
+        print('captured diagnostic marker', flush=True)
+        sys.exit(9)
+    elif mode == 'nonzero-stdout':
+        os.write(1, b'x' * 262144)
+        (root / 'capture-complete').write_text('worker stdout complete')
+        sys.exit(9)
     elif mode == 'nonzero': sys.exit(9)
     elif mode == 'read-failure': os.write(1, b'\xff\n'); time.sleep(600)
 if not live:
@@ -466,4 +473,118 @@ fn normal_worker_diagnostics_remain_visible() {
         assert!(String::from_utf8_lossy(&out.stderr).contains("worker diagnostic marker"));
         lab.reaped();
     }
+}
+
+// Completed capture forwarding must be bounded too: the worker is already
+// gone, but a blocking print would retain the CLI and same-name reservation.
+#[test]
+fn completed_capture_diagnostics_exit_and_release_reservation_before_sink_release() {
+    for dataset in [false, true] {
+        for closed in [false, true] {
+            let lab = Lab::new();
+            let previous = b"{\"name\":\"capture\",\"status\":\"failed\",\"retained\":7}";
+            let mut command = if dataset {
+                std::fs::write(
+                    lab.root.path().join("build_dataset.py"),
+                    r#"
+import os
+from pathlib import Path
+root = Path(__file__).parent
+(root / 'worker.pid').write_text(str(os.getpid()))
+os.write(1, b'x' * 262144)
+(root / 'capture-complete').write_text('worker stdout complete')
+"#,
+                )
+                .unwrap();
+                let mut command = Command::new(env!("CARGO_BIN_EXE_autophys"));
+                command
+                    .env_clear()
+                    .env("HOME", lab.root.path())
+                    .env("PATH", "/usr/bin:/bin")
+                    .env("TMPDIR", lab.root.path())
+                    .env("PYTHONDONTWRITEBYTECODE", "1")
+                    .env("AUTOPHYS_TRAIN_WORKER_TIMEOUT_SECONDS", "5")
+                    .env("AUTOPHYS_TRAIN_WORKER_GRACE_SECONDS", "2")
+                    .env("AUTOPHYS_TRAIN_WORKER_OUTPUT_BYTES", "1048576")
+                    .args(["train", "dataset", "--json", "--out"])
+                    .arg(&lab.data)
+                    .arg("--train-dir")
+                    .arg(lab.root.path())
+                    .args(["--python", "/usr/bin/python3"]);
+                command
+            } else {
+                lab.seed("capture", previous);
+                lab.command("capture", false, "nonzero-stdout", "plan")
+            };
+            let mut child = command
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .unwrap();
+            let sink = child.stderr.take().unwrap();
+            let held = if closed {
+                drop(sink);
+                None
+            } else {
+                Some(sink)
+            };
+            let started = Instant::now();
+            let status = loop {
+                if let Some(status) = child.try_wait().unwrap() {
+                    break Some(status);
+                }
+                if started.elapsed() > Duration::from_secs(3) {
+                    break None;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            };
+            if status.is_none() {
+                child.kill().unwrap();
+                child.wait().unwrap();
+            }
+            assert!(status.is_some(), "completed capture retained CLI");
+            assert_eq!(
+                status.unwrap().code(),
+                Some(if dataset && !closed { 0 } else { 1 })
+            );
+            assert!(lab.root.path().join("capture-complete").exists());
+            lab.reaped();
+            if dataset && !closed {
+                let output = child.wait_with_output().unwrap();
+                let body: Value = serde_json::from_slice(&output.stdout).unwrap();
+                assert_eq!(body["backend"], "local");
+                assert_eq!(body["files"]["train"]["rows"], 1);
+            } else if !dataset {
+                assert_eq!(
+                    std::fs::read(lab.dir("capture").join("manifest.json")).unwrap(),
+                    previous
+                );
+                // This actual retry proves reservation reuse while the original
+                // stderr read end is still held open and undrained.
+                checked(
+                    &lab.command("capture", false, "ok", "plan")
+                        .output()
+                        .unwrap(),
+                );
+                assert_eq!(lab.manifest("capture")["status"], "planned");
+            }
+            drop(held);
+        }
+    }
+}
+
+#[test]
+fn normal_failed_capture_diagnostics_remain_visible() {
+    let lab = Lab::new();
+    let out = lab
+        .command("captured", false, "nonzero-small", "plan")
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("captured diagnostic marker") && stderr.contains("exited unsuccessfully")
+    );
+    assert!(out.stdout.is_empty());
+    lab.reaped();
 }

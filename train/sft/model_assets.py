@@ -27,19 +27,23 @@ class ModelAssets:
         self.path = Path(path).expanduser().resolve()
         try:
             raw = (self.path / "manifest.json").read_bytes()
-            manifest = json.loads(raw)
-            if manifest.get("schema") != 1 or manifest.get("model") != model:
-                raise ValueError("asset manifest schema/model does not match --base-model")
-            if not isinstance(manifest.get("revision"), str) or not manifest["revision"]:
-                raise ValueError("asset manifest needs an identifiable revision")
-            if set(manifest.get("files", {})) != set(FILES):
-                raise ValueError("asset manifest must identify tokenizer.json, tokenizer_config.json and chat_template.jinja")
             data = {name: (self.path / name).read_bytes() for name in FILES}
-            for name, value in data.items():
-                if digest(value) != manifest["files"][name]:
-                    raise ValueError(f"model asset digest mismatch: {name}")
+            self._load(model, raw, data)
         except (OSError, ValueError, KeyError, TypeError) as exc:
             raise ValueError(f"invalid/missing local model assets in {self.path}: {exc}; prepare an identified asset directory before planning or training") from exc
+
+    def _load(self, model, raw, data):
+        manifest = json.loads(raw)
+        if manifest.get("schema") != 1 or manifest.get("model") != model:
+            raise ValueError("asset manifest schema/model does not match --base-model")
+        if not isinstance(manifest.get("revision"), str) or not manifest["revision"]:
+            raise ValueError("asset manifest needs an identifiable revision")
+        if set(manifest.get("files", {})) != set(FILES):
+            raise ValueError("asset manifest must identify tokenizer.json, tokenizer_config.json and chat_template.jinja")
+        for name, value in data.items():
+            if digest(value) != manifest["files"][name]:
+                raise ValueError(f"model asset digest mismatch: {name}")
+        self._raw, self._data = raw, data
         self.template = data["chat_template.jinja"].decode("utf-8")
         config = json.loads(data["tokenizer_config.json"])
         from render import special_tokens_from_config
@@ -47,6 +51,31 @@ class ModelAssets:
         from tokenizers import Tokenizer
         self.tokenizer = Tokenizer.from_str(data["tokenizer.json"].decode("utf-8"))
         self.identity = {"model": model, "revision": manifest["revision"], "manifest_sha256": digest(raw), "files": manifest["files"]}
+
+    def modal_payload(self, expected):
+        self.verify_modal_identity(expected)
+        return {"manifest": self._raw.decode("utf-8"),
+                "files": {name: value.decode("utf-8") for name, value in self._data.items()}}
+
+    def verify_modal_identity(self, expected):
+        if self.identity != expected:
+            raise ValueError("Modal assets differ from the planned identity; refusing training")
+        if not re.fullmatch(r"[0-9a-fA-F]{40}", self.identity["revision"]):
+            raise ValueError("Modal requires an immutable 40-hex model revision; prepare assets at a model commit")
+
+    @classmethod
+    def from_modal_payload(cls, model, payload, expected):
+        # Validate the exact manifest and every prepared file again at the
+        # remote boundary. Never interpret a local path on the remote worker.
+        if not isinstance(payload, dict) or set(payload) != {"manifest", "files"}:
+            raise ValueError("missing/invalid planned Modal asset payload")
+        if not isinstance(payload["files"], dict) or set(payload["files"]) != set(FILES):
+            raise ValueError("missing/invalid planned Modal asset files")
+        obj = cls.__new__(cls)
+        obj._load(model, payload["manifest"].encode("utf-8"),
+                  {name: value.encode("utf-8") for name, value in payload["files"].items()})
+        obj.verify_modal_identity(expected)
+        return obj
 
     def encode(self, text):
         return self.tokenizer.encode(text, add_special_tokens=False).ids

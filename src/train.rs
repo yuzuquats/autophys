@@ -603,7 +603,10 @@ impl Worker {
         argv.extend_from_slice(args);
         let (ok, stdout, _) = self.supervise(&argv, true)?;
         if !ok {
-            eprint!("{stdout}");
+            Diagnostics::open()
+                .context("opening nonblocking captured diagnostics")?
+                .forward(stdout.as_bytes())
+                .context("echoing captured worker output")?;
             bail!("{script} exited unsuccessfully");
         }
         Ok(stdout)
@@ -878,7 +881,10 @@ pub fn dataset(args: Vec<String>) -> Result<Value, Failure> {
             let mut argv = vec!["--out".to_string(), out.display().to_string()];
             argv.extend(flags.passthrough(DATASET_FLAGS));
             let stdout = worker.capture("build_dataset.py", &argv)?;
-            eprint!("{stdout}");
+            Diagnostics::open()
+                .context("opening nonblocking captured diagnostics")?
+                .forward(stdout.as_bytes())
+                .context("echoing captured worker output")?;
         }
         let mut identity = dataset_identity(&out)?;
         identity["backend"] = json!(backend);
@@ -1162,6 +1168,17 @@ pub fn run(args: Vec<String>) -> Result<Value, Failure> {
                 gate["gpu"].as_str().unwrap_or_default().to_string(),
                 "--timeout".into(),
                 gate["timeout_s"].to_string(),
+                "--model-assets".into(),
+                flags
+                    .get("model-assets")
+                    .map(PathBuf::from)
+                    .or_else(|| env_path("AUTOPHYS_TRAIN_MODEL_ASSETS"))
+                    .map(absolute)
+                    .transpose()?
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_default(),
+                "--planned-assets".into(),
+                plan["model_assets"].to_string(),
                 "--hparams".into(),
                 hparams.to_string(),
             ])
@@ -1193,7 +1210,12 @@ pub fn run(args: Vec<String>) -> Result<Value, Failure> {
                             .is_some_and(|s| !s.is_empty())
                         && value
                             .get("state")
-                            .is_some_and(|v| v.is_null() || v.is_string()) =>
+                            .is_some_and(|v| v.is_null() || v.is_string())
+                        && (backend != "modal"
+                            || (plan["model_assets"].is_object()
+                                && value["model_assets"] == plan["model_assets"]
+                                && value["model_revision"]
+                                    == plan["model_assets"]["revision"])) =>
                 {
                     Some(value)
                 }
@@ -1240,6 +1262,8 @@ pub fn run(args: Vec<String>) -> Result<Value, Failure> {
                 "end_of_turn",
                 "trainer",
                 "wall_seconds",
+                "model_assets",
+                "model_revision",
             ] {
                 if let Some(value) = record.get(key) {
                     manifest[key] = value.clone();
