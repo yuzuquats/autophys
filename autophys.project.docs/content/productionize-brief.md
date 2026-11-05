@@ -1,5 +1,11 @@
 # Judge the same Autophys investigation loop on yuzuquats
 
+**Current checkpoint, 2026-11-05:** all five baseline reviews completed, provisional/unverified (quality6, architecture7.4, testing6, folder8.2, performance7). The first bounded core repair is locally committed and validated; independent rejudging remains pending. See [productionize-round-1.md](productionize-round-1.md) for behavior, exact implementation revisions, decisive evidence, agent choices and remaining findings. The storage exception is approved for this campaign; earlier missing-storage/dependency claims below describe their historical checkpoint. No overall readiness verdict or score increase is made.
+
+The remainder is the original preparation/baseline brief, retained as historical context. Its then-current unstarted/no-remediation statements do not describe the checkpoint above.
+
+---
+
 Status: **campaign explicitly authorized; bounded baseline available with concrete qualification blockers. Five independent reviews and remediation remain unstarted.**
 
 The user said “i moved the changes to yuzuquats. let's productionize the app over there”. Owner is **yuzuquats:/home/james/workspace/autophys**, master, Project autophys. This supersedes this page's previous future/unstarted brief and rwc-dev-01 ownership. Do not contact, repair, build on or otherwise use the unstable old host. Read [productionize-prep.md](productionize-prep.md) for current decisive results, [recovery-20261104.md](recovery-20261104.md) for arrived/missing repairs and [oss-layout.md](oss-layout.md) with its historical qualification boundary.

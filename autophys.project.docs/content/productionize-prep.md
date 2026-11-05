@@ -1,5 +1,11 @@
 # Qualify Autophys on its new owner before repairing the observed gaps
 
+**Current checkpoint, 2026-11-05:** all five baseline reviews completed, provisional/unverified (quality6, architecture7.4, testing6, folder8.2, performance7). The first bounded core repair is locally committed and validated; independent rejudging remains pending. See [productionize-round-1.md](productionize-round-1.md) for behavior, exact implementation revisions, decisive evidence, agent choices and remaining findings. The storage exception is approved for this campaign; earlier missing-storage/dependency claims below describe their historical checkpoint. No overall readiness verdict or score increase is made.
+
+The remainder is the original preparation/baseline brief, retained as historical context. Its then-current unstarted/no-remediation statements do not describe the checkpoint above.
+
+---
+
 Status: **campaign authorized; yuzuquats preparation and bounded baseline captured, 2026-11-04. Independent judging and remediation have not run.**
 
 The operator moved Autophys to yuzuquats and said “let's productionize the app over there”. Source/build ownership is now **yuzuquats:/home/james/workspace/autophys**, on master. This supersedes the former-owner and unstarted-campaign statements in the historical preparation below. Reuse Project autophys and plan cover de3116d (I1e0ae63e4c1847019fb8f8e52b4f0bc0). The [current brief](productionize-brief.md) defines the judging scope; this page records what the new owner actually established.
