@@ -593,3 +593,30 @@ files were not edited. Deno checks passed for the root and the two updated brows
 drivers; those drivers were not run. The autoloop's two focused recovery tests
 passed, including a crash between recovery charging and archiving; Cargo check
 passed for autophys-cli. No full suite, push or deployment was performed.
+
+
+## Sign-in opens without forced field focus (2026-11-05)
+
+Opening the standalone sign-in page previously focused Email immediately,
+which could open browser credential suggestions before the user chose a field.
+The login and invitation pages now retain native page focus. Tab reaches Email
+first, then Password; credential autocomplete hints and ordinary form submission
+remain intact. The form enters with a 160 ms opacity fade (0.6 to 1), disabled
+for reduced-motion preferences. Phone-sized inputs use 16 px text to avoid
+iOS input zoom; page padding and small-viewport height keep the form stable.
+
+Prior art: [GitHub Primer's page-navigation focus guidance](https://primer.style/product/ui-patterns/loading/#focus-management)
+recommends native focus behavior when navigation loads a new page.
+[MDN's autofocus accessibility concerns](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Global_attributes/autofocus#accessibility_concerns)
+describe forced scrolling, mobile keyboard activation and skipped context.
+This is a standalone document, so dialog focus-trap guidance does not apply.
+
+Validation: release build passed, with existing dependency warnings.
+Focused browser checks at 1280×800 and 390×844 confirmed BODY retains initial
+focus after load, Tab reaches Email then Password, autocomplete attributes remain,
+and mobile layout has no horizontal overflow. An isolated demo login reached
+the app. Invalid credentials retained the email, cleared the password, displayed
+the existing alert and left initial page focus alone. Invitation fields retained
+new-password autocomplete without autofocus. No test suites were run, per the
+operator's build-only instruction. Native password-manager popup rendering with
+stored credentials and physical iOS Safari were not exercised.

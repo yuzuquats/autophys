@@ -116,7 +116,7 @@ pub fn escape(text: &str) -> String {
 
 const PAGE_STYLE: &str = "\
 *{box-sizing:border-box}\
-body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f6f6f6;\
+body{margin:0;min-height:100vh;min-height:100svh;padding:24px 0;display:grid;place-items:center;background:#f6f6f6;\
 color:#141414;font:15px/1.45 system-ui,-apple-system,'Segoe UI',sans-serif}\
 main{width:min(380px,calc(100vw - 32px));background:#fff;border-radius:14px;padding:28px;\
 box-shadow:0 10px 30px rgba(0,0,0,.10)}\
@@ -129,7 +129,10 @@ background:#141414;color:#fff;font:inherit;font-weight:600;cursor:pointer}\
 .err{background:#fdecec;color:#9b1c1c;border-radius:8px;padding:9px 12px;margin:0 0 6px}\
 .mark{width:28px;height:28px;border-radius:7px;background:#141414;margin-bottom:16px}\
 .alt{margin:18px 0 0;font-size:13px}.alt a{color:#141414}\
-form.demo{margin-top:8px}form.demo button{margin-top:0}button.secondary{background:#efefef;color:#141414}";
+form.demo{margin-top:8px}form.demo button{margin-top:0}button.secondary{background:#efefef;color:#141414}\
+@keyframes auth-enter{from{opacity:.6}to{opacity:1}}\
+@media(prefers-reduced-motion:no-preference){main{animation:auth-enter 160ms ease-out}}\
+@media(max-width:640px){input{font-size:16px}}";
 
 fn page(title: &str, body: &str) -> String {
     format!(
@@ -167,7 +170,7 @@ fn login_form(next: &str, email: &str, error: Option<&str>, demo: bool) -> Strin
              <form method=\"post\" action=\"/api/auth/login\">\
              <input type=\"hidden\" name=\"next\" value=\"{}\">\
              <label for=\"email\">Email</label>\
-             <input id=\"email\" name=\"email\" type=\"email\" autocomplete=\"username\" required value=\"{}\" autofocus>\
+             <input id=\"email\" name=\"email\" type=\"email\" autocomplete=\"username\" required value=\"{}\">\
              <label for=\"password\">Password</label>\
              <input id=\"password\" name=\"password\" type=\"password\" autocomplete=\"current-password\" required>\
              <button type=\"submit\">Sign in</button></form>{demo}\
@@ -199,7 +202,7 @@ fn invite_form(error: Option<&str>) -> String {
              <form method=\"post\" action=\"/api/auth/invite\">\
              <input type=\"hidden\" name=\"token\" id=\"token\">\
              <label for=\"password\">Password</label>\
-             <input id=\"password\" name=\"password\" type=\"password\" autocomplete=\"new-password\" minlength=\"{MIN_PASSWORD}\" required autofocus>\
+             <input id=\"password\" name=\"password\" type=\"password\" autocomplete=\"new-password\" minlength=\"{MIN_PASSWORD}\" required>\
              <label for=\"confirm\">Confirm password</label>\
              <input id=\"confirm\" name=\"confirm\" type=\"password\" autocomplete=\"new-password\" minlength=\"{MIN_PASSWORD}\" required>\
              <button type=\"submit\">Set password and sign in</button></form>\
