@@ -34,9 +34,8 @@ function targetElement(selector: string): HTMLElement | null {
 }
 function visible(el: HTMLElement): boolean {
   const r = el.getBoundingClientRect();
-  return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden" && r.left < innerWidth && r.right > 0 && r.top >= 65 && r.bottom < innerHeight - (innerWidth < 640 ? 260 : 200);
+  return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden" && r.left >= 0 && r.right <= innerWidth && r.top >= 65 && r.bottom < (document.querySelector(".ap-guided-tour")?.getBoundingClientRect().top ?? innerHeight);
 }
-const reduced = () => matchMedia("(prefers-reduced-motion:reduce)").matches;
 
 export function mountGuidedTour(host: Host) {
   const abort = new AbortController(), { signal } = abort;
@@ -44,7 +43,7 @@ export function mountGuidedTour(host: Host) {
   const sheet = document.createElement("section"); sheet.className = "ap-guided-tour"; sheet.hidden = true;
   sheet.setAttribute("role", "region"); sheet.setAttribute("aria-label", "Autophys guided tour");
   sheet.innerHTML = `<div class="ap-tour-inner">
-    <div><div class="ap-tour-preview" aria-hidden="true" inert></div><p class="ap-tour-label"></p></div>
+    <div class="ap-tour-visual"><div class="ap-tour-preview" aria-hidden="true" inert></div><p class="ap-tour-label"></p></div>
     <div class="ap-tour-lesson"><div class="ap-tour-bars" role="img"></div><h2 class="ap-tour-title"></h2>
     <p class="ap-tour-body" aria-live="polite"></p><div class="ap-tour-actions">
     <button type="button" class="ap-tour-back">← Back</button><button type="button" class="ap-tour-next">Next →</button>
@@ -60,10 +59,14 @@ export function mountGuidedTour(host: Host) {
   const seenKey = "autophys.tour.seen." + (document.querySelector("#ap-account")?.textContent?.trim() ?? "local");
   const panels = () => document.querySelector<HTMLElement>(".ck-panels")!;
   let demo: Controller | null = null, steps: ReturnType<typeof tourSteps> = [];
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  let enterFrame = 0, previewFrame = 0;
   let unsubscribe: (() => void) | null = null, frame = 0, revision = 0, busy = false, disposed = false, paused = false;
   let rings: HTMLElement[] = [], targets: HTMLElement[] = [], current: TourPart | undefined;
-  const clearRings = () => { cancelAnimationFrame(frame); clearTimeout(timer); rings.forEach(r => r.remove()); rings = []; };
+  const cancelFrames = () => {
+    cancelAnimationFrame(frame); cancelAnimationFrame(enterFrame); cancelAnimationFrame(previewFrame);
+    previewFrame = 0;
+  };
+  const clearRings = () => { cancelFrames(); rings.forEach(r => r.remove()); rings = []; };
   function panel(which: "sidebar" | "details", open: boolean) {
     const button = document.querySelector<HTMLButtonElement>(".ck-" + which + "-toggle")!;
     if ((button.getAttribute("aria-pressed") === "true") !== open) button.click();
@@ -81,16 +84,35 @@ export function mountGuidedTour(host: Host) {
     host.redraw(); // Also reconcile the app's inert Details state after a shell toggle.
   }
   function drawRings() {
-    clearRings();
-    targets = (current?.target.map(targetElement).filter((e): e is HTMLElement => !!e) ?? []).filter(visible);
-    rings = targets.map((target, i) => {
+    cancelAnimationFrame(frame);
+    targets = current!.target.map(targetElement).filter((e): e is HTMLElement => !!e);
+    // Keep the same nodes across steps, including while a panel is sliding in.
+    while (rings.length > targets.length) rings.pop()!.remove();
+    while (rings.length < targets.length) {
       const ring = document.createElement("div"); ring.className = "ck-target-ring ap-tour-halo";
-      ring.dataset.target = current!.target.filter(s => targetElement(s) === target)[0];
-      ring.setAttribute("aria-hidden", "true"); document.body.append(ring); return ring;
-    });
+      ring.setAttribute("aria-hidden", "true"); document.body.append(ring); rings.push(ring);
+    }
+    targets.forEach((target, i) => { rings[i].dataset.target = current!.target.find(s => targetElement(s) === target); });
+    const own = revision;
+    const preview = $(".ap-tour-preview"), visual = $(".ap-tour-visual");
     const place = () => {
-      targets.forEach((t, i) => {
-        const r = t.getBoundingClientRect();
+      const bounds = targets.map(t => t.getBoundingClientRect());
+      const shown = targets.map(visible);
+      const needsPreview = targets.length < current!.target.length || shown.some(v => !v);
+      visual.hidden = !needsPreview;
+      sheet.dataset.preview = needsPreview ? "true" : "false";
+      if (!needsPreview) {
+        cancelAnimationFrame(previewFrame); previewFrame = 0;
+      } else if (!previewFrame && preview.dataset.ready !== "true") {
+        // A separate frame lets the ready state paint before copying any DOM.
+        previewFrame = requestAnimationFrame(() => {
+          previewFrame = 0;
+          if (own !== revision || !session.active || paused || visual.hidden) return;
+          previewComponent(preview, targets);
+        });
+      }
+      bounds.forEach((r, i) => {
+        rings[i].hidden = !shown[i];
         Object.assign(rings[i].style, { left:r.left - 4 + "px", top:r.top - 4 + "px", width:r.width + 8 + "px", height:r.height + 8 + "px", borderRadius:"8px" });
       });
       frame = requestAnimationFrame(place);
@@ -100,7 +122,9 @@ export function mountGuidedTour(host: Host) {
   function enter() {
     if (!demo || !current) return;
     const own = ++revision;
-    paused = false; clearRings(); sheet.dataset.ready = "false";
+    paused = false; cancelFrames(); sheet.dataset.ready = "false";
+    const preview = $(".ap-tour-preview");
+    preview.replaceChildren(); delete preview.dataset.ready;
     if (current.select) demo.handle({ kind:"select", id:current.select });
     layout(current);
     const { step, substep } = session.pager.position;
@@ -114,20 +138,16 @@ export function mountGuidedTour(host: Host) {
     $(".ap-tour-hint").textContent = (step + 1) + " of " + steps.length + " · Esc restores your view";
     back.disabled = session.pager.first;
     next.textContent = session.pager.last ? "Done" : "Next →";
-    // Selection and synchronous component redraw happen first. Let panel layout settle,
-    // scroll the component, then follow it with the halo after approximately 150ms.
-    requestAnimationFrame(() => {
+    // Selection/redraw and instant scrolling precede the next paint. The halo
+    // follows moving targets; readiness never waits for slides or preview copies.
+    const found = current.target.map(targetElement).filter((e): e is HTMLElement => !!e);
+    for (const t of found) t.scrollIntoView({ block:"nearest", inline:"nearest", behavior:"instant" });
+    enterFrame = requestAnimationFrame(() => {
       if (own !== revision || !session.active) return;
-      const found = current!.target.map(targetElement).filter((e): e is HTMLElement => !!e);
-      for (const t of found) t.scrollIntoView({ block:"nearest", inline:"nearest", behavior:"instant" });
-      timer = setTimeout(() => {
-        if (own !== revision || !session.active) return;
-        const live = current!.target.map(targetElement).filter((e): e is HTMLElement => !!e);
-        previewComponent($(".ap-tour-preview"), live);
-        drawRings(); sheet.dataset.ready = "true";
-      }, reduced() ? 0 : 150);
+      drawRings(); sheet.dataset.ready = "true";
     });
   }
+
   const session = new TourSession([1,1,1,1,2,1,1,1,1], () => ({
     controller: host.get(), scroll: scrollTree(), focus: document.activeElement as HTMLElement | null,
     sidebar: document.querySelector(".ck-sidebar-toggle")?.getAttribute("aria-pressed") === "true",

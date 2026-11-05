@@ -483,3 +483,21 @@ complete snapshot restoration and read-only demo decisions. Clean-archive
 qualification and deployment receipts accompany the captures. The installed task
 CLI is unavailable on this host; live task state is in
 `~/.cache/autophys/tutorial-tour-20261104/tasks.json`.
+
+
+UI-TOUR-01 speed follow-up (2026-11-04): remove the fixed 150ms enter delay;
+instant-scroll first, then place persistent halos and mark ready on the next
+animation frame. Halo bounds glide for 180ms with no entrance animation; tour-only
+cookbook slides finish in 200ms. Reduced motion disables these transitions.
+
+**1A — agent-chosen, pending operator review.** Hide the preview column and widen
+the lesson when every target is visible above the sheet; retain an inert live-DOM
+preview for hidden/off-screen targets. Build that preview in a cancellable frame
+after ready so heavy chart copies leave the readiness path. This recommendation
+came from a capture agent and was not operator-reviewed. Alternative **1B**: a
+full-size crop of the target. Reversing 1A restores the always-on preview, still
+built lazily after ready; this is a small local presentation change, with no data
+migration. Operator direction prioritizes delivery: touched-file type-check only,
+no unit tests, tutorial-flow e2e or scratch-daemon measurements; deploy without
+tests, then measure one public step. Task CLI is unavailable on yuzuquats; live
+state and the final timing receipt are in `~/.cache/autophys/tour-speed-20261104/`.

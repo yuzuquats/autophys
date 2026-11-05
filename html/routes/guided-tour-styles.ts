@@ -1,9 +1,14 @@
-/** The approved 200px peek, with the live component preview on the left. */
+/** The 200px tour sheet; a preview is needed only for obscured targets. */
 export const guidedTourStyles = `
 html[data-ap-tour] .ck-app { --ck-peek: 0px !important; }
 html[data-ap-tour] .ck-panels { bottom:212px !important; }
+html[data-ap-tour] .ck-panel { transition:opacity 200ms ease-out, transform 200ms ease-out, visibility 0s linear 200ms; }
+html[data-ap-tour] .ck-panel-body { transition-duration:200ms; }
+html[data-ap-tour] .ck-toggle, html[data-ap-tour] .ck-main { transition-duration:200ms; }
 .ap-guided-tour { position:fixed; z-index:30; inset:auto 0 0; height:200px; background:#fff; border-radius:24px 24px 0 0; box-shadow:0 -4px 24px rgb(0 0 0 / 9%); padding:18px 28px; }
 .ap-tour-inner { position:relative; max-width:930px; height:100%; margin:auto; display:grid; grid-template-columns:220px minmax(0,1fr); gap:28px; }
+.ap-guided-tour[data-preview="false"] .ap-tour-inner { grid-template-columns:minmax(0,1fr); }
+.ap-tour-visual[hidden] { display:none; }
 .ap-tour-preview { overflow:hidden; height:124px; border-radius:10px; background:var(--ck-fill,#f4f4f4); border:1px solid var(--ck-line,#ddd); pointer-events:none; position:relative; }
 .ap-tour-preview-clip { position:absolute; inset:0 auto auto 0; transform-origin:top left; }
 .ap-tour-label { margin:6px 0 0; font:11px/15px var(--ck-font); color:var(--ck-secondary,#666); }
@@ -28,7 +33,8 @@ html[data-ap-tour] .ck-panels { bottom:212px !important; }
 .ap-tour-menu summary::-webkit-details-marker { display:none; }
 .ap-tour-menu[open] button { position:absolute; right:0; top:40px; width:150px; border-radius:10px; box-shadow:0 4px 16px rgb(0 0 0 / 12%); }
 .ap-tour-empty { display:block; margin:12px auto; }
-.ap-tour-halo { z-index:26 !important; pointer-events:none; position:fixed; }
+.ap-tour-halo { z-index:26 !important; pointer-events:none; position:fixed; animation:none !important;
+ transition:left 180ms ease-out, top 180ms ease-out, width 180ms ease-out, height 180ms ease-out; }
 @media(max-width:639px) {
  .ap-guided-tour { height:260px; padding:18px 16px; border-radius:20px 20px 0 0; }
  html[data-ap-tour] .ck-panels { bottom:272px !important; }
@@ -44,5 +50,8 @@ html[data-ap-tour] .ck-panels { bottom:212px !important; }
  .ap-tour-bars { margin-right:22px; }
  .ap-tour-chip { top:70px; }
 }
-@media(prefers-reduced-motion:reduce) { .ap-tour-halo { transition:none !important; } }
+@media(prefers-reduced-motion:reduce) {
+ .ap-tour-halo, html[data-ap-tour] .ck-panel, html[data-ap-tour] .ck-panel-body,
+ html[data-ap-tour] .ck-toggle, html[data-ap-tour] .ck-main { transition:none !important; }
+}
 `;
