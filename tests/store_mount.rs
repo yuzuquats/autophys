@@ -89,25 +89,32 @@ async fn the_store_is_mounted_in_the_daemon_app() {
     assert_eq!(s, 401, "browser headers without a cookie are insufficient");
     let (s, headers, _) = send(addr, "GET / HTTP/1.1", "").await;
     assert_eq!(s, 200);
-    let set_cookie = headers
+    let cookies: Vec<_> = headers
         .lines()
-        .find(|line| line.to_ascii_lowercase().starts_with("set-cookie:"))
-        .unwrap();
-    let attrs = set_cookie.to_ascii_lowercase();
-    assert!(
-        attrs.contains("httponly")
-            && attrs.contains("samesite=strict")
-            && attrs.contains("path=/api")
+        .filter(|line| line.to_ascii_lowercase().starts_with("set-cookie:"))
+        .map(|line| {
+            actix_web::cookie::Cookie::parse(line.split_once(':').unwrap().1.trim()).unwrap()
+        })
+        .collect();
+    let session = cookies
+        .iter()
+        .find(|cookie| cookie.path() == Some("/") && cookie.value().len() == 64)
+        .expect("document session covers reloads and API requests");
+    assert_eq!(session.http_only(), Some(true));
+    assert_eq!(
+        session.same_site(),
+        Some(actix_web::cookie::SameSite::Strict)
     );
-    let cookie = set_cookie
-        .split_once(':')
-        .unwrap()
-        .1
-        .trim()
-        .split(';')
-        .next()
-        .unwrap();
-    assert_eq!(cookie.split_once('=').unwrap().1.len(), 64);
+    let retired = cookies
+        .iter()
+        .find(|cookie| cookie.name() == session.name() && cookie.path() == Some("/api"))
+        .expect("the obsolete API-only cookie is expired");
+    assert!(retired.value().is_empty());
+    assert_eq!(
+        retired.max_age(),
+        Some(actix_web::cookie::time::Duration::ZERO)
+    );
+    let cookie = format!("{}={}", session.name(), session.value());
     let (s, _, ws) = send(
         addr,
         &format!(
