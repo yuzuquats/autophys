@@ -5,13 +5,13 @@
 import type { Cookbook } from "@tento-cookbook/lib.ts";
 import { MUSE_AVATAR } from "./loops-figure.ts";
 
-/** Every number in the deck below is MOCK, invented to show the charts (handoff from
- * autophys/design, 2026-11-04). The marker shows on each slide that carries numbers, so
- * nothing reads as measured; replace with real runs and drop it. `grep -n MOCK` finds them. */
+/** Illustrative product charts use MOCK (design handoff, 2026-11-04).
+ * Their markers distinguish them from the recorded runs on the experiments slide.
+ * Replace each mock chart with real runs before dropping its marker. */
 const MOCK = "mock data";
 
-/** The battery pitch, in the hacks.lona.so order: hero, user, costly task, alternative, demo,
- * advantage, then where the same contract goes next. */
+/** The calibration pitch: hero, team, user, costly task, alternative, demo,
+ * advantage, workflow, recorded experiments, then other applications. */
 const decay = (a: number, tau: number, floor: number, until = 40) =>
   Array.from({ length: 81 }, (_, i) => i * until / 80).map((t) => [t, a * Math.exp(-t / tau) + floor] as [number, number]);
 const cross = (a: number, tau: number, floor: number, at = 10) => tau * Math.log(a / (at - floor));
@@ -73,7 +73,7 @@ export function deck(app: Cookbook.App, appPath = "/app"): Cookbook.Deck.Slide[]
       eyebrow: { icon: "mark" },
       title: `${app.title}: Intelligent Physical Modeling from Minimal Data`,
       description: `Runs only the tests that pin down your physical model. Muse Spark directs it, and code checks every claim.
-      (Figures in this deck: ${MOCK}.)`,
+      (Product charts: ${MOCK}; experiment results are labeled separately.)`,
       body: {
         kind: "actions",
         primary: open,
@@ -85,10 +85,23 @@ export function deck(app: Cookbook.App, appPath = "/app"): Cookbook.Deck.Slide[]
       },
     },
     {
+      eyebrow: { label: "Introductions" },
+      title: "Meet the team.",
+      description: "A founder and a researcher building better tools for physical modeling.",
+      body: {
+        kind: "actions",
+        primary: null,
+        stats: [
+          { value: "James Kao", label: "Ex-FAANG · Founder" },
+          { value: "Joseph Lucero", label: "Stanford chemistry PhD student · lithium iron batteries" },
+        ],
+      },
+    },
+    {
       eyebrow: { label: "The user" },
       title: "Engineers and scientists who rely on physics-based models.",
       description: "Before these models can guide design or control, they must be calibrated and validated for each new system, material, or operating regime.",
-      body: { kind: "person", name: "Joseph Lucero", role: "Chemistry PhD, Stanford · lithium-ion battery models · our teammate" },
+      body: { kind: "person", name: "Joseph Lucero", role: "Chemistry PhD student, Stanford · lithium iron batteries · our teammate" },
     },
     {
       eyebrow: { label: `The costly task · ${MOCK}` },
@@ -219,6 +232,23 @@ export function deck(app: Cookbook.App, appPath = "/app"): Cookbook.Deck.Slide[]
           },
         },
       ],
+    },
+    {
+      eyebrow: { label: "APIs & model experiments · recorded runs" },
+      title: "What we ran, and what we learned.",
+      description: "Synthetic tasks, real runs. Meta’s direct API is wired; Spark has no measured result here.",
+      // Sources: project sdk.md (live Muse smoke and autoloop), train/sft/README.md.
+      // Muse used the coding plan; the autoloop's inner policy was a fake reasoner.
+      // These are capability checks, not the mock battery benchmark above.
+      body: {
+        kind: "comparison",
+        columns: ["Experiment", "Outcome"],
+        rows: [
+          { label: "Muse Code", before: "Wonder 1.0 · MCP tools & playbook edits", after: "Tools ran; one edit kept on a planted case." },
+          { label: "Modal", before: "Qwen3.5-4B · LoRA training", after: "4/8 closed-loop; never chose an experiment." },
+          { label: "Baseten Loops", before: "Qwen3.8-27B · 36 training updates", after: "Trained; not yet served or evaluated." },
+        ],
+      },
     },
     {
       eyebrow: { label: "Beyond batteries" },

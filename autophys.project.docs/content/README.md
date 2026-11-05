@@ -169,3 +169,31 @@ This repository owns `server/`, `web/`, `ops/`, this record,
 and the `autophys` entry in
 rwc-dev-01's fleet `self.toml`. It reads `tento-cookbook-js` and writes
 nothing in tento. `tento-autophys-js` is not imported.
+
+
+## Pitch-deck additions (2026-11-04)
+
+The operator requested introductions and a slide about the API/model experiments,
+plus deployment to `https://autophys.lona.so/`. Joseph Lucero’s calibration framing
+is retained from `b05127c` (cherry-picked from `cf8089e4d`). The deck now adds the
+team immediately after the title and recorded experiments after the autoloop.
+Introductions use the operator’s supplied bios: James Kao, ex-FAANG/founder;
+Joseph Lucero, Stanford chemistry PhD student, lithium iron batteries. The existing
+user-persona bio also says PhD student.
+
+The experiment copy comes from [the live Muse smoke and autoloop](sdk.md#first-live-muse-smoke-mq-8-mq-9-2026-11-04)
+and [the training run record](../../train/sft/README.md). Muse Wonder ran through
+Muse Code, including MCP tools and a kept playbook edit on a planted case; its
+outer-loop test used a fake reasoner inside. The Modal Qwen3.5-4B adapter passed
+4/8 closed-loop cases but never chose an experiment. Baseten Loops trained
+Qwen3.8-27B for 36 updates; serving and closed-loop evaluation remain pending.
+No claim is made of a live direct Meta API or measured Spark result. Product
+charts retain their mock labels; the experiment slide explicitly names recorded
+runs. No additional model calls or paid training are part of this change.
+
+Validation: type-check the landing entry, run the HTML tests and deployment’s
+Rust gates, then inspect both new slides at desktop and phone widths and verify
+that public health reports the deployed commit. Task record:
+`rwc-01:01m6mmnp353yq8qg4tjxdsyv2y`. Existing workspace/home layout findings on
+yuzuquats predate these edits (including the autophys manifest entry); these
+changes add no workspace/home root entries.
