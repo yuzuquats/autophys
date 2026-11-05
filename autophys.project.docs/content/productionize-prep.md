@@ -1,4 +1,44 @@
-# Establish one reproducible investigation loop before expanding Autophys
+# Qualify Autophys on its new owner before repairing the observed gaps
+
+Status: **campaign authorized; yuzuquats preparation and bounded baseline captured, 2026-11-04. Independent judging and remediation have not run.**
+
+The operator moved Autophys to yuzuquats and said “let's productionize the app over there”. Source/build ownership is now **yuzuquats:/home/james/workspace/autophys**, on master. This supersedes the former-owner and unstarted-campaign statements in the historical preparation below. Reuse Project autophys and plan cover de3116d (I1e0ae63e4c1847019fb8f8e52b4f0bc0). The [current brief](productionize-brief.md) defines the judging scope; this page records what the new owner actually established.
+
+Initial source HEAD was **c2bd1c7ff318fd197b072dabb7d3b44ed5d0c8f1**, clean index/worktree, no nonignored untracked files. The 2,873-path manifest SHA-256 **4c4773837ff51f0a603c6c82ce150e617d19488ee8d4e3faed4327a4319e0aa4** matched before and after the initial checks, with zero unstable reads. It includes vendor, tests, configs and runtime resources. Two concurrent peer tour edits subsequently arrived and were preserved. Affected Deno tests reran: **107 passed/0 failed**, 14.30s wall; root/six-driver checks **exit 0**. Their before/after 2,873-path manifest matched **40aad78df9f9d8993ef47e2a213f89a2e8bebae1aa1fd54f0e811bbae6b4fc7d**. The peer then committed those same tour bytes as **91756de**, also updating its back-performance.md record. That unrelated record change does not invalidate executable checks; all non-project-doc inputs were compared again. Final HEAD/full manifest is captured after this owned documentation-only commit. Parent must coordinate writers and recheck it before judging. No transferred working draft was committed as this executor's work.
+
+The original initial portability commits arrived. R1–R3 and the browser type correction arrived as transcript-reconstructed commits with preserved Change-Ids, not original Git objects: **66a474e**, **9d92acc**. The historical receipt is **9240f7d**. **R4 did not arrive:** html/deno.json still says `"lock": false`, and the original product lock is absent. [The recovery record](recovery-20261104.md) explains the reconstruction boundary. Prior ARM64 test counts and recovered oss-layout.md claims do not qualify this current state.
+
+```review-table
+| Current Linux x86_64 check | Decisive outcome |
+| --- | --- |
+| Existing cached Deno suite | **107 passed, 0 failed**, 14.35s wall |
+| App root and six browser-driver type checks | **exit 0**; experimentalDecorators warning; no browser launched |
+| Python workbook/conformance/display/outlook/curves plus MCP selection | **1 failed, 105 passed, 1 skipped in 13.48s**; MCP missing |
+| Failed conformance generator replay | expected validated; diagnostic returned **failed, three unusable decisions in a row**, 4 steps, 358 simulations |
+| Full Python suite | **timeout after 600.00s, exit 124**; incomplete, not a passing suite; 654 tests collected separately |
+| Ops stand-in contract harness | **Ran 1 test … OK**; no deployment |
+| Offline Cargo graph | **exit 101**, missing cached **arbitrary v1.5.0** |
+| Python build prerequisite | setuptools **68.1.2**, below declared **>=77**; installed wheel not qualified |
+```
+
+The Python checks use Python 3.12.3, NumPy 1.26.4, SciPy 1.11.4 and pytest 7.4.4. Deno is 2.9.8; Rust/Cargo versions are 1.98 nightly. Those are different scientific/native environments from the old owner. Four existing tests fail around the recorded oscillator replay: the conformance generator, test_offline_reason_bench_is_deterministic, test_cli_replay_and_live_guard and test_evaluate_and_replayed_export. The latter three were rerun separately: **3 failed in 9.49s**. Their cause is not established and no repair was made.
+
+Five repetitions over fresh local collections each appended 100 synthetic measurements to each of three workbooks, with 64 time/value pairs and 939-byte JSON payloads. Each retained 303 records including investigations; count/contiguous-sequence/reopen assertions passed. Median append was **0.278–0.284ms**, per-repeat p95 **0.299–0.453ms**, maximum **1.589ms**; reading 101 records took **1.081–1.325ms** per project. Three closed databases totaled **602,112 bytes** per repeat; process peak RSS **85,032 KiB**. The shared host/OS caches were warm, not flushed. An initial external harness incorrectly expected sequence 1 rather than 0; that failed attempt is retained, and the corrected harness uses fresh state. These are descriptive Python persistence measurements, not HTTP/UI/SSE capacity or adopted SLOs.
+
+**W-1 — agent-chosen, pending operator review:** baseline scope is the existing oscillator/thermal/battery families, synthetic/offline policies, this modest three-workbook diagnostic, and one approval/resume with writer/observer tabs plus one/four streams when native proof is available. The three domains are established product behavior; the collection size and stream counts are provisional diagnostic choices. No existing latency/memory budget was found, so no numeric performance pass is asserted. The strongest alternative is invited-account public-proxy operation or larger collections; choosing it requires different measurements and budgets, not a data migration. Reversal now costs only new harness runs. Existing pending FC-1/GT-1 decisions remain pending.
+
+Native qualification is concretely blocked. `findmnt -T ~/ssd-mount` resolves to the root **/dev/nvme0n1p2** ext4 filesystem, with initially **25 GiB free / 98% used**; it is not an external SSD. No yuzuquats Autophys boot-build exception exists. No Cargo build/target creation was attempted, and existing peer caches were preserved. An approved build volume or explicit owner-specific storage exception/capacity decision is needed. The offline dependency cache and Python packaging/MCP prerequisites also need qualification. Rust suites, actual strip/pack/source-free serving, installed SDK resources, cross-writer parity and SDK→snapshot/SSE→real-browser approval/resume remain unverified. macOS packaging/signature/hydration, ARM64 and Python versions other than 3.12 were not run. No provider/cloud/GPU job ran; training-worker help passed only import/argument smoke.
+
+Actual source still retains browser document tokens in an unbounded HashSet (`src/http/auth.rs:37`); account login sessions have separate pruning. Licensing still disagrees (Rust UNLICENSED, Python Apache-2.0) and vendor grants/provenance remain incomplete. These are leads/blockers for independent judgment and the rights holder, not agent-selected licensing or authorized remediation. Existing root/home layout failures were recorded and left intact.
+
+Working packet, exact commands/outcomes, manifests, environment/dependency hashes, failure logs and tasks live outside Git at **~/.local/state/productionize/autophys-productionize-yuzuquats-20261104/** on yuzuquats. The managed console returned **error: no command task** from ~/.tento-tasks; `tasks.json` is the documented external fallback, with root/prepare/baseline/five-reviews/remediation/final-record IDs. No board/SQLite mutation is claimed. Keep the directory while the campaign is unfinished; this assignment authorizes no deletion.
+
+No scores or readiness verdict are assigned. The parent coordinates five independent judges against the final manifest, then at most three bounded repair/rejudge rounds, targeting >=9 in every dimension. The executor changed only these preparation/brief pages, committed locally without adopting peer work. No old-host contact, product/test remediation, source push, stash, worktree, service restart or deployment occurred.
+
+## Earlier preparation on the former owner — historical evidence
+
+Everything below records the earlier preparation and its then-current ownership, state and instructions. It is preserved for evidence; the authorized yuzuquats campaign and current brief above govern further work.
+
 
 Status: **preparation complete, revision 1, 2026-11-04; productionization unstarted.** No product code was changed, no remediation or independent judging ran, and no readiness scores are assigned.
 
