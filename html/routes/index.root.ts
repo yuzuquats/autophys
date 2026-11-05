@@ -21,6 +21,7 @@ import { autophysStyles } from "../ui/styles.ts";
 import { placeholderStyles } from "../ui/placeholder-styles.ts";
 import { deck } from "./content.ts";
 import { mountGuidedTour } from "./guided-tour.ts";
+import { ContentTransition, contentTransitionStyles } from "./content-transition.ts";
 import { landingDocs } from "./docs.ts";
 import { quietLoading, signedOutView } from "../client/derive/signed-out.ts";
 import { signInInPlace } from "./sign-in-in-place.ts";
@@ -80,7 +81,7 @@ const app: Cookbook.App = {
     // The in-flow lowered landing must not be pulled back over fixed panels by
     // scrollIntoView/focus scrolling the body's hidden overflow container.
     // Clip only while open; the landing document retains its native scrolling.
-    const removeStyles = shell.addStyles(autophysStyles(shell.scope) + placeholderStyles(shell.scope) + `
+    const removeStyles = shell.addStyles(autophysStyles(shell.scope) + placeholderStyles(shell.scope) + contentTransitionStyles(shell.scope) + `
       html[data-ck-stage="tour"] body, html[data-ck-stage="app"] body { overflow: clip; }
     `);
     const startupLocation = requestedLocation;
@@ -131,13 +132,19 @@ const app: Cookbook.App = {
       }
     };
     const hydrate = (host: HTMLElement) => { hydrateProjectSetup(host); hydrateComponents(host, handle); };
+    const content = new ContentTransition([shell.slots.queue, shell.slots.main, shell.slots.details]);
+    // Panel movement keeps the shell's FLIP; deferred content enters with its
+    // own reveal instead of measuring and animating the same layout three times.
+    const viewShell = { reflow: (draw: () => void) => {
+      if (content.pending || !shell.reflow) draw(); else shell.reflow(draw);
+    } };
     const views = [
-      Cookbook.View.mount(shell, new AutophysSidebar(shell.slots.queue, handle), () => ctl.view().sidebar),
-      Cookbook.View.mount(shell, new AutophysMain(shell.slots.main, handle, shell.classes, hydrate), () => ctl.view().main),
-      Cookbook.View.mount(shell, new AutophysDetails(shell.slots.details, handle, shell.classes, hydrate), () => ctl.view().details),
+      Cookbook.View.mount(viewShell, new AutophysSidebar(shell.slots.queue, handle), () => ctl.view().sidebar),
+      Cookbook.View.mount(viewShell, new AutophysMain(shell.slots.main, handle, shell.classes, hydrate), () => ctl.view().main),
+      Cookbook.View.mount(viewShell, new AutophysDetails(shell.slots.details, handle, shell.classes, hydrate), () => ctl.view().details),
     ];
     // A record arrived or the selection moved: every view re-reads its model (main with FLIP).
-    const redraw = () => {
+    const redrawNow = () => {
       if (pendingAddress && ctl === userController && ctl.store.snapshot()) {
         const id = pendingAddress; pendingAddress = null;
         ctl.handle({ kind: "select", id });
@@ -151,8 +158,39 @@ const app: Cookbook.App = {
       views.forEach((v) => v.redraw());
       shell.setCrumb?.(breadcrumbText(view.main.crumb));
     };
+    const redraw = () => { if (!content.pending) redrawNow(); };
+    const reconcileMain = () => {
+      const panels = shell.slots.main.closest<HTMLElement>(".ck-panels");
+      const phoneSheet = matchMedia("(max-width:760px)").matches && panels?.dataset.mobile !== "main";
+      shell.slots.main.inert = !panels?.hasAttribute("data-ready") || phoneSheet;
+    };
+    const deferRedraw = (restored: () => void) => content.defer(redrawNow, () => { reconcileMain(); restored(); });
     const unsubscribe = ctl.subscribe(redraw);
-    guided = mountGuidedTour({ get: () => ctl, set: (next) => { ctl = next; }, redraw, startTour: () => shell.startTour?.() });
+    guided = mountGuidedTour({ get: () => ctl, set: (next) => { ctl = next; }, redraw, deferRedraw, startTour: () => shell.startTour?.() });
+    const down = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.key !== "ArrowDown" || event.repeat || event.isComposing ||
+        event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      if (event.composedPath().some(node => node instanceof HTMLElement &&
+        (node.matches("input,textarea,select,[role=textbox]") || node.isContentEditable))) return;
+      const stage = document.documentElement.dataset.ckStage;
+      if (stage !== "tour" && stage !== "app") return;
+      const reveal = () => {
+        if (document.documentElement.dataset.ckStage !== "app") return;
+        const panels = shell.slots.main.closest<HTMLElement>(".ck-panels");
+        if (panels?.hasAttribute("data-ap-setup-only")) return;
+        const phone = matchMedia("(max-width:760px)").matches;
+        const open = phone ? panels?.dataset.mobile === "details" : panels?.hasAttribute("data-details");
+        if (!open) {
+          if (!content.pending) deferRedraw(() => {});
+          panels?.querySelector<HTMLButtonElement>(".ck-details-toggle")?.click();
+        }
+        reconcileMain();
+      };
+      if (stage === "app") { event.preventDefault(); reveal(); }
+      // Let the shell leave the tour, then reveal Details before the first paint.
+      else queueMicrotask(reveal);
+    };
+    document.addEventListener("keydown", down, { capture: true });
     redraw();
     let poll: ReturnType<typeof setInterval> | undefined;
     // Store exposes the failure through the view.
@@ -161,7 +199,7 @@ const app: Cookbook.App = {
     let stopSignIn: (() => void) | undefined;
     if (SIGNED_OUT) stopSignIn = signInInPlace(() => { SIGNED_OUT = false; start(); redraw(); });
     else start();
-    teardown = () => { window.removeEventListener("hashchange", addressChanged); guided?.dispose(); guided = null; stopSignIn?.(); clearInterval(poll); unsubscribe(); views.forEach((v) => v.dispose()); removeStyles(); };
+    teardown = () => { document.removeEventListener("keydown", down, { capture: true }); content.dispose(); window.removeEventListener("hashchange", addressChanged); guided?.dispose(); guided = null; stopSignIn?.(); clearInterval(poll); unsubscribe(); views.forEach((v) => v.dispose()); removeStyles(); };
   },
   unmount() {
     teardown?.();

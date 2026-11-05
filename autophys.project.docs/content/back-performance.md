@@ -94,3 +94,35 @@ open state, and immediate dismissal during loading preserved a manually closed
 state without a late tour restart. At 390×844, direct launch showed the sidebar
 lesson and dismissal returned to the main pane with no horizontal overflow.
 No test suites were run, preserving the earlier operator direction.
+
+## Immediate Down-arrow layout and content reveal — 2026-11-04
+
+Down from the tour synchronously rebuilt the restored workspace before the
+shell could start its transition. Down in the full app had no action at all,
+so a closed Details panel stayed closed. The app now opens Details on Down in
+either state, ignoring editable fields, modifiers, composition and key repeats.
+
+Tour exit restores the controller and panel flags immediately, then schedules
+the workspace rebuild in a task after the first animation frame. Pending regions
+are hidden and inert; the current controller renders once without repeated
+view FLIP measurements, and the contents enter with a 180 ms opacity/4 px reveal.
+Panel frames move in 240 ms. Reduced motion removes panel transitions and uses
+an 80 ms opacity-only content reveal. Pending work and animations are cancelled
+on replacement or teardown. No cookbook vendor files changed.
+
+Focused browser verification at 1280×800 measured the tour-to-app key handler
+at 4.9 ms, down from 30.6 ms on the live baseline. The first frame at 6 ms already
+had Details open and content pending. The following render produced a 51.7 ms
+frame gap; this change moves that work after the initial layout paint rather
+than claiming to eliminate chart rendering cost. Content animations were active
+after rendering and pending markers cleared. Down also reopened a manually
+closed panel; repeated Down left it open, and a focused input retained native
+Down behavior without opening Details.
+
+At 390×844 the first frame selected the Details sheet, with main inert and
+Details interactive after rendering, and no horizontal overflow. Desktop and
+mobile visual checks passed. Rapid Up/Down reversals returned to the app with
+current content and no pending markers; Back during deferred rendering settled
+on the landing with no pending content or late tour revival. Deno type checks,
+diff whitespace checks and the Impeccable detector passed. No test suites run,
+preserving the operator's build-only instruction.

@@ -15,7 +15,7 @@ import { tourOpeningLayout, tourSteps, type TourPart } from "./guided-tour-steps
 import { guidedTourStyles } from "./guided-tour-styles.ts";
 import { tourImages } from "./guided-tour-images.ts";
 
-type Host = { get(): Controller; set(controller: Controller): void; redraw(): void; startTour(): void };
+type Host = { get(): Controller; set(controller: Controller): void; redraw(): void; deferRedraw(restored: () => void): void; startTour(): void };
 type Scroll = { path: number[]; top: number; left: number };
 /** App-only child indexes include -1 at an open shadow root; survives redraws.
  * Resolve saved paths directly. Searching every saved path for every document
@@ -114,18 +114,17 @@ export function mountGuidedTour(host: Host) {
       if (mobile !== "main") panel(mobile as "sidebar" | "details", false);
       if (saved.mobile !== "main") panel(saved.mobile as "sidebar" | "details", true);
     } else { panel("sidebar", saved.sidebar); panel("details", saved.details); }
-    host.redraw();
-    // Restore immediately, and once after the renderer's layout/FLIP has settled.
-    scrollTree(saved.scroll);
-    // Back has already restored the landing offset in the drawer. Only the
-    // app stage belongs to this snapshot; never overwrite the landing scroll.
-    if (document.documentElement.dataset.ckStage === "app") {
-      window.scrollTo(saved.window[0], saved.window[1]);
-    }
-    const restoreScroll = () => { if (!snapshot.active && !disposed) scrollTree(saved.scroll); };
-    requestAnimationFrame(restoreScroll);
-    setTimeout(restoreScroll, 400);
-    if (saved.focus?.isConnected) saved.focus.focus({ preventScroll: true });
+    // Restore the lightweight panel state now. Rebuilding charts and resolving
+    // saved scroll paths must not hold up the shell's transition animation.
+    const own = ended;
+    host.deferRedraw(() => {
+      if (snapshot.active || disposed || own !== ended) return;
+      scrollTree(saved.scroll);
+      if (document.documentElement.dataset.ckStage === "app") {
+        window.scrollTo(saved.window[0], saved.window[1]);
+      }
+      if (saved.focus?.isConnected) saved.focus.focus({ preventScroll: true });
+    });
   });
 
   function toStep(part: TourPart, group: string | undefined, index: number): Cookbook.Tutorial.Step {
