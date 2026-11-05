@@ -112,7 +112,7 @@ pub fn domain(config: &AppConfig, info: BuildInfo) -> DomainConfig {
             // Anything else under /api is a JSON 404, never the page.
             cfg.route("/api", web::route().to(api_not_found));
             cfg.route("/api/{tail:.*}", web::route().to(api_not_found));
-            // Every document load mints a process-local browser session.
+            // Document loads reuse a valid process-local browser session.
             cfg.route("/", web::get().to(app_document));
             cfg.route("/app", web::get().to(app_document));
             cfg.route("/app/{tail:.*}", web::get().to(app_document));
@@ -199,7 +199,15 @@ async fn app_document(
     }
     match tokio::fs::read(&shell.0).await {
         Ok(html) => Ok(HttpResponse::Ok()
-            .cookie(sessions.issue_cookie()?)
+            .cookie(sessions.document_cookie(&req)?)
+            // Retire the former /api cookie so it cannot shadow the reused /
+            // cookie on API calls after the old token's idle lease expires.
+            .cookie(
+                actix_web::cookie::Cookie::build(crate::http::auth::SESSION_COOKIE, "")
+                    .path("/api")
+                    .max_age(actix_web::cookie::time::Duration::ZERO)
+                    .finish(),
+            )
             .insert_header((actix_web::http::header::CACHE_CONTROL, "no-store"))
             // `serve --login` pages carry a password form: refuse framing.
             .insert_header((

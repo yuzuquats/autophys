@@ -11,9 +11,10 @@
 //! not the machine, is what admits a browser, so a public proxy works.
 
 use actix_web::cookie::{Cookie, SameSite};
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use actix_web::dev::Payload;
 use actix_web::http::{Method, header};
@@ -25,38 +26,76 @@ use crate::error::ApiError;
 use crate::http::{Api, blocking};
 use crate::keys::{KeyInfo, Options};
 
-/// Host-only browser session, sent to API routes only.
+/// Host-only, HttpOnly browser session, reused on document loads.
 pub const SESSION_COOKIE: &str = "autophys_session";
 
 /// The sign-in cookie of `serve --login`: a session in the server database,
 /// so it survives restarts (the document cookie above does not).
 pub const LOGIN_COOKIE: &str = "autophys_login";
 
-/// Valid document sessions in this server process. Nothing is persisted.
+/// Process-local document sessions. Reloads reuse a browser's existing token;
+/// ordinary API activity renews its idle lease. Account sessions remain in the
+/// separate persistent store. No valid active token is evicted for admission.
 #[derive(Clone, Default)]
-pub struct BrowserSessions(Arc<Mutex<HashSet<String>>>);
+pub struct BrowserSessions(Arc<Mutex<HashMap<String, Instant>>>);
+
+const DOCUMENT_IDLE: Duration = Duration::from_secs(30 * 24 * 60 * 60);
+const DOCUMENT_CAPACITY: usize = 4096;
 
 impl BrowserSessions {
-    /// Mint a fresh 256-bit session for a served document.
+    /// Mint a session for callers that have no document request (embedders/tests).
     pub fn issue_cookie(&self) -> Result<Cookie<'static>, ApiError> {
-        let token = crate::keys::random_hex(32)?;
-        self.0
+        self.issue_at(None, Instant::now())
+    }
+
+    pub fn document_cookie(&self, req: &HttpRequest) -> Result<Cookie<'static>, ApiError> {
+        self.issue_at(
+            req.cookie(SESSION_COOKIE).as_ref().map(|c| c.value()),
+            Instant::now(),
+        )
+    }
+
+    fn issue_at(&self, existing: Option<&str>, now: Instant) -> Result<Cookie<'static>, ApiError> {
+        let mut valid = self
+            .0
             .lock()
-            .map_err(|_| ApiError::Internal("browser sessions poisoned".into()))?
-            .insert(token.clone());
+            .map_err(|_| ApiError::Internal("browser sessions poisoned".into()))?;
+        valid.retain(|_, seen| now.saturating_duration_since(*seen) < DOCUMENT_IDLE);
+        let token = if let Some(token) = existing.filter(|t| valid.contains_key(*t)) {
+            token.to_string()
+        } else {
+            if valid.len() >= DOCUMENT_CAPACITY {
+                return Err(ApiError::Forbidden(
+                    "document session capacity reached; retry after idle sessions expire".into(),
+                ));
+            }
+            crate::keys::random_hex(32)?
+        };
+        valid.insert(token.clone(), now);
         Ok(Cookie::build(SESSION_COOKIE, token)
             .http_only(true)
             .same_site(SameSite::Strict)
-            .path("/api")
+            // Reload requests must carry the cookie too, so they can reuse it.
+            // HttpOnly and the independent API Host/Origin checks still apply.
+            .path("/")
             .finish())
     }
 
-    fn accepts(&self, req: &HttpRequest) -> bool {
-        req.cookie(SESSION_COOKIE).is_some_and(|cookie| {
-            self.0
-                .lock()
-                .is_ok_and(|valid| valid.contains(cookie.value()))
+    fn accepts_at(&self, token: &str, now: Instant) -> bool {
+        self.0.lock().is_ok_and(|mut valid| {
+            valid.retain(|_, seen| now.saturating_duration_since(*seen) < DOCUMENT_IDLE);
+            if let Some(seen) = valid.get_mut(token) {
+                *seen = now;
+                true
+            } else {
+                false
+            }
         })
+    }
+
+    fn accepts(&self, req: &HttpRequest) -> bool {
+        req.cookie(SESSION_COOKIE)
+            .is_some_and(|cookie| self.accepts_at(cookie.value(), Instant::now()))
     }
 }
 
@@ -296,6 +335,56 @@ fn local_host(name: &str, opts: &Options) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reloads_reuse_tokens_active_api_clients_renew_and_idle_entries_are_reclaimed() {
+        let sessions = BrowserSessions::default();
+        let start = Instant::now();
+        let active = sessions.issue_at(None, start).unwrap();
+        let stale = sessions.issue_at(None, start).unwrap();
+        let initial_len = sessions.0.lock().unwrap().len();
+        for day in 0..100 {
+            let now = start + Duration::from_secs(day * 86400);
+            assert!(sessions.accepts_at(active.value(), now));
+            for _ in 0..100 {
+                let reloaded = sessions.issue_at(Some(active.value()), now).unwrap();
+                assert_eq!(reloaded.value(), active.value());
+                assert_eq!(reloaded.path(), Some("/"));
+                assert!(reloaded.http_only().unwrap());
+                assert_eq!(reloaded.same_site(), Some(SameSite::Strict));
+            }
+            assert!(sessions.0.lock().unwrap().len() <= initial_len);
+            if day >= 30 {
+                assert!(!sessions.accepts_at(stale.value(), now));
+                assert_eq!(sessions.0.lock().unwrap().len(), 1);
+            }
+        }
+        assert!(!sessions.accepts_at(active.value(), start + Duration::from_secs(130 * 86400)));
+        assert_eq!(sessions.0.lock().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn admission_is_bounded_without_evicting_valid_clients_or_accepting_forged_tokens() {
+        let sessions = BrowserSessions::default();
+        let now = Instant::now();
+        let active = sessions.issue_at(Some("untrusted"), now).unwrap();
+        assert_ne!(active.value(), "untrusted");
+        for _ in 1..DOCUMENT_CAPACITY {
+            sessions.issue_at(None, now).unwrap();
+        }
+        assert!(sessions.issue_at(None, now).is_err());
+        assert_eq!(sessions.0.lock().unwrap().len(), DOCUMENT_CAPACITY);
+        assert!(sessions.accepts_at(active.value(), now));
+        assert_eq!(
+            sessions
+                .issue_at(Some(active.value()), now)
+                .unwrap()
+                .value(),
+            active.value()
+        );
+        assert!(sessions.issue_at(None, now + DOCUMENT_IDLE).is_ok());
+        assert_eq!(sessions.0.lock().unwrap().len(), 1);
+    }
 
     #[test]
     fn host_names() {
