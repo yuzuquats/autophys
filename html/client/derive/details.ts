@@ -131,11 +131,16 @@ function investigationDetails(project: Project, inv: Investigation): DetailsMode
   };
 }
 
-function proposalDetails(s: State, project: Project, inv: Investigation, p: Proposal): DetailsModel {
+/** Local structural extension: client derivation does not import a UI renderer. */
+type ProposalDetailsModel = DetailsModel & { experiment: { key: string; caption: string } };
+
+function proposalDetails(s: State, project: Project, inv: Investigation, p: Proposal): ProposalDetailsModel {
   const c = configFor(project, inv), changed = edited(p), spec = specOf(c, p.experiment);
   const shown = displayedFields(s, inv, p);
   const drafts = p.fields.map((f) => s.drafts[draftKey(inv, p, f.name)]);
   const look = outlookAt(p, shown);
+  const invalid = p.status === "proposed" && drafts.some(Boolean);
+  const unedited = shown.every((f) => f.value === f.original);
   const sections: Section[] = [];
   {
     const blocks: Section["blocks"] = [];
@@ -145,7 +150,7 @@ function proposalDetails(s: State, project: Project, inv: Investigation, p: Prop
     if (p.preview.input && spec.input) blocks.push({ kind: "wave", t: p.preview.t, y: p.preview.input, label: `${ch(spec.input)} as proposed`, caption: `Input · ${ch(spec.input)}` });
     blocks.push({ kind: "wave", t: p.preview.t, y: p.preview.predicted, label: `${ch(spec.output)} predicted at Fit #${p.atFit}`, caption: `Predicted · ${ch(spec.output)} at Fit #${p.atFit}` });
     }
-    sections.push({ heading: "Preview", blocks });
+    sections.push({ heading: "Preview", caption: invalid || !unedited ? "Recorded at the proposed settings; previews do not update with edits." : undefined, blocks });
   }
   const at = sections.length;
   if (p.status === "proposed" && p.outlook.axes.length) {
@@ -158,9 +163,11 @@ function proposalDetails(s: State, project: Project, inv: Investigation, p: Prop
     return { label: setting?.label ?? name, value: `${sig(value, 4)} ${setting?.unit ?? ""}`.trim() };
   }) });
   if (!p.outlook.axes.length && !Object.keys(p.outlook.after).length) sections.push({ heading: "Outlook", blocks: [{ kind: "missing", title: "Not recorded yet", description: "This proposal has no outlook grid. Settings are read-only because edits cannot be scored; approve or reject the experiment as proposed." }] });
-  const unedited = shown.every((f) => f.value === f.original);
-  sections.push({ heading: "Expected", blocks: [{ kind: "facts", rows: [
+  sections.push({ heading: "Expected", caption: invalid
+    ? "Draft settings have not been evaluated. Fix the marked fields to use the recorded outlook."
+    : "Predicted uncertainty (1σ), conditional on the recorded model and settings.", blocks: [{ kind: "facts", rows: [
     ...p.expected.map((e) => {
+      if (invalid) return { label: e.param, value: "Not evaluated for draft settings", tone: "muted" as const };
       const after = look ? look.after[e.param] ?? null : e.after;
       return { label: e.param, value: `${e.before === "unknown" ? "not recorded" : "unbounded"} → ${after == null ? "unbounded" : pct(after)}`, tone: after == null ? "warn" as const : undefined,
         tag: unedited || !look ? undefined : { text: "interpolated", tone: "muted" as const } };
@@ -173,12 +180,15 @@ function proposalDetails(s: State, project: Project, inv: Investigation, p: Prop
       ? { heading: "Data", blocks: [{ kind: "facts", rows: [{ label: "Received", value: inv.measurements.filter((m) => m.experiment === p.experiment).map((m) => m.id).join(", ") }] }] }
       : { heading: "Waiting for data", blocks: [{ kind: "facts", rows: [{ label: "SDK", value: `${p.dataFrom} · polling` }, { label: "Expects", value: `${id}.csv` }] }] });
   }
-  const status = p.status === "proposed" ? { text: unedited ? "Awaiting approval" : "Awaiting approval · edited" }
+  const status = p.status === "proposed" ? { text: invalid ? "Awaiting approval · invalid settings" : unedited ? "Awaiting approval" : "Awaiting approval · edited" }
     : p.status === "approved" ? { text: `Approved by ${p.decidedBy} · ${p.decidedAt}${changed.length ? ` · edited (was ${changed.map((f) => sig(f.original, 3)).join(", ")})` : ""}`, tone: "ok" as const }
     : { text: `Rejected by ${p.decidedBy} · ${p.decidedAt}`, tone: "muted" as const };
-  const invalid = drafts.some(Boolean);
   return {
     icon: "proposal", title: spec.label, cardName: true, status, sections,
+    experiment: {
+      key: JSON.stringify([project.id, s.selected[project.id] ?? defaultSelection(project), inv.id, p.id]),
+      caption: `${investigationLabel(project, inv)} · ${p.id} · ranked at Fit #${p.atFit}`,
+    },
     footnote: `${provenance(c, inv)} · ranked at Fit #${p.atFit}`,
     decision: p.status === "proposed" ? [{ name: "approve", label: "Approve", variant: "primary", disabled: invalid, title: invalid ? "Fix the marked field first" : undefined }, { name: "reject", label: "Reject" }] : undefined,
     actions: p.status === "approved" && !delivered(inv, p) && allows(s, "unapproved") ? [{ name: "withdraw", label: "Withdraw approval" }]

@@ -6,6 +6,7 @@
  */
 import { newProjectStyles } from "./new-project-styles.ts";
 import { mainSummaryStyles } from "./main-summary-styles.ts";
+import { detailsExperimentStyles } from "./details-experiment-styles.ts";
 
 export function autophysStyles(scope: string): string {
   const w = scope;
@@ -272,5 +273,6 @@ ${w} :focus-visible { outline:2px solid var(--ck-focus);outline-offset:3px; }
 
 ${newProjectStyles(w)}
 ${mainSummaryStyles(w)}
+${detailsExperimentStyles(w)}
 `;
 }
