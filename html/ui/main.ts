@@ -19,8 +19,11 @@ export { buttonMarkup } from "./actions.ts";
 
 /** The whole main surface at `width` pixels. */
 /** A card: a std-round surface, a list-cell header (title, caption under it) and its content. */
-const cardMarkup = (cls: string, title: string, caption: string, inner: string) =>
-  `<section class="ap-card ${cls}"><std-round floating bg="var(--ap-card-bg)" border="var(--ap-line)" radius="10"></std-round><header class="ap-card-head" data-ap-cell><h3>${esc(title)}</h3>${caption ? `<p>${esc(caption)}</p>` : ""}</header>${inner}</section>`;
+const cardMarkup = (cls: string, title: string, caption: string, inner: string, summary = false) => {
+  const heading = summary ? `<h2>${esc(title)}</h2>` : `<h3>${esc(title)}</h3>`;
+  const meta = caption ? `<p${summary ? ' class="ap-summary-meta"' : ""}>${esc(caption)}</p>` : "";
+  return `<section class="ap-card ${cls}${summary ? " ap-main-summary" : ""}"><std-round floating bg="var(--ap-card-bg)" border="var(--ap-line)" radius="10"></std-round><header class="ap-card-head" data-ap-cell>${heading}${summary ? "" : meta}</header>${summary ? `<div class="ap-summary-copy">${inner}</div>${meta}` : inner}</section>`;
+};
 
 export function mainMarkup(model: MainModel, width: number, classes: MainClasses = {}): string {
   const sep = `<span class="ap-sep" aria-hidden="true"> / </span>`;
@@ -46,9 +49,9 @@ export function mainMarkup(model: MainModel, width: number, classes: MainClasses
   } else if (model.body.kind === "missing" || model.body.kind === "unavailable") {
     body = `<section class="ap-viewer ap-state">${emptyMarkup(model.body.title, model.body.description)}</section>`;
   } else if (model.body.kind === "investigation") {
-    body = investigationMarkup(model.body, width);
+    body = investigationMarkup(model.body, width, model.crumb.at(-1)?.label);
   } else if (model.body.kind === "decision") {
-    body = `<div class="ap-viewer ap-decision-view">${model.body.cards.map((s) => cardMarkup("ap-dcard", s.heading, s.caption ?? "", s.blocks.map(blockMarkup).join(""))).join("")}</div>`;
+    body = `<div class="ap-viewer ap-decision-view">${model.body.cards.map((s, i) => cardMarkup("ap-dcard", s.heading, s.caption ?? "", s.blocks.map(blockMarkup).join(""), i === 0 && s.blocks.some(b => b.kind === "text" && b.lead))).join("")}</div>`;
   } else if (model.body.kind === "configuration") {
     // Each card's header is a list cell: the title with its caption under it (hydrated to std-list-cell-layout).
     const card = cardMarkup;
@@ -76,7 +79,7 @@ export function mainMarkup(model: MainModel, width: number, classes: MainClasses
 
 
 /** Reuse the same card, chart and block renderers as the decision and configuration views. */
-function investigationMarkup(body: InvestigationBody, width: number): string {
+function investigationMarkup(body: InvestigationBody, width: number, title?: string): string {
   const wide = width >= 760, available = Math.max(184, width - 40), inner = available - 24;
   const leftOuter = Math.floor((available - 10) * .55);
   const left = wide ? leftOuter - 24 : inner;
@@ -84,10 +87,10 @@ function investigationMarkup(body: InvestigationBody, width: number): string {
   const panels = (items: ChartPanel[], w: number, key: string) => items.map((p, i) =>
     `<section class="ap-panel">${p.title ? `<h4 class="ap-panel-title">${esc(p.title)}</h4>` : ""}${p.charts.map((c, j) =>
       `<div class="ap-chart">${chartMarkup(c, w, key + "-" + i + "-" + j)}</div>`).join("")}${(p.blocks ?? []).map(blockMarkup).join("")}</section>`).join("");
-  const card = (c: InvestigationCard, w = inner) => {
+  const card = (c: InvestigationCard, w = inner, summary = false) => {
     const rows = (c.rows ?? []).map(r => `<details class="ap-measurement" id="${esc(r.id)}" data-ap-disclosure${r.open ? " open" : ""}><summary><b>${esc(r.label)}</b><span>${esc(r.meta)}</span></summary><div class="ap-measurement-plot">${panels(r.panels, w, r.id)}</div></details>`).join("");
-    return cardMarkup("ap-investigation-card", c.heading, c.caption ?? "",
-      c.blocks.map(blockMarkup).join("") + panels(c.panels ?? [], w, c.id) + rows)
+    return cardMarkup("ap-investigation-card", summary ? title ?? c.heading : c.heading, c.caption ?? "",
+      c.blocks.map(blockMarkup).join("") + panels(c.panels ?? [], w, c.id) + rows, summary)
       .replace('<section class=', `<section id="${esc(c.id)}" tabindex="-1" class=`);
   };
   const jumps = `<nav class="ap-jumps" aria-label="Jump to investigation section">${body.jumps.map((j, i) =>
@@ -100,7 +103,7 @@ function investigationMarkup(body: InvestigationBody, width: number): string {
     ${r.landscape ? card(r.landscape) : ""}${r.proposals.map(c => card(c)).join("")}
     ${r.extras.map(c => `<details class="ap-extra" id="${esc(c.id)}" data-ap-disclosure><summary>${esc(c.heading)}<span>${esc(c.caption ?? "")}</span></summary><div>${panels(c.panels ?? [], inner, c.id)}</div></details>`).join("")}
   </div></details>`).join("");
-  return `${jumps}<div class="ap-viewer ap-decision-view ap-investigation-view" data-ap-page="${esc(body.pageId)}">${card(body.summary)}${outcome}${rounds}</div>`;
+  return `${jumps}<div class="ap-viewer ap-decision-view ap-investigation-view" data-ap-page="${esc(body.pageId)}">${card(body.summary, inner, true)}${outcome}${rounds}</div>`;
 }
 
 export class AutophysMain {
