@@ -18,6 +18,7 @@ import { breadcrumbText } from "../ui/breadcrumb.ts";
 import { autophysStyles } from "../ui/styles.ts";
 import { placeholderStyles } from "../ui/placeholder-styles.ts";
 import { deck } from "./content.ts";
+import { mountGuidedTour } from "./guided-tour.ts";
 import { contentTransitionStyles } from "./content-transition.ts";
 import { landingDocs } from "./docs.ts";
 import { quietLoading, signedOutView } from "../client/derive/signed-out.ts";
@@ -59,9 +60,15 @@ const ctl = new Controller(new Store(source), { user: USER, now: clock });
 let SIGNED_OUT = document.getElementById("ap-account")?.dataset.signedIn === "false";
 const DEMO = document.getElementById("ap-account")?.dataset.demo === "true";
 const baseView = ctl.view.bind(ctl);
-ctl.view = () => SIGNED_OUT ? signedOutView(baseView(), DEMO) : quietLoading(baseView());
+ctl.view = () => {
+  if (SIGNED_OUT) return signedOutView(baseView(), DEMO);
+  const view = quietLoading(baseView());
+  if (view.main.body.kind === "project-setup") return view;
+  return { ...view, main: { ...view.main, actions: [...view.main.actions, { name: "walkthrough", label: "Walkthrough" }] } };
+};
 
 let teardown: (() => void) | null = null;
+let guided: ReturnType<typeof mountGuidedTour> | undefined;
 let resumeSignedIn: (() => void) | undefined;
 
 const app: Cookbook.App = {
@@ -102,6 +109,7 @@ const app: Cookbook.App = {
         return;
       }
       if (intent.kind === "action" && intent.name === "sign-in") { location.assign("/login?next=/app"); return; }
+      if (intent.kind === "action" && intent.name === "walkthrough") { shell.startTour?.(); return; }
       if (SIGNED_OUT) return; // Nothing else works without an account; the main pane says so.
       if (intent.kind === "action" && intent.name === "retry") { location.reload(); return; }
       if (intent.kind === "action" && intent.name === "copy-sdk") {
@@ -152,6 +160,7 @@ const app: Cookbook.App = {
       shell.slots.main.inert = !panels?.hasAttribute("data-ready") || phoneSheet;
     };
     const unsubscribe = ctl.subscribe(redraw);
+    guided = mountGuidedTour({ controller: ctl, signedIn: () => !SIGNED_OUT, redraw });
     const down = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.key !== "ArrowDown" || event.repeat || event.isComposing ||
         event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
@@ -181,10 +190,10 @@ const app: Cookbook.App = {
     const start = () => { void ctl.store.start().catch(() => {}); poll ??= setInterval(() => { void ctl.store.refreshPairings(); void ctl.refresh(); }, PAIRING_POLL_MS); };
     // Signed out: the card signs in without a page load, then the workspace starts in place.
     let stopSignIn: (() => void) | undefined;
-    resumeSignedIn = () => { SIGNED_OUT = false; stopSignIn?.(); start(); redraw(); };
+    resumeSignedIn = () => { SIGNED_OUT = false; stopSignIn?.(); start(); redraw(); shell.startTour?.(); };
     if (SIGNED_OUT) stopSignIn = signInInPlace(resumeSignedIn);
     else start();
-    teardown = () => { resumeSignedIn = undefined; document.removeEventListener("keydown", down, { capture: true }); window.removeEventListener("hashchange", addressChanged); stopSignIn?.(); clearInterval(poll); unsubscribe(); views.forEach((v) => v.dispose()); removeStyles(); };
+    teardown = () => { resumeSignedIn = undefined; document.removeEventListener("keydown", down, { capture: true }); window.removeEventListener("hashchange", addressChanged); guided?.dispose(); guided = undefined; stopSignIn?.(); clearInterval(poll); unsubscribe(); views.forEach((v) => v.dispose()); removeStyles(); };
   },
   unmount() {
     teardown?.();
@@ -194,7 +203,7 @@ const app: Cookbook.App = {
 };
 
 const docs = landingDocs();
-Cookbook.mount({ deck, onStage: (stage) => docs.onStage(stage), tutorial: [], status: null, labels: { sidebar: "Workspace" } }).run(app);
+Cookbook.mount({ deck, onStage: (stage) => docs.onStage(stage), tutorial: { start: () => guided?.source.start() ?? [], finish: result => guided?.source.finish?.(result) }, status: null, labels: { sidebar: "Workspace" } }).run(app);
 mountAccount(() => { SIGNED_OUT = false; resumeSignedIn?.(); });
 docs.mount();
 

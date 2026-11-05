@@ -539,3 +539,27 @@ were observed in the checked rendered states. Deleted worker/image URLs return
 404; the served app bundle contains none of the removed source-selector, worker,
 controller-swap, image or chip identifiers. Owned source snapshots were removed
 after deployment. No account or workbook data changed; no source push was made.
+
+
+## Account walkthrough retained — operator clarification, 2026-11-05
+
+The operator chose to retain the guided walkthrough using account data. This
+supersedes the empty tutorial list described in the removal record above. The
+fixture worker, synthetic workspace, controller swap, chip and static screenshots
+stay removed. The cookbook tutorial now borrows the one account Controller and
+Store, sharing its in-flight load and continuing its normal record stream.
+
+Lessons use real row IDs in the selected project, preferring the selected
+investigation and finding available measurements, converged fits, proposals and
+validation in that project. Missing record types are skipped; empty collections
+receive workspace and project-creation guidance, and unconfigured projects stop at
+configuration guidance. Proposal lessons explain that explicit edits/approvals are
+real actions enforced by the account's normal server permissions.
+
+The drawer moves independently of the initial account load. Anonymous entry
+finishes the tutorial immediately and keeps sign-in visible; in-place sign-in
+starts the account walkthrough. The Walkthrough action reopens it later. No tour
+starts over an unfinished project setup. Exit restores navigation, panel state
+and outer viewer scroll without replacing the Store or discarding edits/results.
+The Controller's preserveNavigation callback captures navigation only. Shared
+cookbook Back/Next/Done, keyboard navigation and dismiss remain authoritative.

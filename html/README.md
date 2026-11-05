@@ -9,6 +9,9 @@ or disconnected collection stays empty or shows recovery UI.
 
 - `routes/index.root.ts` composes the cookbook shell, account state and views.
   The header sign-in uses lona-js Dialog/Overlay and the shared native form.
+  `routes/guided-tour.ts` runs the cookbook walkthrough on that same Controller.
+  Its lessons adapt to the selected project's recorded data and restore navigation
+  on exit. The Walkthrough action reopens it; signed-out visitors sign in first.
 - `client/api.ts` owns authenticated network calls: workspace, SSE, decisions,
   project creation and device pairing. The browser carries an HttpOnly session cookie.
 - `client/wire.ts` maps server records and configuration into plain domain objects.

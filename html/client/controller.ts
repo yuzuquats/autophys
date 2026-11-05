@@ -330,6 +330,21 @@ export class Controller {
     return this.sel;
   }
 
+  /** Save navigation only: walkthroughs keep the same Store and preserve edits and writes. */
+  preserveNavigation(): () => void {
+    const selection = this.selection;
+    if (!selection) return () => {};
+    const saved = { projectId: selection.projectId, selected: { ...selection.selected },
+      expanded: Object.fromEntries(Object.entries(selection.expanded).map(([id, rows]) => [id, [...rows]])) };
+    const devices = this.devicesActive;
+    return () => {
+      if (!this.sel) return;
+      this.sel = { ...this.sel, ...saved };
+      this.devicesActive = devices;
+      this.notify();
+    };
+  }
+
   view(): View {
     const snap = this.store.snapshot(), sel = this.selection;
     let view = derive(
