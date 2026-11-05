@@ -1,8 +1,7 @@
 # One investigation, one page
 
-Rebuild the operator-approved investigation page on its new owner, yuzuquats.
-The rwc-dev-01 implementation was lost before publication. The approved mock and
-four reference captures are under fleet/evidence/autophys/investigation-page-20261104.
+Rebuild the operator-approved investigation page after the original implementation
+was lost before publication, using the approved mock and four reference captures.
 Configuration, sidebar children, onboarding and project setup keep their existing UI.
 
 The waiting page leads with a prose Summary, followed by rounds containing Data,
@@ -71,9 +70,7 @@ typechecking; the later run found two old assertions expecting no actions where
 Report is now retained, corrected without rerunning. Browser acceptance captured
 awaiting-1440.png and found final-card jump highlighting when scroll clamps;
 fixed by treating the visible final section as current at the bottom. Acceptance
-and tour completion are deferred. Partial evidence is in
-fleet/evidence/autophys/investigation-page-20261104/yuzuquats/ on yuzuquats.
+and tour completion are deferred; partial acceptance evidence was retained.
 
-The operator subsequently authorized immediate deployment through
-~/.cache/autophys/deploy-notest.sh from a local clone of the completed SHA,
-after any running invocation finishes. No source push is authorized.
+The operator subsequently authorized immediate deployment of the completed SHA
+without further tests. No source push was authorized.
