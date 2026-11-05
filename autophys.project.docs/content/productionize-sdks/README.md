@@ -1,18 +1,29 @@
-# SDK baseline proves shared core behavior and exposes parity questions
+# SDK core repairs are committed; current acceptance remains blocked
 
-Status: preparation complete for `autophys-sdks-20261105`; five independent judges have not run. No SDK implementation changed. The target remains at least 9 in each dimension, with baseline plus at most three remediation/rejudge rounds. This campaign is unfinished.
+Status: all five baseline judges finished; first bounded core remediation is committed but not qualified or rejudged. The campaign is unfinished and no dimension meets a verified final target. Source commit `3bb0db904f44868847c7d7464632d31aa195bda4` follows plan `5ccb97011980ae7df9f180e0e34e1110784f5cc4`.
+
+The round adds a dedicated atomic attachment operation used by both HTTP SDKs, credential destination binding, workbook-owned Python blob views, executable configuration drift checks, finite data/noise and fit-input checks, optional Python HTTP error paths, and additive explicit open/create counterparts. [core-remediation.md](core-remediation.md) documents record compatibility and reversible choices pending operator review. All Q1–Q7/A1–A4/A7/T01–T03 acceptance remains open until current paired qualification succeeds.
+
+One earlier boundary run reported **27 passed, 1 failed in 2.91s**: empty validation grids reached curve generation during fitting. Both curve adapters were subsequently changed to skip empty grids; that correction and later edits have not been rerun. Earlier direct native source compilation succeeded using read-only audited dependency artifacts, but the daemon guard then detected unrelated `src/keys.rs` drift. Those artifacts do not qualify current source. The real-daemon race/fault/restart, retained-image/blob, Rust remote and current regression drafts remain unexecuted.
+
+The latest runnable preflight stopped before launch because boot free space was below the **13 GiB proactive threshold** (12.74 GiB at handoff). Aggregate campaign allocation is approximately **6.95 GiB**, including the entire unchanged prior campaign; the 8 GiB ceiling and 12 GiB hard free floor were not crossed. A shared native/auth workstream also changed daemon inputs during compilation. Its edits are preserved; only the two attachment additions were carved from `src/http.rs`. A later executor needs stable native inputs and at least about **0.6 GiB of additional free headroom** for the existing bounded native/test plan, or a revised explicitly authorized resource plan. No cleanup or budget bypass was performed.
+
+The new regression draft covers paired finite-noise/initial/validation/configuration/error/target boundaries, old-server refusal without fallback, and real-daemon Python/Python, Rust/Rust, Python/Rust and remote/local attachments with second-insert failure, dropped responses, restart, observers, retry/conflict and single experiment cost. These are authored checks, not passing results. Exact attempt logs, resource stops, source/artifact manifests, known limitations and the next bounded qualification command list are in `~/.local/state/productionize/autophys-sdks-20261105/repair-round-1-core/packet.md` on yuzuquats. Parent custody resumes with fallback task `sdk-core-round-1` blocked on qualification capacity.
+
 
 The operator requires Rust and Python to be analogous. [brief.md](brief.md) maps corresponding capabilities, concepts, formats, defaults, validation/errors and effects, while allowing idiomatic APIs. It also distinguishes intentional API shape differences from unexplained behavior and Python-only tooling. Judge that contract before proposing repairs.
 
 | Dimension | Baseline | Final |
 | --- | --- | --- |
-| Quality | pending | pending |
-| Architecture | pending | pending |
-| Testing | pending | pending |
-| Folder structure | pending | pending |
-| Performance | pending | pending |
+| Quality | 6.0, unverified overall | not rejudged |
+| Architecture | 6.5, unverified overall | not rejudged |
+| Testing | 7.8, unverified overall | not rejudged |
+| Folder structure | 8.0, verified for that assessment | not rejudged |
+| Performance | 8.0, unverified overall | not rejudged |
 
-On yuzuquats Linux x86_64 (i7-12700K, Python 3.12.3, NumPy 1.26.4, SciPy 1.11.4, Rust/Cargo 1.98 nightly), the fresh SDK-only native build ran offline with a locked dependency graph. Ten Rust artifacts passed **109 tests**, and rustdoc passed **1 doctest**; every result reported zero failed/ignored. These include numerical/vector/workbook conformance, investigation loops, remote transport, battery, display and curves/reveal checks.
+## Retained baseline evidence, not current-revision acceptance
+
+At the frozen baseline on yuzuquats Linux x86_64 (i7-12700K, Python 3.12.3, NumPy 1.26.4, SciPy 1.11.4, Rust/Cargo 1.98 nightly), the fresh SDK-only native build ran offline with a locked dependency graph. Ten Rust artifacts passed **109 tests**, and rustdoc passed **1 doctest**; every result reported zero failed/ignored. These include numerical/vector/workbook conformance, investigation loops, remote transport, battery, display and curves/reveal checks.
 
 Python collected **688 cases**. The broad run stopped under its 600-second cap with **424 passed, 1 skipped in 590.75s**, at a SciPy integration inside research tooling. It is an incomplete suite result. Exact unexecuted-case selection then passed **255** critical cases, and separately **5 cross-writer** cases passed against the identified existing daemon: concurrent writes and verification, wait deadlines, restart recovery and blobs. The combined source account is **684 unique passed, 1 intentional live-provider smoke skipped, 3 unexecuted research cases**; there are no observed failures among completed cases. Four warnings concern Python 3.12 fork from the multi-threaded cross-writer test harness. No full-suite pass or universal concurrency/platform qualification is claimed.
 
@@ -38,4 +49,4 @@ The executable baseline began at `5e31b9347a1e26ec8569fd66cf4e328abb3a10d6`. Bef
 
 Conservative aggregate storage peaked at **7,244,431,360 bytes** including the entire unchanged previous campaign; minimum sampled free space was **16,675,655,680 bytes**. Both remain inside the approved 8 GiB allocation and 12 GiB free-space limits. No old cache/evidence was deleted or modified, no target symlink changed, and no push, deployment, service, branch, worktree, stash, product repair or live provider/training call occurred. Workspace/home layout checks retain pre-existing findings (including unpublished Autophys layout divergence); preparation does not authorize their repair.
 
-Raw evidence, exact commands, XML/node accounting, failures, manifests and resumable fallback tasks are retained outside Git at `~/.local/state/productionize/autophys-sdks-20261105` on yuzuquats. The installed task launchers cannot expose a working task command, so `tasks.json` is the documented fallback; no board update or SQLite write is claimed. The parent takes task/evidence custody, launches five independent judges against the same identity, and chooses any bounded remediation. Judges write their own external reports only. Delete working evidence only after the campaign finishes and its final summary/reports are committed.
+Raw evidence, exact commands, XML/node accounting, failures, manifests and resumable fallback tasks are retained outside Git at `~/.local/state/productionize/autophys-sdks-20261105` on yuzuquats. The installed task launchers cannot expose a working task command, so `tasks.json` is the documented fallback; no board update or SQLite write is claimed. The parent takes task/evidence custody. Five baseline judges have finished; current remediation requires qualification before another judging round. Judges write their own external reports only. Delete working evidence only after the campaign finishes and its final summary/reports are committed.
