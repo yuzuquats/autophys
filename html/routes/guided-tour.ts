@@ -11,7 +11,7 @@ import { Controller } from "../client/controller.ts";
 import { Store } from "../client/store.ts";
 import { fixtures } from "../client/fixtures/source.ts";
 import { TourSnapshot } from "../client/tutorial.ts";
-import { tourSteps, type TourPart } from "./guided-tour-steps.ts";
+import { tourOpeningLayout, tourSteps, type TourPart } from "./guided-tour-steps.ts";
 import { guidedTourStyles } from "./guided-tour-styles.ts";
 import { tourImages } from "./guided-tour-images.ts";
 
@@ -87,7 +87,7 @@ export function mountGuidedTour(host: Host) {
     const button = document.querySelector<HTMLButtonElement>(".ck-" + which + "-toggle");
     if (button && (button.getAttribute("aria-pressed") === "true") !== open) button.click();
   }
-  function layout(part: TourPart) {
+  function layout(part: Pick<TourPart, "surface" | "details">) {
     if (matchMedia("(max-width:760px)").matches) {
       // Phone panels are mutually exclusive. Expose the actual targeted surface.
       const mobile = panels().dataset.mobile;
@@ -161,11 +161,14 @@ export function mountGuidedTour(host: Host) {
     async start() {
       if (disposed) return [];
       const own = ended;
+      // The shell opens in this task. Save the user’s layout and apply the first
+      // lesson before awaiting data/images, so Details never paints then closes.
+      snapshot.start();
+      layout(tourOpeningLayout);
       const controller = new Controller(new Store(fixtures()), { user: "tour", now: () => "" });
       preloadImage(1);
       await Promise.all([controller.store.start(), preloadImage(0)!.decode().catch(() => {})]);
       if (disposed || own !== ended) { controller.store.close(); return []; }
-      snapshot.start();
       demo = controller;
       controller.shell = { download: () => {}, picked: () => {} };
       unsubscribe = controller.subscribe(host.redraw);

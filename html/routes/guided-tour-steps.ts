@@ -3,6 +3,8 @@ import { ids, latestFit } from "../client/derive/shared.ts";
 
 export type TourPart = { title: string; body: string; select?: string; details: boolean; surface: "sidebar" | "main" | "details"; target: string[]; label: string };
 export type TourStep = readonly TourPart[];
+/** Apply before loading the demo so the shell opens in the first lesson’s layout. */
+export const tourOpeningLayout = { details: false, surface: "sidebar" } as const;
 /** Select the same public row ids as the ordinary sidebar; no shadow selection state. */
 export function tourSteps(ws: Workspace): TourStep[] {
   const project = ws.projects.find(p => p.id === "bench-oscillators") ?? ws.projects[0];
@@ -11,7 +13,7 @@ export function tourSteps(ws: Workspace): TourStep[] {
   const row = (id: string) => "row:" + id;
   const config = ids.config(project), fitId = ids.view(inv, fit, "fit"), residuals = ids.view(inv, fit, "residuals");
   return [
-    [{ title: "Your workspace", body: "Projects live here. Each holds configurations and the investigations run against them.", select: config, details: false, surface: "sidebar", target: [".ck-sidebar"], label: "Workspace sidebar · clipped" }],
+    [{ title: "Your workspace", body: "Projects live here. Each holds configurations and the investigations run against them.", select: config, ...tourOpeningLayout, target: [".ck-sidebar"], label: "Workspace sidebar · clipped" }],
     [{ title: "A project's configuration", body: "The model, device, inputs and budget the reasoner works within. Investigations reuse it.", select: config, details: true, surface: "sidebar", target: [row(config)], label: "Configuration row · clipped" }],
     [{ title: "Open an investigation", body: "Its measurements, fits, sensitivity, proposals and validation are rows under it.", select: inv.id, details: false, surface: "sidebar", target: [row(inv.id)], label: "Investigation row · clipped" }],
     [{ title: "Read the measured data", body: "Measurements are the evidence each fit is tested against. Select a measurement to inspect its samples.", select: ids.measurement(inv, inv.measurements[0].id), details: false, surface: "main", target: [".ap-viewer"], label: "Measured data · clipped" }],

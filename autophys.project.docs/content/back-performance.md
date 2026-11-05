@@ -72,3 +72,25 @@ The optional 6× CPU stress run of 304bb3e retained up to a 116.6 ms frame on
 tour exit (down from 40281.8 ms); native-speed runs meet the requested 50 ms
 frame target. Those remaining throttled costs are synchronous tour redraw and
 layout, rather than the removed quadratic restore. No extra tests were run.
+
+## Initial Details drawer flash — 2026-11-04
+
+Opening the workbench briefly exposed Details before the first tour lesson
+closed it. The shell defaults to Details open, while the opening lesson needs
+it closed; the lesson previously applied its layout only after awaiting the
+fixture and preview image. A live browser trace measured an 87 ms open/close
+gap on c2bd1c7.
+
+The tour now captures the user's panel state and applies its opening layout
+synchronously before loading data or images. That layout is shared with the
+first lesson, so the two cannot drift. Tour exits still restore the captured
+state, including an exit while the preview is loading. No vendor files changed.
+
+Validation: Deno type checks and diff whitespace checks pass. In an isolated
+browser build at 1280×800, animation-frame sampling with image decode delayed
+by 1500 ms showed Details closed from the first open frame through lesson
+readiness. The next lesson still opened it, dismissal restored the original
+open state, and immediate dismissal during loading preserved a manually closed
+state without a late tour restart. At 390×844, direct launch showed the sidebar
+lesson and dismissal returned to the main pane with no horizontal overflow.
+No test suites were run, preserving the earlier operator direction.
