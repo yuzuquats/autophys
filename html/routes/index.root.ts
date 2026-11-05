@@ -29,6 +29,8 @@ import "./brand.ts";
 import "./light-only.ts";
 import "./tour-ring.ts";
 
+// The drawer normalizes history before mounting the app. Keep the original address.
+const requestedLocation = { search: location.search, hash: location.hash };
 const USER = "james";
 /** How often the open app re-reads the devices waiting to pair (pairings have no stream). */
 const PAIRING_POLL_MS = 5000;
@@ -57,7 +59,8 @@ const source: Source & { chosen?: Promise<Source> } = forced === "fixtures" ? fi
   : daemon({ user: USER, reauth });
 
 const clock = () => new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-let ctl = new Controller(new Store(source), { user: USER, now: clock });
+const userController = new Controller(new Store(source), { user: USER, now: clock });
+let ctl = userController;
 // `serve --login` marks a signed-out page (the Sign in badge). The landing page stays usable:
 // the app makes no API calls (no 401, no reload) and its main pane asks to sign in.
 let SIGNED_OUT = forced !== "fixtures" && document.getElementById("ap-account")?.dataset.signedIn === "false";
@@ -80,10 +83,11 @@ const app: Cookbook.App = {
     const removeStyles = shell.addStyles(autophysStyles(shell.scope) + placeholderStyles(shell.scope) + `
       html[data-ck-stage="tour"] body, html[data-ck-stage="app"] body { overflow: clip; }
     `);
-    let pendingAddress = selectionAddress(location.search, location.hash);
+    let pendingAddress = selectionAddress(requestedLocation.search, requestedLocation.hash);
+    history.replaceState(history.state, "", location.pathname + requestedLocation.search + requestedLocation.hash);
     const addressChanged = () => {
       pendingAddress = selectionAddress(location.search, location.hash);
-      if (pendingAddress && ctl.store.snapshot()) {
+      if (pendingAddress && ctl === userController && ctl.store.snapshot()) {
         const id = pendingAddress; pendingAddress = null;
         ctl.handle({ kind: "select", id });
       }
@@ -128,7 +132,7 @@ const app: Cookbook.App = {
     ];
     // A record arrived or the selection moved: every view re-reads its model (main with FLIP).
     const redraw = () => {
-      if (pendingAddress && ctl.store.snapshot()) {
+      if (pendingAddress && ctl === userController && ctl.store.snapshot()) {
         const id = pendingAddress; pendingAddress = null;
         ctl.handle({ kind: "select", id });
       }
