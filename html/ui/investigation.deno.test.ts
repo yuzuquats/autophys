@@ -24,3 +24,11 @@ Deno.test("investigation markup: Parameters and Identifiability stack beside Fit
   assertStringIncludes(narrow, 'class="ap-fit-layout"');
   assert(!narrow.includes('class="ap-fit-layout ap-wide"'));
 });
+
+Deno.test("investigation markup: missing supplemental targets render their explanation", () => {
+  const copy = structuredClone(body), round = copy.rounds[0];
+  round.extras = [{ id: "frequency-missing", heading: "Frequency", blocks: [{ kind: "missing", title: "Not recorded yet", description: "No frequency data recorded for this fit." }], panels: [] }];
+  const html = mainMarkup({ ...model, body: copy }, 824);
+  assertStringIncludes(html, 'id="frequency-missing"');
+  assertStringIncludes(html, "No frequency data recorded for this fit.");
+});

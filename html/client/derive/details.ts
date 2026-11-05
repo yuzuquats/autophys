@@ -64,6 +64,10 @@ export function detailsModel(s: State): DetailsModel {
     return { ...section, blocks: blocks.length ? blocks : [{ kind: "missing", title: "Not recorded yet", description: "No values have been recorded for this section. They will appear when recorded by the SDK." }] };
   }) };
   // A refused write (a 409 from the daemon, say) stays visible above the panel until the next pick.
+  if (s.notice && "experiment" in m) {
+    const experiment = (m as ProposalDetailsModel).experiment;
+    return { ...m, experiment: { ...experiment, notice: s.notice } } as ProposalDetailsModel;
+  }
   return s.notice ? { ...m, sections: [{ heading: "Not saved", blocks: [{ kind: "text", text: s.notice, tone: "danger" }] }, ...m.sections] } : m;
 }
 
@@ -132,7 +136,7 @@ function investigationDetails(project: Project, inv: Investigation): DetailsMode
 }
 
 /** Local structural extension: client derivation does not import a UI renderer. */
-type ProposalDetailsModel = DetailsModel & { experiment: { key: string; caption: string } };
+type ProposalDetailsModel = DetailsModel & { experiment: { key: string; caption: string; notice?: string } };
 
 function proposalDetails(s: State, project: Project, inv: Investigation, p: Proposal): ProposalDetailsModel {
   const c = configFor(project, inv), changed = edited(p), spec = specOf(c, p.experiment);

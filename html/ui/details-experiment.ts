@@ -8,7 +8,7 @@ import type { DetailsClasses } from "./details.ts";
 import type { DetailsModel } from "./view-model.ts";
 
 export type ExperimentDetailsModel = DetailsModel & {
-  experiment: { key: string; caption: string };
+  experiment: { key: string; caption: string; notice?: string };
 };
 
 /** Classify by derived record metadata, never by human-facing status text. */
@@ -34,7 +34,7 @@ export function experimentDetailsMarkup(model: ExperimentDetailsModel, classes: 
       </summary>
       <div class="ap-experiment-body">${sections}${model.footnote ? `<p class="ap-footnote">${esc(model.footnote)}</p>` : ""}</div>
     </details>
+    ${model.experiment.notice ? `<section class="ap-experiment-notice" role="alert"><h4 class="ap-sub">Not saved</h4>${blockMarkup({ kind: "text", text: model.experiment.notice, tone: "danger" })}</section>` : ""}
     ${decision || actions ? `<footer class="ap-experiment-actions">${decision}${actions}</footer>` : ""}
   </section>`;
 }
-

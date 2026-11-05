@@ -101,7 +101,7 @@ function investigationMarkup(body: InvestigationBody, width: number, title?: str
     ${card(r.data)}
     <div class="ap-fit-layout${wide ? " ap-wide" : ""}">${r.fit ? card(r.fit, left) : ""}<div class="ap-fit-aside">${r.parameters ? card(r.parameters, right) : ""}${r.identifiability ? card(r.identifiability, right) : ""}</div></div>
     ${r.landscape ? card(r.landscape) : ""}${r.proposals.map(c => card(c)).join("")}
-    ${r.extras.map(c => `<details class="ap-extra" id="${esc(c.id)}" data-ap-disclosure><summary>${esc(c.heading)}<span>${esc(c.caption ?? "")}</span></summary><div>${panels(c.panels ?? [], inner, c.id)}</div></details>`).join("")}
+    ${r.extras.map(c => `<details class="ap-extra" id="${esc(c.id)}" data-ap-disclosure><summary>${esc(c.heading)}<span>${esc(c.caption ?? "")}</span></summary><div>${c.blocks.map(blockMarkup).join("")}${panels(c.panels ?? [], inner, c.id)}</div></details>`).join("")}
   </div></details>`).join("");
   return `${jumps}<div class="ap-viewer ap-decision-view ap-investigation-view" data-ap-page="${esc(body.pageId)}">${card(body.summary, inner, true)}${outcome}${rounds}</div>`;
 }

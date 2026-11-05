@@ -182,11 +182,9 @@ Deno.test("daemon: a 409 from the approval route shows as Not saved in details",
   const env = JSON.parse(String(post.init.body));
   assertEquals({ ...env, id: env.id.startsWith("ui-") }, { id: true, kind: "proposal", payload: { proposal_id: "prop_1", event: "approved", by: "james" } });
   assertStringIncludes(ctl.error!, "409 conflict: proposal is approved");
-  const notice = ctl.view().details.sections[0];
-  assertEquals(notice.heading, "Not saved");
-  assertEquals(notice.blocks[0], { kind: "text", text: "Not saved: 409 conflict: proposal is approved; approved is not allowed", tone: "danger" });
+  assertStringIncludes(JSON.stringify(ctl.view().details), "Not saved: 409 conflict: proposal is approved; approved is not allowed");
   ctl.handle({ kind: "select", id: "inv_1" });
-  assert(ctl.view().details.sections[0].heading !== "Not saved", "the next pick clears it");
+  assert(!JSON.stringify(ctl.view().details).includes("409 conflict"), "the next pick clears it");
 });
 
 Deno.test("daemon: an edit posts every proposed setting, edited ones replaced, and applies the answer once", async () => {

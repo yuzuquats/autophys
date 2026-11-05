@@ -329,3 +329,17 @@ Deno.test("unconfigured project: Details has one section-aligned next step", () 
   assertEquals(view.details.sections[0].blocks[0].kind, "missing");
   assert(!JSON.stringify(view.details).includes("Not recorded yet"));
 });
+
+Deno.test("details: refused decisions carry visible-card feedback and clear on selection", () => {
+  const project = ws.projects[0], inv = project.investigations[0], proposal = inv.proposals[0];
+  const state = { ...s0, projectId: project.id, selected: { [project.id]: inv.id + "/prop/" + proposal.id } };
+  for (const action of ["Approve", "Reject"]) {
+    const notice = action + " refused: conflict <409>", model = detailsModel({ ...state, notice });
+    assert("experiment" in model);
+    assertEquals((model.experiment as { notice?: string }).notice, notice);
+    assert(!JSON.stringify(model.sections).includes(notice), "feedback is outside the collapsible sections");
+    assert(!JSON.stringify(detailsModel(state)).includes(notice), "next selection clears the notice");
+  }
+  const config = detailsModel({ ...state, selected: { [project.id]: "config:" + project.id }, notice: "Config write refused" });
+  assertEquals(config.sections[0].heading, "Not saved", "other Details retain their existing feedback");
+});

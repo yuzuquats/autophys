@@ -29,3 +29,36 @@ Main summary now leads with recorded investigation identity, uses larger explana
 Experiment Details now uses one native disclosure card with an existing hydrated list-cell identity/provenance header. Settings, previews, uncertainty, budget and provenance expand inside; existing authorized decisions/actions remain outside the disclosure. Collapse, summary focus and input focus/caret survive ordinary rerenders; record changes reset the disclosure. Derived metadata identifies the exact record without display-text inference. Invalid committed drafts suppress stale precision and approval; edited previews are labeled as recorded at the proposed settings. Other Details record types retain their presentation.
 
 Matched before/after desktop and phone renderer captures are at rwc-01 fleet/evidence/autophys-ux-flow/implementation-20261105/details/comparison.html; handoff.json and capture-receipt.json record commands and inputs. 27 existing scoped tests and 39 browser capture checks passed. The known unrelated client boundary assertion fails because existing auth context.ts uses fetch(; it is outside these edits. Parent integrated both stylesheet exports, reviewed diffs/captures and passed the combined Main/Details/styles/derivation Deno type-check and scoped diff check. No native builds, shared deployment, source push or live account record writes occurred. Native/auth/http.rs/SDK work was preserved. Current implementation is complete locally and the screenshots are ready for operator review. No scientific objective or missing evidence was fabricated.
+
+
+## Scoped source publication review — 2026-11-05
+
+The operator requested sink-and-push. The publication includes this page's three
+changes plus six earlier same-thread investigation-page commits, identified by
+the retained child-task receipt and stable Change-Ids in investigation-page.md.
+The earlier renderer is a real prerequisite for the summary refinement. Account,
+SDK, deck and other peer drafts remain outside this publication.
+
+Initial independent Codex review (Claude was rate-limited) found save failures
+could be hidden by a collapsed experiment. A forward repair keeps the existing
+Not saved feedback in an alert beside the decision controls, outside the
+disclosure. A derivation-to-markup regression covers refused Approve/Reject,
+escaping, notice clearing and unchanged Configuration feedback. Final prefix
+identities, checks, review and publication receipts are retained in the linked
+fleet/evidence/autophys-ux-flow/implementation-20261105/publication directory.
+The current sink request supersedes this workstream's earlier no-push delivery
+limit; it does not request another deployment.
+
+The prerequisite review also found absent supplemental-view destinations and
+lost acquisition metadata. A forward repair retains a selected missing-data
+destination and shows recorded measurement settings, source/upload, missing
+samples, noise, columns and consumption links inside each expanded Data row.
+Missing settings are explicitly unrecorded rather than copied from defaults.
+Regressions exercise empty Frequency/Edges and acquisition facts/escaping.
+
+The final preservation review identified additional facts formerly shown in leaf
+Details. Fit cards now retain recorded variant/loss/data; Identifiability retains
+recorded condition numbers, including summary-only records; Validate retains
+measurement/fit and worst-parameter 2σ relative uncertainty when recorded.
+Missing summary-only values remain explicit. Preservation regressions cover both
+losses/variants, full and summary-only identifiability, and validation records.

@@ -239,3 +239,15 @@ Deno.test("pairing markup associates unbroken codes and actions with each card",
   assertStringIncludes(card, 'id="ap-action-pair-approve:LHMX-5814"');
   assertStringIncludes(card, 'id="ap-action-pair-deny:LHMX-5814"');
 });
+
+Deno.test("experiment card: closed details keep escaped save failures beside decisions", () => {
+  const model = { ...proposal, experiment: { key: "bench/p1", caption: "Bench A · p1", notice: "Approve refused <409>" } };
+  const html = detailsMarkup(model, classes, false), alert = html.indexOf('role="alert"');
+  assertStringIncludes(html, "<details data-ap-experiment>");
+  assert(alert > html.indexOf("</details>"), "feedback is visible outside the closed disclosure");
+  assertStringIncludes(html.slice(alert), "Approve refused &lt;409&gt;");
+  assertStringIncludes(html.slice(alert), 'data-ap-name="approve"');
+  assertEquals(count(html, "Approve refused"), 1);
+  const cleared = { ...model, experiment: { ...model.experiment, notice: undefined } };
+  assert(!detailsMarkup(cleared, classes, false).includes('role="alert"'));
+});

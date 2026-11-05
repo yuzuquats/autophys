@@ -21,6 +21,8 @@ ${scope} .ap-experiment-caption { margin:0 0 8px;color:var(--ap-sec);font:12px/1
 ${scope} .ap-experiment-card .ap-facts { grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:4px 8px; }
 ${scope} .ap-experiment-card .ap-facts dd { text-align:right; }
 ${scope} .ap-experiment-card .ap-footnote { margin-top:18px;color:var(--ap-sec); }
+${scope} .ap-experiment-notice { padding:0 12px 12px; }
+${scope} .ap-experiment-notice .ap-sub { margin:0 0 7px; }
 ${scope} .ap-experiment-actions { display:flex;flex-direction:column;gap:8px;padding:12px;border-top:1px solid var(--ap-line); }
 ${scope} .ap-experiment-actions .ap-decision, ${scope} .ap-experiment-actions .ap-actions { margin:0; }
 ${scope} .ap-experiment-card input { caret-color:var(--ap-ink); }
@@ -28,4 +30,3 @@ ${scope} .ap-experiment-card .ap-input:focus-within { outline:2px solid var(--ck
 ${scope} .ap-experiment-card .ap-input input:focus-visible { outline:none; }
 `;
 }
-

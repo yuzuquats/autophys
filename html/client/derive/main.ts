@@ -1,5 +1,5 @@
 /** The main column: crumb, meta, the viewer's panels and one credit line. */
-import type { Investigation, Project, ProjectConfig, Proposal } from "../domain.ts";
+import type { Investigation, Measurement, Project, ProjectConfig, Proposal } from "../domain.ts";
 import type { BarRow, ChartPanel, InvestigationBody, InvestigationCard, MainModel, RangesChart, Section, TableRow, TraceRow } from "../../ui/view-model.ts";
 import {
   configPanels, edgePanels, envelopePanels, fitPanels, frequencyPanels, landscapeChart, measurementPanels, sensitivityPanels,
@@ -13,9 +13,34 @@ import { configurationSections, experimentSections, knownSection } from "./confi
 import { simulatorLabel, specOf } from "../config.ts";
 import { engineering, int, shortHash, sig, pct } from "./fmt.ts";
 import { displayedFields, outlookAt } from "./outlook.ts";
-import { configFor, investigationLabel, defaultSelection, experimentsUsed, latestConfig, latestFit, parseSel, projectOf, proposalLabel, rankOf, type State, type Sel, statusText, plusMinus } from "./shared.ts";
+import { configFor, investigationLabel, defaultSelection, ids, experimentsUsed, latestConfig, latestFit, parseSel, projectOf, proposalLabel, rankOf, type State, type Sel, statusText, plusMinus } from "./shared.ts";
 
 
+
+/** Acquisition facts belong to the recorded measurement, not catalog defaults. */
+function acquisitionPanel(c: ProjectConfig, inv: Investigation, m: Measurement): ChartPanel {
+  const spec = specOf(c, m.experiment), missing = m.output.filter(y => !Number.isFinite(y)).length;
+  const settings = [...new Set([...spec.settings.map(x => x.name), ...Object.keys(m.settings)])].map(name => {
+    const setting = spec.settings.find(x => x.name === name), value = m.settings[name];
+    return { label: setting?.label ?? name, value: value == null ? "not recorded" : (sig(value, 3) + " " + (setting?.unit ?? "")).trim() };
+  });
+  const usedBy = inv.fits.filter(f => f.measurements.includes(m.id)).map(f => ({ label: "Fit #" + f.n, id: ids.fit(inv, f) }));
+  const v = inv.validation;
+  if ((v.state === "passed" || v.state === "failed") ? v.measurement === m.id : v.state === "summary" && v.measurements.includes(m.id))
+    usedBy.push({ label: "Validate", id: ids.validate(inv) });
+  return { title: "Acquisition", charts: [], blocks: [
+    { kind: "facts", rows: [
+      { label: "Experiment", value: spec.label + " · " + m.experiment }, ...settings,
+      { label: "Source", value: m.source || "not recorded" }, { label: "Uploaded", value: m.uploadedAt || "not recorded" },
+      { label: "Missing samples", value: String(missing), tone: missing ? "warn" : undefined },
+      { label: m.sigmaSource === "declared" ? "Noise σ (declared)" : "Noise σ (est.)",
+        value: Number.isFinite(m.sigmaEstimate) ? (sig(m.sigmaEstimate, 3) + " " + spec.output.unit).trim() : "not recorded" },
+      { label: "Input series", value: m.inputRecorded === false ? "not recorded" : spec.input ? spec.input.name + " · " + spec.input.unit : "none" },
+      { label: "Output column", value: spec.output.name + " · " + spec.output.unit },
+    ] },
+    usedBy.length ? { kind: "links", links: usedBy } : { kind: "text", text: "Not used by a fit or validation yet", tone: "muted" },
+  ] };
+}
 
 /** The ranking bars, the proposal's own row at its current (possibly edited) fields. */
 export function rankingBars(s: State, inv: Investigation, p: Proposal): BarRow[] {
@@ -142,10 +167,16 @@ function validationCard(c: ProjectConfig, inv: Investigation): InvestigationCard
     const fit = latestFit(inv);
     const panels = fit ? v.measurements.filter(id => fit.curves[id] && inv.measurements.some(m => m.id === id))
       .flatMap(id => validationPanels(ctx, fit, id, fit.curves[id].fit, fit.curves[id].t)) : [];
-    return { id, heading: "Validate", caption, blocks: panels.length ? [] : [gap("The held-out predicted series is not recorded.")], panels };
+    return { id, heading: "Validate", caption, blocks: [{ kind: "facts", rows: [
+      { label: "Measurement", value: v.measurements.join(", ") || "not recorded" },
+      { label: "Worst parameter", value: "not recorded" },
+    ] }, ...(panels.length ? [] : [gap("The held-out predicted series is not recorded.")])], panels };
   }
   const fit = inv.fits.find(f => f.n === v.fit);
-  return { id, heading: "Validate", caption, blocks: [],
+  return { id, heading: "Validate", caption, blocks: [{ kind: "facts", rows: [
+    { label: "Measurement", value: v.measurement }, { label: "Fit", value: "Fit #" + v.fit },
+    { label: "Worst parameter", value: v.worst.param + " " + pct(v.worst.relative) + " (2σ relative)" },
+  ] }],
     panels: recordedPanels(fit && inv.measurements.some(m => m.id === v.measurement)
       ? validationPanels(ctx, fit, v.measurement, v.predicted) : [], "The validation fit or measurement is not recorded.") };
 }
@@ -196,23 +227,32 @@ export function investigationPage(s: State, project: Project, sel: Exclude<Sel, 
       blocks: r.measurements.length ? [] : [gap("No measurements recorded for this round.")],
       rows: r.measurements.map(m => ({ id: measurementAnchor(inv, r, m.id), label: m.id,
         meta: `${m.split === "train" ? "train" : "held out"} · ${int(m.output.length)} samples · ${number(m.rate)} Hz`,
-        open: target === measurementAnchor(inv, r, m.id), panels: measurementPanels(c, m) })) };
+        open: target === measurementAnchor(inv, r, m.id), panels: [acquisitionPanel(c, inv, m), ...measurementPanels(c, m)] })) };
     const at = f ? `At Fit #${f.n}` : "";
     const parameters: InvestigationCard | null = f ? { id: roundAnchor(inv, r, "parameters"), heading: "Parameters", caption: at,
       blocks: [{ kind: "table", rows: paramsTable(c, f) }] } : null;
+    const condition = f?.sensitivity?.condition ?? f?.identification?.condition;
     const identifiability: InvestigationCard | null = f ? { id: roundAnchor(inv, r, "identifiability"), heading: "Identifiability",
       caption: f.sensitivity ? `Rank ${rankOf(f.sensitivity)} of ${f.sensitivity.names.length} · ${at}` : at,
       blocks: f.sensitivity ? [] : [gap(f.identification
         ? `Identified: ${f.identification.identified.join(", ") || "none"}. Not identified: ${f.identification.nonIdentified.join(", ") || "none"}. Singular values and directions are not recorded.`
         : "No singular values or directions recorded for this fit.")],
-      panels: f.sensitivity ? sensitivityPanels(f) : [] } : null;
+      panels: [
+        { charts: [], blocks: [{ kind: "facts", rows: [{ label: "Condition", value:
+          condition == null ? "not recorded"
+            : condition > 1e6 ? "> 10⁶"
+            : sig(condition, 3) }] }] },
+        ...(f.sensitivity ? sensitivityPanels(f) : []),
+      ] } : null;
     const chart = f && landscapeChart(c, f);
     const landscape: InvestigationCard | null = f ? { id: roundAnchor(inv, r, "landscape"), heading: "Landscape", caption: at,
       blocks: chart ? [] : [gap("No landscape recorded for this fit.")], panels: chart ? [{ charts: [{ ...chart, height: 220 }] }] : [] } : null;
     const extras: InvestigationCard[] = f ? [
       ["envelope", "Envelope", envelopePanels(ctx, f)], ["frequency", "Frequency", frequencyPanels(ctx, f)], ["zoom:edges", "Edges", edgePanels(ctx, f)],
-    ].filter(([, , panels]) => (panels as ChartPanel[]).length).map(([part, heading, panels]) => ({
-      id: roundAnchor(inv, r, part as string), heading: heading as string, caption: at, blocks: [], panels: panels as ChartPanel[],
+    ].filter(([part, , panels]) => (panels as ChartPanel[]).length || target === roundAnchor(inv, r, part as string)).map(([part, heading, panels]) => ({
+      id: roundAnchor(inv, r, part as string), heading: heading as string, caption: at,
+      blocks: (panels as ChartPanel[]).length ? [] : [gap("No " + (heading as string).toLowerCase() + " data recorded for this fit.")],
+      panels: panels as ChartPanel[],
     })) : [];
     const quality = f ? `Fit #${f.n} · χ²/N ${number(f.chi2N)}` : "Waiting for a fit";
     const decision = r.proposals.map(p => `${proposalLabel(p)} ${p.status}${p.decidedBy ? " by " + p.decidedBy : ""}`).join(" · ");
@@ -220,8 +260,12 @@ export function investigationPage(s: State, project: Project, sel: Exclude<Sel, 
       open: r === latest || target === id || target.startsWith(id + "-"), data,
       fit: f ? { id: roundAnchor(inv, r, "fit"), heading: `Fit #${f.n}`,
         caption: `${f.state} · χ²/N ${number(f.chi2N)} · ${int(f.evals)} evals · ${f.starts} starts${f.basins == null ? "" : " → " + f.basins + " basins"}`,
-        blocks: Object.entries(f.lag1).map(([id, rho]) => ({ kind: "text" as const,
-          text: `${id}: ${Math.abs(rho) > .3 ? "structured" : "white"} residuals (ρ₁ ${number(rho)})` })),
+        blocks: [{ kind: "facts" as const, rows: [
+          ...(f.variant ? [{ label: "Variant", value: f.variant }] : []),
+          { label: "Loss", value: f.loss === "linear" ? "least squares" : "soft L1" },
+          { label: "Data", value: f.measurements.join(", ") || "not recorded" },
+        ] }, ...Object.entries(f.lag1).map(([id, rho]) => ({ kind: "text" as const,
+          text: `${id}: ${Math.abs(rho) > .3 ? "structured" : "white"} residuals (ρ₁ ${number(rho)})` }))],
         panels: recordedPanels(fitPanels(ctx, f), "No fitted data recorded.") } : null,
       parameters, identifiability, landscape, proposals, extras };
   });
