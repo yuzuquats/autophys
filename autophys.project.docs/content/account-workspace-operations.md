@@ -290,3 +290,22 @@ had run. The operator subsequently requested deployment; productionize released
 one scoped local commit slot. The bounded build, exact source/artifact identities
 and deployment outcome are recorded in the same evidence directory under
 deployment.json. Git publication remains a separate coordinated operation.
+
+
+### One sign-in surface in the signed-out workspace — 2026-11-06
+
+The header account action now reuses the signed-out workspace form instead of
+opening a second form over it. The workspace owns this decision while mounted;
+returning to the pitch uses the existing lona-js modal. On phones the action
+first closes the sidebar or details sheet. Focus moves to the form heading,
+without opening credential autocomplete, and Tab proceeds to Email. Existing
+input values and the URL are preserved. Teardown removes the workspace handler.
+
+The cached/frozen entry typecheck and browser bundle passed. Ten focused browser
+checks covered desktop and 390px reuse, keyboard activation, preserved input,
+phone sheets, drawer reentry, pitch modal/dismissal, one demo request and sign-out
+recovery. The exact revised bundle ran only in an owned incognito preview using
+the persisted read-only account; its session was signed out afterward. Evidence:
+fleet/evidence/autophys-single-sign-in/validation.json. No native build, suite,
+deployment or push ran. The scoped local commit remains separate from
+productionize’s reviewed publication prefix.

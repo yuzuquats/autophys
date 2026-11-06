@@ -86,6 +86,7 @@ ctl.view = () => {
 let teardown: (() => void) | null = null;
 let guided: ReturnType<typeof mountGuidedTour> | undefined;
 let resumeSession: (() => void) | undefined;
+let focusWorkspaceSignIn: (() => boolean) | undefined;
 
 const app: Cookbook.App = {
   id: "autophys",
@@ -220,6 +221,17 @@ const app: Cookbook.App = {
         context = next; ctl.updateAccess(identity(), next.capabilities);
       }).catch(() => {});
     }, PAIRING_POLL_MS); };
+    focusWorkspaceSignIn = () => {
+      const stage = document.documentElement.dataset.ckStage;
+      if (!SIGNED_OUT || (stage !== "app" && stage !== "tour")) return false;
+      const heading = shell.slots.main.querySelector<HTMLElement>("form.ap-signin h2");
+      if (!heading) return false;
+      // Return from a phone side sheet before focusing the existing form.
+      shell.onSelect();
+      heading.tabIndex = -1;
+      heading.focus({ preventScroll: true });
+      return true;
+    };
     // Signed out: the card signs in without a page load, then the workspace starts in place.
     let stopSignIn: (() => void) | undefined;
     resumeSession = () => {
@@ -236,7 +248,7 @@ const app: Cookbook.App = {
     if (SIGNED_OUT) stopSignIn = signInInPlace(onContextChanged);
     else if (context) start();
     else void readContext().then(next => { context = next; SIGNED_OUT = !next.principal; resumeSession?.(); }).catch(error => { ctl.store.error = error.message; redraw(); });
-    teardown = () => { resumeSession = undefined; document.removeEventListener("keydown", down, { capture: true }); window.removeEventListener("hashchange", addressChanged); guided?.dispose(); guided = undefined; stopSignIn?.(); clearInterval(poll); unsubscribe(); views.forEach((v) => v.dispose()); removeStyles(); };
+    teardown = () => { focusWorkspaceSignIn = undefined; resumeSession = undefined; document.removeEventListener("keydown", down, { capture: true }); window.removeEventListener("hashchange", addressChanged); guided?.dispose(); guided = undefined; stopSignIn?.(); clearInterval(poll); unsubscribe(); views.forEach((v) => v.dispose()); removeStyles(); };
   },
   unmount() {
     teardown?.();
@@ -255,7 +267,7 @@ function onContextChanged(next: AppContext): void {
   if (resumeSession) resumeSession();
   else ctl.reset(makeStore(), environment());
 }
-mountAccount(onContextChanged, pending => { signingOut = pending; });
+mountAccount(onContextChanged, pending => { signingOut = pending; }, () => focusWorkspaceSignIn?.() ?? false);
 docs.mount();
 
 // Remove the unused hard-coded shell control before the first app open too.

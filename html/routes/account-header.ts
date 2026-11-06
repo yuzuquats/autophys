@@ -59,6 +59,7 @@ function hydrateAnonymousAccount(account: HTMLElement | null): HTMLElement | nul
 export function mountAccount(
   onContextChanged: (context: AppContext) => void,
   onSigningOut: (pending: boolean) => void,
+  focusWorkspaceSignIn: () => boolean,
 ): void {
   initHtmlElement();
   const account = hydrateAnonymousAccount(document.getElementById("ap-account"));
@@ -140,6 +141,8 @@ export function mountAccount(
     if (!trigger || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
     if (modal) return;
+    // The open workspace already owns sign-in; reuse its form and input state.
+    if (focusWorkspaceSignIn()) return;
     const form = document.createElement("form");
     form.className = "ap-signin";
     form.method = "post";
