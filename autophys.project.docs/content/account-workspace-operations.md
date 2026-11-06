@@ -327,3 +327,16 @@ Rust template/CSS into the existing live header in an owned incognito tab; they
 do not qualify a newly compiled daemon. Sign-out cleared the session and the tab
 was closed. Edition-2024 rustfmt and diff checks passed. No native build, suite,
 deployment or push ran. Evidence: fleet/evidence/autophys-compact-account-menu/.
+
+
+### Compact account source publication — 2026-11-06
+
+Published the reviewed account-menu presentation change as
+[`663de859`](https://github.com/yuzuquats/autophys/commit/663de859d062a2d94cb632f6fed49ceb92305418),
+directly above public base `6853e551`. Independent review found no actionable
+issues; its exact source boundary and nine existing extracted-template browser
+checks are recorded under yuzuquats
+`~/.local/state/productionize/autophys-outstanding-review-20261106/`.
+The guarded prefix-only push was verified remotely; the two existing local
+publication receipts were preserved. No new tests, build or deployment ran.
+This outcome note remains local.
