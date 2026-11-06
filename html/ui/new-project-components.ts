@@ -19,8 +19,15 @@ export function hydrateProjectSetup(host: HTMLElement): void {
       return { ...Stepper.plain(heading.textContent!, slot), current: step.dataset.current === "true", marker: step.dataset.done === "true" ? "✓" : "" };
     });
     const existing = marker.querySelector<Stepper>(":scope > std-stepper");
-    if (existing) existing.bind({ steps });
-    else {
+    if (existing) {
+      // Rebinding rebuilds the kit's light DOM. Restore our slotted bodies,
+      // retaining the editable controls and their focus across step changes.
+      const focused = document.activeElement instanceof HTMLElement && existing.contains(document.activeElement)
+        ? document.activeElement : null;
+      existing.bind({ steps });
+      existing.append(...sections);
+      if (focused?.isConnected) focused.focus({ preventScroll: true });
+    } else {
       const stepper = Stepper.makeWith({ steps });
       stepper.append(...sections);
       marker.replaceChildren(stepper);

@@ -1,7 +1,10 @@
 /** Browser regression suite, bundled as AutophysDiffTests and run in an owned tab. */
 import { AutophysMain } from "./main.ts";
 import { AutophysDetails } from "./details.ts";
-import type { DetailsModel, MainModel } from "./view-model.ts";
+import { AutophysSidebar } from "./sidebar.ts";
+import { hydrateProjectSetup } from "./new-project-components.ts";
+import { newProjectMarkup, type ProjectSetupBody } from "./new-project.ts";
+import type { DetailsModel, MainModel, SidebarModel } from "./view-model.ts";
 import { MarkupDiff, freshMarkers } from "./render-diff.ts";
 
 export function run(): string[] {
@@ -78,6 +81,43 @@ export function run(): string[] {
     detailsView.render({ ...detail, status: { text: "approved" } });
     check(gain.isConnected && detailsHost.querySelector("input") === gain && document.activeElement === gain && gain.selectionStart === 1 && gain.selectionEnd === 2, "details status updates retain edited field and caret");
     detailsView.destroy();
+    const setupHost = document.createElement("section"); host.append(setupHost);
+    const setup = new MarkupDiff(setupHost, hydrateProjectSetup);
+    const wizard: ProjectSetupBody = { kind: "project-setup", title: "New project", description: "Configure the model", steps: [
+      { title: "Name", current: true, done: false, description: "Project name", fields: [{ name: "setup:name", label: "Name", value: "original" }], actions: [{ name: "setup:next", label: "Continue" }] },
+      { title: "Parameters", current: false, done: false, description: "Model settings", fields: [{ name: "setup:gain", label: "Gain", value: "1" }], actions: [{ name: "setup:back", label: "Back" }] },
+    ] };
+    setup.render(newProjectMarkup(wizard));
+    const stepper = setupHost.querySelector("std-stepper")!;
+    const sections = [...stepper.querySelectorAll("[data-ap-step]")];
+    const name = setupHost.querySelector<HTMLInputElement>('input[type="text"]')!;
+    const continueButton = setupHost.querySelector("button")!;
+    name.value = "edited"; name.focus(); name.setSelectionRange(1, 4);
+    const advanced = { ...wizard, steps: wizard.steps.map((step, i) => ({ ...step, current: i === 1, done: i === 0 })) };
+    setup.render(newProjectMarkup(advanced));
+    check(setupHost.querySelector("std-stepper") === stepper && sections.every(section => section.parentElement === stepper) && continueButton.isConnected, "real stepper retains setup sections and actions when advancing");
+    check(setupHost.querySelector('input[type="text"]') === name && name.value === "edited" && document.activeElement === name && name.selectionStart === 1 && name.selectionEnd === 4, "real stepper rebind preserves edited field identity, focus and caret");
+    check(stepper.shadowRoot?.querySelectorAll('.step-item[aria-current="step"]').length === 1 && stepper.shadowRoot?.querySelector('.step-item[aria-current="step"] slot')?.getAttribute("name") === sections[1].getAttribute("slot"), "real stepper displays the newly current body");
+    setup.render(newProjectMarkup(wizard));
+    check(sections.every(section => section.parentElement === stepper) && stepper.querySelectorAll("input").length === 2, "real stepper keeps fields when returning to a previous step");
+    const railHost = document.createElement("section");
+    railHost.className = "ck-app"; railHost.dataset.cookbook = "";
+    railHost.style.cssText = "width:240px;height:400px;position:relative";
+    const sidebarHost = document.createElement("section"); sidebarHost.style.cssText = "width:240px;height:400px";
+    railHost.append(sidebarHost); host.append(railHost);
+    const sidebar = new AutophysSidebar(sidebarHost, () => {});
+    const railModel: SidebarModel = { switcher: { kind: "single", label: "Workspace", value: "project", options: [] }, pinned: { id: "devices", label: "Devices", icon: "device", selectable: true, children: null }, section: { label: "Projects", count: "1" }, treeLabel: "Projects", selectedId: null, expandedIds: [], nodes: [
+      { id: "project", label: "Short", icon: "workspace", selectable: true, children: [{ id: "child", label: "Long scientific investigation label requiring horizontal scrolling".repeat(2), icon: "workspace", selectable: true, children: null }] },
+    ] };
+    sidebar.render(railModel);
+    const tree = sidebarHost.querySelector<HTMLElement>("std-tree-list")!;
+    const collapsedWidth = parseFloat(tree.style.minWidth);
+    sidebar.render({ ...railModel, expandedIds: ["project"] });
+    const childName = tree.shadowRoot!.querySelector<HTMLElement>('[data-id="child"] .name')!;
+    check(!!childName && parseFloat(tree.style.minWidth) > collapsedWidth + 100 && childName.clientWidth >= childName.scrollWidth - 1, "real sidebar expansion measures newly visible long labels");
+    sidebar.render(railModel);
+    check(parseFloat(tree.style.minWidth) === collapsedWidth, "real sidebar collapse restores the measured rail width");
+    sidebar.destroy();
     return checks;
   } finally { host.remove(); }
 }

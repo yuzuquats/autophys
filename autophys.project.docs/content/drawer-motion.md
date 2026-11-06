@@ -351,3 +351,26 @@ Evidence under `fleet/evidence/autophys-drawer/`:
 `diff2-deploy.log`, `diff2-{html,types}.log`,
 `diff2-{desktop,phone}-stability.json`, `diff2-browser-checks.json`,
 `diff2-root-error-triage.json`, `diff2-{public,signed}-route-checks.json`.
+
+
+### Publication review repairs — 2026-11-06
+
+The independent sink-and-push review found two incremental-rendering regressions.
+The real Stepper rebuilds its light DOM on bind, removing the slotted project
+setup sections. Restore those same sections after binding and restore focused
+control state. Sidebar sizing now includes caller-owned expansion in its cache
+key, so opening long descendant names recalculates horizontal scroll width.
+
+The browser suite now checks the actual Stepper through forward/back transitions,
+retained sections/actions, edited input identity/focus/caret and current-body
+slots, plus the actual sidebar through expand/collapse with long names. All
+**19 browser checks pass**, including the original 13 reconciliation checks.
+Frozen cached typechecking and the 15 scoped controller/render tests pass.
+No native build or deployment was performed for these source-only repairs.
+
+Publication remains under review. The 17 polish changes require completed UI
+and account prerequisites absent from public master. UI supplied its exact
+13-commit scope for joint review; account scope is requested from auth. An
+intentional ancestry merge is preserved. No foreign work is adopted, no sink
+has moved master, and no push has occurred. Review manifests and browser results
+live at `fleet/evidence/autophys-drawer/push-review/` on yuzuquats.

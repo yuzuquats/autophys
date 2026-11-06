@@ -160,7 +160,7 @@ export class AutophysSidebar {
     // The kit clips names to a flexible column. Reserve the intrinsic label
     // width when its accessory would shorten it; the surrounding tree region
     // can scroll horizontally for unusually long SDK names.
-    const nodeKey = JSON.stringify(model.nodes), railWidth = this.rail.clientWidth;
+    const nodeKey = JSON.stringify([model.nodes, model.expandedIds]), railWidth = this.rail.clientWidth;
     if (nodeKey !== this.measuredNodes || railWidth !== this.measuredWidth) {
       this.measuredNodes = nodeKey; this.measuredWidth = railWidth;
       this.tree.style.width = "100%";
