@@ -29,6 +29,7 @@ queueMicrotask(() => {
     .ck-landing[data-lowered] { position: relative; inset: auto; }
     ${surfaceFinishStyles}
     .ck-header { --ck-gutter: 28px; }
+    .ck-header .ck-nav-links { gap: 16px; }
     .ck-header .ck-brand { padding-left: 28px; }
   `;
   document.head.append(navigationStyle);
