@@ -1,9 +1,11 @@
 # Can the inner research loop turn measurements into useful, honest conclusions?
 
-Status: live predeclared protocol, revision 1 scientific design; integration gates
-updated 2026-11-06. No pilot, confirmatory run, provider invocation or experiment
-harness execution is established by this consolidation. The scientific seed schedules,
-thresholds and matrix are unchanged from the original 15,783-byte design.
+Status: live predeclared protocol, revision 1 scientific design; operational/source
+gates reconciled 2026-11-06. The historical consolidation itself established no pilot,
+confirmatory run, provider invocation or experiment harness execution. The later
+[pilot checkpoint](innerloop-pilots.md) records bounded evidence and failures;
+confirmation and complete scientific acceptance remain open. The scientific seed
+schedules, thresholds and matrix are unchanged from the original 15,783-byte design.
 
 The canonical source is yuzuquats:/home/james/workspace/autophys master. Independent
 completeness review must verify adoption and retained ancestry before the parent
@@ -15,7 +17,7 @@ The present executor runs no experiments and performs no native/Cargo/Deno build
 
 The actual product boundary
 
-Owner fad6b86d257f363ed7e1aaa182e474abe8b556f5 has:
+Historical inspection at owner fad6b86d257f363ed7e1aaa182e474abe8b556f5 found:
 - synthetic.py: CaseView / SyntheticRunner separate measurements from Evaluator truth.
   observe generates at tighter TRUTH_OPTIONS than the fitting solver.
 - agent.py: Investigation.run dispatches fitting, sensitivity, ranking, requests,
@@ -27,22 +29,55 @@ Owner fad6b86d257f363ed7e1aaa182e474abe8b556f5 has:
   training seeds, keeps lexicographically better scores, then evaluates initial/final
   strategies on disjoint held-out seeds. The scripted researcher supplies known edits.
 
-Two source-level limitations matter before any experiment:
-1. research.py:evaluate adds all records of failed runs to failing_transcripts AFTER
-   run_case has appended a reveal. proposal_prompt retains that payload, including
-   synthetic truth, when it sends the report to a researcher. Inner-policy truth
-   separation does not establish outer-researcher truth separation. Check this explicitly;
-   a harness wrapper may redact reveals before a future data-driven proposer, but must
-   report that it adds a boundary absent from the default product path.
+Two source-level observations from that historical inspection remain relevant:
+1. Historical leak observation: research.py:evaluate added failed-run records to
+   failing_transcripts AFTER run_case appended a reveal; proposal_prompt then retained
+   that payload, including synthetic truth. This describes the pre-filter source,
+   not the current proposer boundary. Inner-policy separation alone did not establish
+   outer-researcher separation.
 2. research() uses improves() on training scores and checks held-out results only at
    the end. It does not reject/rollback a candidate because of held-out failure.
    paired_bootstrap exists separately. Do not claim research() has an independent
    validation acceptance gate merely because its final summary has held-out scores.
 
-Those are inspection findings, not reproduced test failures. They may change before
-execution; pin and recheck actual source. Existing tests test_research_planted.py
+The selected implementation now copies and filters reports with proposer_report at
+research/autoloop proposer call sites and again at proposal_prompt. Named evaluator
+fields and reveal records are removed from the supported structural route; aggregate
+training rewards intentionally remain truth-derived. Raw evaluator sidecars/workbooks
+are retained for analysis. This is a cooperative structural boundary, not a sandbox:
+real-path, history, direct file/image and resume qualification remain open, including
+alternate schemas and text outside the filter's guarantee. See the operator-confirmed
+PILOT-01 boundary and pending PILOT-02 environment in [innerloop-pilots.md](innerloop-pilots.md).
+Pin and recheck actual source before execution. Existing tests test_research_planted.py
 exercise scripted edit selection on a known biased-battery problem. They are useful
 integration tests, not proof that an LLM independently discovered a scientific fix.
+
+The independent protocol review remains **CHANGES_REQUIRED** before confirmation.
+Its unresolved findings are retained here alongside the pilot checkpoint:
+- **M1:** absent/empty/zero-length/all-missing or validation-only training must be
+  refused before project/config/blob/record/projection writes in fresh and sentinel
+  workbooks. Empty training instead persisted a failed investigation. The original
+  refusal-before-write criterion below is unmet; failure persistence does not pass it.
+- **M2:** final negative-harness reporting/assertions and the complete 11/12 negative
+  matrix remain unexecuted; all-missing and misspecified controls were unreached.
+  Main SQLite-file hashes miss WAL/logical store changes; structural diagnosis and
+  transaction-aware no-write evidence remain incomplete. Scientific acceptance is open.
+- **M3:** prospective instrumentation, failure/timeout accounting, estimand and
+  seed-cluster sensitivity, test-set identities and final-audit sealing remain to be
+  frozen/reviewed. This correction changes no estimator or bootstrap design below.
+- **M4:** actual research/autoloop proposer, history, file/image and resume routes
+  still need boundary qualification; two handcrafted/mocked checks do not establish
+  those paths. Truth-derived training aggregates remain allowed; final audit cannot
+  feed selection, reselection or tuning.
+- **M5:** six catalogue pilot units support recovery, not superiority over random
+  (92.545% median reduction versus no update, -0.00346% versus random). Original
+  usefulness targets and the separately specified perturbed-truth matrix remain open.
+- **M6:** prospective environment/source qualification, final negative harness,
+  native/Q1, frontend Q2/G1 and paired Rust/Python daemon/runtime acceptance remain
+  incomplete. Old artifact receipts do not qualify current source or another platform.
+
+These are unresolved qualification findings, not permission to execute or evidence of
+confirmation, autonomous discovery, portability or complete E2E acceptance.
 
 Claims and measurements
 
@@ -200,15 +235,21 @@ with real completion records and modeled billing explicitly distinguished.
 
 Execution and artifacts after the review gate
 
-After independent source review and reviewed consumer fast-forward, use one native
-compilation from the exact unified master on rwc-dev-01 only, with separately approved
-external SSD CARGO_TARGET_DIR, CARGO_INCREMENTAL=0, CARGO_BUILD_JOBS<=8 and a bounded
-wall deadline. The parent must establish capacity/output limits for that later phase;
-the executor's 8 MiB total source-only allowance does not authorize it. Leave existing
+Owner yuzuquats authors and builds canonical master under a separately admitted,
+custodied resource window after independent source review. The rwc-dev-01 consumer
+runs an aligned reviewed owner-master checkout with exact source/environment identities
+frozen per run (PILOT-02); alignment/environment qualification remain pending. Native
+x86_64 artifacts are not ARM64-portable without a matching platform build from the
+qualified source. There is currently no native-build or deploy window. This protocol
+correction grants no build, confirmation or experiment permission.
+
+A later admitted native compilation retains separately approved external SSD
+CARGO_TARGET_DIR, CARGO_INCREMENTAL=0, CARGO_BUILD_JOBS<=8 and a bounded wall deadline.
+The parent must establish capacity/output limits for that phase; the historical
+consolidation executor's 8 MiB source-only allowance does not authorize it. Leave existing
 targets, Deno caches, SDK goldens, frozen artifacts, data and backups untouched. Inspect RAM/CPU and boot ID before/after; abort
 confirmation on reboot, unexplained HEAD/index drift, source hash change or resource
-pressure. No yuzu build or experiment allocation. The current source-only consolidation is
-already authorized on yuzuquats; it does not authorize this future campaign.
+pressure. Owner source-edit authorization grants no experiment allocation.
 
 Use a clean task-owned Python venv outside the checkout with numpy/scipy/pytest;
 record interpreter, package versions, wheel hashes, source hashes and actual import
