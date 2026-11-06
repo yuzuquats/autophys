@@ -82,3 +82,32 @@ Deno.test("controller: project switch keeps each project's selection; export and
   assert(Number.isNaN(doc.workspace.projects[2].investigations[0].measurements[1].output[101]), "missing sample (null once serialized)");
   store.close();
 });
+
+Deno.test("controller: unchanged access polls preserve views; identity and permission changes redraw", () => {
+  const capabilities = { read: true, createProject: true, startInvestigation: true, approveProposal: true, manageDevices: true };
+  const store = new Store(fixtures()), ctl = new Controller(store, { ...env, capabilities });
+  let redraws = 0;
+  ctl.subscribe(() => redraws++);
+  try {
+    // Each HTTP response is a fresh object; JSON property ordering is irrelevant.
+    for (let i = 0; i < 4; i++) ctl.updateAccess(env.user, {
+      manageDevices: true, approveProposal: true, startInvestigation: true, createProject: true, read: true,
+    });
+    assertEquals(redraws, 0, "unchanged polling must not replace the mounted UI");
+    for (const key of Object.keys(capabilities) as (keyof typeof capabilities)[]) {
+      const changed = { ...capabilities, [key]: false };
+      const before = redraws;
+      ctl.updateAccess(env.user, changed);
+      assertEquals(redraws, before + 1, `${key} revocation redraws`);
+      ctl.updateAccess(env.user, { ...changed });
+      assertEquals(redraws, before + 1, `${key} unchanged remains quiet`);
+      ctl.updateAccess(env.user, { ...capabilities });
+      assertEquals(redraws, before + 2, `${key} restoration redraws`);
+    }
+    const before = redraws;
+    ctl.updateAccess("another-user", { ...capabilities });
+    assertEquals(redraws, before + 1, "identity change redraws even with equal permissions");
+    ctl.updateAccess("another-user", { ...capabilities });
+    assertEquals(redraws, before + 1);
+  } finally { store.close(); }
+});

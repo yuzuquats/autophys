@@ -314,6 +314,12 @@ export class Controller {
   }
 
   updateAccess(user: string, capabilities: Capabilities): void {
+    // Context polling returns fresh objects even when access has not changed.
+    // Keep the mounted views (and their scroll/focus state) intact in that case.
+    const current = this.env.capabilities;
+    if (user === this.env.user && current && Object.entries(capabilities).every(
+      ([key, value]) => current[key as keyof Capabilities] === value,
+    )) return;
     this.env = { ...this.env, user, capabilities }; this.notify();
   }
 

@@ -140,3 +140,18 @@ excluding only the project documentation directory: a peer’s SDK brief remains
 dirty and untouched. All compiled source was committed on owner master, which
 stayed at 5130812 throughout packaging. The exact deployment script is retained
 beside the log. No source push.
+
+## Periodic redraw investigation — 2026-11-05
+
+Live observation found a five-second context/pairing poll. Each unchanged context
+response called Controller.updateAccess, which always notified the composition
+root; all three views then redrew, replacing and hydrating the main contents.
+Three observed cycles each produced 55 DOM mutations. No page-level layout-shift
+entries or viewport scrollbar changes accompanied these cycles, identifying the
+unnecessary redraw as the measured trigger rather than document geometry.
+
+Compare identity and capability values before notifying. Keep the periodic
+session/access checks and pairing refresh; actual access changes still redraw.
+Regression coverage checks fresh objects with reordered keys, every capability
+revocation/restoration, and identity changes. Validate native and HTML gates,
+then deploy and repeat the idle trace across multiple polling intervals.
