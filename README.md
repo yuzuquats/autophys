@@ -62,7 +62,7 @@ The rest of the repo does the following:
 | `sdks/python/src/autophys/models/` | built-in battery, oscillator and thermal models |
 | `plugins/muse-autophys` | Muse Code plugin: a local MCP server, so Muse can run the calibration ([guide](autophys.project.docs/content/muse-plugin.md)) |
 | `src/`, `html/` | Rust daemon and browser workbench, where experiments are approved |
-| `sdks/rust` | Rust SDK |
+| `sdks/rust` | Rust SDK: scientific calibration, investigation loop and local/remote workbook records ([README](sdks/rust/README.md)); analogous to Python with explicit capability limits |
 | `tests/`, `sdks/*/tests`, `html/**/*.test.ts` | daemon, SDK and browser contract checks |
 | `ops/` | standalone packaging and optional systemd operation ([guide](ops/README.md)) |
 | `train/sft` | optional policy training and evaluation ([guide](train/sft/README.md)) |

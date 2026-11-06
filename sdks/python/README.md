@@ -1,35 +1,67 @@
-# sdks/python: the autophys Python SDK
+# autophys Python SDK
 
-A Python SDK that calibrates an engineer's simulator against noisy
-measurements, says which parameters those measurements actually determine,
-and ranks the experiments that would determine the rest. An agent loop
-drives the same tools through structured decisions and records every step.
-Its records live in one workbook per project, `<project>.ap-workbook` (a
-SQLite file), which the SDK writes directly or through an autophys daemon. A
-reviewer approves or edits each proposed experiment in the browser viewer,
-which writes into the same workbook.
+The Python SDK fits simulators to noisy measurements, analyzes identifiability,
+ranks experiments and runs recorded investigations with human approval. The
+analogous [Rust SDK](../rust/README.md) implements both science and local/remote
+records. Its [capability table](../rust/README.md#rust-and-python-contracts-and-capabilities)
+maps shared results, idiomatic API differences and remaining gaps.
+
+## Install from this checkout
+
+From the repository root, in an activated Python 3.10+ environment:
+
+```sh
+python -m pip install -e sdks/python
+```
+
+The [manifest](pyproject.toml) declares NumPy and SciPy as dependencies, plus
+optional `test` and `mcp` extras. See [contributor setup](../../CONTRIBUTING.md).
+Installation from source is separate from qualification of an installed wheel.
+
+## A local scientific calculation
+
+This matches the Rust guide's synthetic thermal example. Direct numerical calls
+create no workbook and make no network request. Generated data demonstrates API
+use; it is not independent physical validation.
 
 ```python
 import autophys as ap
+from autophys.models import thermal_rc
 
-@ap.simulator(params={"C": ("J/K", 10, 1e5), "R": ("K/W", 0.01, 100)},
-              experiments={"step": {"kind": "step", "power": 10, "duration": 120, "rate": 1}},
-              outputs=("T",))
-def block(params, experiment, options=ap.FIT_OPTIONS):
-    ...  # return {"t": t, "T": temperature}
-
-project = ap.Project("heated-block", block, budgets=ap.Budgets(max_experiments=2))
-client = ap.connect("~/autophys")            # a directory, a .ap-workbook file, or a daemon URL
-wb = client.project(project)                 # ~/autophys/heated-block.ap-workbook
-inv = wb.investigate(measurements, ap.ProposalRunner(), policy=ap.ScriptedPolicy())
-outcome = inv.run()                          # ends "awaiting_data" at the first proposal
-
-# later, in any process:
-inv = ap.connect("~/autophys").project(project).investigation(outcome.investigation)
-inv.wait_for_approval()                      # the viewer's approve/edit lands in the file
-inv.attach_data(outcome.proposal_id, observation)
-inv.run()
+settings = thermal_rc.experiment("step_long")
+y = thermal_rc({"C": 500.0, "R": 2.0}, settings)
+observation = ap.Observation("step_long", settings, y["t"], {"T": y["T"]}, {"T": 0.05})
+observations = [observation]
+result = ap.fit(thermal_rc, observations)
+report, jacobian = ap.analyze(thermal_rc, result.params, observations)
+ranking = ap.rank_experiments(thermal_rc, result.params, observations, {"T": 0.05}, J0=jacobian)
+print(result.params, report.identified, len(ranking))
 ```
+
+For a recorded investigation, continue with a workbook and proposal runner:
+
+```python
+project = ap.Project("heated-block", thermal_rc)
+with ap.connect("~/autophys") as client:
+    wb = client.project(project)  # creates/binds heated-block.ap-workbook
+    inv = wb.investigate(ap.Dataset(observations), ap.ProposalRunner(),
+                         policy=ap.ScriptedPolicy())
+    outcome = inv.run()
+    # If outcome.status == "awaiting_data", retain outcome.investigation
+    # and outcome.proposal_id. After review, using the actual id/measurement:
+    # inv.approve(proposal_id, by="reviewer")
+    # inv.attach_data(proposal_id, measured_observation)
+    # inv.run()
+
+# Later, with the same Project declaration and executable simulator:
+# with ap.connect("~/autophys") as client:
+#     inv = client.project(project).investigation(investigation_id,
+#         runner=ap.ProposalRunner(), policy=ap.ScriptedPolicy())
+```
+
+A run may finish without requesting more data. `ProposalRunner` waits for
+approved external measurements; it does not acquire them. Use measured training
+and separate validation observations for a scientific workflow.
 
 ## Muse Code plugin
 
@@ -117,9 +149,10 @@ format both Rust and Python implement is
 
 | Call | What it does |
 | --- | --- |
-| `ap.connect(target=None, api_key=None)` | a directory (local collection, created if missing), a `*.ap-workbook` path, an `http(s)://` daemon URL, or nothing (`$AUTOPHYS_HOME`, default `~/autophys`) |
+| `ap.connect(target=None, api_key=None)` | a directory (local collection; files created on project creation), a `*.ap-workbook` path, an `http(s)://` daemon URL, or nothing (`$AUTOPHYS_HOME`, default `~/autophys`) |
 | `client.projects()` | `[{id, name}]` (plus `path` locally) |
-| `client.project(project)` | the project's `Workbook`, created if new. Pass the `Project` to run investigations, or its name to read, review and approve only. |
+| `client.project(project)` | bind a scientific Project, creating its workbook if needed; a name alone opens an existing workbook for review. |
+| `client.open_project(name)`, `client.ensure_project(name)` | explicit open-only or create-if-absent record access; Rust has the same explicit names, but legacy Rust `project(name)` creates. |
 | `wb.investigate(dataset, runner, **kw)` | a new recorded `Investigation`; `.run()` runs the loop |
 | `wb.investigations()` | the projection rows: `id, status, budget_used, overrides, …` |
 | `wb.investigation(id, runner=None, policy=None)` | resume from the records (`Investigation.resume`) |
@@ -133,65 +166,25 @@ transaction with the daemon's rules: payload validation with field paths,
 idempotent client ids, the proposal state machine, edit limits on outlook
 axes, the hash chain and the projection fold. Another process (the viewer, a
 second SDK) may write the same file; `wait_for_approval` notices its commit
-through `PRAGMA data_version`. Resuming restores the measurements, counts,
-adopted model variant, pending proposal and last outcome. Fits, sensitivities
-and rankings are recomputed by the next `run()`.
+through `PRAGMA data_version`. Resuming restores recorded measurements, counts, adopted model and warm start,
+pending proposal and outcome. The next `run()` continues the policy; individual
+scientific operations recompute results as needed.
 
-## Where this came from
+## Effects and support boundaries
 
-This package was written as **ModelLab** on yuzuquats, in
-`yuzuquats:~/workspace/hacks-site/exp/modellab/python/` (package `modellab`),
-and moved on 2026-11-04. It went first to tento as `tento-autophys-py`
-(tento commit `74361a921`, Change-Id `Ic96fa28b3efe4b1f9c2b`, the copy and
-rename) and was retargeted there, uncommitted. Then it came here, to
-`autophys/sdks/python`, after the operator's S-1..S-3 rulings put autophys in
-its own repo (`tento/projects/autophys.project.docs/content/repo.md`). The
-source tree was copied from hacks-site `f788194b`. The original and its
-virtual environment on yuzuquats are untouched. Its history is these
-hacks-site commits (`Project: modellab`):
+The SDK runs scientific calculations beside the simulator. Local workbooks use
+SQLite; remote stores send records to the daemon through `/api/v1`, where
+persistence and projection live. See the paired Rust guide for atomic attachment,
+retry/idempotency, configuration pinning and credential-scoping contracts.
 
-| Commit | Subject |
-| --- | --- |
-| `1c47d7c4` | Plan ModelLab, an SDK that calibrates simulators and picks the next experiment |
-| `38e8da90` | Add the modellab simulator contract, ODE models and calibration numerics |
-| `e3bc5fcd` | Add modellab projects, the investigation loop, recording and pairing CLI |
-| `f788194b` | Record the ModelLab first version, its benchmark and open choices |
-
-Its design record (decisions ML-1..ML-14) is
-`hacks-site/projects/modellab.project.docs/content/{README.md,implementation.md}`;
-ML-8..ML-14 are carried forward in
-[`autophys.project.docs/content/sdk.md`](../../autophys.project.docs/content/sdk.md).
-
-What changed in the move:
-
-- **Name (AX-6).** `modellab` became `autophys` everywhere: the package,
-  the `autophys` CLI (`pair`, `whoami`, `bench`), `AUTOPHYS_API_KEY`,
-  `AUTOPHYS_SERVER`, `AUTOPHYS_CONFIG_DIR`, `~/.config/autophys/credentials`,
-  `AUTOPHYS_LIVE_REASON_URL`, and the test fake `FakeAutophys`.
-- **Contract.** The client speaks the daemon's `/api/v1` (below) instead of
-  the draft `/api/modellab` on hacks.lona.so; the default server is the
-  loopback daemon, `http://127.0.0.1:4794`.
-- **Approval waits** consume the daemon's record stream instead of polling.
-- **Outlook (E-1).** Every proposal carries a precomputed grid so the
-  browser can re-score an edited proposal without running a simulation.
-
-Numerics, the benchmark, `ScriptedPolicy` and the reasoner are unchanged; the
-benchmark reproduces the source's table (see Test).
-
-## Boundary
-
-- **This package** runs on the user's machine next to their simulator:
-  fits, diagnostics, the agent loop, the outlook grids and local recording.
-  All numerics live here, and this package is their reference: AX-2 (revised 2026-11-04) has autophys-rs port them in phase 2.
-- **The daemon** is this repo's `autophys serve` (loopback
-  `127.0.0.1:4794`). Its record store is being built from
-  `tento-autophys-store`. It stores and projects records and never computes
-  from them.
-
-- **Language model calls** go through hacks-site's reason lane,
-  `POST /api/inference/reason` (text only), unchanged by the move. The policy
-  sends compact text diagnostics, never raw arrays, the evaluator or the test
-  split.
+A3 remains open: run/approve/attach and resume check configuration pins, but
+public scientific tool calls can bypass drift checks before effects. Python
+MemoryStore/JsonlStore lack a public full-investigation Rust counterpart (A5),
+and Rust visual policy/replay/resume is partial (A6). Total Python HTTP body/frame
+bounds and transfer deadlines (PERF01), and repeated paired scientific resource
+qualification (PERF02), remain open. The [SDK assessment](../../autophys.project.docs/content/productionize-sdks/README.md)
+separates retained source, installed-wheel and native-artifact evidence. This
+documentation refresh does not run examples or establish SDK readiness.
 
 ## What is in the package
 
@@ -209,7 +202,7 @@ benchmark reproduces the source's table (see Test).
 | `reasoner.py` | `ChatReasoner` (Muse or Baseten chat completions), `reasoner_from_env`, `HttpReasoner` (reason lane), `FakeReasoner` |
 | `workbook.py` | `WorkbookStore`: the `.ap-workbook` file (format, validation, state machine, projections, `check()`) |
 | `client.py` | `connect`, `LocalClient`, `RemoteClient`, `Workbook` |
-| `store.py`, `http.py` | append-only `MemoryStore`/`JsonlStore` (tests); `HttpStore` (`/api/v1`, record stream), pairing and credentials |
+| `store.py`, `http.py` | append-only public `MemoryStore`/`JsonlStore` backends; `HttpStore` (`/api/v1`, record stream), pairing and credentials |
 
 | `bench.py`, `cli.py` | benchmark runner; `autophys pair`, `whoami`, `bench` |
 
@@ -309,54 +302,24 @@ the stream is missing (404, wrong content type, connection refused), or with
 `HttpStore.last_wait` reports which one served the last wait. Memory and
 JSON-lines stores poll their own records.
 
-## Test
+## Checking source and installed packages
 
-The environment lives outside the checkout:
+Use the activated [contributor environment](../../CONTRIBUTING.md), from the
+repository root, for `python -m pytest -q sdks/python/tests`. This checks source;
+it does not establish that an installed wheel imports the same files/resources.
+Wheel acceptance additionally needs an isolated install and checks with the
+source path removed (pytest `-o pythonpath=`), identified package/resource hashes
+and a recorded interpreter/dependency environment. The [SDK assessment](../../autophys.project.docs/content/productionize-sdks/README.md)
+keeps those results separate. No tests or wheel builds ran for this docs update.
 
-```sh
-python3 -m venv ~/.cache/autophys/venv
-~/.cache/autophys/venv/bin/pip install numpy scipy pytest
-cd sdks/python  # from the repository root
+`test_conformance.py` consumes the [shared workbook/chain fixtures](../../tests/conformance/README.md).
+`test_cross_writer.py` requires an identified existing Rust daemon artifact via
+`AUTOPHYS_RUST_BIN` (and `AUTOPHYS_RUST_WEB_ROOT` unless bundled); live reasoner
+smokes are separately opt-in. An unavailable optional prerequisite is not a pass.
 
-PYTHONDONTWRITEBYTECODE=1 ~/.cache/autophys/venv/bin/python -m pytest -q
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src ~/.cache/autophys/venv/bin/python -c 'from autophys.cli import main; import sys; sys.exit(main(sys.argv[1:]))' bench --seeds 5
-```
-
-On rwc-dev-01 (Python 3.12.3, SQLite 3.45.1, NumPy 2.5.4, SciPy 1.18.1,
-aarch64) the suite is 382 passed, 2 skipped, in about 112 s with no network (Muse batch 2).
-HTTP code is tested against an in-process fake of `/api/v1`
-(`tests/fake_server.py`), including the stream. Workbook tests include a
-second process approving while the SDK waits. The two skips are opt-in:
-
-- a smoke that sends one decision through a running reason lane
-  (`AUTOPHYS_LIVE_REASON_URL=http://127.0.0.1:4861 pytest -k live`);
-- `tests/test_cross_writer.py`, which starts the Rust daemon on a free port
-  over a private collection, pairs a key, and has the daemon (through
-  `HttpStore`) and a local `WorkbookStore` write one workbook at once; both
-  verifiers must agree. Point `AUTOPHYS_RUST_BIN` at a built `autophys`
-  (`AUTOPHYS_RUST_WEB_ROOT` too unless it is a deployed bundle).
-
-`tests/test_conformance.py` is the shared suite (W-4): the hash-chain vectors
-in `tests/vectors/chain.json` and the golden workbooks in
-`tests/conformance/` (see its README; regenerate the Python ones with
-`tests/conformance_cases.py`).
-
-Build the wheel and test the installed package in a clean environment:
-
-```sh
-~/.cache/autophys/venv/bin/python -m pip wheel --no-deps -w ~/.cache/autophys/dist .
-rm -rf build src/autophys.egg-info               # setuptools' build leftovers
-python3 -m venv ~/.cache/autophys/venv-check
-~/.cache/autophys/venv-check/bin/pip install ~/.cache/autophys/dist/autophys-0.1.0-py3-none-any.whl pytest
-PYTHONDONTWRITEBYTECODE=1 ~/.cache/autophys/venv-check/bin/python -m pytest -q -o pythonpath=
-~/.cache/autophys/venv-check/bin/autophys bench --seeds 5
-```
-
-`-o pythonpath=` drops `src` from the path, so the tests import the installed
-wheel.
-
-The benchmark (5 seeds per row, medians, evaluator view) reproduces the
-source's statuses, errors and requests on both policies:
+The following benchmark is retained historical evidence from the earlier
+migration, not a current-source, installed-wheel or current-artifact result.
+It used five seeds per row (medians, evaluator view):
 
 | Case | Status | Max rel. error | Requested |
 | --- | --- | --- | --- |
@@ -368,5 +331,4 @@ source's statuses, errors and requests on both policies:
 Simulation counts and the free-only test RMSE differ slightly by CPU
 (aarch64 rwc-dev-01: 308 / 644 / 133 / 336 calls, RMSE 0.194 m; x86_64
 yuzuquats: 314 / 650 / 134 / 336, 0.190 m): the multistart fits take a
-different number of steps under different floating-point libraries. The
-rename-only tree and this tree give identical rows on the same host.
+different number of steps under different floating-point libraries. These historical comparisons do not establish current-revision equivalence.

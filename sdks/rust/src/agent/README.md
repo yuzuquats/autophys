@@ -1,10 +1,10 @@
 # Rust investigation API
 
 `client.project_with(project::Project::new(name, model))` returns a
-`ProjectWorkbook`, which dereferences to the phase-1 record `Workbook`.
+`ProjectWorkbook`, which dereferences to the record `Workbook`.
 It owns the executable simulator needed by `investigate` and `resume`.
 A review-only workbook can attach code with `with_project(project)`.
-The resulting investigation dereferences to the phase-1 record investigation;
+The resulting investigation dereferences to the record investigation;
 its `run()` executes the loop, and durable records always use `append`.
 
 Numerical dependencies:
@@ -24,11 +24,11 @@ and tail paths. Fits also accept explicit physical-parameter starts.
 
 The private Python fixtures in `models/fixtures/python.json` cover all three
 example models. Their generator must run against an exported Python SDK copy.
-The shared `tests/conformance/numerics` reader skips an empty directory and
+The shared `tests/conformance/numerics` reader fails on a missing or empty corpus and
 supports simulate, fit, analyze, rank, outlook and run cases, including per-field
 numeric, exact, set and up-to-sign comparisons.
 
-Observed maximum relative errors (native ARM64; primary numeric results):
+Retained earlier native ARM64 measurements (not a fresh current-artifact run):
 
 | Model | simulate | fit | analyze | rank | outlook |
 | --- | --- | --- | --- | --- | --- |
@@ -36,9 +36,9 @@ Observed maximum relative errors (native ARM64; primary numeric results):
 | oscillator | 1.12e-13 | 1.69e-10 | 4.72e-12 | 2.22e-9 | 5.17e-11 |
 | battery | 2.27e-16 | 2.82e-10 | 1.39e-11 | 1.51e-10 | 3.69e-11 |
 
-All three scripted runs match Python's actions, arguments, experiment choices
-and final validated status. Bound and identification decisions match the
-fixtures. No tolerances were relaxed.
+In that retained assessment, all three scripted runs matched Python's actions,
+arguments, experiment choices and final validated status. Bound and identification
+decisions matched the fixtures; no tolerances were relaxed.
 
 Resume restores the last fit, its model and warm start. Outlooks carry
 `after_resolved_max` and `at`, shrink uniformly to fit the configured
@@ -57,7 +57,12 @@ Outlook axes match Python (E-1b): 12 evenly spaced values, with an off-grid
 proposed value inserted, so an axis has 12 or 13 values. Explicit axes retain
 their supplied order.
 
-Rust types are available in their named public modules. Phase-1's root `Project`
+Rust types are available in their named public modules. The root `Project`
 and `Investigation` remain the record types; executable types are
 `project::Project` and `agent::Investigation`. No external reasoner request
 was made during validation; local HTTP, FakeReasoner and parsing are tested.
+
+Start with the [Rust SDK guide](../../README.md) for installation, a scientific
+example and the explicit Python analogy/gap table. The [shared fixture guide](../../../../tests/conformance/README.md)
+identifies writers, readers and regeneration controls. A3/A5/A6 and PERF01/02
+remain open; retained measurements here do not establish current readiness.

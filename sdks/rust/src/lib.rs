@@ -1,30 +1,36 @@
-//! autophys-rs: the Rust counterpart of the autophys Python SDK's record
-//! side (crate `autophys`). It reads and writes `.ap-workbook` files, one
-//! SQLite file per project, exactly as `workbook-format.md` (version 1)
-//! specifies, so Rust programs, the Python SDK and the `autophys` daemon all
-//! apply the same rules to the same files.
+//! autophys: scientific calibration and local/remote workbook records in Rust.
+//!
+//! The scientific API includes [`project::Project`], [`fit::fit`],
+//! [`sensitivity::analyze`], [`design::rank_experiments`] and
+//! [`agent::Investigation`]: fit, diagnose, rank, propose, approve, attach and
+//! resume. [`Client::project_with`] binds executable simulator code to a
+//! [`project::ProjectWorkbook`]. Root [`Project`] and [`Investigation`] are
+//! record types; scientific types live in their named modules.
+//!
+//! [`connect`] selects a local `.ap-workbook` collection/file or an HTTP daemon.
+//! [`Client::open_project`] opens existing records; [`Client::ensure_project`]
+//! explicitly creates when absent. Legacy [`Client::project`] also creates.
+//! Python's name-only `project` opens existing records instead.
 //!
 //! ```no_run
 //! # fn main() -> autophys::Result<()> {
 //! let client = autophys::connect(Some("~/autophys"))?;
-//! let wb = client.project("heated-block")?;
-//! for inv in wb.investigations()? {
-//!     println!("{} {}", inv.id, inv.status);
+//! for project in client.projects()? {
+//!     let wb = client.open_project(&project.name)?;
+//!     println!("{} {:?}", project.name, wb.verify()?);
 //! }
-//! # let inv = wb.investigations()?.remove(0);
-//! wb.investigation(&inv.id)?.approve("p-3", "james", None)?;
 //! # Ok(())
 //! # }
 //! ```
 //!
-//! The names follow the Python SDK (`rust-sdk.md`). Phase 1 is the record
-//! calls; the investigation loop and the numerics come in phase 2, and their
-//! names are reserved: `Client::project_with`, `Workbook::investigate`,
-//! `Workbook::resume` and `Investigation::run`. The record writer is
-//! [`Investigation::append`], never `run`.
+//! See `sdks/rust/README.md` and the paired Python README for source installation,
+//! scientific examples, shared contracts and remaining capability gaps. Rust
+//! supports recorded scientific loops today; public ephemeral/JSONL loops and
+//! visual-policy orchestration remain incomplete analogies. Configuration guards
+//! at run/approve/attach do not cover every public scientific tool boundary.
 //!
-//! The crate has no web framework or tento dependency; the daemon
-//! (`autophys-cli`) maps each `/api/v1` route to one call here.
+//! The crate has no web framework or tento dependency; the daemon maps its
+//! `/api/v1` record routes to this library. Direct numeric calls run locally.
 
 pub mod canonical;
 mod client;

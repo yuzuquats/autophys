@@ -1,32 +1,54 @@
-# SDK round1 native repairs are qualified; deferred campaign work remains
+# Paired SDK documentation is current; scientific qualification remains open
 
-The two native failures reported in the preceding qualification are repaired.
-[round1-native-repair.md](round1-native-repair.md) records the invalid-port cause,
-the scientifically unsupported long-extrapolation fixture, unchanged contracts,
-and exact acceptance limits. Fresh native checks: **78 passed, zero failures**.
-Identified paired remote/local Python union: **39 passed, zero skips** after the
-specific losing-writer harness correction; combined current Python source proof
-is **153 passed+1provider skip+568 unexecuted=722 collected**. Installed wheel204
-is separate carried evidence, with38package members still matching source.
-Forty-four prior native passes are historical; their consumed SDK library differs.
+The [Rust SDK](../../../sdks/rust/README.md) and
+[Python SDK](../../../sdks/python/README.md) now introduce both scientific and
+record APIs, with source installation, analogous thermal examples and an
+explicit capability/effect table. The [shared fixture guide](../../../tests/conformance/README.md)
+and [numerical guide](../../../tests/conformance/numerics/README.md) identify
+current writers/readers without fixed counts. FS01/FS02 documentation was
+refreshed against owner master `8aa0252`; source, links and whitespace were
+checked without runtime execution. Independent acceptance/rejudge is pending.
+No scientific golden, implementation, manifest or dependency was changed.
 
-The campaign is unfinished and has not been rejudged. Baseline scores below are
-unchanged. Deferred A5/A6/FS01/FS02/PERF01/PERF02 and two T04 research shards remain
-open; none is waived. The completed narrow batch used parent-authorized384MiB,
-proactive aggregate7.85GiB/free13GiB, hard8GiB/free12GiB, preserving prior artifacts
-and the fixed deployed6efe1f3. Exact final resources, identity and task custody
-are in the external native-repair-refreeze packet. Parent owns further remediation
-and rejudge scheduling. The following baseline section is historical evidence.
+The last formal SDK round1 at `fad6b86d257f363ed7e1aaa182e474abe8b556f5`
+scored quality **8.0**, architecture **8.0**, testing **8.5**, folder structure
+**8.0**, performance **8.0**. Those are retained assessments of that input, not
+scores for current source; documentation changes do not promote them. Current
+changes require a fresh rejudge. The round1 reports remain on yuzuquats at
+`~/.local/state/productionize/autophys-sdks-20261105/judges/round-1/`.
 
-The operator requires Rust and Python to be analogous. [brief.md](brief.md) maps corresponding capabilities, concepts, formats, defaults, validation/errors and effects, while allowing idiomatic APIs. It also distinguishes intentional API shape differences from unexplained behavior and Python-only tooling. Judge that contract before proposing repairs.
+Open findings remain A3 (public scientific tools can bypass configuration-drift
+checks before effects), A5 (Rust ephemeral/JSONL investigation disposition),
+A6 (visual policy/replay/resume analogy), PERF01 (Python total HTTP deadline and
+body/frame bounds, with Rust empty-data SSE accumulation also a review concern),
+and PERF02 (repeated paired scientific resource measurements). Explicit
+open/create, credential scoping, atomic attachment and input/error repairs were
+accepted in the round1 scope; stale baseline contrasts below describe earlier
+inputs, not current defects. No campaign-wide readiness is claimed.
 
-| Dimension | Baseline | Final |
-| --- | --- | --- |
-| Quality | 6.0, unverified overall | not rejudged |
-| Architecture | 6.5, unverified overall | not rejudged |
-| Testing | 7.8, unverified overall | not rejudged |
-| Folder structure | 8.0, verified for that assessment | not rejudged |
-| Performance | 8.0, unverified overall | not rejudged |
+[round1-native-repair.md](round1-native-repair.md) retains the exact earlier
+qualification: 78 fresh native passes and a deduplicated 39-case paired Python
+union; the then-current Python account was 153 passed + 1 provider skip + 568
+unexecuted = 722 collected. The 204 installed-wheel passes are separate carried
+distribution evidence; the 44 other native passes were historical with differing
+consumed SDK inputs. These figures are not a new whole-suite run at current HEAD.
+
+The unified source was subsequently reviewed/adopted. Later scientific-loop
+pilot evidence is scoped in [innerloop-pilots.md](../innerloop-pilots.md): at
+`8e3e848`, 33 checks passed with 2 collection errors (missing `tokenizers`),
+6/6 recovery units, median error gain 92.545% versus no update and -0.00346%
+versus random (no superiority), plus 4/4 local approval/resume matches. A scripted
+useful strategy was accepted and a harmful one rejected; this is neither
+autonomous discovery nor full end-to-end qualification. Protocol review remains
+CHANGES_REQUIRED for invalid-data refusal, negative controls, final harness,
+frozen environment and analysis. Confirmation 101..105, selection 201..205 and
+final 901..905 seeds remain untouched. Fresh runtime/artifact qualification and
+that scientific protocol are independent of deployed app health.
+
+The documentation receipt is external at
+`~/.local/state/productionize/autophys-sdks-20261105/docs-refresh-20261106/`.
+The existing `tasks.json` CLI fallback remains in use; no SQLite write or fresh
+runtime CLI probe was made under the documentation-only admission.
 
 ## Retained baseline evidence, not current-revision acceptance
 
