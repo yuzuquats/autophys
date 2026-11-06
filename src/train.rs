@@ -6,7 +6,7 @@
 //! the GPU step (today Baseten Loops). Training data is a view of synthetic
 //! investigations; this module adds no state to the record store.
 //!
-//! Nothing here spends money unless `train run --live` passes the budget
+//! Nothing here spends money unless `train run --live` or `train loop --live` passes the budget
 //! gate: an explicit price, an explicit cap and an estimate under that cap.
 //! Provider keys are only ever checked for presence, never read or written.
 
@@ -33,7 +33,10 @@ pub const USAGE: &str =
                            [--policy reason|scripted]... [--route baseten|meta|lane] [--replay FILE]
        autophys train eval --backend modal --run NAME --gpu GPU --usd-per-hour X --max-usd Y
                            [--out DIR] [--seeds 3,4] [--case NAME]...
-       autophys train runs
+       autophys train loop --name LOOP --base-model HF_ID --gpu GPU --usd-per-hour X --max-usd TOTAL
+                           [--iterations 3] [--patience 2] [--candidates FILE] [--eval-seeds 3,4]
+                           [--model-assets DIR] [--case NAME]... [--live] [--resume]
+       autophys train runs | train loops
        (all take --train-dir DIR (AUTOPHYS_TRAIN_DIR, default <project>/train/sft)
         and --python FILE (AUTOPHYS_TRAIN_PYTHON, default python3 on PATH))
        worker limits: AUTOPHYS_TRAIN_WORKER_TIMEOUT_SECONDS (default 86400;
@@ -91,6 +94,7 @@ impl WorkerLimits {
 struct WorkerEvents {
     steps: u64,
     last_val_nll: Value,
+    gpu_seconds: Option<f64>,
 }
 
 impl WorkerEvents {
@@ -98,6 +102,9 @@ impl WorkerEvents {
         let line = std::str::from_utf8(bytes).context("reading worker stdout: invalid UTF-8")?;
         if let Some(start) = line.find('{') {
             if let Ok(Value::Object(event)) = serde_json::from_str::<Value>(&line[start..]) {
+                if event.get("event").and_then(Value::as_str) == Some("eval_done") {
+                    self.gpu_seconds = event.get("gpu_seconds").and_then(Value::as_f64).filter(|n| n.is_finite() && *n >= 0.0);
+                }
                 if event.contains_key("step") {
                     self.steps += 1;
                 }
@@ -412,6 +419,7 @@ impl Flags {
 }
 
 /// Where the worker scripts live and which interpreter runs them.
+#[derive(Clone)]
 struct Worker {
     dir: PathBuf,
     python: PathBuf,
@@ -1293,7 +1301,7 @@ pub fn run(args: Vec<String>) -> Result<Value, Failure> {
 }
 
 const EVAL_LOCAL: &[&str] = &["out", "model", "seeds", "case", "policy", "route", "replay"];
-const EVAL_MODAL_ONLY: &[&str] = &["run", "gpu", "usd-per-hour", "max-usd"];
+const EVAL_MODAL_ONLY: &[&str] = &["run", "gpu", "usd-per-hour", "max-usd", "model-assets"];
 const EVAL_LOCAL_ONLY: &[&str] = &["model", "policy", "route", "replay"];
 
 /// Which eval to run, decided from the flags alone (no I/O).
@@ -1377,13 +1385,40 @@ fn eval_local(flags: &Flags) -> Result<Value> {
 }
 
 fn eval_modal(flags: &Flags, run: &str, gate: Value) -> Result<Value> {
+    let worker = Worker::new(flags)?.budgeted(&gate);
+    let out = flags
+        .get("out")
+        .map(|o| absolute(PathBuf::from(o)))
+        .transpose()?;
+    eval_modal_run(
+        &worker,
+        run,
+        gate,
+        flags.get("seeds"),
+        flags.all("case"),
+        out,
+        flags.get("model-assets").map(PathBuf::from).or_else(|| env_path("AUTOPHYS_TRAIN_MODEL_ASSETS")).as_deref(),
+    )
+    .map(|(report, _)| report)
+}
+
+/// The modal eval of a completed modal run, recorded in its manifest under
+/// `eval`. Returns the report and the container's GPU seconds (if reported).
+fn eval_modal_run(
+    worker: &Worker,
+    run: &str,
+    gate: Value,
+    seeds: Option<&str>,
+    cases: &[String],
+    out: Option<PathBuf>,
+    assets: Option<&Path>,
+) -> Result<(Value, Option<f64>)> {
     if gate["live_allowed"] != true {
         bail!(
             "modal eval refused: {}",
             gate["refusal"].as_str().unwrap_or("budget gate")
         );
     }
-    let worker = Worker::new(flags)?.budgeted(&gate);
     let run_dir = worker.dir.join("runs").join(run);
     let _reservation = reserve_run(&run_dir)?;
     let manifest_path = run_dir.join("manifest.json");
@@ -1407,56 +1442,18 @@ fn eval_modal(flags: &Flags, run: &str, gate: Value) -> Result<Value> {
         .to_string();
     require_modal_credentials()?;
 
-    let out = absolute(
-        flags
-            .get("out")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| run_dir.join("eval")),
-    )?;
-    // A report from an earlier attempt must not count as this one's.
-    let _ = std::fs::remove_file(out.join("report.json"));
-    let mut options = serde_json::Map::new();
-    if let Some(seeds) = flags.get("seeds") {
-        options.insert("seeds".into(), json!(seeds));
-    }
-    if !flags.all("case").is_empty() {
-        options.insert("case".into(), json!(flags.all("case")));
-    }
-    let gpu = gate["gpu"].as_str().unwrap_or_default().to_string();
+    let out = out.unwrap_or_else(|| run_dir.join("eval"));
     let started_at = now();
-    let streamed = worker.stream_raw(&[
-        "-m".into(),
-        "modal".into(),
-        "run".into(),
-        worker
-            .dir
-            .join("modal_app.py::eval_main")
-            .display()
-            .to_string(),
-        "--run".into(),
-        run.to_string(),
-        "--base-model".into(),
-        base_model,
-        "--out".into(),
-        out.display().to_string(),
-        "--gpu".into(),
-        gpu.clone(),
-        "--timeout".into(),
-        gate["timeout_s"].to_string(),
-        "--args".into(),
-        Value::Object(options).to_string(),
-    ]);
-    let report = match &streamed {
-        Ok((true, _)) => read_json(&out.join("report.json")).ok(),
-        _ => None,
-    };
+    let (streamed, report, gpu_seconds) =
+        modal_eval_call(worker, run, &base_model, &out, &gate, seeds, cases, false, assets, manifest.pointer("/plan/model_assets"));
     // Re-read so a concurrent `train runs` view or edit is not clobbered.
     let mut manifest = read_json(&manifest_path)?;
     let mut record = json!({
         "status": if report.is_some() { "completed" } else { "failed" },
         "out": out.display().to_string(),
-        "gpu": gpu,
+        "gpu": gate["gpu"],
         "budget": gate,
+        "gpu_seconds": gpu_seconds,
         "started_at": started_at,
         "finished_at": now(),
     });
@@ -1466,13 +1463,148 @@ fn eval_modal(flags: &Flags, run: &str, gate: Value) -> Result<Value> {
     manifest["eval"] = record;
     write_json(&manifest_path, &manifest)?;
     match (streamed, report) {
-        (_, Some(report)) => Ok(report),
+        (_, Some(report)) => Ok((report, gpu_seconds)),
         (Err(e), None) => Err(e.context(format!(
             "modal eval failed; see {}",
             manifest_path.display()
         ))),
         (Ok(_), None) => bail!("modal eval failed; see {}", manifest_path.display()),
     }
+}
+
+/// The closed-loop eval of the base model with no adapter, served through the
+/// same container path as an adapter so prompts are identical.
+fn eval_modal_base(
+    worker: &Worker,
+    label: &str,
+    base_model: &str,
+    gate: &Value,
+    seeds: Option<&str>,
+    cases: &[String],
+    out: &Path,
+    assets: Option<&Path>,
+    identity: Option<&Value>,
+) -> Result<(Value, Option<f64>)> {
+    if gate["live_allowed"] != true {
+        bail!(
+            "modal eval refused: {}",
+            gate["refusal"].as_str().unwrap_or("budget gate")
+        );
+    }
+    require_modal_credentials()?;
+    let (streamed, report, gpu_seconds) =
+        modal_eval_call(worker, label, base_model, out, gate, seeds, cases, true, assets, identity);
+    match (streamed, report) {
+        (_, Some(report)) => Ok((report, gpu_seconds)),
+        (Err(e), None) => Err(e.context("modal base eval failed")),
+        (Ok(_), None) => bail!("modal base eval failed; no report in {}", out.display()),
+    }
+}
+
+/// One `modal_app.py::eval_main` call: whether it exited cleanly, its
+/// report (if written) and the GPU seconds from its `eval_done` line.
+#[allow(clippy::too_many_arguments)]
+fn modal_eval_call(
+    worker: &Worker,
+    label: &str,
+    base_model: &str,
+    out: &Path,
+    gate: &Value,
+    seeds: Option<&str>,
+    cases: &[String],
+    base_only: bool,
+    assets: Option<&Path>,
+    identity: Option<&Value>,
+) -> (Result<bool>, Option<Value>, Option<f64>) {
+    // A report from an earlier attempt must not count as this one's.
+    if out.exists() {
+        let empty = std::fs::read_dir(out)
+            .map(|mut entries| entries.next().is_none())
+            .unwrap_or(false);
+        if !empty {
+            return (Err(anyhow!("evaluation output {} is not empty or readable; choose a fresh directory", out.display())), None, None);
+        }
+    }
+    let mut options = serde_json::Map::new();
+    if let Some(seeds) = seeds {
+        options.insert("seeds".into(), json!(seeds));
+    }
+    if !cases.is_empty() {
+        options.insert("case".into(), json!(cases));
+    }
+    let mut argv: Vec<String> = vec![
+        "-m".into(),
+        "modal".into(),
+        "run".into(),
+        worker
+            .dir
+            .join("modal_app.py::eval_main")
+            .display()
+            .to_string(),
+        "--run".into(),
+        label.to_string(),
+        "--base-model".into(),
+        base_model.to_string(),
+        "--out".into(),
+        out.display().to_string(),
+        "--gpu".into(),
+        gate["gpu"].as_str().unwrap_or_default().to_string(),
+        "--timeout".into(),
+        gate["timeout_s"].to_string(),
+        "--args".into(),
+        Value::Object(options).to_string(),
+    ];
+    if base_only {
+        argv.push("--base-only".into());
+    }
+    if let Some(assets) = assets { argv.extend(["--model-assets".into(), assets.display().to_string()]); }
+    if let Some(identity) = identity { argv.extend(["--planned-assets".into(), identity.to_string()]); }
+    let worker = worker.clone().budgeted(gate);
+    let streamed = worker.stream_raw(&argv);
+    let gpu_seconds = streamed.as_ref().ok().and_then(|(_, events)| events.gpu_seconds);
+    let report = match &streamed {
+        Ok((true, _)) => read_report(&out.join("report.json")).ok(),
+        _ => None,
+    };
+    (streamed.map(|(ok, _)| ok), report, gpu_seconds)
+}
+
+/// `report.json` from Python's `json.dumps`, which writes a non-finite
+/// `max_rel_error` as bare `Infinity`/`NaN`; those become null here.
+fn read_report(path: &Path) -> Result<Value> {
+    let text =
+        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+    serde_json::from_str(&nonfinite_to_null(&text))
+        .with_context(|| format!("parsing {}", path.display()))
+}
+
+fn nonfinite_to_null(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let (mut in_string, mut escaped) = (false, false);
+    let mut rest = text;
+    while let Some(c) = rest.chars().next() {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == '"' {
+                in_string = false;
+            }
+        } else if c == '"' {
+            in_string = true;
+        } else if let Some(token) = ["-Infinity", "Infinity", "NaN"]
+            .into_iter()
+            .find(|t| rest.starts_with(t))
+        {
+            out.push_str("null");
+            rest = &rest[token.len()..];
+            continue;
+        }
+        out.push(c);
+        rest = &rest[c.len_utf8()..];
+    }
+    out
 }
 
 /// `train runs`: every run manifest, newest first.
@@ -1498,6 +1630,1116 @@ pub fn runs(args: Vec<String>) -> Result<Value, Failure> {
                 "run_id": m.get("run_id"),
                 "heldout_decisions": m.get("heldout_decisions"),
                 "last_val_nll": m.get("last_val_nll"),
+            }));
+        }
+        rows.sort_by(|a, b| b["planned_at"].as_str().cmp(&a["planned_at"].as_str()));
+        Ok(Value::Array(rows))
+    };
+    go().map_err(runtime)
+}
+
+// ------------------------------------------------------------------ train loop
+//
+// An automatic SFT improvement loop: evaluate the base model closed-loop
+// (iteration 0), then for each candidate build its dataset locally (free),
+// train it on Modal, evaluate it on the same held-out seeds and keep it only
+// if it strictly beats the incumbent under the MQ-4 order. State lives in
+// `loops/LOOP/` (state.json, journal.jsonl, per-iteration data and evals), so
+// a stopped loop resumes where it stopped.
+
+/// Hyperparameters a candidate may set, as `train run` flags.
+const LOOP_HPARAMS: &[&str] = &[
+    "epochs",
+    "lr",
+    "rank",
+    "batch-size",
+    "max-seq-len",
+    "warmup",
+    "eval-every",
+    "seed",
+];
+/// A run with no estimate (non-finite error) scores this, worse than any
+/// real error; report errors are rounded to 1e-5, the floor.
+const LOG_ERROR_CAP: f64 = 50.0;
+const LOG_ERROR_FLOOR: f64 = 1e-5;
+/// GPU-second estimates for budget planning, from the L40S smoke runs
+/// (Qwen3.5-4B: 686 s training 3 seeds x 4 epochs incl. load and held-out
+/// decoding; closed-loop eval 132 s plus load).
+const EVAL_EST_S: u64 = 300;
+/// The untrained base model writes long replies (up to max_tokens per call),
+/// so its eval runs several times longer than a trained adapter's (measured:
+/// 3 of 8 investigations in 487 s on an L40S for Qwen3.5-4B).
+const BASE_EVAL_EST_S: u64 = 1500;
+const TRAIN_FIXED_S: u64 = 300;
+const TRAIN_PER_SEED_EPOCH_S: u64 = 32;
+const DEFAULT_EPOCHS: u64 = 4;
+/// Matches `modal_budget`: 20% of each cap is left for startup and billing lag.
+const OVERHEAD_FACTOR: f64 = 0.8;
+
+/// `0-2,7,9` -> [0, 1, 2, 7, 9], sorted and unique.
+fn parse_seeds(spec: &str) -> Result<Vec<u64>, String> {
+    let bad = || format!("seeds {spec:?} must look like 0,1,2 or 0-9,12");
+    let mut out = BTreeSet::new();
+    for part in spec.split(',').map(str::trim) {
+        let (a, b) = part.split_once('-').unwrap_or((part, part));
+        let (a, b) = (
+            a.trim().parse::<u64>().map_err(|_| bad())?,
+            b.trim().parse::<u64>().map_err(|_| bad())?,
+        );
+        if a > b || b - a > 10_000 {
+            return Err(bad());
+        }
+        out.extend(a..=b);
+    }
+    Ok(out.into_iter().collect())
+}
+
+fn seeds_text(seeds: &[u64]) -> String {
+    seeds
+        .iter()
+        .map(u64::to_string)
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+/// One thing the loop tries: a dataset recipe and `train run` hyperparameters.
+#[derive(Debug, Clone, PartialEq)]
+struct Candidate {
+    label: String,
+    train_seeds: Vec<u64>,
+    val_seeds: Vec<u64>,
+    cases: Vec<String>,
+    /// Worker keys (`batch_size`), numbers checked.
+    hparams: serde_json::Map<String, Value>,
+}
+
+impl Candidate {
+    fn epochs(&self) -> u64 {
+        self.hparams
+            .get("epochs")
+            .and_then(Value::as_u64)
+            .unwrap_or(DEFAULT_EPOCHS)
+    }
+
+    fn est_train_s(&self) -> u64 {
+        TRAIN_FIXED_S + TRAIN_PER_SEED_EPOCH_S * self.train_seeds.len() as u64 * self.epochs()
+    }
+
+    fn hparam_flags(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        for (key, value) in &self.hparams {
+            out.push(format!("--{}", key.replace('_', "-")));
+            out.push(value.to_string());
+        }
+        out
+    }
+
+    fn to_json(&self) -> Value {
+        json!({
+            "label": self.label,
+            "dataset": {
+                "train_seeds": seeds_text(&self.train_seeds),
+                "val_seeds": seeds_text(&self.val_seeds),
+                "case": self.cases,
+            },
+            "hparams": self.hparams,
+            "est_train_gpu_s": self.est_train_s(),
+        })
+    }
+
+    /// Held-out seeds must never be trained or validated on.
+    fn check_seeds(&self, eval_seeds: &[u64]) -> Result<(), String> {
+        let overlap = |a: &[u64], b: &[u64]| -> Vec<u64> {
+            a.iter().filter(|s| b.contains(s)).copied().collect()
+        };
+        for (what, seeds) in [("train", &self.train_seeds), ("val", &self.val_seeds)] {
+            let bad = overlap(seeds, eval_seeds);
+            if !bad.is_empty() {
+                return Err(format!(
+                    "candidate {:?}: {what} seeds {} overlap the eval seeds",
+                    self.label,
+                    seeds_text(&bad)
+                ));
+            }
+        }
+        let bad = overlap(&self.train_seeds, &self.val_seeds);
+        if !bad.is_empty() {
+            return Err(format!(
+                "candidate {:?}: train and val seeds share {}",
+                self.label,
+                seeds_text(&bad)
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// Grow the training data with default hyperparameters: 3, 6 then 12 seeds,
+/// skipping the default validation (5,6) and eval (3,4) seeds.
+fn default_candidates(cases: &[String]) -> Vec<Candidate> {
+    [
+        ("seeds-3", "0-2"),
+        ("seeds-6", "0-2,7-9"),
+        ("seeds-12", "0-2,7-15"),
+    ]
+    .into_iter()
+    .map(|(label, train)| Candidate {
+        label: label.into(),
+        train_seeds: parse_seeds(train).expect("static seeds"),
+        val_seeds: vec![5, 6],
+        cases: cases.to_vec(),
+        hparams: serde_json::Map::new(),
+    })
+    .collect()
+}
+
+/// A `--candidates` file: a JSON list of
+/// `{"label", "dataset": {"train_seeds", "val_seeds", "case"}, "hparams"}`.
+/// Unknown keys are refused so a typo cannot silently fall back to a default.
+fn parse_candidates(
+    text: &str,
+    default_cases: &[String],
+    eval_seeds: &[u64],
+) -> Result<Vec<Candidate>, String> {
+    let value: Value =
+        serde_json::from_str(text).map_err(|e| format!("--candidates is not JSON: {e}"))?;
+    let list = value
+        .as_array()
+        .filter(|l| !l.is_empty())
+        .ok_or("--candidates must be a non-empty JSON list")?;
+    let only = |obj: &serde_json::Map<String, Value>, keys: &[&str], what: &str| match obj
+        .keys()
+        .find(|k| !keys.contains(&k.as_str()))
+    {
+        Some(k) => Err(format!("{what}: unknown key {k:?}")),
+        None => Ok(()),
+    };
+    let seeds_field = |v: &Value, what: &str| -> Result<Vec<u64>, String> {
+        match v {
+            Value::String(s) => parse_seeds(s).map_err(|e| format!("{what}: {e}")),
+            Value::Array(items) => items
+                .iter()
+                .map(|x| x.as_u64().ok_or(format!("{what}: seeds must be integers")))
+                .collect::<Result<BTreeSet<_>, _>>()
+                .map(|s| s.into_iter().collect()),
+            _ => Err(format!(
+                "{what}: seeds must be a string like \"0-9\" or a list"
+            )),
+        }
+    };
+    let mut out = Vec::new();
+    for (i, item) in list.iter().enumerate() {
+        let obj = item
+            .as_object()
+            .ok_or(format!("candidate {i} must be an object"))?;
+        only(
+            obj,
+            &["label", "dataset", "hparams"],
+            &format!("candidate {i}"),
+        )?;
+        let label = match obj.get("label") {
+            None => format!("c{}", i + 1),
+            Some(Value::String(s)) if !s.is_empty() => s.clone(),
+            _ => return Err(format!("candidate {i}: label must be a non-empty string")),
+        };
+        let what = format!("candidate {label:?}");
+        let dataset = obj
+            .get("dataset")
+            .and_then(Value::as_object)
+            .ok_or(format!("{what}: dataset object is required"))?;
+        only(dataset, &["train_seeds", "val_seeds", "case"], &what)?;
+        let train_seeds = seeds_field(
+            dataset
+                .get("train_seeds")
+                .ok_or(format!("{what}: dataset.train_seeds is required"))?,
+            &what,
+        )?;
+        let val_seeds = match dataset.get("val_seeds") {
+            Some(v) => seeds_field(v, &what)?,
+            None => vec![5, 6],
+        };
+        if train_seeds.is_empty() || val_seeds.is_empty() {
+            return Err(format!("{what}: train and val seeds must not be empty"));
+        }
+        let cases = match dataset.get("case") {
+            None => default_cases.to_vec(),
+            Some(Value::String(s)) => vec![s.clone()],
+            Some(Value::Array(items)) => items
+                .iter()
+                .map(|c| {
+                    c.as_str()
+                        .map(String::from)
+                        .ok_or(format!("{what}: case names must be strings"))
+                })
+                .collect::<Result<_, _>>()?,
+            _ => return Err(format!("{what}: case must be a string or a list")),
+        };
+        let mut hparams = serde_json::Map::new();
+        if let Some(h) = obj.get("hparams") {
+            let h = h
+                .as_object()
+                .ok_or(format!("{what}: hparams must be an object"))?;
+            for (key, value) in h {
+                let flag = key.replace('_', "-");
+                if !LOOP_HPARAMS.contains(&flag.as_str()) {
+                    return Err(format!(
+                        "{what}: unknown hparam {key:?}; use {}",
+                        LOOP_HPARAMS.join(", ").replace('-', "_")
+                    ));
+                }
+                let x = value
+                    .as_f64()
+                    .filter(|x| x.is_finite() && *x >= 0.0)
+                    .ok_or(format!(
+                        "{what}: hparam {key} must be a non-negative number"
+                    ))?;
+                let normalized = if flag == "lr" {
+                    json!(x)
+                } else if x.fract() == 0.0
+                    && (x >= 1.0 || matches!(flag.as_str(), "seed" | "warmup"))
+                {
+                    json!(x as u64)
+                } else {
+                    return Err(format!("{what}: hparam {key} must be a positive integer"));
+                };
+                hparams.insert(flag.replace('-', "_"), normalized);
+            }
+        }
+        let candidate = Candidate {
+            label,
+            train_seeds,
+            val_seeds,
+            cases,
+            hparams,
+        };
+        candidate.check_seeds(eval_seeds)?;
+        out.push(candidate);
+    }
+    Ok(out)
+}
+
+/// A closed-loop result under MQ-4: more passes first, then lower mean log10
+/// max relative error, then fewer parse failures (the cost proxy here).
+#[derive(Debug, Clone, PartialEq)]
+struct Score {
+    passes: u64,
+    runs: u64,
+    mean_log10_error: f64,
+    parse_failures: u64,
+}
+
+impl Score {
+    fn to_json(&self) -> Value {
+        json!({
+            "passes": self.passes,
+            "runs": self.runs,
+            "mean_log10_error": self.mean_log10_error,
+            "parse_failures": self.parse_failures,
+        })
+    }
+
+    fn from_json(v: &Value) -> Option<Score> {
+        Some(Score {
+            passes: v["passes"].as_u64()?,
+            runs: v["runs"].as_u64()?,
+            mean_log10_error: v["mean_log10_error"].as_f64()?,
+            parse_failures: v["parse_failures"].as_u64()?,
+        })
+    }
+}
+
+/// Score `report.json` rows with policy `reason`. A missing or non-finite
+/// error counts as `LOG_ERROR_CAP`.
+fn score_report(report: &Value) -> Result<Score, String> {
+    let rows = report
+        .as_array()
+        .ok_or("report.json is not a list of rows")?;
+    let (mut passes, mut runs, mut log_sum, mut parse_failures) = (0, 0, 0.0, 0);
+    for row in rows.iter().filter(|r| r["policy"] == "reason") {
+        let case = row["case"].as_str().unwrap_or("?");
+        let (k, n) = row["pass"]
+            .as_str()
+            .and_then(|p| p.split_once('/'))
+            .and_then(|(k, n)| Some((k.parse::<u64>().ok()?, n.parse::<u64>().ok()?)))
+            .filter(|(k, n)| k <= n)
+            .ok_or(format!("report row {case}: pass is not \"k/n\""))?;
+        let errors = row["max_rel_error"]
+            .as_array()
+            .ok_or(format!("report row {case}: max_rel_error is not a list"))?;
+        if errors.len() as u64 != n {
+            return Err(format!(
+                "report row {case}: {} errors for {n} runs",
+                errors.len()
+            ));
+        }
+        for e in errors {
+            log_sum += match e.as_f64().filter(|x| x.is_finite()) {
+                Some(x) => x.max(LOG_ERROR_FLOOR).log10().min(LOG_ERROR_CAP),
+                None => LOG_ERROR_CAP,
+            };
+        }
+        passes += k;
+        runs += n;
+        parse_failures += row["parse_failures"]
+            .as_u64()
+            .ok_or(format!("report row {case}: parse_failures is not a count"))?;
+    }
+    if runs == 0 {
+        return Err("report.json has no reason runs".into());
+    }
+    Ok(Score {
+        passes,
+        runs,
+        mean_log10_error: log_sum / runs as f64,
+        parse_failures,
+    })
+}
+
+/// Strictly better under MQ-4; a tie keeps the incumbent.
+fn better(candidate: &Score, incumbent: &Score) -> bool {
+    if candidate.passes != incumbent.passes {
+        return candidate.passes > incumbent.passes;
+    }
+    let delta = candidate.mean_log10_error - incumbent.mean_log10_error;
+    if delta.abs() > 1e-9 {
+        return delta < 0.0;
+    }
+    candidate.parse_failures < incumbent.parse_failures
+}
+
+/// One spending step of the plan: the baseline eval, then train and eval
+/// per iteration. Datasets are built locally inside the train step, free.
+#[derive(Debug, Clone, PartialEq)]
+struct Step {
+    kind: &'static str,
+    iteration: usize,
+    est_s: u64,
+}
+
+fn loop_steps(candidates: &[Candidate]) -> Vec<Step> {
+    let mut steps = vec![Step {
+        kind: "eval",
+        iteration: 0,
+        est_s: BASE_EVAL_EST_S,
+    }];
+    for (i, c) in candidates.iter().enumerate() {
+        steps.push(Step {
+            kind: "train",
+            iteration: i + 1,
+            est_s: c.est_train_s(),
+        });
+        steps.push(Step {
+            kind: "eval",
+            iteration: i + 1,
+            est_s: EVAL_EST_S,
+        });
+    }
+    steps
+}
+
+fn floor_cents(x: f64) -> f64 {
+    ((x * 100.0) + 1e-6).floor() / 100.0
+}
+
+fn ceil_cents(x: f64) -> f64 {
+    ((x * 100.0) - 1e-6).ceil() / 100.0
+}
+
+/// Split `usd` over steps in proportion to their GPU-time estimates, floored
+/// to cents so the caps never sum above `usd`. Each cap becomes that step's
+/// Modal timeout through `modal_budget`. Refused when the total cannot buy
+/// the estimated GPU time, or a step's timeout would fall under its estimate.
+fn plan_caps(
+    usd: f64,
+    usd_per_hour: f64,
+    gpu: &str,
+    ests: &[u64],
+) -> Result<Vec<(f64, u64)>, String> {
+    if usd_per_hour <= 0.0 {
+        return Err("--usd-per-hour must be above zero".into());
+    }
+    let total: u64 = ests.iter().sum();
+    let needed = ceil_cents(total as f64 * usd_per_hour / 3600.0 / OVERHEAD_FACTOR);
+    if usd + 1e-9 < needed {
+        return Err(format!(
+            "the plan's estimated {total} GPU-s needs ${needed:.2} at ${usd_per_hour}/h \
+             (with the {OVERHEAD_FACTOR} overhead factor); ${usd:.2} is available"
+        ));
+    }
+    let mut out = Vec::new();
+    for (i, est) in ests.iter().enumerate() {
+        let cap = floor_cents(usd * *est as f64 / total as f64);
+        let gate = modal_budget(Some(usd_per_hour), Some(cap), Some(gpu));
+        let timeout = gate["timeout_s"].as_u64().unwrap_or(0);
+        if gate["live_allowed"] != true || timeout < *est {
+            return Err(format!(
+                "step {i}: its ${cap:.2} cap buys a {timeout} s timeout, under its {est} s estimate"
+            ));
+        }
+        out.push((cap, timeout));
+    }
+    Ok(out)
+}
+
+/// What a step cost: measured GPU seconds plus the same 20% overhead the
+/// timeout leaves, never more than the cap; the whole cap when unmeasured.
+fn charge(cap: f64, usd_per_hour: f64, gpu_seconds: Option<f64>) -> f64 {
+    match gpu_seconds {
+        Some(s) if s.is_finite() && s >= 0.0 => {
+            ceil_cents(s * usd_per_hour / 3600.0 / OVERHEAD_FACTOR).min(cap)
+        }
+        _ => cap,
+    }
+}
+
+/// A live loop may start fresh only over a plan; `--resume` continues one
+/// that stopped, failed or was interrupted.
+fn loop_start_allowed(previous_status: Option<&str>, resume: bool) -> Result<(), String> {
+    match (previous_status, resume) {
+        (None, true) => Err("has no state.json to resume; start it without --resume".into()),
+        (None | Some("planned"), _) => Ok(()),
+        (Some(_), true) => Ok(()),
+        (Some(status), false) => Err(format!(
+            "already has status {status:?}; continue it with --resume or pick a new --name"
+        )),
+    }
+}
+
+/// Everything a loop's flags fix, validated without I/O beyond the
+/// candidates file.
+struct LoopPlan {
+    name: String,
+    base_model: String,
+    model_assets: Option<PathBuf>,
+    asset_identity: Option<Value>,
+    gpu: String,
+    usd_per_hour: f64,
+    max_usd: f64,
+    iterations: usize,
+    patience: u64,
+    eval_seeds: Vec<u64>,
+    cases: Vec<String>,
+    candidates: Vec<Candidate>,
+}
+
+impl LoopPlan {
+    /// What a resumed loop must match: changing any of it would make the
+    /// incumbent's score incomparable.
+    fn fingerprint(&self) -> Value {
+        json!({
+            "base_model": self.base_model,
+            "model_assets": self.asset_identity,
+            "gpu": self.gpu,
+            "usd_per_hour": self.usd_per_hour,
+            "eval_seeds": seeds_text(&self.eval_seeds),
+            "case": self.cases,
+            "candidates": self.candidates.iter().map(Candidate::to_json).collect::<Vec<_>>(),
+        })
+    }
+
+    fn steps(&self) -> Vec<Step> {
+        loop_steps(&self.candidates[..self.iterations])
+    }
+
+    fn run_name(&self, iteration: usize) -> String {
+        format!("{}-i{iteration}", self.name)
+    }
+
+    fn step_json(&self, index: usize, step: &Step, cap: Option<(f64, u64)>) -> Value {
+        let label = match step.iteration {
+            0 => "base".to_string(),
+            i => self.candidates[i - 1].label.clone(),
+        };
+        json!({
+            "step": index,
+            "kind": step.kind,
+            "iteration": step.iteration,
+            "label": label,
+            "run": (step.iteration > 0).then(|| self.run_name(step.iteration)),
+            "est_gpu_s": step.est_s,
+            "cap_usd": cap.map(|c| c.0),
+            "timeout_s": cap.map(|c| c.1),
+        })
+    }
+
+    /// The remaining steps from `cursor` with caps split from `usd`.
+    fn schedule(&self, cursor: usize, usd: f64) -> (Vec<Value>, Option<String>) {
+        let steps = self.steps();
+        let rest = &steps[cursor.min(steps.len())..];
+        let ests: Vec<u64> = rest.iter().map(|s| s.est_s).collect();
+        let caps = if rest.is_empty() {
+            Ok(vec![])
+        } else {
+            plan_caps(usd, self.usd_per_hour, &self.gpu, &ests)
+        };
+        let rows = rest
+            .iter()
+            .enumerate()
+            .map(|(i, s)| {
+                let cap = caps.as_ref().ok().map(|c| c[i]);
+                self.step_json(cursor + i, s, cap)
+            })
+            .collect();
+        (rows, caps.err())
+    }
+}
+
+fn loop_plan(flags: &Flags) -> Result<LoopPlan, String> {
+    let name = flags.require("name")?.to_string();
+    check_name(&name)?;
+    let base_model = flags.require("base-model")?.to_string();
+    let model_assets = flags.get("model-assets").map(PathBuf::from)
+        .or_else(|| env_path("AUTOPHYS_TRAIN_MODEL_ASSETS"))
+        .map(absolute).transpose().map_err(|e| e.to_string())?;
+    let asset_identity = model_assets.as_ref().map(|dir| -> Result<Value, String> {
+        let manifest = read_json(&dir.join("manifest.json")).map_err(|e| e.to_string())?;
+        if manifest["schema"] != 1 || manifest["model"] != base_model { return Err("model assets schema/model mismatch".into()); }
+        let revision = manifest["revision"].as_str().filter(|r| r.len() == 40 && r.bytes().all(|c| c.is_ascii_hexdigit())).ok_or("model assets need an immutable 40-hex revision")?;
+        for file in ["tokenizer.json", "tokenizer_config.json", "chat_template.jinja"] {
+            if manifest["files"][file].as_str() != Some(sha256_file(&dir.join(file)).map_err(|e| e.to_string())?.as_str()) { return Err(format!("model asset digest mismatch: {file}")); }
+        }
+        Ok(json!({"model": base_model, "revision": revision, "manifest_sha256": sha256_file(&dir.join("manifest.json")).map_err(|e| e.to_string())?, "files": manifest["files"]}))
+    }).transpose()?;
+    let gpu = flags
+        .get("gpu")
+        .ok_or("--gpu is required for a modal loop (for example L40S, A100-80GB, H100)")?
+        .to_string();
+    let usd_per_hour = flags
+        .number("usd-per-hour")?
+        .ok_or("--usd-per-hour is required: the CLI never assumes a price")?;
+    if usd_per_hour <= 0.0 {
+        return Err("--usd-per-hour must be above zero".into());
+    }
+    let max_usd = flags
+        .number("max-usd")?
+        .ok_or("--max-usd is required: a loop needs one explicit total cap")?;
+    let count = |flag: &str, default: u64| -> Result<u64, String> {
+        match flags.get(flag) {
+            None => Ok(default),
+            Some(v) => v
+                .parse::<u64>()
+                .ok()
+                .filter(|n| *n >= 1)
+                .ok_or(format!("--{flag} {v:?} must be a positive integer")),
+        }
+    };
+    let iterations = count("iterations", 3)? as usize;
+    let patience = count("patience", 2)?;
+    let eval_seeds = parse_seeds(flags.get("eval-seeds").unwrap_or("3,4"))
+        .map_err(|e| format!("--eval-seeds: {e}"))?;
+    let cases = flags.all("case").to_vec();
+    let candidates = match flags.get("candidates") {
+        Some(path) => {
+            let text =
+                std::fs::read_to_string(path).map_err(|e| format!("--candidates {path:?}: {e}"))?;
+            parse_candidates(&text, &cases, &eval_seeds)?
+        }
+        None => {
+            let defaults = default_candidates(&cases);
+            for c in &defaults {
+                c.check_seeds(&eval_seeds)
+                    .map_err(|e| format!("{e}; pass --candidates for these eval seeds"))?;
+            }
+            defaults
+        }
+    };
+    Ok(LoopPlan {
+        name,
+        base_model,
+        model_assets,
+        asset_identity,
+        gpu,
+        usd_per_hour,
+        max_usd,
+        iterations: iterations.min(candidates.len()),
+        patience,
+        eval_seeds,
+        cases,
+        candidates,
+    })
+}
+
+/// Persisted state is untrusted input. Refuse malformed counters and budget
+/// fields before defaults can restart a baseline, erase spending or panic on steps.
+fn validate_loop_state(state: &Value, plan: &LoopPlan) -> Result<()> {
+    let invalid = || anyhow!("invalid loop state; refusing overwrite or resume");
+    let required = ["name", "status", "fingerprint", "cursor", "spent_usd", "incumbent", "consecutive_rejections", "in_flight", "steps"];
+    if !state.as_object().map(|obj| required.iter().all(|key| obj.contains_key(*key))).unwrap_or(false)
+        || state["name"].as_str() != Some(plan.name.as_str())
+        || !matches!(state["status"].as_str(), Some("planned" | "running" | "failed" | "finished"))
+        || !state["fingerprint"].is_object()
+    {
+        return Err(invalid());
+    }
+    let cursor = state["cursor"].as_u64().ok_or_else(invalid)?;
+    let rejections = state["consecutive_rejections"].as_u64().ok_or_else(invalid)?;
+    let spent = state["spent_usd"].as_f64().filter(|n| n.is_finite() && *n >= 0.0).ok_or_else(invalid)?;
+    let steps = state["steps"].as_array().ok_or_else(invalid)?;
+    let schedule = plan.steps();
+    if cursor > schedule.len() as u64 || steps.len() as u64 != cursor || rejections > cursor {
+        return Err(invalid());
+    }
+    for (index, entry) in steps.iter().enumerate() {
+        let step = &schedule[index];
+        if entry["step"].as_u64() != Some(index as u64)
+            || entry["kind"].as_str() != Some(step.kind)
+            || entry["iteration"].as_u64() != Some(step.iteration as u64)
+            || !entry["result"].is_object()
+        { return Err(invalid()); }
+    }
+    let incumbent = &state["incumbent"];
+    if !incumbent.is_null() {
+        let iteration = incumbent["iteration"].as_u64().ok_or_else(invalid)?;
+        let score = Score::from_json(&incumbent["score"]).ok_or_else(invalid)?;
+        if iteration > plan.iterations as u64 || iteration * 2 >= cursor
+            || score.runs == 0 || score.passes > score.runs || !score.mean_log10_error.is_finite()
+        { return Err(invalid()); }
+    } else if cursor > 0 { return Err(invalid()); }
+    let flight = &state["in_flight"];
+    if !flight.is_null() {
+        let cap = flight["cap_usd"].as_f64().filter(|n| n.is_finite() && *n >= 0.0).ok_or_else(invalid)?;
+        if flight["step"].as_u64() != Some(cursor) || cursor >= schedule.len() as u64
+            || !spent.is_finite() || !(spent + cap).is_finite()
+        { return Err(invalid()); }
+    }
+    if state["status"] == "planned" && (cursor != 0 || spent != 0.0 || !flight.is_null()) {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
+/// `train loop`: plan (free) or run the keep-if-better SFT loop.
+pub fn run_loop(args: Vec<String>) -> Result<Value, Failure> {
+    let flags = Flags::parse(
+        args,
+        &[
+            "name",
+            "base-model",
+            "model-assets",
+            "gpu",
+            "usd-per-hour",
+            "max-usd",
+            "iterations",
+            "patience",
+            "candidates",
+            "eval-seeds",
+            "case",
+        ],
+        &["live", "resume"],
+    )?;
+    let plan = loop_plan(&flags)?;
+    let live = flags.switches.contains("live");
+    let resume = flags.switches.contains("resume");
+    if live && plan.model_assets.is_none() { return Err("live loop requires prepared --model-assets (or AUTOPHYS_TRAIN_MODEL_ASSETS)".into()); }
+    let go = || -> Result<Value> {
+        let worker = Worker::new(&flags)?;
+        let dir = worker.dir.join("loops").join(&plan.name);
+        let _reservation = if live || !resume { Some(reserve_run(&dir)?) } else { None };
+        let state_path = dir.join("state.json");
+        let previous = match std::fs::read(&state_path) {
+            Ok(bytes) => Some(serde_json::from_slice::<Value>(&bytes).context("invalid loop state; refusing overwrite")?),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+            Err(e) => return Err(e.into()),
+        };
+        if let Some(state) = &previous {
+            validate_loop_state(state, &plan)?;
+        }
+        let status = previous.as_ref().and_then(|s| s["status"].as_str());
+        loop_start_allowed(status, resume).map_err(|why| anyhow!("loop {:?} {why}", plan.name))?;
+        let fingerprint = plan.fingerprint();
+        let mut state = match previous.filter(|_| resume) {
+            Some(state) => {
+                if state["fingerprint"] != fingerprint {
+                    bail!(
+                        "loop {:?} was planned with a different base model, GPU, price, eval seeds, \
+                         cases or candidates; resume with the same flags (see {})",
+                        plan.name,
+                        state_path.display()
+                    );
+                }
+                state
+            }
+            None => json!({
+                "name": plan.name,
+                "status": "planned",
+                "stop_reason": null,
+                "planned_at": now(),
+                "git_head": git_head(),
+                "fingerprint": fingerprint,
+                "cursor": 0,
+                "spent_usd": 0.0,
+                "incumbent": null,
+                "consecutive_rejections": 0,
+                "in_flight": null,
+                "steps": [],
+            }),
+        };
+        let spent = state["spent_usd"].as_f64().unwrap_or(0.0);
+        // An interrupted step's spend is unknown: charge its whole cap.
+        let in_flight_cap = state["in_flight"]["cap_usd"].as_f64().unwrap_or(0.0);
+        let cursor = state["cursor"].as_u64().unwrap_or(0) as usize;
+        let (schedule, refusal) = plan.schedule(cursor, plan.max_usd - spent - in_flight_cap);
+        let worst_case: f64 = schedule.iter().filter_map(|s| s["cap_usd"].as_f64()).sum();
+        let est_s: u64 = schedule
+            .iter()
+            .filter_map(|s| s["est_gpu_s"].as_u64())
+            .sum();
+        state["plan"] = json!({
+            "base_model": plan.base_model,
+            "gpu": plan.gpu,
+            "usd_per_hour": plan.usd_per_hour,
+            "max_usd": plan.max_usd,
+            "iterations": plan.iterations,
+            "patience": plan.patience,
+            "eval_seeds": seeds_text(&plan.eval_seeds),
+            "case": plan.cases,
+            "candidates": plan.candidates.iter().map(Candidate::to_json).collect::<Vec<_>>(),
+            "schedule": schedule,
+            "estimate_gpu_s": est_s,
+            "estimate_usd": ceil_cents(est_s as f64 * plan.usd_per_hour / 3600.0),
+            "worst_case_usd": floor_cents(worst_case + 1e-9),
+            "rule": "accept only if strictly better: passes desc, mean log10 max_rel_error asc, parse_failures asc",
+            "live_allowed": refusal.is_none(),
+            "refusal": refusal,
+        });
+        if !live {
+            if !resume {
+                std::fs::create_dir_all(&dir)?;
+                write_json(&state_path, &state)?;
+            }
+            return Ok(state);
+        }
+        if let Some(refusal) = refusal {
+            bail!("live loop refused: {refusal}");
+        }
+        require_modal_credentials()?;
+        std::fs::create_dir_all(&dir)?;
+        let mut driver = LoopDriver {
+            plan: &plan,
+            worker: &worker,
+            passthrough: flags.passthrough(&["train-dir", "python"]),
+            dir: dir.clone(),
+            state,
+        };
+        driver.drive()?;
+        Ok(driver.state)
+    };
+    go().map_err(runtime)
+}
+
+struct LoopDriver<'a> {
+    plan: &'a LoopPlan,
+    worker: &'a Worker,
+    passthrough: Vec<String>,
+    dir: PathBuf,
+    state: Value,
+}
+
+impl LoopDriver<'_> {
+    fn save(&mut self) -> Result<()> {
+        self.state["updated_at"] = json!(now());
+        write_json(&self.dir.join("state.json"), &self.state)
+    }
+
+    fn journal(&self, event: &str, mut entry: Value) -> Result<()> {
+        use std::io::Write;
+        entry["at"] = json!(now());
+        entry["event"] = json!(event);
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(self.dir.join("journal.jsonl"))?;
+        writeln!(file, "{entry}")?;
+        Ok(())
+    }
+
+    fn spent(&self) -> f64 {
+        self.state["spent_usd"].as_f64().unwrap_or(0.0)
+    }
+
+    fn add_spend(&mut self, usd: f64) {
+        self.state["spent_usd"] = json!(((self.spent() + usd) * 100.0).round() / 100.0);
+    }
+
+    fn stop(&mut self, status: &str, reason: String) -> Result<()> {
+        self.state["status"] = json!(status);
+        self.state["stop_reason"] = json!(reason);
+        self.state["stopped_at"] = json!(now());
+        self.journal(
+            "stop",
+            json!({"status": status, "reason": reason, "spent_usd": self.spent(),
+                   "incumbent": self.state["incumbent"]}),
+        )?;
+        self.save()
+    }
+
+    fn drive(&mut self) -> Result<()> {
+        let resumed = self.state["status"] != "planned";
+        if let Some(cap) = self.state["in_flight"]["cap_usd"].as_f64() {
+            let step = self.state["in_flight"].clone();
+            self.add_spend(cap);
+            self.state["in_flight"] = Value::Null;
+            self.journal(
+                "interrupted_step_charged",
+                json!({"step": step, "charged_usd": cap}),
+            )?;
+        }
+        self.state["status"] = json!("running");
+        self.state["stop_reason"] = Value::Null;
+        self.journal(
+            if resumed { "resume" } else { "start" },
+            json!({"plan": self.state["plan"], "spent_usd": self.spent()}),
+        )?;
+        self.save()?;
+        let steps = self.plan.steps();
+        loop {
+            let cursor = self.state["cursor"].as_u64().unwrap_or(0) as usize;
+            let rejections = self.state["consecutive_rejections"].as_u64().unwrap_or(0);
+            if cursor >= steps.len() {
+                return self.stop("finished", "iterations".into());
+            }
+            if rejections >= self.plan.patience && steps[cursor].kind == "train" {
+                return self.stop(
+                    "finished",
+                    format!("patience: {rejections} consecutive rejections"),
+                );
+            }
+            let ests: Vec<u64> = steps[cursor..].iter().map(|s| s.est_s).collect();
+            let remaining = self.plan.max_usd - self.spent();
+            let (cap, timeout) =
+                match plan_caps(remaining, self.plan.usd_per_hour, &self.plan.gpu, &ests) {
+                    Ok(caps) => caps[0],
+                    Err(why) => return self.stop("finished", format!("budget: {why}")),
+                };
+            let step = &steps[cursor];
+            let record = self.plan.step_json(cursor, step, Some((cap, timeout)));
+            self.state["in_flight"] = json!({"step": cursor, "cap_usd": cap, "started_at": now()});
+            self.journal("step_start", record.clone())?;
+            self.save()?;
+            let gate = modal_budget(
+                Some(self.plan.usd_per_hour),
+                Some(cap),
+                Some(&self.plan.gpu),
+            );
+            let result = match step.kind {
+                "train" => self.train(step.iteration, cap),
+                _ => self.eval(step.iteration, &gate),
+            };
+            self.state["in_flight"] = Value::Null;
+            match result {
+                Ok(mut done) => {
+                    let charged = charge(cap, self.plan.usd_per_hour, done["gpu_seconds"].as_f64());
+                    self.add_spend(charged);
+                    done["charged_usd"] = json!(charged);
+                    let mut entry = record.clone();
+                    entry["result"] = done.clone();
+                    if step.kind == "eval" {
+                        let score = done["score"].clone();
+                        entry["decision"] = self.decide(step.iteration, &score)?;
+                    }
+                    self.journal("step_done", entry.clone())?;
+                    self.state["steps"]
+                        .as_array_mut()
+                        .expect("steps list")
+                        .push(entry);
+                    self.state["cursor"] = json!(cursor + 1);
+                    self.save()?;
+                }
+                Err(e) => {
+                    self.add_spend(cap);
+                    let reason = format!(
+                        "failed: step {cursor} ({} {}): {e:#}",
+                        step.kind, step.iteration
+                    );
+                    self.journal(
+                        "step_failed",
+                        json!({"step": record, "error": format!("{e:#}"), "charged_usd": cap}),
+                    )?;
+                    self.stop("failed", reason.clone())?;
+                    bail!("{reason}; resume with --resume after fixing it");
+                }
+            }
+        }
+    }
+
+    /// Accept the candidate only if it strictly beats the incumbent.
+    fn decide(&mut self, iteration: usize, score: &Value) -> Result<Value> {
+        let candidate =
+            Score::from_json(score).ok_or_else(|| anyhow!("step result has no score"))?;
+        let (label, run) = match iteration {
+            0 => ("base".to_string(), Value::Null),
+            i => (
+                self.plan.candidates[i - 1].label.clone(),
+                json!(self.plan.run_name(i)),
+            ),
+        };
+        let incumbent = Score::from_json(&self.state["incumbent"]["score"]);
+        let accepted = match &incumbent {
+            None => true,
+            Some(inc) => better(&candidate, inc),
+        };
+        if accepted {
+            self.state["incumbent"] = json!({
+                "iteration": iteration, "label": label, "run": run, "score": score,
+            });
+            self.state["consecutive_rejections"] = json!(0);
+        } else {
+            let n = self.state["consecutive_rejections"].as_u64().unwrap_or(0) + 1;
+            self.state["consecutive_rejections"] = json!(n);
+        }
+        Ok(json!({
+            "accepted": accepted,
+            "baseline": iteration == 0,
+            "against": incumbent.map(|s| s.to_json()),
+        }))
+    }
+
+    /// Build the candidate's dataset locally (free), then train it on Modal
+    /// through `train run` under this step's cap.
+    fn train(&mut self, iteration: usize, cap: f64) -> Result<Value> {
+        let candidate = &self.plan.candidates[iteration - 1];
+        let run_name = self.plan.run_name(iteration);
+        let manifest_path = self
+            .worker
+            .dir
+            .join("runs")
+            .join(&run_name)
+            .join("manifest.json");
+        let data = self.dir.join(format!("iter-{iteration}")).join("data");
+        if let Ok(m) = read_json(&manifest_path) {
+            let ours = data.canonicalize().ok().map(|d| d.display().to_string());
+            if m["status"] == "completed"
+                && ours.is_some()
+                && m.pointer("/data/dir").and_then(Value::as_str) == ours.as_deref()
+            {
+                // Trained before an interruption; its spend was charged then.
+                return Ok(json!({"run": run_name, "reused": true, "gpu_seconds": 0.0}));
+            }
+        }
+        let failure = |f: Failure| anyhow!(f.message());
+        let mut args = vec![
+            "--out".to_string(),
+            data.display().to_string(),
+            "--train-seeds".into(),
+            seeds_text(&candidate.train_seeds),
+            "--val-seeds".into(),
+            seeds_text(&candidate.val_seeds),
+            "--heldout-seeds".into(),
+            seeds_text(&self.plan.eval_seeds),
+        ];
+        for case in &candidate.cases {
+            args.extend(["--case".to_string(), case.clone()]);
+        }
+        args.extend(self.passthrough.clone());
+        let identity = dataset(args).map_err(failure)?;
+        self.journal("dataset", json!({"iteration": iteration, "data": identity}))?;
+        let mut args = vec![
+            "--name".to_string(),
+            run_name.clone(),
+            "--base-model".into(),
+            self.plan.base_model.clone(),
+            "--data".into(),
+            data.display().to_string(),
+            "--backend".into(),
+            "modal".into(),
+            "--gpu".into(),
+            self.plan.gpu.clone(),
+            "--usd-per-hour".into(),
+            self.plan.usd_per_hour.to_string(),
+            "--max-usd".into(),
+            cap.to_string(),
+            "--live".into(),
+        ];
+        if let Some(assets) = &self.plan.model_assets { args.extend(["--model-assets".into(), assets.display().to_string()]); }
+        args.extend(candidate.hparam_flags());
+        args.extend(self.passthrough.clone());
+        let manifest = run(args).map_err(failure)?;
+        Ok(json!({
+            "run": run_name,
+            "train_rows": manifest.pointer("/data/files/train/rows"),
+            "last_val_nll": manifest["last_val_nll"],
+            "heldout_decisions": manifest["heldout_decisions"],
+            "gpu_seconds": manifest["gpu_seconds"],
+        }))
+    }
+
+    /// Closed-loop eval: the base model for iteration 0, else the
+    /// iteration's run. Each attempt writes a fresh directory.
+    fn eval(&mut self, iteration: usize, gate: &Value) -> Result<Value> {
+        let parent = self.dir.join(match iteration {
+            0 => "baseline".to_string(),
+            i => format!("iter-{i}"),
+        });
+        let out = (1..)
+            .map(|k| {
+                parent.join(if k == 1 {
+                    "eval".into()
+                } else {
+                    format!("eval-{k}")
+                })
+            })
+            .find(|p| !p.exists())
+            .expect("a free directory name");
+        let seeds = seeds_text(&self.plan.eval_seeds);
+        let (report, gpu_seconds) = if iteration == 0 {
+            eval_modal_base(
+                self.worker,
+                &format!("{}-base", self.plan.name),
+                &self.plan.base_model,
+                gate,
+                Some(&seeds),
+                &self.plan.cases,
+                &out,
+                self.plan.model_assets.as_deref(),
+                self.plan.asset_identity.as_ref(),
+            )?
+        } else {
+            eval_modal_run(
+                self.worker,
+                &self.plan.run_name(iteration),
+                gate.clone(),
+                Some(&seeds),
+                &self.plan.cases,
+                Some(out.clone()),
+                self.plan.model_assets.as_deref(),
+            )?
+        };
+        let score = score_report(&report).map_err(|e| anyhow!("{e} ({})", out.display()))?;
+        Ok(json!({
+            "out": out.display().to_string(),
+            "score": score.to_json(),
+            "gpu_seconds": gpu_seconds,
+        }))
+    }
+}
+
+/// `train loops`: every loop's state, newest first.
+pub fn loops(args: Vec<String>) -> Result<Value, Failure> {
+    let flags = Flags::parse(args, &[], &[])?;
+    let go = || -> Result<Value> {
+        let worker = Worker::new(&flags)?;
+        let mut rows = Vec::new();
+        let Ok(entries) = std::fs::read_dir(worker.dir.join("loops")) else {
+            return Ok(Value::Array(rows));
+        };
+        for entry in entries.flatten() {
+            let Ok(s) = read_json(&entry.path().join("state.json")) else {
+                continue;
+            };
+            rows.push(json!({
+                "name": s["name"],
+                "status": s["status"],
+                "stop_reason": s["stop_reason"],
+                "base_model": s.pointer("/plan/base_model"),
+                "steps_done": s["cursor"],
+                "incumbent": s
+                    .pointer("/incumbent/run")
+                    .filter(|v| !v.is_null())
+                    .or(s.pointer("/incumbent/label")),
+                "incumbent_score": s.pointer("/incumbent/score"),
+                "spent_usd": s["spent_usd"],
+                "max_usd": s.pointer("/plan/max_usd"),
+                "planned_at": s["planned_at"],
             }));
         }
         rows.sort_by(|a, b| b["planned_at"].as_str().cmp(&a["planned_at"].as_str()));
@@ -1705,5 +2947,157 @@ mod tests {
             first_json(out).unwrap()["billed_token_estimate"]["total"],
             5
         );
+    }
+    fn row(policy: &str, pass: &str, errors: Value, parse_failures: u64) -> Value {
+        json!({"case": "c", "policy": policy, "pass": pass, "max_rel_error": errors,
+               "parse_failures": parse_failures})
+    }
+
+    #[test]
+    fn report_scores_reason_rows_only() {
+        let report = json!([
+            row("scripted", "2/2", json!([0.001, 0.001]), 0),
+            row("reason", "1/2", json!([0.01, null]), 3),
+            row("reason", "2/2", json!([0.0, 0.1]), 1),
+        ]);
+        let s = score_report(&report).unwrap();
+        assert_eq!((s.passes, s.runs, s.parse_failures), (3, 4, 4));
+        // log10: -2, cap 50, floor 1e-5 -> -5, -1
+        assert!((s.mean_log10_error - (-2.0 + 50.0 - 5.0 - 1.0) / 4.0).abs() < 1e-12);
+        assert!(score_report(&json!([row("scripted", "1/1", json!([0.1]), 0)])).is_err());
+        assert!(score_report(&json!([row("reason", "1/2", json!([0.1]), 0)])).is_err());
+        assert!(score_report(&json!([row("reason", "x", json!([0.1]), 0)])).is_err());
+        assert!(score_report(&json!({})).is_err());
+    }
+
+    #[test]
+    fn python_nonfinite_numbers_become_null() {
+        let text = r#"[{"case": "NaN-case \"Infinity\"", "max_rel_error": [Infinity, -Infinity, NaN, 0.1]}]"#;
+        let v: Value = serde_json::from_str(&nonfinite_to_null(text)).unwrap();
+        assert_eq!(v[0]["case"], "NaN-case \"Infinity\"");
+        assert_eq!(v[0]["max_rel_error"], json!([null, null, null, 0.1]));
+    }
+
+    #[test]
+    fn better_is_lexicographic_and_strict() {
+        let s = |passes, err, pf| Score {
+            passes,
+            runs: 8,
+            mean_log10_error: err,
+            parse_failures: pf,
+        };
+        assert!(better(&s(5, 9.0, 9), &s(4, -3.0, 0))); // passes first
+        assert!(!better(&s(4, -3.0, 0), &s(5, 9.0, 9)));
+        assert!(better(&s(4, -2.0, 9), &s(4, -1.0, 0))); // then lower error
+        assert!(better(&s(4, -2.0, 1), &s(4, -2.0, 2))); // then fewer parse failures
+        assert!(!better(&s(4, -2.0, 2), &s(4, -2.0, 2))); // a tie keeps the incumbent
+    }
+
+    #[test]
+    fn budget_splits_by_estimate_and_refuses_short_plans() {
+        let candidates = default_candidates(&[]);
+        let steps = loop_steps(&candidates[..2]);
+        let ests: Vec<u64> = steps.iter().map(|s| s.est_s).collect();
+        assert_eq!(ests, [1500, 684, 300, 1068, 300]);
+        let caps = plan_caps(3.0, 1.95, "L40S", &ests).unwrap();
+        let total: f64 = caps.iter().map(|c| c.0).sum();
+        assert!(total <= 3.0);
+        for ((cap, timeout), est) in caps.iter().zip(&ests) {
+            assert!(*timeout >= *est);
+            assert_eq!(
+                modal_budget(Some(1.95), Some(*cap), Some("L40S"))["timeout_s"],
+                *timeout
+            );
+        }
+        // 3852 GPU-s at $1.95/h with the 0.8 factor needs $2.61; the cent
+        // floors on each cap need a little more.
+        assert!(plan_caps(2.70, 1.95, "L40S", &ests).is_ok());
+        assert!(plan_caps(2.50, 1.95, "L40S", &ests).is_err());
+        assert!(plan_caps(3.0, 0.0, "L40S", &ests).is_err());
+        // The default three-candidate schedule does not fit $3.
+        let all: Vec<u64> = loop_steps(&candidates).iter().map(|s| s.est_s).collect();
+        assert!(plan_caps(3.0, 1.95, "L40S", &all).is_err());
+        assert_eq!(charge(0.5, 1.95, Some(720.0)), 0.49);
+        assert_eq!(charge(0.3, 1.95, Some(720.0)), 0.3);
+        assert_eq!(charge(0.3, 1.95, None), 0.3);
+    }
+
+    #[test]
+    fn candidates_parse_and_refuse_eval_seed_overlap() {
+        let eval = [3, 4];
+        let ok = r#"[{"label": "big", "dataset": {"train_seeds": "0-2,7-9", "case": ["thermal"]},
+                      "hparams": {"epochs": 2, "lr": 0.0001, "batch_size": 4}},
+                     {"dataset": {"train_seeds": [0, 1], "val_seeds": "5"}}]"#;
+        let c = parse_candidates(ok, &["oscillator".into()], &eval).unwrap();
+        assert_eq!(c[0].train_seeds, [0, 1, 2, 7, 8, 9]);
+        assert_eq!(c[0].val_seeds, [5, 6]);
+        assert_eq!(c[0].cases, ["thermal"]);
+        assert_eq!(c[0].epochs(), 2);
+        assert_eq!(c[0].est_train_s(), 300 + 32 * 6 * 2);
+        assert_eq!(
+            c[0].hparam_flags(),
+            ["--epochs", "2", "--lr", "0.0001", "--batch-size", "4"]
+        );
+        assert_eq!(
+            (c[1].label.as_str(), c[1].cases.as_slice()),
+            ("c2", &["oscillator".to_string()][..])
+        );
+        let refuse = |text: &str| parse_candidates(text, &[], &eval).unwrap_err();
+        assert!(
+            refuse(r#"[{"dataset": {"train_seeds": "0-4"}}]"#).contains("overlap the eval seeds")
+        );
+        assert!(
+            refuse(r#"[{"dataset": {"train_seeds": "0", "val_seeds": "3"}}]"#).contains("overlap")
+        );
+        assert!(refuse(r#"[{"dataset": {"train_seeds": "0,5"}}]"#).contains("share"));
+        assert!(refuse(r#"[{"dataset": {"train_seed": "0"}}]"#).contains("unknown key"));
+        assert!(
+            refuse(r#"[{"dataset": {"train_seeds": "0"}, "hparams": {"epoch": 1}}]"#)
+                .contains("unknown hparam")
+        );
+        assert!(
+            refuse(r#"[{"dataset": {"train_seeds": "0"}, "hparams": {"epochs": 1.5}}]"#)
+                .contains("integer")
+        );
+        assert!(refuse("[]").contains("non-empty"));
+        assert_eq!(parse_seeds("0-2,7, 9").unwrap(), [0, 1, 2, 7, 9]);
+        assert!(parse_seeds("2-1").is_err() && parse_seeds("a").is_err());
+        for d in default_candidates(&[]) {
+            assert!(d.check_seeds(&eval).is_ok());
+        }
+        assert!(default_candidates(&[])[2].check_seeds(&[8]).is_err());
+    }
+
+    #[test]
+    fn loop_start_needs_resume_after_a_live_start() {
+        assert!(loop_start_allowed(None, false).is_ok());
+        assert!(loop_start_allowed(None, true).is_err());
+        assert!(loop_start_allowed(Some("planned"), false).is_ok());
+        assert!(loop_start_allowed(Some("failed"), false).is_err());
+        assert!(loop_start_allowed(Some("failed"), true).is_ok());
+        assert!(loop_start_allowed(Some("running"), true).is_ok());
+    }
+
+    #[test]
+    fn malformed_loop_state_is_refused_before_resume() {
+        let flags = Flags::parse(vec!["--name", "checked", "--base-model", "model", "--gpu", "L40S", "--usd-per-hour", "1.95", "--max-usd", "3"].into_iter().map(String::from).collect(),
+            &["name", "base-model", "gpu", "usd-per-hour", "max-usd"], &[]).unwrap();
+        let plan = loop_plan(&flags).unwrap();
+        let valid = json!({"name": "checked", "status": "planned", "fingerprint": plan.fingerprint(), "cursor": 0,
+            "spent_usd": 0.0, "incumbent": null, "consecutive_rejections": 0, "in_flight": null, "steps": []});
+        assert!(validate_loop_state(&valid, &plan).is_ok());
+        for (field, value) in [("status", json!("unknown")), ("cursor", json!(99)), ("spent_usd", json!(-1)),
+            ("steps", json!({})), ("incumbent", json!({})), ("in_flight", json!({"step": 0})),
+            ("consecutive_rejections", json!("zero"))] {
+            let mut broken = valid.clone(); broken[field] = value;
+            assert!(validate_loop_state(&broken, &plan).is_err(), "{field}");
+        }
+        for malformed in [Value::Null, json!([]), json!({})] {
+            assert!(validate_loop_state(&malformed, &plan).is_err());
+        }
+        let mut resumed = valid.clone();
+        resumed["status"] = json!("running");
+        resumed["in_flight"] = json!({"step": 0, "cap_usd": 0.5});
+        assert!(validate_loop_state(&resumed, &plan).is_ok());
     }
 }

@@ -12,12 +12,13 @@ manifests, evaluation, history) and drives a Python worker in `train/sft`
 that tokenizes and trains:
 
 ```
-src/train.rs              autophys train dataset | run | eval | runs; Flags, budget gates, manifests
+src/train.rs              autophys train dataset | run | eval | runs | loop | loops; Flags, budget gates, manifests
 train/sft/build_dataset.py   teacher rows: ScriptedPolicy's decisions through the real ReasonLanePolicy
 train/sft/train_sft.py       Baseten Loops LoRA SFT (dry run by default)
 train/sft/modal_app.py       Modal: dataset fan-out, LoRA SFT, closed-loop eval in one GPU container
 train/sft/eval_heldout.py    held-out closed-loop benchmark, reason vs scripted
 train/sft/runs/NAME/         manifest.json per run (not committed)
+train/sft/loops/LOOP/        train loop state.json, journal.jsonl, per-iteration data and evals (not committed)
 ```
 
 The training data is a view of the record log: each row is one decision the
@@ -50,6 +51,12 @@ the model's own chat template.
 
 1. Data, not tooling, is the bottleneck. Add more cases and steps where the
    right move is an experiment, then retrain and evaluate closed-loop.
+   Experimental implementation, pending successful qualification: `autophys train loop` automates the
+   retrain-and-evaluate cycle. It scores the base model closed-loop, then
+   per candidate builds the data locally, trains on Modal, evaluates on the
+   held-out seeds, and keeps the new model only if it is strictly better
+   (MQ-4 order: passes, then mean log error, then parse failures), under one
+   total `--max-usd`. Historical baseline attempts failed or were interrupted; no successful loop qualification is established. Current-source native qualification remains pending.
 2. `train eval --backend baseten` (serve Loops weights, then the same
    benchmark) is not built.
 3. Datasets built on Modal's x86 machines differ in the last digits of fitted

@@ -20,7 +20,9 @@ to the ``autophys-train`` volume; ``runs/<name>/run.json`` is written locally.
 ``eval_main`` runs the full closed-loop benchmark (``eval_heldout.py``,
 reason vs scripted) against a trained adapter served on 127.0.0.1 inside one
 GPU container, and writes report.json, scores.json, the cassette and the
-workbooks locally.
+workbooks locally. ``--base-only`` serves the base weights with no adapter
+through the same server, so a baseline sees byte-identical prompts (the
+``train loop`` baseline).
 
 No credentials are read here; the Modal client reads its own token.
 """
@@ -36,9 +38,11 @@ from pathlib import Path
 import modal
 
 HERE = Path(__file__).resolve().parent
-SDK = Path(os.environ.get("AUTOPHYS_SDK_DIR", HERE.parents[1] / "sdks/python"))
+# Resolved on the host only: inside a container this file is /root/modal_app.py
+# and has no checkout around it (the SDK is already in the image there).
+SDK = Path(os.environ.get("AUTOPHYS_SDK_DIR") or (HERE.parents[1] / "sdks/python" if len(HERE.parents) > 1 else HERE / "sdks/python"))
 # Never ship data, runs or any env file (partner.env can hold a key).
-IGNORE = ["data", "data-*", "runs", "results", "__pycache__", "*.env", ".env*", "*.jsonl", "serving"]
+IGNORE = ["data", "data-*", "runs", "loops", "results", "__pycache__", "*.env", ".env*", "*.jsonl", "serving"]
 
 app = modal.App("autophys-train")
 volume = modal.Volume.from_name("autophys-train", create_if_missing=True)
@@ -389,7 +393,7 @@ def eval_argv(out: str, model: str, seeds: str, cases: list[str]) -> list[str]:
 
 
 @app.function(image=gpu_image, gpu="L40S", timeout=600, volumes={"/vol": volume})
-def eval_adapter(run: str, base: str, seeds: str, cases: list[str]) -> dict:
+def eval_adapter(run: str, base: str, seeds: str, cases: list[str], base_only: bool = False, asset_cfg: dict | None = None) -> dict:
     import secrets
     import subprocess
     import threading
@@ -407,17 +411,30 @@ def eval_adapter(run: str, base: str, seeds: str, cases: list[str]) -> dict:
 
     started = time.time()
     adapter = Path(f"/vol/runs/{run}/adapter")
-    if not adapter.is_dir():
+    if not base_only and not adapter.is_dir():
         raise SystemExit(f"no adapter at {adapter}; train it first (autophys train run --backend modal)")
-    tok = AutoTokenizer.from_pretrained(base)
-    enc = Encoder(base, tok)
-    model = AutoModelForCausalLM.from_pretrained(base, dtype=torch.bfloat16, device_map="cuda")
-    model = PeftModel.from_pretrained(model, str(adapter)).merge_and_unload()
+    if base_only and asset_cfg is None:
+        raise ValueError("base-only evaluation requires prepared model assets")
+    if asset_cfg is not None:
+        if asset_cfg.get("base_model") != base:
+            raise ValueError("evaluation asset model differs from the requested base")
+        tok, enc = bound_training_inputs(asset_cfg, [])
+        revision = enc.identity["revision"]
+        model = AutoModelForCausalLM.from_pretrained(base, revision=revision, trust_remote_code=False, dtype=torch.bfloat16, device_map="cuda")
+        if model.config._commit_hash != revision:
+            raise ValueError("Modal evaluation model differs from the planned revision")
+    else:
+        # Compatibility for historical standalone evals without prepared inputs.
+        tok = AutoTokenizer.from_pretrained(base)
+        enc = Encoder(base, tok)
+        model = AutoModelForCausalLM.from_pretrained(base, dtype=torch.bfloat16, device_map="cuda")
+    if not base_only:  # base_only: the base weights, served and prompted exactly as an adapter would be
+        model = PeftModel.from_pretrained(model, str(adapter)).merge_and_unload()
     model.eval()
     eot_ids = [i for i in (tok.convert_tokens_to_ids(enc.end_of_turn), tok.eos_token_id)
                if isinstance(i, int) and i >= 0 and i != tok.unk_token_id]
     pad = tok.pad_token_id if tok.pad_token_id is not None else eot_ids[0]
-    emit(event="eval_loaded", run=run, base_model=base, t=round(time.time() - started, 1))
+    emit(event="eval_loaded", run=run, base_model=base, base_only=base_only, t=round(time.time() - started, 1))
 
     token = secrets.token_urlsafe(24)  # local only; never a provider key
     lock = threading.Lock()
@@ -476,7 +493,9 @@ def eval_adapter(run: str, base: str, seeds: str, cases: list[str]) -> dict:
 
 
 @app.local_entrypoint()
-def eval_main(run: str, base_model: str, out: str, gpu: str, timeout: int, args: str = "{}"):
+def eval_main(run: str, base_model: str, out: str, gpu: str, timeout: int, args: str = "{}", base_only: bool = False,
+              model_assets: str = "", planned_assets: str = "null"):
+    """``run`` names the adapter (and the model string); with ``--base-only`` it is only a label."""
     a = json.loads(args)
     seeds = a.get("seeds", "3,4")
     if isinstance(seeds, list):
@@ -487,10 +506,19 @@ def eval_main(run: str, base_model: str, out: str, gpu: str, timeout: int, args:
     dest = Path(out)
     if dest.exists() and any(dest.iterdir()):
         raise SystemExit(f"{dest} is not empty; pick a new --out")
+    asset_cfg = None
+    if model_assets or planned_assets != "null":
+        from model_assets import ModelAssets
+        assets = ModelAssets(base_model, model_assets or None)
+        expected = json.loads(planned_assets) if planned_assets != "null" else assets.identity
+        asset_cfg = {"base_model": base_model, "planned_assets": expected,
+                     "model_assets_payload": assets.modal_payload(expected)}
+    if base_only and asset_cfg is None:
+        raise ValueError("base-only evaluation requires prepared model assets")
     fn = eval_adapter.with_options(gpu=gpu, timeout=timeout)
-    result = fn.remote(run, base_model, seeds, cases)
+    result = fn.remote(run, base_model, seeds, cases, base_only, asset_cfg)
     dest.mkdir(parents=True, exist_ok=True)
     for name, data in result["files"].items():
         (dest / name).write_bytes(data)
-    print(json.dumps({"event": "eval_done", "out": str(dest), "run": run, "calls": result["calls"],
+    print(json.dumps({"event": "eval_done", "out": str(dest), "run": run, "base_only": base_only, "calls": result["calls"],
                       "gpu_seconds": result["gpu_seconds"], "gpu": gpu}), flush=True)

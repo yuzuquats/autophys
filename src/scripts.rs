@@ -59,6 +59,8 @@ fn train_commands() -> Scripts<()> {
         .add_command(train_run)
         .add_command(train_eval)
         .add_command(train_runs)
+        .add_command(train_loop)
+        .add_command(train_loops)
 }
 
 /// Train errors are reported here and end the process: returning `Err` would
@@ -105,6 +107,22 @@ async fn train_eval(_: (), args: Option<Vec<String>>) -> tento_sh::Result<Value>
 )]
 async fn train_runs(_: (), args: Option<Vec<String>>) -> tento_sh::Result<Value> {
     train_result(crate::train::runs(args.unwrap_or_default()))
+}
+
+#[command(
+    name = "loop",
+    description = "Plan (free) or run the keep-if-better SFT loop: --name L --base-model HF_ID --gpu G --usd-per-hour X --max-usd TOTAL [--iterations N] [--candidates FILE] [--live] [--resume]"
+)]
+async fn train_loop(_: (), args: Option<Vec<String>>) -> tento_sh::Result<Value> {
+    train_result(crate::train::run_loop(args.unwrap_or_default()))
+}
+
+#[command(
+    name = "loops",
+    description = "List train loops: status, stop reason, incumbent, spend"
+)]
+async fn train_loops(_: (), args: Option<Vec<String>>) -> tento_sh::Result<Value> {
+    train_result(crate::train::loops(args.unwrap_or_default()))
 }
 
 fn description(root: &Scripts<()>) -> Value {

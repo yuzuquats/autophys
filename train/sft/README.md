@@ -27,7 +27,7 @@ Captured by the SDK's own code (`ReasonLanePolicy.decide`), not copied:
 | `data-ext/` | Not committed; regenerate with `--out data-ext --train-seeds 0,1,2,10-59`. Train is 1,272 rows; validation and held-out are as above. |
 | `patch_chat_template.py`, `render.py`, `serving/*.jinja` | Serving template that renders `developer` as `system`, with thinking off by default. Verified byte-identical to the training prompt. |
 | `train_sft.py` | Loops LoRA SFT (`baseten-loops`). Dry run by default (offline); `--live` trains. Guards dedicated trainers: `--allow-dedicated --max-seconds N` (the CLI passes these), otherwise a dedicated trainer is deactivated before training. |
-| `modal_app.py` | Modal backend: `dataset_main` (CPU, one case per container), `train_main` (GPU LoRA SFT plus held-out scoring before and after), `eval_main` (closed-loop benchmark of an adapter served on localhost in one container). |
+| `modal_app.py` | Modal backend: `dataset_main` (CPU, one case per container), `train_main` (GPU LoRA SFT plus held-out scoring before and after), `eval_main` (closed-loop benchmark of an adapter, or with `--base-only` the base model, served on localhost in one container). |
 | `eval_heldout.py` | Held-out benchmark of reason vs scripted through `autophys.bench.run_case`, with workbooks, `--record` cassette, `scores.json` and `report.json`. |
 | `selftest_replay.py` | Offline harness check: replays the teacher's answers as a `--route baseten` cassette. |
 | `SDK_BRIEF.md` | SDK issues for the `sdks/python` owner. Nothing in `sdks/` was edited. |
@@ -46,6 +46,8 @@ evaluation and history. These scripts are its worker. All commands take
 | `autophys train run --name N --base-model HF_ID --data DIR --model-assets DIR` | Always plans first: an offline dry run (token counts, schedule) written to `runs/N/manifest.json`. Trains only with `--live`. Any Hugging Face chat model works: the end-of-turn marker is read from the model's own template (`render.end_of_turn`), not hardcoded. |
 | `autophys train eval ...` | Held-out closed-loop benchmark, reason vs scripted (`eval_heldout.py`). For a Modal-trained adapter, `modal_app.py::eval_main` serves it on 127.0.0.1 inside one GPU container and runs the benchmark there (see below). |
 | `autophys train runs` | Every run manifest, newest first: status, backend, model, rows, budget, held-out scores. |
+| `autophys train loop --name L ...` | Keep-if-better SFT loop on Modal (see "`train loop`" below). Plans for free without `--live`. |
+| `autophys train loops` | Every loop's state: status, stop reason, incumbent and its score, spend. |
 
 **Backends for `train run`:**
 
@@ -121,6 +123,92 @@ Checked offline: a stub server built from the same helpers, answering from
 SDK requests (seeds 3,4, all four cases) byte-identical to training prompts for
 `Qwen/Qwen3.5-4B`, and `eval_heldout.py` completed through it. Expect roughly 6 to 10
 GPU-minutes on an L40S for the 48 calls plus load (about $0.20 to $0.35 at $1.95/h).
+
+### `train loop`: keep a new model only if it beats the best so far
+
+```sh
+autophys train loop --name LOOP --base-model HF_ID --gpu L40S --usd-per-hour 1.95 --max-usd TOTAL \
+  [--iterations 3] [--patience 2] [--candidates FILE] [--eval-seeds 3,4] [--case NAME]... [--live] [--resume]
+```
+
+Without `--live` it only plans, for free. It validates the flags and
+candidates, writes `loops/LOOP/state.json` with status `planned`, and prints
+the schedule: each step, its GPU-second estimate, cap and Modal timeout, and
+the worst-case cost. With `--live` it runs:
+
+1. **Baseline (iteration 0).** It runs a closed-loop eval of the base model
+   with no adapter (`eval_main --base-only`). The base weights go through the
+   same server path, so the prompts are byte-identical to an adapter's. This
+   result becomes the first incumbent.
+2. **Each iteration N** takes the next candidate. It builds its dataset
+   locally and for free (the `train dataset` code path) into
+   `loops/LOOP/iter-N/data`, with the eval seeds as the held-out split. It
+   trains the run `LOOP-iN` (the `train run --backend modal --live` code path,
+   with a normal run manifest), then evaluates it (the `train eval --backend
+   modal` code path) into `loops/LOOP/iter-N/eval`.
+3. **Score**, from the `report.json` rows with policy `reason`, in the MQ-4
+   order: passes (more is better), then mean log10 of `max_rel_error` (lower
+   is better), then parse failures (fewer is better). A missing or infinite
+   error counts as 50, and errors are floored at 1e-5, the report's rounding.
+   A candidate is accepted only if it is **strictly** better than the
+   incumbent; a tie keeps the incumbent.
+4. **Stops** (recorded as `status` and `stop_reason`):
+   - `iterations`: the planned iterations are done (at most one per candidate).
+   - `patience`: `--patience` rejections in a row.
+   - `budget: ...`: the next step no longer fits the remaining budget.
+   - `failed: ...`: a step failed. The loop stops and records why; it does
+     not go on to the next step.
+
+**Candidates.** `--candidates FILE` is a JSON list:
+
+```json
+[{"label": "more-data",
+  "dataset": {"train_seeds": "0-2,7-9", "val_seeds": "5,6", "case": ["oscillator"]},
+  "hparams": {"epochs": 4, "lr": 0.0002, "rank": 32, "batch_size": 8}}]
+```
+
+- `val_seeds` defaults to 5,6. `case` defaults to the loop's `--case` (all
+  cases if none).
+- Allowed `hparams`: `epochs`, `lr`, `rank`, `batch_size`, `max_seq_len`,
+  `warmup`, `eval_every` and `seed`. Unknown keys are refused.
+- Any candidate whose train or val seeds intersect `--eval-seeds` is refused.
+- Without `--candidates`, the loop grows the training data with default
+  hyperparameters: 3, then 6, then 12 train seeds (`0-2`, `0-2,7-9`,
+  `0-2,7-15`).
+
+**Budget.** There is one total cap, `--max-usd`.
+
+- It is split over the steps in proportion to their GPU-second estimates:
+  the base eval is 1,500 s, each adapter eval is 300 s, and train is 300 s plus 32 s per train seed per epoch. These
+  numbers come from the L40S smoke runs: training 72 rows took 686 s, and an
+  eval took 132 s plus model load.
+- Each cap becomes that step's Modal timeout through the same `modal_budget`
+  rule, so 20% is left for startup and billing lag.
+- The loop is refused before it starts if `--max-usd` cannot buy the estimated
+  GPU time, or if any step's timeout would fall under its estimate.
+- `spent_usd` charges the measured GPU seconds x rate / 0.8, capped at the
+  step's cap. A failed or interrupted step is charged its whole cap.
+- Before each step, the remaining budget is split again over the remaining
+  steps, so unspent money rolls forward. A step never starts with a cap above
+  what remains.
+
+**State.** `loops/LOOP/` holds `state.json` (cursor, incumbent and score,
+spend, consecutive rejections, every finished step), `journal.jsonl` (start,
+dataset, `step_start`, `step_done` with the decision, `step_failed`, stop),
+`baseline/eval*` and `iter-N/{data,eval*}`. Each eval attempt gets a fresh
+directory.
+
+**Resume.** `--resume --live` continues a stopped, failed or interrupted loop
+from its cursor. The base model, GPU, price, eval seeds, cases and candidates
+must match the original run, or the resume is refused. `--iterations`,
+`--patience` and `--max-usd` may change, for example to give it more budget.
+A step that was in flight when the loop was interrupted is charged its full
+cap, and a run that already completed is reused, not retrained. Without
+`--live`, `--resume` previews the remaining schedule and writes nothing.
+
+The schedule uses 1,500 GPU-s for the untrained baseline, 300 GPU-s for each adapter evaluation, and 300 + 32 × train seeds × epochs GPU-s for training. These are planning estimates, not guarantees. Inspect the printed schedule and its refusal before authorizing any spend; older $3 smoke examples predate the longer baseline estimate.
+
+Historical loop-smoke-1 and loop-smoke-2 baselines failed; loop-smoke-3 was interrupted with an in-flight baseline. No successful loop qualification is established. The imported score/budget/seed tests are retained; native execution of this integrated revision remains pending. A live loop also requires separately prepared `--model-assets DIR` (or `AUTOPHYS_TRAIN_MODEL_ASSETS`), which fixes tokenizer/model identity across baseline, training, evaluation and resume. No model acquisition is implicit in planning. Repeated evaluation seeds select the incumbent and are therefore selection data, not an untouched final scientific audit.
 
 ## Smoke test result (Modal, 2026-11-04)
 
