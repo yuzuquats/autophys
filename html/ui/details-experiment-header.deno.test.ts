@@ -20,6 +20,7 @@ Deno.test("review header: identity precedes title; ranking links to a separate r
   assert(!nav.includes("Fit #1"));
   assertStringIncludes(html, 'data-ap-id="bench-a/fit-1"');
   assertStringIncludes(html, 'aria-label="Awaiting approval · invalid settings"');
+  assertStringIncludes(html, '<input type="button" class="ap-review-status"');
   assertStringIncludes(html, 'popovertarget="ap-review-status-popover"');
   assertStringIncludes(html, 'id="ap-review-status-popover" popover');
   assertStringIncludes(html, 'id="ap-status" role="status">Awaiting approval · invalid settings');

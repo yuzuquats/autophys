@@ -22,10 +22,11 @@ ${scope} .ap-experiment-title-row { display:flex;align-items:flex-start;gap:8px;
 ${scope} .ap-experiment-title-row .ap-dname { flex:1; }
 ${scope} .ap-experiment-separator { flex:none; }
 ${scope} .ap-experiment-fit { margin:2px 0 0;color:var(--ap-sec);font:11px/15px var(--ap-font); }
-${scope} .ap-review-status { position:relative;display:flex;flex:none;align-items:center;justify-content:center;width:24px;height:24px;padding:0;border:0;border-radius:4px;background:transparent;color:var(--ap-warn);cursor:pointer;anchor-name:--ap-review-status; }
-${scope} .ap-review-status[data-state="approved"] { color:var(--ap-ok); }
-${scope} .ap-review-status[data-state="rejected"] { color:var(--ap-danger); }
-${scope} .ap-review-status > svg { width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round; }
+${scope} .ap-review-control { position:relative;display:block;flex:none;width:24px;height:24px;color:var(--ap-warn); }
+${scope} .ap-review-control[data-state="approved"] { color:var(--ap-ok); }
+${scope} .ap-review-control[data-state="rejected"] { color:var(--ap-danger); }
+${scope} .ap-review-status { display:block;box-sizing:border-box;width:24px;height:24px;padding:0;border:0;border-radius:4px;appearance:none;background:transparent;color:inherit;cursor:pointer;anchor-name:--ap-review-status; }
+${scope} .ap-review-control > svg { position:absolute;inset:2px;width:20px;height:20px;pointer-events:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round; }
 ${scope} .ap-review-tooltip { position:fixed;inset:0;margin:auto;width:max-content;height:max-content;max-width:180px;padding:6px 8px;border:1px solid var(--ap-line);border-radius:6px;background:var(--bg);color:var(--ap-ink);font:12px/16px var(--ap-font); }
 @supports (position-anchor:--ap-review-status) {
   ${scope} .ap-review-tooltip { position-anchor:--ap-review-status;inset:auto;top:anchor(bottom);right:anchor(right);margin:4px 0 0;position-try-fallbacks:flip-block; }

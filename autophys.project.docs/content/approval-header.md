@@ -31,3 +31,10 @@ legacy view-model compatibility, disclosures and visible save failures.
 Initial owner validation: 26 scoped tests passed and the renderer, stylesheet
 and derivation passed frozen cached typechecks. Final prefix qualification and
 agent review are required before publication.
+
+Phone qualification found that the shell consumes Escape from ordinary buttons
+to close the sheet. The review control uses the equivalent native input button,
+which the existing shell already treats as owning its keyboard interaction.
+Escape now dismisses its native popover while keeping Details open; no shell or
+reserved renderer lifecycle changes are required. The decorative SVG is layered
+beside the input and excluded from hit testing and the accessibility tree.

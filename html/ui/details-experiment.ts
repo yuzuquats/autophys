@@ -34,7 +34,7 @@ function headerMarkup(model: ExperimentDetailsModel, name: string, status: strin
     <li>${recordLink(h.investigation)}</li><li><span class="ap-experiment-separator" aria-hidden="true">›</span><span aria-current="page">${esc(h.proposal)}</span></li>
   </ol></nav>
   <div class="ap-experiment-title-row">${title}
-    <button type="button" class="ap-review-status" data-state="${esc(h.state)}" popovertarget="ap-review-status-popover" aria-label="${esc(model.status.text)}" title="${esc(model.status.text)}">${reviewIcon(h.state)}</button>
+    <span class="ap-review-control" data-state="${esc(h.state)}"><input type="button" class="ap-review-status" data-state="${esc(h.state)}" value="" popovertarget="ap-review-status-popover" aria-label="${esc(model.status.text)}" title="${esc(model.status.text)}">${reviewIcon(h.state)}</span>
     <div class="ap-review-tooltip" id="ap-review-status-popover" popover>${esc(model.status.text)}</div>
     ${h.state === "pending" ? `<span class="ap-review-announcement" id="ap-status" role="status">${esc(model.status.text)}</span>` : ""}
   </div>
