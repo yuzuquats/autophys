@@ -1,4 +1,4 @@
-import type { AppContext } from "../client/context.ts";
+import { readContext, type AppContext } from "./context.ts";
 /** Account control in the header; sign-in stays over the current page. */
 import { initHtmlElement } from "@tento-ui/init/html-element.global";
 import { Dialog } from "@tento-ui/components/dialog/dialog";
@@ -33,11 +33,8 @@ const formStyles = `
 }
 `;
 
-export function mountAccount(onSignedIn: (context: AppContext) => void): void {
-  initHtmlElement();
-  let account = document.getElementById("ap-account");
-  // Hydrate the anonymous server link into the same details/summary avatar
-  // control used by account sessions, before the header's first paint.
+/** Use the same profile control for document bootstrap and in-place sign-out. */
+function hydrateAnonymousAccount(account: HTMLElement | null): HTMLElement | null {
   if (account?.dataset.signedIn === "false" && account instanceof HTMLAnchorElement) {
     const control = document.createElement("details");
     control.id = account.id;
@@ -54,8 +51,17 @@ export function mountAccount(onSignedIn: (context: AppContext) => void): void {
     button.append(avatar);
     control.append(button);
     account.replaceWith(control);
-    account = control;
+    return control;
   }
+  return account;
+}
+
+export function mountAccount(
+  onContextChanged: (context: AppContext) => void,
+  onSigningOut: (pending: boolean) => void,
+): void {
+  initHtmlElement();
+  const account = hydrateAnonymousAccount(document.getElementById("ap-account"));
   const links = document.querySelector(".ck-header .ck-nav-links");
   if (account && links && account.parentElement !== links) links.append(account);
   const hideBrokenImages = () => {
@@ -76,6 +82,54 @@ export function mountAccount(onSignedIn: (context: AppContext) => void): void {
       details.querySelector<HTMLElement>("summary")?.focus({ preventScroll: true });
     }
   }, { capture: true });
+  document.addEventListener("submit", async event => {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement) || !form.matches('#ap-account form[action="/api/auth/logout"]')) return;
+    event.preventDefault();
+    if (form.getAttribute("aria-busy") === "true") return;
+    form.setAttribute("aria-busy", "true");
+    const button = form.querySelector<HTMLButtonElement>("button[type=submit]");
+    if (button) button.disabled = true;
+    form.querySelector("[role=alert]")?.remove();
+    onSigningOut(true);
+    let ended = false;
+    try {
+      // The native form fallback redirects to /app. Fetch clears its HttpOnly
+      // session cookie without navigating, so the landing/drawer/scroll stay put.
+      const response = await fetch(form.action, { method: "POST", body: new URLSearchParams(),
+        credentials: "same-origin", redirect: "manual", signal: AbortSignal.timeout(15_000) });
+      if (!response.ok && response.type !== "opaqueredirect") throw new Error("Sign-out refused");
+      ended = true;
+      const next = await readContext();
+      if (next.principal) throw new Error("Session still active");
+      onContextChanged(next);
+      // Reuse the server's anonymous profile markup; no account data or demo
+      // affordance is guessed by the browser. This GET never changes the page.
+      const documentResponse = await fetch("/", { credentials: "same-origin", cache: "no-store",
+        signal: AbortSignal.timeout(10_000) });
+      if (!documentResponse.ok) throw new Error("Account control unavailable");
+      const template = document.createElement("template");
+      template.innerHTML = await documentResponse.text();
+      const anonymous = template.content.getElementById("ap-account");
+      if (anonymous?.dataset.signedIn !== "false") throw new Error("Expected anonymous account");
+      const control = hydrateAnonymousAccount(anonymous)!;
+      document.getElementById("ap-account")?.replaceWith(control);
+      control.querySelector<HTMLElement>("summary")?.focus({ preventScroll: true });
+    } catch {
+      // After a confirmed logout, refresh this same address if context/markup
+      // recovery failed. Never leave the previous account's data on screen.
+      if (ended) { location.reload(); return; }
+      const error = document.createElement("span");
+      error.setAttribute("role", "alert");
+      error.className = "ap-acct-mode";
+      error.textContent = "Couldn't sign out. Try again.";
+      form.append(error);
+    } finally {
+      onSigningOut(false);
+      form.removeAttribute("aria-busy");
+      if (button) button.disabled = false;
+    }
+  });
   const overlayStyle = document.createElement("style");
   overlayStyle.textContent = "body { --bg-overlay:rgb(0 0 0 / 32%); }";
   document.head.append(overlayStyle);
@@ -92,7 +146,7 @@ export function mountAccount(onSignedIn: (context: AppContext) => void): void {
     form.innerHTML = signInFields(trigger.dataset.demo === "true");
     const stopSignIn = signInInPlace(context => {
       hideBrokenImages(); modal?.dismiss();
-      onSignedIn(context);
+      onContextChanged(context);
     }, form);
     const background = [...document.querySelectorAll<HTMLElement>(".ck-app,.ck-landing,.ck-header,.ap-landing-docs,.ck-footer")]
       .map(node => ({ node, inert: node.inert }));
