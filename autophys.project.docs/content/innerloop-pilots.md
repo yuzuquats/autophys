@@ -21,7 +21,13 @@ The immutable scientific schedule and thresholds remain in [innerloop-experiment
 
 **Historical agent choice and reason (initially pending operator review):** replace raw proposer feedback with a copied report excluding reveal records and evaluator-only fields. Training aggregate score feedback is retained by design; final audit never influences candidate selection. The observed default passed post-outcome reveals into a researcher. Keeping that path would expose hidden physical parameters. Raw evaluator sidecars/workbooks remain unchanged for analysis; this is a cooperative structural boundary, not a hostile-code sandbox. Reverse by reverting the scoped Python change before any confirmation; expected cost one small forward commit, then new review and pilot.
 
-Decision PILOT-02, agent-chosen, pending operator review: execute a hashed, read-only owner-produced Python source capsule on rwc-dev-01, without moving its consumer refs while the parent finalizer uses them. This qualifies the recorded capsule, not an arbitrary checkout HEAD. The alternative is to wait for consumer-ref custody to transfer. Reversal costs only selecting the same committed source after safe fast-forward; no data migration.
+**Decision PILOT-02: use aligned checkout.**
+
+**Review status: operator-confirmed.** The operator explicitly answered **"Use aligned checkout (Recommended)"**. Future experiments, when separately authorized, use the rwc-dev-01 checkout aligned to a reviewed owner-master revision, with exact source and environment identities frozen per run. Existing snapshot pilot evidence remains historical, capsule-scoped evidence; it does not qualify a future checkout or environment.
+
+**Implementation status: pending checkout alignment/environment qualification.** This documentation-only recording authorizes no checkout alignment, new experiments, tests, confirmation-seed use or readiness claim.
+
+**Historical agent choice and reason (initially pending operator review):** execute a hashed, read-only owner-produced Python source capsule on rwc-dev-01, without moving its consumer refs while the parent finalizer uses them. This qualifies the recorded capsule, not an arbitrary checkout HEAD. The alternative is to wait for consumer-ref custody to transfer. Reversal costs only selecting the same committed source after safe fast-forward; no data migration.
 
 Resource ceiling: no native build on any host, no owner cache/install, <=2 MiB new owner source/Git, <=512 MiB experiment output, <=4 CPU threads, <=45 minutes this phase; checks <=300 s except one 600 s research pilot. Seccomp denies Internet sockets in each Python runner and descendants. Existing scientific dependencies only, no installs/downloads. Native x86_64 retained artifacts cannot run on ARM64 rwc-dev-01 and current training/login source is newer. Q1/Q2/G1 remain distinct gates. Confirmatory 101..105, selection 201..205 and final 901..905 remain untouched.
 
