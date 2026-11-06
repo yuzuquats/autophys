@@ -1,3 +1,4 @@
+import { MarkupDiff } from "./render-diff.ts";
 /// <reference lib="dom" />
 /**
  * The details surface: a titled header and status line, sections of facts, tables, bars,
@@ -34,9 +35,11 @@ export function detailsMarkup(model: DetailsModel, classes: DetailsClasses = {},
 
 export class AutophysDetails {
   private abort = new AbortController();
+  private diff: MarkupDiff;
   private experimentKey: string | null = null;
 
   constructor(private host: HTMLElement, onIntent: IntentHandler, private classes: DetailsClasses = {}, private hydrate: (host: HTMLElement) => void = () => {}) {
+    this.diff = new MarkupDiff(host, hydrate);
     const { signal } = this.abort;
     host.addEventListener("click", (e) => {
       const el = (e.target as Element).closest?.<HTMLElement>(`[${ATTR.role}]`);
@@ -74,8 +77,7 @@ export class AutophysDetails {
     const field = active && this.host.contains(active) && active.getAttribute(ATTR.role) === "field" ? active.getAttribute(ATTR.name) : null;
     const caret = field ? [active!.selectionStart, active!.selectionEnd] as const : null;
     this.experimentKey = key;
-    this.host.innerHTML = detailsMarkup(model, this.classes, rows);
-    this.hydrate(this.host);
+    this.diff.render(detailsMarkup(model, this.classes, rows));
     const scroll = this.host.querySelector(".ap-experiment-scroll");
     if (scroll) scroll.scrollTop = scrollTop;
     if (focusedRow !== null) this.host.querySelector<HTMLElement>(`[data-ap-experiment-row="${CSS.escape(focusedRow)}"] > summary`)?.focus({ preventScroll: true });

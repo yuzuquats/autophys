@@ -172,3 +172,42 @@ repaired gates and capacity checks pass. Yuzuquats has about 4 GiB available,
 below the recorded 12 GiB floor; the disk workstream is recovering capacity and
 preserves the live Autophys target. Resume native qualification and packaging
 only after those prerequisites, then repeat the live trace. No source push.
+
+## Incremental UI reconciliation — 2026-11-05
+
+The operator requested UI diffing and deployment. Compare serialized pane
+models before entering shell reflow, then reconcile authored markup by stable
+IDs/roles and sibling position. Patch changed text/attributes and retain
+unchanged cards, SVGs, inputs, disclosures and hydrated controls. Keep grid
+and list-cell light DOM adoption explicit; setup-step sections remain slotted
+light DOM so field edits can patch existing inputs. Hydrate each new marker
+once. Cache tree-row accessories by row ID/content and evict removed rows.
+Actual controller access changes and streamed records still update the UI.
+
+Validation includes controller and full HTML checks, browser DOM identity,
+keyboard focus/caret, disclosure state, changed fields, keyed reorders, duplicate
+class keys, and the deployed periodic-refresh trace. Native packaging remains
+held for cache-maintenance exclusion and repaired gates. No source push.
+
+### Planned native qualification window
+
+Use the existing owner master and held target
+`/home/james/ssd-mount/cargo-target/autophys`; preserve every existing output
+and SDK artifact. Take both the SDK campaign's
+`~/.local/state/productionize/autophys-sdks-20261105/build.lock` and the service's
+`~/.local/state/autophys/deploy.lock`. One Cargo invocation at a time, at most
+two compiler jobs. The full workspace-test stage is budgeted for **20 GiB new
+debug allocation**, followed by **12 GiB new release/packaging allocation**;
+combined target growth is bounded at **32 GiB**, release-root growth at
+**512 MiB**, and operation evidence at **128 MiB**. Existing retained targets
+are excluded from these growth allowances, never released or reclaimed.
+
+Before admission take fresh stable capacity samples, require at least the
+32 GiB growth budget plus a 13.5 GiB reserve, verify no other native writer,
+and confirm default-DENO_DIR maintenance has released exclusion. Monitor
+free space and output growth every five seconds. Stop the operation before
+continuing a phase if reserve falls below **13.5 GiB**, and terminate at the
+unchanged **12 GiB hard stop** or any output bound. Bound the window to 30
+minutes and terminate only this operation's process group on violation. Run
+normal workspace/HTML/package gates; the initial failure is not waived.
+Current read-only measurement is about 110 GiB free after external cleanup.

@@ -3,6 +3,7 @@
  * The main surface: a crumb with a meta line and buttons, the viewer (panels of charts) and
  * one credit line. Charts are drawn at the host's width and redrawn when it changes.
  */
+import { MarkupDiff } from "./render-diff.ts";
 import { signInFields } from "./sign-in-fields.ts";
 import { emptyMarkup, skeletonMarkup, componentButton, recoveryMarkup } from "./state-markup.ts";
 import { chartMarkup } from "./charts.ts";
@@ -109,12 +110,14 @@ function investigationMarkup(body: InvestigationBody, width: number, title?: str
 
 export class AutophysMain {
   private abort = new AbortController();
+  private diff: MarkupDiff;
   private model: MainModel | null = null;
   private width = 0;
   private setupStep = -1;
   private observer: ResizeObserver | null = null;
 
   constructor(private host: HTMLElement, onIntent: IntentHandler, private classes: MainClasses = {}, private hydrate: (host: HTMLElement) => void = () => {}) {
+    this.diff = new MarkupDiff(host, hydrate);
     host.addEventListener("scroll", () => this.highlightJump(), { capture: true, signal: this.abort.signal });
     host.addEventListener("click", (e) => {
       const jump = (e.target as Element).closest<HTMLElement>("[data-ap-jump]");
@@ -138,8 +141,8 @@ export class AutophysMain {
   }
 
   /**
-   * Redraws. The three top-level elements (toolbar, viewer, credit) are kept and only their
-   * contents and attributes change, so a shell that FLIPs the host's children can move them.
+   * Reconcile changed markup in place; retained cards, charts and controls keep
+   * their DOM identity, scroll position and focus across streamed updates.
    */
   render(model: MainModel): void {
     const previous = this.model?.body, nextBody = model.body;
@@ -149,7 +152,7 @@ export class AutophysMain {
     const scroll = samePage ? this.host.querySelector(".ap-viewer")?.scrollTop ?? 0 : 0;
     const focused = document.activeElement;
     const input = focused instanceof HTMLInputElement && this.host.contains(focused) ? focused : null;
-    const setupControl = focused instanceof HTMLElement && focused.closest(".ap-project-setup") && this.host.contains(focused) ? focused : null;
+    const setupControl = focused instanceof HTMLElement && this.host.contains(focused) ? focused : null;
     const focus = input || setupControl;
     const caret = input ? { start: input.selectionStart, end: input.selectionEnd } : null;
     const setup = model.body.kind === "project-setup" ? model.body : null;
@@ -177,7 +180,7 @@ export class AutophysMain {
     const finish = () => {
       for (const [id, open] of disclosures) {
         const el = this.host.querySelector<HTMLDetailsElement>(`[id="${CSS.escape(id)}"]`);
-        if (el) el.open = open;
+        if (el && el.open !== open) el.open = open;
       }
       const viewer = this.host.querySelector(".ap-viewer");
       if (viewer) viewer.scrollTop = scroll;
@@ -189,21 +192,7 @@ export class AutophysMain {
     };
     this.model = model;
     this.width = Math.round(this.host.clientWidth) || 640;
-    const next = document.createElement("template");
-    next.innerHTML = mainMarkup(model, this.width, this.classes);
-    const fresh = [...next.content.children] as HTMLElement[], kept = [...this.host.children] as HTMLElement[];
-    if (kept.length !== fresh.length || kept.some((el, i) => el.tagName !== fresh[i].tagName)) {
-      this.host.replaceChildren(...fresh);
-      this.hydrate(this.host);
-      finish();
-      return;
-    }
-    kept.forEach((el, i) => {
-      for (const a of [...el.attributes]) if (!fresh[i].hasAttribute(a.name)) el.removeAttribute(a.name);
-      for (const a of [...fresh[i].attributes]) el.setAttribute(a.name, a.value);
-      el.innerHTML = fresh[i].innerHTML;
-    });
-    this.hydrate(this.host);
+    this.diff.render(mainMarkup(model, this.width, this.classes));
     finish();
   }
 
@@ -247,7 +236,7 @@ export class AutophysMain {
       }
     }
     for (const button of buttons) {
-      if (button === active) button.setAttribute("aria-current", "location");
+      if (button === active) { if (button.getAttribute("aria-current") !== "location") button.setAttribute("aria-current", "location"); }
       else button.removeAttribute("aria-current");
     }
   }

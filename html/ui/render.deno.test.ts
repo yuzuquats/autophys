@@ -205,12 +205,10 @@ function fakeHost() {
   return { host, fire };
 }
 
-Deno.test("components: they draw what they are given and forward the raw intent", () => {
+Deno.test("components: they forward the raw intent (DOM reconciliation is browser-tested)", () => {
   const got: unknown[] = [];
   const { host, fire } = fakeHost();
   const details = new AutophysDetails(host as unknown as HTMLElement, (i) => got.push(i), classes);
-  details.render(proposal);
-  assertEquals(host.innerHTML, detailsMarkup(proposal, classes));
   const button = { getAttribute: (n: string) => ({ "data-ap": "action", "data-ap-name": "reject" } as Record<string, string>)[n] ?? null };
   fire("click", { closest: () => button });
   fire("change", { getAttribute: (n: string) => ({ "data-ap": "field", "data-ap-name": "rate" } as Record<string, string>)[n] ?? null, value: "200" });
@@ -277,4 +275,20 @@ Deno.test("experiment card: every content section discloses independently above 
   assertStringIncludes(expanded, 'data-ap-experiment-row="So far">');
   const cleared = { ...model, experiment: { ...model.experiment, notice: undefined } };
   assert(!detailsMarkup(cleared, classes).includes('role="alert"'));
+});
+
+Deno.test("sidebar: unchanged row accessories retain identity across new models and selection changes", () => {
+  const cache = new Map();
+  let built = 0;
+  const make = { lead: () => ({ built: ++built }), trail: () => ({ built: ++built }) };
+  const first = listNodes(tree, make, cache);
+  const lead = first[0].$lead(), trail = first[0].$trail!();
+  const next = listNodes(JSON.parse(JSON.stringify(tree)), make, cache);
+  assert(next[0].$lead() === lead);
+  assert(next[0].$trail!() === trail);
+  assertEquals(built, 2);
+  const changed = listNodes([{ ...tree[0], trail: { text: "New result" } }], make, cache);
+  assert(changed[0].$lead() === lead);
+  assert(changed[0].$trail!() !== trail);
+  assertEquals(built, 3);
 });

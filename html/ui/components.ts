@@ -1,3 +1,4 @@
+import { freshMarkers } from "./render-diff.ts";
 import { ColumnsIcon, LinkIcon, GearIcon, ComponentIcon, DatabaseIcon, FormulaIcon, BarChartIcon,
   PlayIcon, CheckmarkIcon, EyeIcon, GridIcon, SearchIcon, PlusIcon, ChevronRightIcon } from "@tento-ui/ui/icons";
 export const chevronIcon = ChevronRightIcon;
@@ -20,11 +21,11 @@ import { LabelTimeline } from "./timeline.ts";
 import type { IntentHandler } from "./intent.ts";
 
 export function hydrateComponents(host: HTMLElement, onIntent: IntentHandler): void {
-  for (const marker of host.querySelectorAll<HTMLElement>("[data-ap-icon]")) {
+  for (const marker of freshMarkers(host, "[data-ap-icon]")) {
     marker.style.cssText = "display:inline-flex;width:14px;height:14px;flex:none";
     marker.innerHTML = (icons[marker.dataset.apIcon!] ?? "").replace("<svg", '<svg width="14" height="14" aria-hidden="true"');
   }
-  for (const marker of host.querySelectorAll<HTMLElement>("[data-ap-empty]")) {
+  for (const marker of freshMarkers(host, "[data-ap-empty]")) {
     const empty = EmptyState.makeWith({ title: marker.dataset.title!, description: marker.dataset.description!, icon: null,
       $illustration: null, primary: null, secondary: null, announce: false });
     // The shared component centres full-pane empties; section empties follow the section grid.
@@ -35,7 +36,7 @@ export function hydrateComponents(host: HTMLElement, onIntent: IntentHandler): v
     }
     marker.replaceChildren(empty);
   }
-  for (const marker of host.querySelectorAll<HTMLElement>("[data-ap-cell]")) {
+  for (const marker of freshMarkers(host, "[data-ap-cell]")) {
     // The rendered title and caption become the cell's content slot (makeText needs tento's global DOM extensions).
     const content = document.createElement("div");
     content.className = "ap-cell-text";
@@ -44,7 +45,7 @@ export function hydrateComponents(host: HTMLElement, onIntent: IntentHandler): v
     cell.style.cssText = "--list-cell-padding:0;--list-cell-layout-hover-color:transparent";
     marker.replaceChildren(cell);
   }
-  for (const marker of host.querySelectorAll<HTMLElement>("[data-ap-steps]")) {
+  for (const marker of freshMarkers(host, "[data-ap-steps]")) {
     // A reasoning trace: earlier steps are history (muted, one line of text); the current one is the
     // reader's step and carries its evidence and expectation as an element body.
     const rows = JSON.parse(marker.dataset.apSteps!) as TraceRow[];
@@ -79,19 +80,19 @@ export function hydrateComponents(host: HTMLElement, onIntent: IntentHandler): v
     });
     marker.replaceChildren(Stepper.makeWith({ steps }));
   }
-  for (const marker of host.querySelectorAll<HTMLElement>("[data-ap-grid]")) {
+  for (const marker of freshMarkers(host, "[data-ap-grid]")) {
     const grid = GridLayout.make();
     grid.style.cssText = "display:block;width:100%";
     grid.append(...marker.children);
     marker.replaceChildren(grid);
     grid.bind({ blockSpacingPx: 10, inlineSpacingPx: 10, minWidthPx: Number(marker.dataset.apGrid) || 260 });
-    // Every render replaces the grid; place the cards now instead of showing them stacked for a frame.
+    // Place a newly mounted grid before its first paint; later renders retain it.
     grid.layoutGridSync();
   }
-  for (const marker of host.querySelectorAll<HTMLElement>("[data-ap-timeline]")) {
+  for (const marker of freshMarkers(host, "[data-ap-timeline]")) {
     marker.replaceChildren(LabelTimeline.makeWith(JSON.parse(marker.dataset.apTimeline!)));
   }
-  for (const marker of host.querySelectorAll<HTMLElement>("[data-ap-copy]")) {
+  for (const marker of freshMarkers(host, "[data-ap-copy]")) {
     const button = Button.makeWith("Copy provenance", { type: "secondary" });
     button.addEventListener("click", async () => {
       try { await navigator.clipboard.writeText(marker.dataset.apCopy!); button.textContent = "Copied"; }
@@ -106,20 +107,20 @@ export function hydrateComponents(host: HTMLElement, onIntent: IntentHandler): v
     });
     marker.replaceChildren(button);
   }
-  for (const marker of host.querySelectorAll<HTMLElement>("[data-ap-action]")) {
+  for (const marker of freshMarkers(host, "[data-ap-action]")) {
     const fallback = marker.querySelector<HTMLButtonElement>("button")!;
     const button = Button.makeWith(fallback.textContent!, { type: marker.dataset.apAction === "primary" ? "primary" : "secondary" });
     for (const a of fallback.attributes) if (a.name !== "class") button.setAttribute(a.name, a.value);
     marker.replaceChildren(button);
   }
-  for (const marker of host.querySelectorAll<HTMLElement>("[data-ap-skeleton]")) {
+  for (const marker of freshMarkers(host, "[data-ap-skeleton]")) {
     marker.replaceChildren(Skeleton.makeWith({ shape: "text", lines: 3, widthPx: null, heightPx: 12, animated: true }));
   }
   for (const marker of host.querySelectorAll<HTMLElement>("[data-ap-switcher]")) {
     marker.replaceChildren(SelectInput.makeWith({ name: "project", label: "Project", value: marker.dataset.value,
       options: JSON.parse(marker.dataset.options!), onChange: (value: string) => onIntent({ kind: "switch", value }) }));
   }
-  for (const marker of host.querySelectorAll<HTMLElement>("[data-ap-button]")) {
+  for (const marker of freshMarkers(host, "[data-ap-button]")) {
     const name = marker.dataset.apButton!, label = marker.textContent!;
     const button = Button.makeWith(label, { type: "secondary" });
     // Native composed click supports pointer and keyboard activation alike.

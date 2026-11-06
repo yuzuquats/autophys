@@ -16,6 +16,7 @@ import { type IntentHandler, intentOf } from "./intent.ts";
 import {
   listNodes,
   type RowFactories,
+  type RowCache,
   trailMarkup,
   treeKey,
 } from "./sidebar-markup.ts";
@@ -61,6 +62,9 @@ export class AutophysSidebar {
   private notice = document.createElement("div");
   private tree = TreeList.make() as TreeList;
   private footer = document.createElement("div");
+  private rowCache: RowCache = new Map();
+  private measuredNodes = "";
+  private measuredWidth = 0;
   private keys = { head: "", pinned: "", tree: "" };
   private abort = new AbortController();
 
@@ -132,7 +136,7 @@ export class AutophysSidebar {
     if (tk !== this.keys.tree) {
       this.keys.tree = tk;
       this.tree.bind({
-        nodes: listNodes(model.nodes, factories) as unknown as TreeList.Node[],
+        nodes: listNodes(model.nodes, factories, this.rowCache) as unknown as TreeList.Node[],
         selectedId: treeSelected,
         label: model.treeLabel,
         expansion: {
@@ -146,6 +150,7 @@ export class AutophysSidebar {
       const labels = new Map<string, string>();
       const visit = (nodes: SidebarModel["nodes"]) => { for (const n of nodes) { labels.set(n.id, `${n.label} · ${n.id}`); if (n.children) visit(n.children); } };
       visit(model.nodes);
+      for (const id of this.rowCache.keys()) if (!labels.has(id)) this.rowCache.delete(id);
       for (const row of this.tree.shadowRoot?.querySelectorAll<HTMLElement>("[role=treeitem]") ?? []) {
         row.title = labels.get(row.dataset.id ?? "") ?? "";
         const name = row.querySelector<HTMLElement>(":scope > .line .name");
@@ -155,19 +160,24 @@ export class AutophysSidebar {
     // The kit clips names to a flexible column. Reserve the intrinsic label
     // width when its accessory would shorten it; the surrounding tree region
     // can scroll horizontally for unusually long SDK names.
-    this.tree.style.width = "100%";
-    this.tree.style.minWidth = "100%";
-    const names = [...this.tree.shadowRoot?.querySelectorAll<HTMLElement>(".name") ?? []];
-    const required = Math.max(this.rail.clientWidth, ...names.map((name) => {
-      const line = name.closest(".line") as HTMLElement;
-      return line.getBoundingClientRect().width + Math.max(0, name.scrollWidth - name.clientWidth);
-    }));
-    this.tree.style.minWidth = `${Math.ceil(required)}px`;
+    const nodeKey = JSON.stringify(model.nodes), railWidth = this.rail.clientWidth;
+    if (nodeKey !== this.measuredNodes || railWidth !== this.measuredWidth) {
+      this.measuredNodes = nodeKey; this.measuredWidth = railWidth;
+      this.tree.style.width = "100%";
+      this.tree.style.minWidth = "100%";
+      const names = [...this.tree.shadowRoot?.querySelectorAll<HTMLElement>(".name") ?? []];
+      const required = Math.max(railWidth, ...names.map((name) => {
+        const line = name.closest(".line") as HTMLElement;
+        return line.getBoundingClientRect().width + Math.max(0, name.scrollWidth - name.clientWidth);
+      }));
+      this.tree.style.minWidth = `${Math.ceil(required)}px`;
+    }
     this.rail.bodyScrollTop = scrollTop;
   }
 
   /** Stop listening; the host keeps its last rendering until the caller clears it. */
   destroy(): void {
     this.abort.abort();
+    this.rowCache.clear();
   }
 }

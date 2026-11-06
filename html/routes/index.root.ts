@@ -153,7 +153,9 @@ const app: Cookbook.App = {
       Cookbook.View.mount(viewShell, new AutophysMain(shell.slots.main, handle, shell.classes, hydrate), () => renderedView.main),
       Cookbook.View.mount(viewShell, new AutophysDetails(shell.slots.details, handle, shell.classes, hydrate), () => renderedView.details),
     ];
-    // A record arrived or the selection moved: every view re-reads its model (main with FLIP).
+    let viewKeys = [renderedView.sidebar, renderedView.main, renderedView.details].map(model => JSON.stringify(model));
+    let crumb = breadcrumbText(renderedView.main.crumb);
+    // Streamed records may affect only one pane. Keep the other panes mounted.
     const redraw = () => {
       if (pendingAddress && ctl.store.snapshot()) {
         const id = pendingAddress; pendingAddress = null;
@@ -162,11 +164,14 @@ const app: Cookbook.App = {
       const view = renderedView = ctl.view();
       const panels = shell.slots.main.closest<HTMLElement>(".ck-panels");
       const setupOnly = view.main.body.kind === "project-setup" && view.sidebar.selectedId !== "devices";
-      panels?.toggleAttribute("data-ap-setup-only", setupOnly);
+      if (panels && panels.hasAttribute("data-ap-setup-only") !== setupOnly) panels.toggleAttribute("data-ap-setup-only", setupOnly);
       const details = panels?.querySelector<HTMLElement>(".ck-details");
       if (details) details.inert = setupOnly || !panels?.hasAttribute("data-details");
-      views.forEach((v) => v.redraw());
-      shell.setCrumb?.(breadcrumbText(view.main.crumb));
+      const nextKeys = [view.sidebar, view.main, view.details].map(model => JSON.stringify(model));
+      const previousKeys = viewKeys; viewKeys = nextKeys;
+      views.forEach((v, i) => { if (nextKeys[i] !== previousKeys[i]) v.redraw(); });
+      const nextCrumb = breadcrumbText(view.main.crumb);
+      if (nextCrumb !== crumb) { crumb = nextCrumb; shell.setCrumb?.(crumb); }
       if (SIGNED_OUT && pendingSignInError) {
         const form = shell.slots.main.querySelector<HTMLFormElement>("form.ap-signin");
         if (form) { showSignInError(form, pendingSignInError, false); pendingSignInError = null; }

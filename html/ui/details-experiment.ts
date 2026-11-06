@@ -73,7 +73,7 @@ export function experimentDetailsMarkup(model: ExperimentDetailsModel, classes: 
   const decision = model.decision ? `<div class="${esc([classes.decision ?? "", "ap-decision"].filter(Boolean).join(" "))}">${model.decision.map(a => buttonMarkup(a, classes)).join("")}</div>` : "";
   const receipt = model.experiment.header && model.experiment.header.state !== "pending" ? `<p class="ap-experiment-receipt" id="ap-status" role="status">${esc(model.status.text)}</p>` : "";
   const actions = model.actions?.length ? `<div class="ap-actions${model.actions.length === 1 ? " ap-one" : ""}">${model.actions.map(a => buttonMarkup(a, classes)).join("")}</div>` : "";
-  return `<section class="ap-experiment-card" aria-labelledby="ap-experiment-name">
+  return `<section class="ap-experiment-card" data-ap-experiment-key="${esc(model.experiment.key)}" aria-labelledby="ap-experiment-name">
     <std-round floating bg="var(--bg,#fff)" border="var(--ap-line)" radius="12"></std-round>
     <header class="ap-experiment-header" data-ap-cell>
       ${headerMarkup(model, name, status, classes)}

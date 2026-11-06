@@ -61,18 +61,26 @@ export type ListNode = {
   $trail: (() => unknown) | null;
 };
 
-export function listNodes(nodes: TreeNode[], make: RowFactories): ListNode[] {
+export type RowCache = Map<string, { lead?: { key: string; value: unknown }; trail?: { key: string; value: unknown } }>;
+export function listNodes(nodes: TreeNode[], make: RowFactories, cache?: RowCache): ListNode[] {
+  const content = (n: TreeNode, kind: "lead" | "trail", key: string, build: () => unknown) => {
+    if (!cache) return build();
+    const row = cache.get(n.id) ?? {};
+    cache.set(n.id, row);
+    if (row[kind]?.key !== key) row[kind] = { key, value: build() };
+    return row[kind]!.value;
+  };
   return nodes.map((n) => ({
     id: n.id,
     label: n.label,
     icon: null,
     selectable: n.selectable,
-    $lead: () => make.lead(ICONS[n.icon], !!n.dim),
+    $lead: () => content(n, "lead", JSON.stringify([n.icon, !!n.dim]), () => make.lead(ICONS[n.icon], !!n.dim)),
     $trail: n.trail &&
         (n.trail.text != null || n.trail.badge != null || n.trail.spinner)
-      ? () => make.trail(trailMarkup(n.trail!), n.trail!.tone ?? "muted")
+      ? () => content(n, "trail", JSON.stringify(n.trail), () => make.trail(trailMarkup(n.trail!), n.trail!.tone ?? "muted"))
       : null,
-    children: n.children ? listNodes(n.children, make) : null,
+    children: n.children ? listNodes(n.children, make, cache) : null,
   }));
 }
 
