@@ -155,3 +155,20 @@ session/access checks and pairing refresh; actual access changes still redraw.
 Regression coverage checks fresh objects with reordered keys, every capability
 revocation/restoration, and identity changes. Validate native and HTML gates,
 then deploy and repeat the idle trace across multiple polling intervals.
+
+Qualification receipt: controller tests pass 3/3, including the new unchanged-
+access regression. A second public-page probe confirmed that the next poll
+removed the original card and focused jump button, dropping keyboard focus,
+while viewer scrollTop stayed 300 and dimensions stayed 656×616. Evidence:
+`fleet/evidence/autophys-drawer/periodic-flash-{before,focus-before}.json`.
+
+Deployment is held, not completed. The normal pipeline stopped on the current
+master's three native login tests; the HTML suite reports 111 passed and three
+failures in context-boundary, display-stream and closed-store fixture contracts.
+The account/UI workstream owns their repair and preserves the controller fix.
+Logs: `periodic-flash-deploy.log` and `periodic-flash-html.log` in the evidence
+directory. The operator explicitly confirmed the native packaging hold until
+repaired gates and capacity checks pass. Yuzuquats has about 4 GiB available,
+below the recorded 12 GiB floor; the disk workstream is recovering capacity and
+preserves the live Autophys target. Resume native qualification and packaging
+only after those prerequisites, then repeat the live trace. No source push.
