@@ -24,11 +24,15 @@ async fn product_routes_work_and_dependency_system_routes_are_product_404s() {
     let app =
         test::init_service(App::new().configure(move |cfg| app.configure(cfg, web::scope(""))))
             .await;
-    for path in ["/", "/app", "/app/project", "/login", "/api/healthz"] {
+    for path in ["/", "/app", "/app/project", "/api/healthz"] {
         let response =
             test::call_service(&app, test::TestRequest::get().uri(path).to_request()).await;
         assert_eq!(response.status(), 200, "{path}");
     }
+    let response =
+        test::call_service(&app, test::TestRequest::get().uri("/login").to_request()).await;
+    assert_eq!(response.status(), 303);
+    assert_eq!(response.headers().get("location").unwrap(), "/app");
     // All methods on the entire namespace, including the bare prefix, are
     // reserved. Future upstream routes cannot silently expand the surface.
     for path in [

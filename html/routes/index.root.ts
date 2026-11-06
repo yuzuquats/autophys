@@ -23,10 +23,12 @@ import { mountGuidedTour } from "./guided-tour.ts";
 import { contentTransitionStyles } from "./content-transition.ts";
 import { landingDocs } from "./docs.ts";
 import { quietLoading, signedOutView } from "../client/derive/signed-out.ts";
-import { signInInPlace } from "./sign-in-in-place.ts";
+import { signInInPlace, takeSignInError, showSignInError } from "./sign-in-in-place.ts";
 import { mountAccount } from "./account-header.ts";
 import "./brand.ts";
 import "./light-only.ts";
+
+let pendingSignInError = takeSignInError();
 
 // The drawer normalizes history before mounting the app. Keep the original address.
 let requestedLocation: { search: string; hash: string } | null = { search: location.search, hash: location.hash };
@@ -45,12 +47,14 @@ const PAIRING_POLL_MS = 5000;
 // asks for reauthentication; the host owns document reload and its per-tab loop guard.
 const REAUTH_WINDOW_MS = 30_000;
 function reauth(): void {
-  // `serve --login` (the page carries the account badge): a 401 means the session ended, so
-  // sign in again and come back here rather than reloading into the same 401.
+  // Refresh the document context when a login session ends. The workspace
+  // renders its inline form and makes no authenticated calls while signed out.
   ctl.store.close();
   guided?.dispose();
   if (context?.auth.canSignOut || context?.auth.canSignIn) {
-    location.assign(`/login?next=${encodeURIComponent(location.pathname + location.search)}`);
+    // Refresh context at this address; a signed-out workspace owns its form.
+    // Preserve the current route and hash instead of leaving for /login.
+    location.reload();
     return;
   }
   try {
@@ -161,6 +165,10 @@ const app: Cookbook.App = {
       if (details) details.inert = setupOnly || !panels?.hasAttribute("data-details");
       views.forEach((v) => v.redraw());
       shell.setCrumb?.(breadcrumbText(view.main.crumb));
+      if (SIGNED_OUT && pendingSignInError) {
+        const form = shell.slots.main.querySelector<HTMLFormElement>("form.ap-signin");
+        if (form) { showSignInError(form, pendingSignInError, false); pendingSignInError = null; }
+      }
     };
     const reconcileMain = () => {
       const panels = shell.slots.main.closest<HTMLElement>(".ck-panels");

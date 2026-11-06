@@ -1,19 +1,18 @@
 //! Invite-only browser sign-in for `serve --login` (accounts in
-//! [`crate::accounts`]). Plain server-rendered pages, so signing in works
-//! before the app's bundle loads and needs nothing from `html/`:
+//! [`crate::accounts`]). Credentials are entered in the workspace or its header
+//! dialog. The legacy `/login` URL redirects into the workspace.
 //!
 //! ```text
-//! GET  /login                 email + password form (?next=/app/...)
+//! GET  /login                 303 to /app (or a safe workspace next path)
 //! GET  /invite#<token>        choose a password (the token stays out of logs)
-//! POST /api/auth/login        form → session cookie, 303 to next
-//! POST /api/auth/invite       form → password set, session cookie, 303 /app
-//! POST /api/auth/logout       end the session, 303 /login
+//! POST /api/auth/login        session cookie, 303 to next; JSON on failure
+//! POST /api/auth/invite       password set, session cookie, 303 /app
+//! POST /api/auth/logout       end the session, 303 /app
 //! GET  /api/auth/me           {"user": {...}} or 401
 //! ```
 //!
-//! Every form POST must carry one of the daemon's Origins. The app document
-//! itself ([`crate::app`]) redirects to `/login` until a session exists and
-//! then carries a small account badge ([`badge`]).
+//! Every form POST must carry one of the daemon's Origins. App documents
+//! ([`crate::app`]) remain public; signed-out workspaces render the inline form.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -31,7 +30,7 @@ use crate::error::{ApiError, Result};
 use crate::http::auth::{LOGIN_COOKIE, form_origin, signed_in};
 use crate::http::{Api, blocking};
 
-/// Register the sign-in pages and `/api/auth/*`. Call before the `/api`
+/// Register the legacy redirect, invitation page and `/api/auth/*`. Call before the `/api`
 /// catch-all.
 pub fn configure(cfg: &mut web::ServiceConfig, api: Api) {
     let data = web::Data::new(api);
@@ -153,44 +152,6 @@ fn html(status: actix_web::http::StatusCode, body: String) -> HttpResponse {
         .body(body)
 }
 
-/// The demo button under the sign-in form, when a demo account exists.
-const DEMO_FORM: &str = "<form method=\"post\" action=\"/api/auth/demo\" class=\"demo\">\
-<input type=\"hidden\" name=\"next\" value=\"/app\">\
-<button type=\"submit\" class=\"secondary\">Continue as demo</button></form>";
-
-fn login_form(next: &str, email: &str, error: Option<&str>, demo: bool) -> String {
-    let demo = if demo { DEMO_FORM } else { "" };
-    let error = error
-        .map(|e| format!("<div class=\"err\" role=\"alert\">{}</div>", escape(e)))
-        .unwrap_or_default();
-    page(
-        "Sign in",
-        &format!(
-            "<h1>Sign in to Autophys</h1><p>Use the email you were invited with.</p>{error}\
-             <form method=\"post\" action=\"/api/auth/login\">\
-             <input type=\"hidden\" name=\"next\" value=\"{}\">\
-             <label for=\"email\">Email</label>\
-             <input id=\"email\" name=\"email\" type=\"email\" autocomplete=\"username\" required value=\"{}\">\
-             <label for=\"password\">Password</label>\
-             <input id=\"password\" name=\"password\" type=\"password\" autocomplete=\"current-password\" required>\
-             <button type=\"submit\">Sign in</button></form>{demo}\
-             <p class=\"alt\"><a href=\"/\">Back to the overview</a></p>",
-            escape(next),
-            escape(email),
-        ),
-    )
-}
-
-/// Whether the sign-in page offers the demo account.
-async fn has_demo(api: &Api) -> bool {
-    let keys = api.keys.clone();
-    blocking(move || keys.users_demo())
-        .await
-        .ok()
-        .flatten()
-        .is_some()
-}
-
 fn invite_form(error: Option<&str>) -> String {
     let error = error
         .map(|e| format!("<div class=\"err\" role=\"alert\">{}</div>", escape(e)))
@@ -220,19 +181,38 @@ struct NextQuery {
     next: Option<String>,
 }
 
-async fn login_page(
-    api: web::Data<Api>,
-    req: HttpRequest,
-    q: web::Query<NextQuery>,
-) -> Result<HttpResponse> {
+async fn login_page(q: web::Query<NextQuery>) -> HttpResponse {
+    // Legacy links never render another sign-in surface, or redirect back to
+    // this alias. Only workspace destinations can contain the inline form.
     let next = safe_next(q.next.as_deref());
-    if signed_in(&api, &req).await?.is_some() {
-        return Ok(see_other(&next));
+    let path = next.split(['?', '#']).next().unwrap_or("");
+    see_other(if path == "/app" || path.starts_with("/app/") {
+        &next
+    } else {
+        "/app"
+    })
+}
+
+/// Fetch submissions keep failures in the existing form. A native form
+/// navigation returns to the inline workspace form with a fixed error code;
+/// credentials and arbitrary messages never enter the URL.
+fn login_error(
+    req: &HttpRequest,
+    status: actix_web::http::StatusCode,
+    code: &str,
+    message: &str,
+) -> HttpResponse {
+    if req
+        .headers()
+        .get("sec-fetch-mode")
+        .and_then(|v| v.to_str().ok())
+        == Some("navigate")
+    {
+        return see_other(&format!("/app?signin_error={code}"));
     }
-    Ok(html(
-        actix_web::http::StatusCode::OK,
-        login_form(&next, "", None, has_demo(&api).await),
-    ))
+    HttpResponse::build(status)
+        .insert_header((header::CACHE_CONTROL, "no-store"))
+        .json(json!({ "error": code, "message": message }))
 }
 
 async fn invite_page() -> HttpResponse {
@@ -262,21 +242,26 @@ async fn login(
         .app_data::<web::Data<Throttle>>()
         .cloned()
         .ok_or_else(|| ApiError::Internal("no sign-in throttle".into()))?;
-    let demo = has_demo(&api).await;
     let key = crate::accounts::normalize_email(&email).unwrap_or_else(|_| email.to_lowercase());
-    let refuse = |m: &str| {
-        Ok(html(
+    let refuse = |code: &str, message: &str| {
+        Ok(login_error(
+            &req,
             actix_web::http::StatusCode::TOO_MANY_REQUESTS,
-            login_form(&next, &email, Some(m), demo),
+            code,
+            message,
         ))
     };
     if throttle.locked(&key) {
         return refuse(
+            "throttled",
             "Too many sign-in attempts for this email. Wait a few minutes and try again.",
         );
     }
     let Some(_slot) = throttle.slot() else {
-        return refuse("Autophys is busy signing people in. Try again in a moment.");
+        return refuse(
+            "busy",
+            "Autophys is busy signing people in. Try again in a moment.",
+        );
     };
     let keys = api.keys.clone();
     let typed = email.clone();
@@ -286,14 +271,11 @@ async fn login(
         None => throttle.fail(&key),
     }
     let Some(user) = user else {
-        return Ok(html(
+        return Ok(login_error(
+            &req,
             actix_web::http::StatusCode::UNAUTHORIZED,
-            login_form(
-                &next,
-                &email,
-                Some("That email and password don't match an account."),
-                demo,
-            ),
+            "invalid",
+            "That email and password don't match an account.",
         ));
     };
     start_session(&api, &req, user, &next).await
@@ -394,7 +376,7 @@ async fn logout(api: web::Data<Api>, req: HttpRequest) -> Result<HttpResponse> {
     }
     let mut gone = session_cookie(&api, String::new());
     gone.make_removal();
-    let mut resp = see_other("/login");
+    let mut resp = see_other("/app");
     resp.add_cookie(&gone)
         .map_err(|e| ApiError::Internal(format!("clear cookie: {e}")))?;
     Ok(resp)
@@ -584,7 +566,7 @@ pub fn badge(user: &User) -> String {
 
 pub fn anonymous_badge(demo: bool) -> String {
     format!(
-        "<a id=\"ap-account\" data-signed-in=\"false\" data-demo=\"{demo}\" class=\"ap-acct-btn\" href=\"/login?next=/app\" aria-label=\"Sign in\" title=\"Sign in\"><svg viewBox=\"0 0 20 20\" aria-hidden=\"true\"><circle cx=\"10\" cy=\"7\" r=\"3.25\"/><path d=\"M3.75 16.5c.9-3 3.3-4.5 6.25-4.5s5.35 1.5 6.25 4.5\"/></svg></a>{ACCOUNT_STYLE}"
+        "<a id=\"ap-account\" data-signed-in=\"false\" data-demo=\"{demo}\" class=\"ap-acct-btn\" href=\"/app\" aria-label=\"Sign in\" title=\"Sign in\"><svg viewBox=\"0 0 20 20\" aria-hidden=\"true\"><circle cx=\"10\" cy=\"7\" r=\"3.25\"/><path d=\"M3.75 16.5c.9-3 3.3-4.5 6.25-4.5s5.35 1.5 6.25 4.5\"/></svg></a>{ACCOUNT_STYLE}"
     )
 }
 

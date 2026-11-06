@@ -105,15 +105,16 @@ async fn sign_in_gates_the_app_and_the_browser_api() {
     let f = login_fixture();
     let app = app!(f.api);
 
-    // Signed out: the document redirects, keyless reads are refused even
-    // with a document session and a local Host.
-    let (s, to, _, _) = send(
+    // Signed-out workspaces render the app shell, whose main pane owns sign-in.
+    // Keyless reads are refused even with a document session and a local Host.
+    let (s, _, _, page) = send(
         &app,
         public(test::TestRequest::get().uri("/app/inv_1?x=1")),
         "x",
     )
     .await;
-    assert_eq!((s, to.as_str()), (303, "/login?next=/app/inv_1%3Fx%3D1"));
+    assert_eq!(s, 200);
+    assert!(page.contains("data-signed-in=\"false\""));
     assert_eq!(
         call(
             &app,
@@ -123,15 +124,22 @@ async fn sign_in_gates_the_app_and_the_browser_api() {
         .0,
         401
     );
-    let (s, _, _, page) = send(&app, public(test::TestRequest::get().uri("/login")), "x").await;
-    assert!(
-        s == 200
-            && page.contains("action=\"/api/auth/login\"")
-            && !page.contains("source=fixtures"),
-        "{page}"
-    );
+    // Legacy login links always enter the workspace; no standalone form is served.
+    for (uri, expected) in [
+        ("/login", "/app"),
+        (
+            "/login?next=%2Fapp%2Finv_1%3Fx%3D1%23record",
+            "/app/inv_1?x=1#record",
+        ),
+        ("/login?next=%2Flogin", "/app"),
+        ("/login?next=%2F%2Fevil.example", "/app"),
+    ] {
+        let (s, to, _, page) = send(&app, public(test::TestRequest::get().uri(uri)), "x").await;
+        assert_eq!((s, to.as_str()), (303, expected), "{uri}");
+        assert!(!page.contains("<form"));
+    }
 
-    // Signed out, only the landing page is public; there is no demo mode.
+    // Both landing and workspace are public shells; account data remains gated.
     let (s, _, _, page) = send(&app, public(test::TestRequest::get().uri("/")), "x").await;
     assert!(s == 200 && page.contains("data-signed-in=\"false\"") && !page.contains("Sign out"));
     for uri in [
@@ -139,10 +147,10 @@ async fn sign_in_gates_the_app_and_the_browser_api() {
         "/app?source=fixtures",
         "/app/inv_1?x=1&source=fixtures",
     ] {
-        let (s, to, _, _) = send(&app, public(test::TestRequest::get().uri(uri)), "x").await;
+        let (s, _, _, page) = send(&app, public(test::TestRequest::get().uri(uri)), "x").await;
         assert!(
-            s == 303 && to.starts_with("/login?next="),
-            "{uri}: {s} {to}"
+            s == 200 && page.contains("data-signed-in=\"false\""),
+            "{uri}: {s}"
         );
     }
 
@@ -277,9 +285,9 @@ async fn sign_in_gates_the_app_and_the_browser_api() {
         s == 200 && frag.contains("ada@lab.org") && frag.contains("/api/auth/logout"),
         "{frag}"
     );
-    // The demo account: no password; offered on the sign-in pages only when set.
-    let (_, _, _, page) = send(&app, public(test::TestRequest::get().uri("/login")), "x").await;
-    assert!(!page.contains("/api/auth/demo"));
+    // The demo account: no password; the workspace advertises it only when set.
+    let (_, _, _, page) = send(&app, public(test::TestRequest::get().uri("/app")), "x").await;
+    assert!(page.contains("data-demo=\"false\""));
     let (s, _, _, _) = send(
         &app,
         form("/api/auth/demo", "next=%2Fapp", Some(PUBLIC)),
@@ -289,11 +297,8 @@ async fn sign_in_gates_the_app_and_the_browser_api() {
     assert_eq!(s, 404, "no demo account yet");
     let demo = f.api.keys.users_set_demo("Demo@Lab.org", true).unwrap();
     assert!(demo.demo && demo.active);
-    let (_, _, _, page) = send(&app, public(test::TestRequest::get().uri("/login")), "x").await;
-    assert!(
-        page.contains("/api/auth/demo") && page.contains("Continue as demo"),
-        "{page}"
-    );
+    let (_, _, _, page) = send(&app, public(test::TestRequest::get().uri("/app")), "x").await;
+    assert!(page.contains("data-demo=\"true\""), "{page}");
     let (_, _, _, page) = send(&app, public(test::TestRequest::get().uri("/")), "x").await;
     assert!(page.contains("data-demo=\"true\""), "{page}");
     let (s, _, _, _) = send(&app, form("/api/auth/demo", "next=%2Fapp", None), "x").await;
@@ -337,8 +342,8 @@ async fn sign_in_gates_the_app_and_the_browser_api() {
             .0,
         401
     );
-    let (_, _, _, page) = send(&app, public(test::TestRequest::get().uri("/login")), "x").await;
-    assert!(!page.contains("/api/auth/demo"));
+    let (_, _, _, page) = send(&app, public(test::TestRequest::get().uri("/app")), "x").await;
+    assert!(page.contains("data-demo=\"false\""));
     // A read-only account reads but cannot write, and the popover says so.
     f.api.keys.users_set_read_only("ada@lab.org", true).unwrap();
     assert_eq!(
@@ -371,7 +376,7 @@ async fn sign_in_gates_the_app_and_the_browser_api() {
     assert_eq!(call(&app, foreign.to_request()).await.0, 403);
 
     // Password sign-in.
-    let (s, _, _, _) = send(
+    let (s, _, _, failure) = send(
         &app,
         form(
             "/api/auth/login",
@@ -382,6 +387,10 @@ async fn sign_in_gates_the_app_and_the_browser_api() {
     )
     .await;
     assert_eq!(s, 401);
+    assert_eq!(
+        serde_json::from_str::<Value>(&failure).unwrap()["error"],
+        "invalid"
+    );
     // Repeated failures for one email lock it for the window (429), even
     // with the right password; other emails are unaffected.
     for _ in 1..autophys_cli::login::Throttle::FAILURES {
@@ -408,6 +417,19 @@ async fn sign_in_gates_the_app_and_the_browser_api() {
     )
     .await;
     assert!(s == 429 && page.contains("Too many"), "{s}");
+    let (s, to, _, page) = send(
+        &app,
+        form(
+            "/api/auth/login",
+            "email=ada%40lab.org&password=wrong",
+            Some(PUBLIC),
+        )
+        .insert_header(("sec-fetch-mode", "navigate")),
+        "x",
+    )
+    .await;
+    assert_eq!((s, to.as_str()), (303, "/app?signin_error=throttled"));
+    assert!(!page.contains("<form"));
     let app = app!(f.api);
     let (s, to, again, _) = send(
         &app,
@@ -428,7 +450,7 @@ async fn sign_in_gates_the_app_and_the_browser_api() {
         login.clone(),
     ));
     let (s, to, _, _) = send(&app, out, "x").await;
-    assert_eq!((s, to.as_str()), (303, "/login"));
+    assert_eq!((s, to.as_str()), (303, "/app"));
     assert_eq!(
         call(&app, both(get("/workspace", None)).to_request())
             .await
