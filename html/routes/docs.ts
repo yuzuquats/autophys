@@ -591,7 +591,13 @@ export function landingDocs(): { onStage(stage: Cookbook.Stage): void; mount(): 
       const footer = document.querySelector(".ck-footer");
       if (footer) footer.before(section);
       else document.body.append(section);
-      void doc.bind({ markdown: DOCS_MARKDOWN, nodeViews: NODE_VIEWS, inlineCodeLanguage: "autophys-inline" });
+      void doc.bind({ markdown: DOCS_MARKDOWN, nodeViews: NODE_VIEWS, inlineCodeLanguage: "autophys-inline" }).then(() => {
+        // A fresh /#docs load can reach the anchor while the section is still
+        // empty, clamping the scroll to the short document's temporary end.
+        if (location.hash === "#docs" && document.documentElement.dataset.ckStage === "landing") {
+          section.scrollIntoView({ block: "start", behavior: "instant" });
+        }
+      });
       museSectionPeek(section, doc);
     },
   };
