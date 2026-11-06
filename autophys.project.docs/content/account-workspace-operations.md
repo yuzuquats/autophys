@@ -267,3 +267,26 @@ data was copied. Free before/minimum/after was
 were released. No suite, deployment or automatic retry ran. The scoped forward
 fix and earlier hardening remain excluded above polish's joint prerequisite
 prefix; the final publication boundary still needs independent review.
+
+
+### Pitch-to-workspace tutorial continuity — 2026-11-06
+
+Pitch navigation now keeps the current account walkthrough visible when it opens
+the workspace, including ArrowDown, right-arrow slide navigation and reopening
+during the closing animation. The previous explicit-launch flag returned no
+lessons for pitch entry, so the shell immediately lowered the tutorial away.
+Only an initial direct workspace URL skips the walkthrough; later drawer
+navigation and the Walkthrough action use the ordinary account-backed source.
+Sign-in itself still only signs in, and identity changes still discard lessons.
+
+The entry module passed its cached/frozen Deno typecheck and browser bundle.
+Thirteen focused collaborative-browser checks passed against the exact bundle,
+including desktop/390px visibility, next/back, dismissal/restart, direct app
+entry, fast reversal, sign-out teardown, and sign-in without an automatic tour.
+The browser used the persisted read-only account; no records were seeded.
+Evidence: fleet/evidence/autophys-tutorial-header/validation.json. At that source
+checkpoint, commits were held and no native build, test suite, push or deployment
+had run. The operator subsequently requested deployment; productionize released
+one scoped local commit slot. The bounded build, exact source/artifact identities
+and deployment outcome are recorded in the same evidence directory under
+deployment.json. Git publication remains a separate coordinated operation.

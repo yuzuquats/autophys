@@ -72,7 +72,9 @@ const ctl = new Controller(makeStore(), environment());
 // `serve --login` marks a signed-out page (the Sign in badge). The landing page stays usable:
 // the app makes no API calls (no 401, no reload) and its main pane asks to sign in.
 let SIGNED_OUT = !!context?.auth.canSignIn && !context.principal;
-let walkthroughRequested = false;
+// A direct workspace URL skips the pitch walkthrough on its first mount.
+// Every later request comes from drawer navigation or the Walkthrough action.
+let skipInitialWalkthrough = location.pathname !== "/";
 const baseView = ctl.view.bind(ctl);
 ctl.view = () => {
   if (SIGNED_OUT) return signedOutView(baseView(), context?.auth.allowDemo);
@@ -123,7 +125,7 @@ const app: Cookbook.App = {
         return;
       }
       if (intent.kind === "action" && intent.name === "sign-in") { document.getElementById("ap-account")?.click(); return; }
-      if (intent.kind === "action" && intent.name === "walkthrough") { walkthroughRequested = true; shell.startTour?.(); return; }
+      if (intent.kind === "action" && intent.name === "walkthrough") { shell.startTour?.(); return; }
       if (SIGNED_OUT) return; // Nothing else works without an account; the main pane says so.
       if (intent.kind === "action" && intent.name === "retry") { location.reload(); return; }
       if (intent.kind === "action" && intent.name === "copy-sdk") {
@@ -244,10 +246,10 @@ const app: Cookbook.App = {
 };
 
 const docs = landingDocs();
-Cookbook.mount({ deck, onStage: (stage) => docs.onStage(stage), tutorial: { start: () => { if (!walkthroughRequested) return []; walkthroughRequested = false; return guided?.source.start() ?? []; }, finish: result => guided?.source.finish?.(result) }, status: null, labels: { sidebar: "Workspace" } }).run(app);
+Cookbook.mount({ deck, onStage: (stage) => docs.onStage(stage), tutorial: { start: () => { if (skipInitialWalkthrough) { skipInitialWalkthrough = false; return []; } return guided?.source.start() ?? []; }, finish: result => guided?.source.finish?.(result) }, status: null, labels: { sidebar: "Workspace" } }).run(app);
 function onContextChanged(next: AppContext): void {
   cancelAccountBadge();
-  context = next; SIGNED_OUT = !next.principal; walkthroughRequested = false;
+  context = next; SIGNED_OUT = !next.principal;
   const bootstrap = document.getElementById("ap-context");
   if (bootstrap) bootstrap.textContent = JSON.stringify(next);
   if (resumeSession) resumeSession();
