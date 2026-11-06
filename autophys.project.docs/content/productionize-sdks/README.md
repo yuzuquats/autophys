@@ -65,6 +65,36 @@ in both SDKs. This walkthrough records scope only and does not start
 implementation or claim Rust memory/JSONL investigation backends exist. A5
 remains open; historical scores, findings and evidence limits remain unchanged.
 
+## SDK-PARITY-02 — Opt-in visual parity
+
+Review status: **operator-confirmed**. Implementation status: **pending**.
+
+For A6, the operator chose **Add opt-in visual parity**: Rust is to support
+optional fitted-curve image evidence, stored image identities/references and
+replay/resume checks analogous to Python. Visual evidence is disabled by
+default; numerical scientific contracts remain unchanged. Implementation is
+pending and A6 remains open.
+
+## PUB-01 — Completed campaign work
+
+Review status: **operator-confirmed scope**; independent final review pending.
+Publication preparation status: **pending; held for polish**.
+
+The operator chose **Completed campaign work** as the target next publication
+scope: our completed SDK repairs, approved source unification, pilot checkpoint,
+docs and confirmed decisions. Newly chosen memory/JSONL (SDK-PARITY-01) and
+visual-parity (SDK-PARITY-02) implementations remain pending. Unfinished
+scientific/SDK qualification remains documented above; this decision makes no
+readiness promotion. Preserve peer work outside the selection except prior
+explicitly authorized dependencies.
+
+The exact Change-Id allowlist, dependencies, isolated prefix validation and
+independent final review remain pending. This scoped decision is not a blanket
+master push or automatic deployment. Publication preparation and all ref/commit
+operations remain held under **POLISH REF FREEZE** until explicit polish release;
+this recording task grants no push permission. No fixed live stack count is
+asserted.
+
 ## Retained baseline evidence, not current-revision acceptance
 
 At the frozen baseline on yuzuquats Linux x86_64 (i7-12700K, Python 3.12.3, NumPy 1.26.4, SciPy 1.11.4, Rust/Cargo 1.98 nightly), the fresh SDK-only native build ran offline with a locked dependency graph. Ten Rust artifacts passed **109 tests**, and rustdoc passed **1 doctest**; every result reported zero failed/ignored. These include numerical/vector/workbook conformance, investigation loops, remote transport, battery, display and curves/reveal checks.
