@@ -21,6 +21,19 @@ AutoPhys flags the ambiguity and recommends a test to separate them. Run the
 test, attach the measurements, and refit before checking predictions against
 held-out data.
 
+**Choose the next experiment.** Rank candidate tests by the information they
+would add, then review the proposal before approving it.
+
+![Four candidate experiments ranked at Fit 1, with pulse_ladder proposed to reduce uncertainty in C1 and R1.](docs/images/readme/learning-loop-proposal.png)
+
+**Check the updated model.** After adding measurements and refitting, compare
+predictions with a separate held-out measurement.
+
+![Held-out voltage measurements and predictions from Fit 2, with a passing chi-squared per sample of 1.04.](docs/images/readme/learning-loop-validation.png)
+
+*Screenshots from the live workbench's simulated battery demo. Ranked
+uncertainties are predictions; the validation panel shows a recorded check.*
+
 ## Try the battery example
 
 You need Git and Python 3.10 or newer. The first run installs the Python SDK

@@ -40,3 +40,18 @@ part of this work.
 The Rust SDK link uses the existing published guide rather than depending on
 an unpublished per-language README. The prefix check caught that dependency
 before publication.
+
+
+The investigation loop now has two workbench crops beside the battery example:
+candidate ranking before approval, then the held-out check after measurements
+were added and the model was refitted. Both come from the public simulated
+battery demo. The captions distinguish predicted uncertainty from the recorded
+validation result; neither capture claims a real-cell run or a trained-policy
+improvement. The outer-loop and policy-training illustrations remain separate.
+
+The ranking crop is 948 by 176 pixels from a 1280 by 900 capture; the validation
+crop is 616 by 274 pixels from a 1280 by 800 capture. Both preserve source pixels
+without rescaling. Capture URLs, original hashes, crop coordinates and PNG hashes
+are in fleet/evidence/autophys-readme-marketing/learning-loop-screenshots/provenance.json
+on yuzuquats. Validation checks those crops, all README image/link targets and
+whitespace. No approval, experiment run or account data change was performed.
