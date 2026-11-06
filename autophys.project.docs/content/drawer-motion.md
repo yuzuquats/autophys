@@ -279,3 +279,22 @@ custody before a new admission. UI has no action to commit those files.
 Structured evidence, log lines, writer preimages pointer and corrected handoff
 are under `fleet/evidence/autophys-drawer/endtour-writer-attribution.json` and
 `diff-native-handoff.json`. No source hunks were changed, no native retry.
+
+### Renewed operator deployment request — 2026-11-06 02:49Z
+
+The operator explicitly requested deployment again after the stopped attempt.
+Auth committed the five walkthrough-clear changes as 288b2e6. Full HTML
+qualification on this source passes **117/117**, with route/browser TypeScript
+checks passing. This is a new single bounded attempt, retaining the same
+existing target, two shared locks, 20 GiB debug + 12 GiB release growth bounds,
+45.5 GiB conservative fresh entry gate, 13.5 GiB stop reserve / 12 GiB hard
+floor, filesystem/peak/before-after receipts, and 30-minute duration. Previous
+attempt evidence is retained; the new wrapper and receipts use the diff2 prefix.
+No automatic retry.
+
+Before starting Cargo, require auth's completed review and exact source/test
+quiescence, productionize's runtime executor release, and no competing writer.
+The independent scientific protocol reviewer remains read-only and does not run
+tests/imports/builds or change source/refs. Disk coordination has been notified
+to exclude overlapping cleanup. All native outputs and SDK artifacts remain
+protected. Source remains current owner master; no source push.
