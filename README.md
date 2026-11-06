@@ -51,7 +51,7 @@ Then run the complete loop with a simulated cell and the default scripted policy
 It ranks the next test, waits for approval, attaches synthetic measurements,
 refits, and checks predictions against data kept out of the fit. The
 [battery guide](examples/battery_fit/README.md) explains the results and how
-to use your own cell data, connect a cycler, or choose a model-backed policy.
+to use your own cell data, import measurements from a cycler, or choose a model-backed policy.
 
 ## Use your own model
 

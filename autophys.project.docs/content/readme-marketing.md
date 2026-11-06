@@ -27,8 +27,8 @@ Validation covers local Markdown/image targets in the exact publication tree,
 PNG dimensions and source hashes, whitespace, absence of em dashes, and the
 short-test verdict plus the default simulated loop. No executable behavior is
 changed. The independently reviewed publication set contains only README.md,
-these three images and this record, with Project: autophys and one stable
-Change-Id. The existing autophys plan and original north-star review history
+these three images and this record, with Project: autophys and a stable Change-Id on each selected commit,
+recorded in the publication allowlist. The existing autophys plan and original north-star review history
 remain intact.
 
 Destination: origin (https://github.com/yuzuquats/autophys), refs/heads/master.
