@@ -2,7 +2,7 @@
 import { simulatorLabel, specOf } from "../config.ts";
 import type { Fit, Investigation, Project, ProjectConfig, Proposal, SensitivityResult } from "../domain.ts";
 import { type Decision, delivered, edited, expectedMeasurement, stateOf } from "../proposal.ts";
-import type { Action, DetailsModel, Fact, Section, TableRow } from "../../ui/view-model.ts";
+import type { Action, DetailsModel, ExperimentHeader, Fact, Section, TableRow } from "../../ui/view-model.ts";
 import { shortHash, int, pct, plural, sig } from "./fmt.ts";
 import { configurationSections } from "./configuration.ts";
 import { pairingExpiry } from "./pairing.ts";
@@ -136,7 +136,7 @@ function investigationDetails(project: Project, inv: Investigation): DetailsMode
 }
 
 /** Local structural extension: client derivation does not import a UI renderer. */
-type ProposalDetailsModel = DetailsModel & { experiment: { key: string; caption: string; notice?: string } };
+type ProposalDetailsModel = DetailsModel & { experiment: { key: string; caption: string; header?: ExperimentHeader; notice?: string } };
 
 function proposalDetails(s: State, project: Project, inv: Investigation, p: Proposal): ProposalDetailsModel {
   const c = configFor(project, inv), changed = edited(p), spec = specOf(c, p.experiment);
@@ -184,6 +184,7 @@ function proposalDetails(s: State, project: Project, inv: Investigation, p: Prop
       ? { heading: "Data", blocks: [{ kind: "facts", rows: [{ label: "Received", value: inv.measurements.filter((m) => m.experiment === p.experiment).map((m) => m.id).join(", ") }] }] }
       : { heading: "Waiting for data", blocks: [{ kind: "facts", rows: [{ label: "SDK", value: `${p.dataFrom} · polling` }, { label: "Expects", value: `${id}.csv` }] }] });
   }
+  const sourceFit = inv.fits.find(f => f.n === p.atFit);
   const status = p.status === "proposed" ? { text: invalid ? "Awaiting approval · invalid settings" : unedited ? "Awaiting approval" : "Awaiting approval · edited" }
     : p.status === "approved" ? { text: `Approved by ${p.decidedBy} · ${p.decidedAt}${changed.length ? ` · edited (was ${changed.map((f) => sig(f.original, 3)).join(", ")})` : ""}`, tone: "ok" as const }
     : { text: `Rejected by ${p.decidedBy} · ${p.decidedAt}`, tone: "muted" as const };
@@ -192,6 +193,12 @@ function proposalDetails(s: State, project: Project, inv: Investigation, p: Prop
     experiment: {
       key: JSON.stringify([project.id, s.selected[project.id] ?? defaultSelection(project), inv.id, p.id]),
       caption: `${investigationLabel(project, inv)} · ${p.id} · ranked at Fit #${p.atFit}`,
+      header: {
+        investigation: { label: investigationLabel(project, inv), id: ids.inv(inv) },
+        proposal: `Proposal ${p.id}`,
+        sourceFit: { label: `Fit #${p.atFit}`, ...(sourceFit ? { id: ids.fit(inv, sourceFit) } : {}) },
+        state: p.status === "proposed" ? "pending" : p.status,
+      },
     },
     footnote: `${provenance(c, inv)} · ranked at Fit #${p.atFit}`,
     decision: p.status === "proposed" ? [{ name: "approve", label: "Approve", variant: "primary", disabled: invalid, title: invalid ? "Fix the marked field first" : undefined }, { name: "reject", label: "Reject" }] : undefined,

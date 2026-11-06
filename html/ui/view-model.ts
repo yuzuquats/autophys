@@ -143,6 +143,14 @@ export type Meter = { label: string; value: string; fraction: number; tone?: Ton
 export type Field = { name: string; label: string; value: string; unit?: string; invalid?: string };
 export type Link = { label: string; id: string };
 
+/** Proposal identity and ranking provenance are separate navigation relationships. */
+export type ExperimentHeader = {
+  investigation: Link;
+  proposal: string;
+  sourceFit: Crumb;
+  state: "pending" | "approved" | "rejected";
+};
+
 export type TextStep = { label: string; delayMs: number };
 
 export type Block =
