@@ -113,3 +113,18 @@ Before/after captures and commands are in
 on yuzuquats, with an acceptance copy on rwc-01. These are deterministic renderer
 fixtures, not live experimental records. One additive local commit is admitted
 by productionize; its publication/ref custody stays intact. No deployment.
+
+
+## Lifecycle and navigation publication (2026-11-06)
+
+Published three owned UI changes to https://github.com/yuzuquats/autophys
+master through `d016bcb344c384df2fbcf0f692042e77032d87e8`: the approval-header publication
+receipt, shared lifecycle cards and simplified investigation navigation.
+Independent exact-prefix review was READY. All 129 HTML tests, frozen
+typechecks and whitespace checks passed on the isolated publication prefix.
+The full local tip tree, shared index and worktree were preserved during
+sinking; 15 excluded peer drafts remain local, including the compact
+account dropdown. No build or deployment ran during publication.
+Exact allowlist, mapping, reviews, validation and push receipts:
+`fleet/evidence/autophys-ux-flow/ui-publication-20261106/` on yuzuquats.
+This outcome receipt is a local documentation follow-up.
