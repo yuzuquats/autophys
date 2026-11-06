@@ -77,23 +77,15 @@ pending and A6 remains open.
 
 ## PUB-01 — Completed campaign work
 
-Review status: **operator-confirmed scope**; independent final review pending.
-Publication preparation status: **pending; held for polish**.
+Review status: independent **READY_FOR_SOURCE_PUBLICATION** for this scoped source checkpoint.
 
-The operator chose **Completed campaign work** as the target next publication
-scope: our completed SDK repairs, approved source unification, pilot checkpoint,
-docs and confirmed decisions. Newly chosen memory/JSONL (SDK-PARITY-01) and
-visual-parity (SDK-PARITY-02) implementations remain pending. Unfinished
-scientific/SDK qualification remains documented above; this decision makes no
-readiness promotion. Preserve peer work outside the selection except prior
-explicitly authorized dependencies.
+Published [5a3031a917d3..e42f24ef0067](https://github.com/yuzuquats/autophys/compare/5a3031a917d3ded1beb815fbc7c2c1b747fe594b...e42f24ef00670d87dfa88ca2d752b5824dacf4b1) to [origin master](https://github.com/yuzuquats/autophys/commit/e42f24ef00670d87dfa88ca2d752b5824dacf4b1). Exact prefix e42f24ef00670d87dfa88ca2d752b5824dacf4b1; tree f793f72031729dcb3e821b02a6a9380bc62199ca. The range contains 28 selected first-parent commits and 14 exact original side objects. Sixteen unrelated local drafts remain above the prefix, including the auth and UI rail changes; this outcome receipt stays local.
 
-The exact Change-Id allowlist, dependencies, isolated prefix validation and
-independent final review remain pending. This scoped decision is not a blanket
-master push or automatic deployment. Publication preparation and all ref/commit
-operations remain held under **POLISH REF FREEZE** until explicit polish release;
-this recording task grants no push permission. No fixed live stack count is
-asserted.
+Final independent review: fresh independent GPT-6.1-sol / Codex high; T3 Code rwc-01; no implementation; failed Claude API-limit attempt is not a review. Report SHA-256: 521506ad33cf5d895a0cd92d845c42361067225ccdc741fb73e527fdf2def76f. PUB-R1/R2/R3 are closed for source publication. Exact review, mapping and install/push evidence remain on yuzuquats under `~/.local/state/productionize/autophys-campaign-publication-20261106/`.
+
+The bounded exact-prefix evidence covers **49 distinct Python cases** (47 carried by verified source/environment equality plus 7 fresh, with 5 overlapping), **40 fresh native passes**, 9 compilation targets and the changed Rust `no_run` example compilation. The fresh Python run includes 5 asset cases and 2 actual-daemon atomic cases; no product failures, skips or timeouts were reported in that admitted window.
+
+M1/M2 inherited checkpoint defects and broader scientific qualification remain open, as do A3, A5/A6 implementation, PERF01/PERF02, the full integrated LoopDriver harness and 8 tokenizers-dependent asset-planning cases. Historical scores are unchanged. This publication makes no production-readiness, scientific-confirmation, release, deployment or A5/A6 implementation claim.
 
 ## Retained baseline evidence, not current-revision acceptance
 
