@@ -225,3 +225,36 @@ with the recorded output budgets and existing retained target. The wrapper adds
 before/after filesystem identity, sampled peak allocation and minimum free
 space to the receipt. No Cargo retry is authorized. Source freeze and a clean
 owner checkout remain prerequisites.
+
+### Admitted window stopped on custody conflict — 2026-11-06 02:43Z
+
+The exact executor release admitted owner HEAD
+`8e3e848021b042a1ea2f1174e977a48aa0525294`. Fresh clean-source, no Cargo/rustc,
+both nonblocking locks and three stable capacity samples passed. Dependency
+identities: Cargo.lock SHA-256
+`a213e9bf85f9dd72a9f0a8fe80be1eff6b6be4ab44e490f1387892ff35bc1d0f`,
+html/deno.lock SHA-256
+`a75c57a30c27a5e9903000176ea62efb9f8e8ff320654390440f3a4bb515e474`,
+and vendor Git tree `ce9f77dd5d1e0c0bcd8dcbfdf98055ed19974880`.
+
+All native workspace suites completed: **238 passed, 2 ignored, 0 failed**.
+During the subsequent HTML run, concurrent account/tutorial UI changes appeared
+in index.root.ts and vendored cookbook drawer/shell/tutorial/types. At 45.7
+seconds the source monitor terminated this operation's process group. Those
+peer edits are preserved, with their owner asked to finish and commit them.
+The one-attempt admission is consumed: **no retry, release build, packaging,
+installation or service restart occurred**. The live service still reports
+`6efe1f3-auth-c58c041`; incremental UI fixes are not deployed.
+
+Free bytes before/after: **141,656,895,488 / 141,634,797,568**, sampled minimum
+**141,634,613,248**. Peak target growth: **21,499,904 bytes** (debug only);
+release and installation growth **0**. Evidence growth **36,864 bytes**.
+All measured paths stayed on device 66306, ext4 UUID
+`08226818-6142-43a3-8ab8-8f94fdee7d8e`. Existing targets and SDK artifacts
+remain retained. Both native locks were verified released and Cargo absent.
+The source freeze and native window are returned to productionize; a future
+native attempt requires a new explicit admission and exact source freeze.
+
+Evidence: `fleet/evidence/autophys-drawer/diff-native-{admission,window,handoff}.json`,
+`diff-deploy.log`, `diff-html.log`, `diff-types.log`, and
+`diff-browser-results.json`. No source push.
