@@ -72,7 +72,7 @@ function children(parent: Node, before: Mounted[], next: Node[], grids: Set<Elem
     const siblings = keyed.get(id) ?? [];
     siblings.push(record); keyed.set(id, siblings);
   }
-  let cursor = parent.firstChild;
+  let cursor: Node | null = parent.firstChild;
   const result = next.map(source => {
     const id = identity(source), position = positions.get(id) ?? 0;
     positions.set(id, position + 1);

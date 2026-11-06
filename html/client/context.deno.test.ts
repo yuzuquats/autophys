@@ -5,8 +5,8 @@ Deno.test("context: refreshing account capabilities uses an uncached same-origin
   const context = {
     principal: null,
     workspace: null,
-    capabilities: { read: false },
-    auth: { canSignIn: true },
+    capabilities: { read: false, createProject: false, startInvestigation: false, approveProposal: false, manageDevices: false },
+    auth: { canSignIn: true, canSignOut: false, allowDemo: false },
   };
   let url: string | undefined, init: RequestInit | undefined;
   const http: typeof fetch = (input, options) => {

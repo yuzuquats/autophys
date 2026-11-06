@@ -211,3 +211,17 @@ unchanged **12 GiB hard stop** or any output bound. Bound the window to 30
 minutes and terminate only this operation's process group on violation. Run
 normal workspace/HTML/package gates; the initial failure is not waived.
 Current read-only measurement is about 110 GiB free after external cleanup.
+
+Qualification before the admitted native window: all **117 HTML tests pass**,
+the route and browser-suite TypeScript checks pass, and the browser diff suite
+passes **13 DOM identity/focus/caret checks**. The browser unit suite lives in
+ui/ to preserve the no-layer-import contract for e2e drivers. The context
+fixture now supplies the complete capability/auth shape; the stale-stream test
+compares redraws across stale callbacks, independently of the legitimate
+reconnect-error notification.
+
+Cache maintenance released exclusion. The operator admitted one native window
+with the recorded output budgets and existing retained target. The wrapper adds
+before/after filesystem identity, sampled peak allocation and minimum free
+space to the receipt. No Cargo retry is authorized. Source freeze and a clean
+owner checkout remain prerequisites.

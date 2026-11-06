@@ -1,8 +1,8 @@
 /** Browser regression suite, bundled as AutophysDiffTests and run in an owned tab. */
-import { AutophysMain } from "../ui/main.ts";
-import { AutophysDetails } from "../ui/details.ts";
-import type { DetailsModel, MainModel } from "../ui/view-model.ts";
-import { MarkupDiff, freshMarkers } from "../ui/render-diff.ts";
+import { AutophysMain } from "./main.ts";
+import { AutophysDetails } from "./details.ts";
+import type { DetailsModel, MainModel } from "./view-model.ts";
+import { MarkupDiff, freshMarkers } from "./render-diff.ts";
 
 export function run(): string[] {
   const checks: string[] = [];

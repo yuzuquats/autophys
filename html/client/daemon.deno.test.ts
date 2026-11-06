@@ -443,10 +443,11 @@ Deno.test("daemon: display events redraw an open store without advancing or dupl
   assertEquals(store.applied.length, 1);
   const old = d.streams[0]; d.drop(); await settle();
   assert(old.closed);
+  const redrawsBeforeStale = redraws; // A reconnect error may itself notify the view.
   // A queued callback belonging to the old connection may not repaint or append.
   old.fire.display.forEach((fn) => fn({ data: JSON.stringify({ ...event, digest: "b".repeat(64), display: { format: 1 } }), lastEventId: "" }));
   old.fire.record.forEach((fn) => fn({ data: JSON.stringify(rec("outcome", { status: "failed" })), lastEventId: "10" }));
-  assertEquals([store.snapshot()!.gseq, store.applied.length, redraws], [9, 1, 2]);
+  assertEquals([store.snapshot()!.gseq, store.applied.length, redraws], [9, 1, redrawsBeforeStale]);
   fire({ ...event, digest: "c".repeat(64), display: { ...display, experiments: { sine: { label: "Reconnected sine", views: ["edges"] } } } });
   assertEquals(store.snapshot()!.workspace.projects[0].configs[0].catalog[1].label, "Reconnected sine");
   store.close();
