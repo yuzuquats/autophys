@@ -1,12 +1,22 @@
 # autophys
 
-autophys fits a physical model to your measurements, then tells you which
-parameters those measurements actually pin down. A parameter counts as
-**identified** only if the data determines it to better than ±10%. That
-verdict comes from a sensitivity (log-Jacobian SVD) analysis, not from how good
-the fit looks. When parameters are tied together, autophys ranks the next
-experiment that would separate them. An agent (Muse Spark, or a scripted
-policy) can drive that loop, with a human approving each experiment.
+AutoPhys helps engineers and researchers build better models of physical
+systems. Agents analyze measurements, suggest what to test next, and help
+refine the model as new results come in. You steer the investigation and
+approve experiments.
+
+A model can fit your data and still get the physics wrong. AutoPhys checks
+what your measurements actually tell you and recommends experiments to
+resolve what’s uncertain.
+
+For example, a battery engineer uploads a short test. The voltage curve
+fits well, but several parameter combinations could explain it. AutoPhys
+recommends a test to tell them apart. The engineer runs it, uploads the
+results, and AutoPhys refits the model and checks its predictions against
+separate measurements.
+
+Today, AutoPhys fits supplied models and ranks candidate experiments.
+The longer-term goal is to help revise the underlying physics too.
 
 For local development, start with [CONTRIBUTING.md](CONTRIBUTING.md) and the
 [repository map](docs/README.md). The daemon, browser and SDKs build from this
