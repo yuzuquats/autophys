@@ -298,3 +298,56 @@ The independent scientific protocol reviewer remains read-only and does not run
 tests/imports/builds or change source/refs. Disk coordination has been notified
 to exclude overlapping cleanup. All native outputs and SDK artifacts remain
 protected. Source remains current owner master; no source push.
+
+### Deployment and live stability verified — 2026-11-06 03:04Z
+
+Deployed **8aa0252dc693852b9fd88a6a8c11192c6ecd554a**, installed release
+`8aa0252-20261105`, through normal clean-owner-master deployment.
+Auth independently reviewed/released 288b2e6; productionize returned exact
+runtime quiescence; fresh source/capacity/competitor checks and both shared locks
+passed. Full native workspace suites pass **238 tests, 2 ignored**; all
+**117 HTML tests** pass. Release build, web build, pack and public health pass.
+Public web ID:
+`b6bd61050a77924b833229726add18540f62035103ba3a2abde209d661cdc919`.
+Installed binary SHA-256:
+`769071aec98d2010ca2ee33bd0f51579ba49ebeace01403e79c3c745e0976e8f`.
+Exact source tree, dependency lock hashes and vendor tree are in the handoff.
+
+The window ran **96.5 seconds**, with no source drift or limit violation.
+Free before/after/minimum: **141,598,814,208 / 141,329,182,720 /
+141,329,182,720 bytes**. Sampled peak debug growth **0**, release/total target
+growth **69,599,232 bytes**, install growth **22,216,704 bytes**, operation
+evidence growth **61,440 bytes**. Filesystem identity remained unchanged.
+Both build/deploy locks were verified free, no Cargo/rustc remained, and prior
+targets, SDK artifacts and installed releases are preserved. No automatic retry.
+
+After loading the public deployment, desktop 1280×800 and phone 390×844 each
+observed four actual five-second context/pairing polling cycles over 17 seconds:
+**zero viewer DOM mutations, zero layout-shift entries**, retained original
+card/button nodes and keyboard focus, scrollTop fixed at 300, and unchanged
+viewer/document dimensions. All **13 browser reconciliation checks** also pass,
+including actual Main/Details updates, charts, hydrated buttons, input caret,
+disclosures, reorders and removed nodes.
+
+The operator's reported root failure was triaged before closure. Nginx records
+502s for `/`, `/app` and polling requests during the controlled restart at
+18:56:16–25 PST (02:56:16–25Z), with upstream 127.0.0.1:4794 refusing connections.
+Systemd restarted the new service at 18:56:25; no crash or further restart is
+recorded. Current repeated public `/`, `/app` and `/api/healthz` checks all
+return 200 both anonymously and using the existing signed-in demo session.
+Failure session class is unavailable because proxy logs omit cookies; no
+continuing 500 was reproduced. No account/database mutation, extra restart or
+second build was used. Current and prior releases remain available.
+
+Source freeze is released. The UI workstream has the disjoint header paths and
+cached/frozen Deno validation window; productionize may edit the operator's
+proposed SDK README/fixture-guide/project documentation scope without runtime,
+test, config or lockfile changes. Drawer/account receipts remain polish-owned
+through this closure. Scientific/SDK readiness and source publication are
+independent; no Git push occurred.
+
+Evidence under `fleet/evidence/autophys-drawer/`:
+`diff2-deployment-handoff.json`, `diff2-native-{admission,window}.json`,
+`diff2-deploy.log`, `diff2-{html,types}.log`,
+`diff2-{desktop,phone}-stability.json`, `diff2-browser-checks.json`,
+`diff2-root-error-triage.json`, `diff2-{public,signed}-route-checks.json`.
