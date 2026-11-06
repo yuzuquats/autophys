@@ -374,3 +374,41 @@ and account prerequisites absent from public master. UI supplied its exact
 intentional ancestry merge is preserved. No foreign work is adopted, no sink
 has moved master, and no push has occurred. Review manifests and browser results
 live at `fleet/evidence/autophys-drawer/push-review/` on yuzuquats.
+
+### Scoped source publication verified — 2026-11-06
+
+Independent final review is READY for the exact 65-commit prefix from
+`c94aa46b3110762ee77889e55c1a9cd809447277` through
+`5a3031a917d3ded1beb815fbc7c2c1b747fe594b` (tree
+`ec77fff60856c15a84a5a161316c2b079fec4004`). Normal fast-forward push to
+`https://github.com/yuzuquats/autophys`, `refs/heads/master`, succeeded and
+was verified by fetching the remote. This includes the explicitly handed-off
+UI/account prerequisites, vendor delta, README and SSE fixture; the final
+allowlist and old/new identities are in `candidate.json` under the evidence
+path below. Each selected change appears exactly once, with its Project and
+Change-Id preserved. The review fixes restore Stepper sections/focus and
+recalculate sidebar width after expansion.
+
+The exact source export passes **121 HTML tests**, cached/frozen route and
+browser type checks and **19 browser checks**. An additional **22 cookbook
+tests** pass with an external validation-lock alias for the already pinned
+assert package; product configuration and lockfiles are unchanged. All 2,902
+exported blobs match the committed prefix. No exact-prefix native build or
+new deployment was performed; installed release remains `8aa0252-20261105`.
+Source publication does not imply native release or SDK/scientific readiness.
+
+Merge-preserving transpositions retain all 14 original side-ancestry commits,
+35 excluded first-parent drafts, and byte-identical full tip tree, index and
+worktree. Both reviewed auth hardening changes remain above the published
+boundary. The prior tip is retained at
+`refs/safety/autophys-polish-push-20261106T055538Z`. Review, install, push and
+custody receipts are in `fleet/evidence/autophys-drawer/push-review/` on
+yuzuquats (`review-ready.json`, `install-receipt.json`, `push-receipt.json`,
+`custody-release.json`). This receipt commit stays local.
+
+Polish releases ref/sink custody to productionize first for its queued scoped
+publication. Auth is next, after productionize's explicit lock/ref release;
+no simultaneous ref operation is admitted. UI and README publication holds
+are satisfied by this verified boundary. No build or deployment window is
+created by this handoff. Existing unrelated workspace/home layout audit
+failures and Git GC warnings remain outside this source publication.
