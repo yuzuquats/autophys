@@ -217,3 +217,12 @@ suites ran under the operator's speed constraint. Evidence:
 `yuzuquats:~/workspace/fleet/evidence/hacks-carousel-align/slide9-20261105/`.
 The committed vendor tree remains authoritative during the rwc-dev-01 outage;
 this runtime change must be retained when reconstructing the vendor recipe.
+
+
+## Scoped source publication (2026-11-06)
+
+Published the remaining fourteen reviewed commits to [origin master](https://github.com/yuzuquats/autophys/commit/9bf5184e9668901619cd8f1929aadb6d8966925e). Exact prefix 9bf5184e9668901619cd8f1929aadb6d8966925e; tree 3b5ebb20d7e6b1c2afb4d86e53c375f39458b593; public base d016bcb344c384df2fbcf0f692042e77032d87e8. The three UI commits from the frozen seventeen were already public. Three existing trailer blocks received only their reviewed blank-line repairs. Four excluded commits remain local above this prefix: the compact account menu, the UI outcome note and two marketing commits. This outcome commit stays local.
+
+Final independent source-publication review: READY_FOR_SOURCE_PUBLICATION; R17-01 and DOCS-EXEC-01 closed; R17-02 review minimum satisfied and final publisher guards passed for this exact boundary. Report SHA-256 d0ab8bdcca395c5e7e93a2bea3b9d4db9e342f33926cc0ca90d5fde8f278b2c5. Validation combines the bounded source/evidence correspondence in validation1 and the focused offline documentation examples in docs-examples1, accepted by final-review3; the publisher ran no tests or builds and adds no fresh pass counts. Exact validation, independent review, mappings, peer guards and install/push receipts: yuzuquats ~/.local/state/productionize/autophys-remaining-publication-20261106/ (publication-operation/).
+
+This source publication does not close inherited scientific M1/M2 and integrated LoopDriver/confirmation/random-baseline gaps, vendor-manifest and license/provenance gaps, or Rust memory/JSONL, opt-in visual, broader platform/provider, performance and asset-planning gaps. Historical scores and author review are unchanged; no release, deployment or whole-product qualification is claimed.
