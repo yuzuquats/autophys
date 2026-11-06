@@ -9,8 +9,9 @@ points. Contributor setup and the existing licensing limitation remain at the
 end; the directory inventory is linked through the repository map.
 
 The Muse Spark illustration leads. The two-loop and policy-training diagrams
-sit in an expandable section so the opening stays short. They are site
-illustrations, not evidence of measured lab savings or model performance.
+are visible in the learning-loop section, following the operator's choice of
+landing-page diagrams. They are site illustrations, not evidence of measured
+lab savings or model performance.
 The Spark capture retains its mock-data label; the training diagram retains
 its current distillation and planned reinforcement distinction. Model-structure
 revision remains a longer-term goal.
@@ -41,17 +42,13 @@ The Rust SDK link uses the existing published guide rather than depending on
 an unpublished per-language README. The prefix check caught that dependency
 before publication.
 
+The learning-loop section reuses the landing-page captures headed “Two loops:
+one investigates, one improves it” and “Then train the model that runs it.”
+Both remain at their original 640 by 600 crop resolution, with their existing
+provenance. The training caption keeps the distinction between current
+distillation and planned reinforcement learning. The workbench crops are kept
+as optional marketing assets and are no longer embedded in the README.
 
-The investigation loop now has two workbench crops beside the battery example:
-candidate ranking before approval, then the held-out check after measurements
-were added and the model was refitted. Both come from the public simulated
-battery demo. The captions distinguish predicted uncertainty from the recorded
-validation result; neither capture claims a real-cell run or a trained-policy
-improvement. The outer-loop and policy-training illustrations remain separate.
-
-The ranking crop is 948 by 176 pixels from a 1280 by 900 capture; the validation
-crop is 616 by 274 pixels from a 1280 by 800 capture. Both preserve source pixels
-without rescaling. Capture URLs, original hashes, crop coordinates and PNG hashes
-are in fleet/evidence/autophys-readme-marketing/learning-loop-screenshots/provenance.json
-on yuzuquats. Validation checks those crops, all README image/link targets and
-whitespace. No approval, experiment run or account data change was performed.
+Validation covers every local README image and link target, the unchanged
+landing-page image hashes, whitespace and absence of em dashes. No new capture,
+experiment, approval, account data change or deployment is needed.
