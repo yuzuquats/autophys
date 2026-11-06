@@ -30,9 +30,21 @@ built-in simulators remain available for creating real persisted investigations.
 
 The daemon stores accounts and sessions in `server.db`. `POST /api/auth/demo`
 creates a normal browser session for the configured demo user. Its read-only flag
-is enforced by the server on writes. All currently authenticated accounts access
-one collection of `<slug>.ap-workbook` SQLite files; project ownership and per-user
-collection isolation are not implemented. Login grants access to that collection.
+is enforced by the server on writes. The bootstrapped context binds the Source to
+its workspace and principal; snapshots, reference refreshes and reconnect probes
+verify both identities. The controller is replaced when account context changes.
+Workbooks are resolved within the authenticated workspace; login does not grant
+access to an arbitrary collection.
+
+A dropped record stream immediately reports a connection error while retrying from
+the last cursor. Existing records stay visible, and decisions pause. The current
+Store retains this error until an explicit workspace refresh or the page's Retry
+reload; a successful EventSource open alone does not clear it.
+
+The sidebar's project roots replace the old select-input switcher. New project
+setup uses the shared Stepper and preserves SDK configuration guidance, including
+the thermal starter. These controls use the signed-in Controller and never swap
+in a fixture data source.
 
 Each workbook holds configuration versions, investigations, measurements, fits,
 proposals, decisions and validation records. The Rust/Python SDK computes results

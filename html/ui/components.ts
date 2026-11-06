@@ -10,7 +10,6 @@ const icons: Record<string, string> = { workspace: ColumnsIcon, device: LinkIcon
 /** Browser-only component binding. The data attributes contain already-derived view text. */
 import { EmptyState } from "@tento-ui/components/empty-state/empty-state";
 import { Skeleton } from "@tento-ui/components/skeleton/skeleton";
-import { SelectInput } from "@tento-ui/components/input/select-input";
 import { Button } from "@tento-ui/components/button/button";
 import { GridLayout } from "@tento-ui/components/grid/grid-layout";
 import { ListCellLayout } from "@tento-ui/components/list/list-cell-layout";
@@ -115,10 +114,6 @@ export function hydrateComponents(host: HTMLElement, onIntent: IntentHandler): v
   }
   for (const marker of freshMarkers(host, "[data-ap-skeleton]")) {
     marker.replaceChildren(Skeleton.makeWith({ shape: "text", lines: 3, widthPx: null, heightPx: 12, animated: true }));
-  }
-  for (const marker of host.querySelectorAll<HTMLElement>("[data-ap-switcher]")) {
-    marker.replaceChildren(SelectInput.makeWith({ name: "project", label: "Project", value: marker.dataset.value,
-      options: JSON.parse(marker.dataset.options!), onChange: (value: string) => onIntent({ kind: "switch", value }) }));
   }
   for (const marker of freshMarkers(host, "[data-ap-button]")) {
     const name = marker.dataset.apButton!, label = marker.textContent!;

@@ -6,7 +6,8 @@ uses the client as its state. `ui/` and `client/` never import the cookbook; the
 tests check this.
 
 ```ts
-Cookbook.mount({ tutorial: [...Cookbook.Tutorial.shellSteps, ...tutorial], status: null }).run(app);
+// tutorial is mountGuidedTour(...).source, bound to the signed-in Controller.
+Cookbook.mount({ tutorial, status: null }).run(app);
 // inside app.mount(shell):
 const view = Cookbook.View.mount(shell, new AutophysMain(shell.slots.main, ctl.handle, shell.classes), () => ctl.view().main);
 ctl.subscribe(() => view.redraw());     // in app.unmount: view.dispose()
@@ -16,7 +17,7 @@ ctl.subscribe(() => view.redraw());     // in app.unmount: view.dispose()
 
 | Member | Use |
 | --- | --- |
-| `Cookbook.mount(options).run(app)` | `options.tutorial` holds the shell's steps followed by autophys's; `status: null`, because the fixture page has no `/api/healthz` |
+| `Cookbook.mount(options).run(app)` | `options.tutorial` is a `Cookbook.Tutorial.Source` with `start`/`finish`; `status: null` keeps shell health polling quiet |
 | `app.mount(shell)` / `unmount()` / `export()` | mount wires the three surfaces and starts the client's Store. unmount disposes them and leaves the client's state for the next mount. export returns the client's export document |
 | `shell.slots.queue / main / details` | one ui surface each |
 | `shell.scope`, `shell.addStyles` | `autophysStyles(shell.scope)`, removed on unmount |
@@ -25,7 +26,14 @@ ctl.subscribe(() => view.redraw());     // in app.unmount: view.dispose()
 | `shell.download(name, type, data)` | Export JSON and the investigation report |
 | `Cookbook.View.mount(shell, view, model)` | `redraw()` on every client change, `dispose()` on unmount |
 
-## Gaps found against the cookbook as built (tento 561cad2f5)
+The current walkthrough uses the existing account Store and Controller. Its source
+starts only after sign-in, preserves navigation and restores panels, scroll and
+focus on finish; generation cancellation rejects stale startup. Project navigation
+uses the sidebar tree. Export/report actions belong to the relevant investigation,
+and the shared header Export is removed at mount. The observations below describe
+the earlier cookbook contract, not an instruction to restore fixture controllers.
+
+## Historical gaps against the cookbook as built (tento 561cad2f5)
 
 1. **FLIP reaches only the main slot's direct children, and only if they survive the
    change.** `Motion` measures `[...slots.main.children]` before and after `reflow(change)`.

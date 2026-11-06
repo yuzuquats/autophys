@@ -226,6 +226,7 @@ export function daemon(opts: DaemonOptions = {}): Source {
           if (!live || es !== s) return;
           s.close();
           es = null;
+          for (const on of errors) on(new Error("Record stream disconnected; reconnecting."));
           // Native EventSource hides the response status. Probe a small cookie-
           // protected read to distinguish an expired session from a dropped connection.
           void call<{ workspace: { id: string } | null; principal: { id: string } | null }>("GET", "/context")

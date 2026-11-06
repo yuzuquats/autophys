@@ -241,7 +241,8 @@ Deno.test("daemon: pairings are listed and approved from the configuration panel
   await settle();
   assertEquals(store.snapshot()!.pairings, [{ code: "WXYZ-1234", device: "laptop", client: "autophys-py 0.1", expires: "2026-11-04T10:10:00Z" }]);
   assertEquals(ctl.view().sidebar.pinned.trail, { badge: "1", tone: "danger", label: "1 device waiting to approve" });
-  ctl.handle({ kind: "select", id: ctl.view().sidebar.nodes[0].children![0].id });
+  ctl.handle({ kind: "select", id: "devices" });
+  assertEquals(ctl.view().sidebar.selectedId, "devices");
   assertEquals(ctl.view().details.sections.flatMap((s) => s.blocks.flatMap((b) => b.kind === "pairing" ? b.decision.map((a) => a.name) : [])), ["pair-approve:WXYZ-1234", "pair-deny:WXYZ-1234"]);
   ctl.handle({ kind: "action", name: "pair-approve:WXYZ-1234" });
   await settle(); await settle(); await settle();
@@ -276,6 +277,7 @@ Deno.test("daemon: collection cursor survives a drop; workbook gseq collisions a
   assertEquals(store.applied.length, 2);
   assertEquals(store.snapshot()!.workspace.projects[0].investigations.length, 2);
   d.drop();
+  assertStringIncludes(store.error!, "Record stream disconnected; reconnecting.");
   await settle();
   assertEquals(d.streams.at(-1)!.url, "/api/v1/stream?after=prj_bench%3A9%2Cprj_other%3A9");
   const n = d.streams.length;

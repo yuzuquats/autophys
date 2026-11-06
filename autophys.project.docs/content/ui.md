@@ -587,3 +587,15 @@ bundle contains none of the removed fixture-worker, sample-project, source-switc
 static-preview or chip identifiers. Local no-login daemon mode was inspected in
 code but not separately launched for this check. Owned source snapshots were
 removed after successful deployment. Concurrent SDK edits were preserved.
+
+
+## Cohesive-master adoption, 2026-11-06
+
+The audited disconnect notification now runs inside the current guarded SSE error
+handler, before the workspace/principal probe and auth-gated reconnect. The Store
+keeps the error and pauses decisions until explicit refresh or Retry reload. The
+unused select-input hydration is removed; project roots remain the navigation.
+The pairing test now selects Devices explicitly. These small ports preserve the
+account-bound tour, vendor/deck/drawer work and UI-26; earlier sidebar B/UI-21–24
+notes are not reinstated as a product ruling. Deno/browser execution is deferred
+under the source-only allocation; static correspondence alone does not qualify UI.
