@@ -54,9 +54,34 @@ queueMicrotask(() => {
     docs.addEventListener("click", event => {
       if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       const section = document.getElementById("docs");
-      // The workbench hides the landing document; keep its ordinary /#docs
-      // navigation. On the landing, scroll without reloading or dropping queries.
-      if (!section || document.documentElement.dataset.ckStage !== "landing") return;
+      if (!section) return;
+      const fromApp = document.documentElement.dataset.ckStage !== "landing";
+      if (fromApp) {
+        const home = document.querySelector<HTMLAnchorElement>(".ck-header .ck-brand");
+        if (!home) return; // Keep the ordinary link if the shell is unavailable.
+        event.preventDefault();
+        // Use the shell's normal close path so it restores the document and
+        // disposes the workbench. Docs is a page switch: settle the cover and
+        // header now, before scrolling, rather than playing the drawer return.
+        home.click();
+        history.replaceState(history.state, "", docs.href);
+        for (const element of document.querySelectorAll(".ck-landing, .ck-header .ck-wordmark")) {
+          for (const animation of element.getAnimations()) animation.finish();
+        }
+        section.scrollIntoView({ block: "start", behavior: "instant" });
+        // The shell restores its trigger's focus when close finishes. Run
+        // after that cleanup, before the next paint.
+        requestAnimationFrame(() => {
+          // Closing starts panel/toggle exit transitions in the completion
+          // microtask. Settle those too so no workbench controls linger on Docs.
+          for (const animation of document.querySelector(".ck-app")?.getAnimations({ subtree: true }) ?? []) {
+            animation.finish();
+          }
+          section.tabIndex = -1;
+          section.focus({ preventScroll: true });
+        });
+        return;
+      }
       event.preventDefault();
       if (location.hash !== "#docs") {
         const url = new URL(location.href);

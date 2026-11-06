@@ -122,3 +122,9 @@ Native/Cargo builds and target writes from this workstream are quiet after the c
 These acceleration caches are unnecessary for the deployed release or retained debug proof. Auth has no future use planned during the cleanup window. The separately authorized cleanup delegate owns fresh identity, caller and lock checks and must serialize removal against every debug/incremental writer. No cache deletion was executed by this workstream. Executables, dependencies, build/fingerprint/release siblings, source, databases, campaign artifacts and deployment backups remain retained.
 
 The receipts identify current rusqlite 0.32.1 with `backup,bundled,modern_sqlite`; Cargo.lock is unchanged. The older SDK dependency selection lacking `backup` must be replaced and independently qualified. The deployment completion receipt preserves the native/dependency identity correspondence; it does not qualify the SDK campaign.
+
+## Pending Docs navigation refinement
+
+The header now orders Try now, Docs, then the profile. Docs from the mounted app or walkthrough uses the shell's close path, settles its cover/header and panel exit animations before paint, and jumps directly to the existing documentation. It does not reload the document. The landing retains smooth same-page scrolling (instant with reduced motion); modified clicks retain the ordinary anchor behavior. Browser qualification with the current handler in the owned preview confirmed the documentation at y=0, closed panels and hidden toggles, focus on the documentation, unchanged timeOrigin, and a single history entry. Reopening and Back restored the app; desktop and 390px checks passed. Deno checked the header module; no test suites ran.
+
+These browser changes remain undeployed under the existing disk reserve hold. Package the maintained header source together with the pending initial-anchor and same-page scrolling fixes; the older inactive package is incomplete.
