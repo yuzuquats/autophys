@@ -38,3 +38,13 @@ which the existing shell already treats as owning its keyboard interaction.
 Escape now dismisses its native popover while keeping Details open; no shell or
 reserved renderer lifecycle changes are required. The decorative SVG is layered
 beside the input and excluded from hit testing and the accessibility tree.
+
+Published to https://github.com/yuzuquats/autophys master through c94aa46b.
+Final agent review: READY, /root/approval_header_final_r3; exact prefix tree
+66b921dca36ea57a1ffa299e8625e87aeb2bb2ec. All 123 HTML tests and frozen
+typechecks passed; desktop/phone checks include native popover dismissal,
+record navigation, row state, focus/caret and visible refused-write feedback.
+Six scoped commits were fast-forward pushed; 104 unrelated commits stayed local.
+The full tip tree, shared index and worktree were preserved. No deployment.
+See the linked evidence directory for comparison.html and final review, install
+and push receipts. This publication receipt is a local documentation follow-up.
