@@ -30,6 +30,14 @@ The avatar change (`c0f577a`) and 16 px header gap (`6550d2d`) are deployed in `
 
 Live desktop/mobile checks confirmed a 36 px avatar and 16 px gap, sign-in and Escape focus restoration, demo's unchanged 29 read-only records, and Open app navigation. Temporary packaging ran in RAM after the initial disk gate stopped the build. The revised allocation capped disk growth at 48 MiB and stopped before 12.125 GiB free; no native/Cargo build or database migration ran. The prior release and service-unit backup remain retained. Deployment, build identity, allocation and browser receipts are in the same deployment scratch entry under `header-deploy-6550d2d/`.
 
+## Try now and Docs navigation — deployed 2026-11-06
+
+Release `6efe1f3-web-1daa409-20261106` deploys `1daa409`: the header reads “Try now,” and Docs links to `/#docs` from the landing and workbench. The existing avatar and 16 px spacing remain. Public health reports native commit `6efe1f3` and web ID `9907e1050b29e31ba12a6e5a30e2932310d792293be3b31ee5ba4e1a76e1fa1b`. Only the three maintained header/docs files differ from the original deployed browser baseline; the native prefix is unchanged.
+
+Live checks confirmed both labels and destinations, app opening, documentation navigation, and no header overlap or horizontal overflow at 320 px. Evidence: the deployment scratch entry's `docs-deploy-1daa409/`. Web compilation and an isolated packaged-daemon rehearsal passed; no native/Cargo build, database migration or test suite ran.
+
+A follow-up anchor alignment issue was found: a fresh Docs load from the app can clamp scrolling while the documentation is still empty, leaving the section 398 px below the viewport top. Fix `d8c9841` scrolls after documentation binding. Its package is retained at `6efe1f3-web-d8c9841-20261106`, but is **inactive**: activation stopped when unrelated host allocation reduced free space to about 11.8 GiB, below the mandatory 12 GiB floor and the 12.125 GiB activation guard. Receipts are under `docs-deploy-d8c9841/`, including `activation-held.json`. Restore capacity and recheck live identity before activating it; retain the prior releases, source and backups.
+
 ## Configure a profile or workspace
 
 All examples run on the server with its intended server database. Replace the paths and account addresses deliberately. Mapping, key, profile and seed commands preview by default; add `--apply` only to apply that specific operation. Opening an older server database applies the additive metadata schema migration even for `workspace list`; dry-run refers to the requested mapping/profile/import.
