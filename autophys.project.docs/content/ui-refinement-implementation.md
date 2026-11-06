@@ -130,3 +130,50 @@ Frozen cached stylesheet typecheck passed; this CSS-only change adds no tests.
 Real-component source captures and measurements are retained under
 fleet/evidence/autophys-ux-flow/implementation-20261105/approval-header/ on rwc-01;
 bundles are at the same path on yuzuquats. Committed locally; no push/deployment.
+
+
+## Owner consolidation custody — 2026-11-05
+
+UI owner: yuzuquats:/home/james/workspace/autophys master. Active iteration:
+independently collapsible approval sections. Hot paths held by this thread are
+html/ui/details-experiment.ts, html/ui/details-experiment-styles.ts,
+html/ui/render.deno.test.ts and this project page. The existing
+html/ui/details.ts state/focus handling is part of the contract; coordinate
+before changing it. Consolidation must reconcile legacy hunks against current
+owner and wait for custody on overlapping paths. Never replace old files whole.
+
+Read-only inventory: rwc-01 has no Autophys source checkout; only UI evidence.
+rwc-dev-01 master has eight candidates without an owner-master SHA or Change-Id
+match, plus mixed staged/unstaged/untracked source. This is an identity census,
+not proof of patch uniqueness. It includes legacy unified-page commits whose
+effects may already have been adapted on owner, so patch review is required.
+The full identities and raw dirty inventory are retained on both rwc-01 and
+yuzuquats in fleet/evidence/autophys-ux-flow/implementation-20261105/
+approval-sections/nonowner-source-inventory.json. No foreign source was adopted
+by this UI iteration. No deployment or restart is requested.
+
+
+## Per-section chevrons — 2026-11-05
+
+Latest operator direction gives each content section its own chevron. The middle
+is now one flat accordion with Experiment, Expected, Preview, So far and
+Provenance rows, each independently expandable; the outer Supporting details
+wrapper is replaced. Additional named sections, such as Waiting for data or
+Outlook, use the same row treatment. The compact 70 px header, std-round card and
+anchored decision footer remain intact. Save failures stay outside disclosures.
+
+Experiment and Expected start open, supporting sections closed (reversible
+agent-chosen defaults, pending operator review). Same-record redraws preserve
+explicitly closed rows, independently open rows, summary focus, input caret and
+middle scroll; changing records resets defaults. Frozen typechecks and 32 scoped
+Deno tests passed. Actual desktop/phone components were checked for native
+summary clicks, all-collapsed and mixed states, read-only/invalid decisions,
+precision suppression, escaped errors, focus/scroll preservation and footer
+position. Bundles are on owner, matched captures/validation/comparison on rwc-01,
+under fleet/evidence/autophys-ux-flow/implementation-20261105/approval-sections/.
+
+UI custody release: this iteration is complete in
+Change-Id I226863b686ee42fe936fd14ec81631ce. The executor may reconcile against
+the committed owner files, preserving these changes and the prior review
+history. No foreign source, brand or docs-route changes are included in this
+commit. This does not request a deployment, restart or source push.

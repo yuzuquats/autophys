@@ -12,9 +12,6 @@ ${scope} .ap-experiment-header .ap-dname { display:flex;align-items:baseline;gap
 ${scope} .ap-experiment-header .ap-dname [data-ap-icon] { align-self:center; }
 ${scope} .ap-experiment-source { margin:2px 0 0;color:var(--ap-sec);font:12px/16px var(--ap-font); }
 ${scope} .ap-experiment-header .ap-status { margin:2px 0 0;font:12px/16px var(--ap-font); }
-${scope} .ap-experiment-body { padding:0 12px 12px; }
-${scope} .ap-experiment-section + .ap-experiment-section { margin-top:18px; }
-${scope} .ap-experiment-section .ap-sub { margin:0 0 7px; }
 ${scope} .ap-experiment-caption { margin:0 0 8px;color:var(--ap-sec);font:12px/17px var(--ap-font); }
 ${scope} .ap-experiment-row { border-top:1px solid var(--ap-line); }
 ${scope} .ap-experiment-row-summary { display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:40px;box-sizing:border-box;padding:10px 12px;list-style:none;cursor:pointer;font:600 12px/20px var(--ap-font); }

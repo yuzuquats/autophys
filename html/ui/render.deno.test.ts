@@ -240,7 +240,7 @@ Deno.test("pairing markup associates unbroken codes and actions with each card",
   assertStringIncludes(card, 'id="ap-action-pair-deny:LHMX-5814"');
 });
 
-Deno.test("experiment card: one middle disclosure and a separate bottom decision footer", () => {
+Deno.test("experiment card: every content section discloses independently above the footer", () => {
   const model = { ...proposal, experiment: { key: "bench/p1", caption: "Bench A · p1", notice: "Approve refused <409>" },
     sections: [
       { heading: "Preview", blocks: [{ kind: "text" as const, text: "Recorded trace" }] },
@@ -252,22 +252,29 @@ Deno.test("experiment card: one middle disclosure and a separate bottom decision
   assertStringIncludes(html, '<std-round floating');
   assertStringIncludes(html, '<header class="ap-experiment-header" data-ap-cell>');
   assert(!html.includes("data-ap-experiment>"), "the experiment itself has no disclosure");
-  assertEquals(count(html, "<details "), 1, "one middle accordion");
-  assertStringIncludes(html, 'data-ap-experiment-row="supporting">');
+  assertEquals(count(html, "<details "), 5, "one disclosure per section plus provenance");
+  assertEquals(count(html, 'class="ap-experiment-caret"'), 5, "every section has a chevron");
+  assert(!html.includes('data-ap-experiment-row="supporting"'), "sections are flat, with no outer disclosure");
+  assertStringIncludes(html, 'data-ap-experiment-row="Experiment" open>');
+  assertStringIncludes(html, 'data-ap-experiment-row="Expected" open>');
+  assertStringIncludes(html, 'data-ap-experiment-row="Preview">');
+  assertStringIncludes(html, 'data-ap-experiment-row="So far">');
+  assertStringIncludes(html, 'data-ap-experiment-row="provenance">');
   assertStringIncludes(html, 'class="ap-experiment-scroll"');
   assertStringIncludes(html, "Recorded trace");
   assertStringIncludes(html, "Recorded budget");
   assertStringIncludes(html, "Pinned config");
-  assert(html.indexOf("Recorded settings") < html.indexOf("<details"), "settings remain visible");
-  assert(html.indexOf("Conditional uncertainty") < html.indexOf("<details"), "expected result remains visible");
   const footer = html.indexOf('<footer class="ap-experiment-actions"');
-  assert(footer > html.indexOf("</details>"), "actions follow the middle accordion");
+  assert(footer > html.lastIndexOf("</details>"), "actions follow the middle accordion");
   assert(alert > footer, "feedback remains in the fixed footer outside the accordion");
   assertStringIncludes(html.slice(alert), "Approve refused &lt;409&gt;");
   assertStringIncludes(html.slice(alert), 'data-ap-name="approve"');
   assertEquals(count(html, "Approve refused"), 1);
-  const expanded = detailsMarkup(model, classes, { supporting: true });
-  assertStringIncludes(expanded, 'data-ap-experiment-row="supporting" open>');
+  const expanded = detailsMarkup(model, classes, { Experiment: false, Expected: false, Preview: true });
+  assertStringIncludes(expanded, 'data-ap-experiment-row="Experiment">');
+  assertStringIncludes(expanded, 'data-ap-experiment-row="Expected">');
+  assertStringIncludes(expanded, 'data-ap-experiment-row="Preview" open>');
+  assertStringIncludes(expanded, 'data-ap-experiment-row="So far">');
   const cleared = { ...model, experiment: { ...model.experiment, notice: undefined } };
   assert(!detailsMarkup(cleared, classes).includes('role="alert"'));
 });
