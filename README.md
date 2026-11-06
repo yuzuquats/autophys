@@ -65,16 +65,16 @@ longer-term goal is to help revise the underlying physics too.
 
 ## The learning loop
 
-![Two loops: one investigates, one improves it. Muse Wonder evaluates playbook changes around a Muse Spark investigation.](docs/images/readme/investigation-loops.png)
-
-The inner loop calibrates a physical model. The outer loop evaluates changes
-to the investigation playbook and keeps those that score better.
-
-![Then train the model that runs it. Record decisions, distil the scripted expert today, and plan reinforcement learning.](docs/images/readme/policy-training.png)
-
-Policy training is separate from fitting the physical model. The diagram
-shows the distillation workflow; reinforcement learning is planned. See the
-[training guide](train/sft/README.md) for the current pipeline and its limits.
+<table>
+<tr>
+<td width="50%"><img src="docs/images/readme/investigation-loops.png" alt="Two loops: one investigates, one improves it. Muse Wonder evaluates playbook changes around a Muse Spark investigation." width="640"></td>
+<td width="50%"><img src="docs/images/readme/policy-training.png" alt="Then train the model that runs it. Record decisions, distil the scripted expert today, and plan reinforcement learning." width="640"></td>
+</tr>
+<tr>
+<td valign="top">The inner loop calibrates a physical model. The outer loop evaluates changes to the investigation playbook and keeps those that score better.</td>
+<td valign="top">Policy training is separate from fitting the physical model. The diagram shows the distillation workflow; reinforcement learning is planned. See the <a href="train/sft/README.md">training guide</a> for the current pipeline and its limits.</td>
+</tr>
+</table>
 
 ## Development and feedback
 

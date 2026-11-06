@@ -52,3 +52,10 @@ as optional marketing assets and are no longer embedded in the README.
 Validation covers every local README image and link target, the unchanged
 landing-page image hashes, whitespace and absence of em dashes. No new capture,
 experiment, approval, account data change or deployment is needed.
+
+The operator requested an uncollapsed side-by-side presentation. The learning-loop
+section uses a two-column HTML table supported by GitHub Markdown, with one
+unchanged landing-page diagram and its caption per column. Alt text and the
+current distillation versus planned reinforcement distinction remain intact.
+Validation checks the table structure, local image and guide targets, unchanged
+image hashes, and whitespace. No executable behavior changes.
