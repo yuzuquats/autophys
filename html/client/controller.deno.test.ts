@@ -71,7 +71,8 @@ Deno.test("controller: project switch keeps each project's selection; export and
   ctl.handle({ kind: "select", id: "heater-1/validate" });
   ctl.handle({ kind: "switch", value: "bench-oscillators" });
   ctl.handle({ kind: "switch", value: "lab-heaters" });
-  assertEquals(ctl.view().sidebar.selectedId, "heater-1/validate");
+  assertEquals(ctl.selection!.selected["lab-heaters"], "heater-1/validate");
+  assertEquals(ctl.view().sidebar.selectedId, "heater-1");
   const sel = ctl.selection!;
   assert(reduce(sel, store.snapshot()!, { kind: "switch", value: "nope" }, env).selection === sel);
   ctl.handle({ kind: "action", name: "export" });

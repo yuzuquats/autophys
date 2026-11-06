@@ -1,5 +1,5 @@
 /// <reference lib="deno.ns" />
-/** Domain → view model: tree nodes and trails per state, view-hint leaves, ridge greying, panels, outlook. */
+/** Domain → view model: tree nodes and trails per state, in-page view hints, ridge greying, panels, outlook. */
 Deno.test("derive: Fit residual strip shares time axis and uses only matching downsampled samples", async () => {
   const { fitPanels, residualPanels } = await import("./charts.ts");
   const { sigmaOf } = await import("../config.ts");
@@ -50,15 +50,14 @@ Deno.test("derive: residuals fall back to the measurement's sigma estimate when 
 
 Deno.test("derive: Ground truth is conditional and formats payload ratios, tolerance and within", async () => {
   const { investigationNode } = await import("./tree.ts");
-  const { groundTruthNode, truthPanels } = await import("./truth.ts");
+  const { truthPanels } = await import("./truth.ts");
   const project = structuredClone(ws.projects[0]), inv = project.investigations[1];
   assert(inv.reveal);
   inv.reveal.tolerance = .2;
   inv.reveal.quantities[0].within = false;
   inv.reveal.quantities[0].ratio = 1.37;
   inv.reveal.quantities[0].sigma_ratio = .06;
-  assertEquals(groundTruthNode(inv), { id: inv.id + "/truth", label: "Ground truth", icon: "validate", selectable: true, children: null });
-  assertEquals(investigationNode(project, inv).children!.at(-1), groundTruthNode(inv), "a revealed investigation lists Ground truth in the tree");
+  assert(!investigationNode(project, inv).children!.some(n => n.id === inv.id + "/truth"), "Ground truth is an in-page destination");
   const state = { ...s0, ws: { ...ws, projects: [project] }, projectId: project.id, selected: { [project.id]: inv.id + "/truth" } };
   assertEquals(parseSel(project, inv.id + "/truth")?.kind, "truth");
   const model = mainModel(state);
@@ -74,7 +73,6 @@ Deno.test("derive: Ground truth is conditional and formats payload ratios, toler
   assertAlmostEquals(whisker.points[0][0], 1.31);
   assertAlmostEquals(whisker.points[1][0], 1.43);
   delete inv.reveal;
-  assertEquals(groundTruthNode(inv), null);
   assert(!investigationNode(project, inv).children!.some((n) => n.label === "Ground truth"));
   assertEquals(parseSel(project, inv.id + "/truth"), null);
 });
@@ -131,15 +129,14 @@ Deno.test("derive: investigation trails: badge, spinner, ± and the rows under b
   assertEquals(side.nodes[0].children![0].trail, { text: "v2" });
   const a = find(side.nodes, "bench-a")!;
   assertEquals(a.trail, { badge: "Approve", tone: "warn" });
-  assertEquals(a.children!.map((c) => c.label), ["Data", "Fit #1", "Sensitivity", "Sine 0.44 Hz", "Validate"]);
+  assertEquals(a.children!.map((c) => c.label), ["Data", "Fit #1", "Sine 0.44 Hz"]);
   assertEquals(find(side.nodes, "bench-a/data/free_response@1")!.trail, { text: "1,000" });
   assertEquals(find(side.nodes, "bench-a/fit-1")!.trail!.tone, "ok");
-  assertEquals(find(side.nodes, "bench-a/fit-1")!.children!.map((c) => c.id), ["bench-a/fit-1/fit", "bench-a/fit-1/residuals", "bench-a/fit-1/landscape", "bench-a/fit-1/envelope"]);
-  assertEquals(find(side.nodes, "bench-a/sens")!.trail, { text: "rank 2/3", tone: "warn" });
+  assertEquals(find(side.nodes, "bench-a/fit-1")!.children, null);
+  assertEquals(find(side.nodes, "bench-a/sens"), undefined);
   assertEquals(find(side.nodes, "bench-a/prop/p1")!.trail, { badge: "proposed", tone: "warn" });
   assertEquals(find(side.nodes, "bench-b/prop/p1")!.trail, { text: "data in", tone: "ok" }, "the replayed approval");
-  const v = find(side.nodes, "bench-a/validate")!;
-  assertEquals([v.dim, v.trail], [true, { text: "needs data" }]);
+  assertEquals(find(side.nodes, "bench-a/validate"), undefined);
   assert(find(side.nodes, "bench-b")!.trail!.text!.startsWith("±") && find(side.nodes, "bench-b")!.trail!.tone === "ok");
   const cell = find(sidebarModel({ ...s0, projectId: "cell-pulse-tests" }).nodes, "cell-a")!;
   assertEquals(cell.trail, { spinner: true, text: "12/40", tone: "run" });

@@ -1,5 +1,5 @@
 /** One workspace tree, with each project a collapsible root. */
-import type { Fit, Investigation, Project, ProjectConfig } from "../domain.ts";
+import type { Fit, Investigation, Project } from "../domain.ts";
 import {
   awaiting,
   delivered,
@@ -8,32 +8,18 @@ import {
   stateOf,
 } from "../proposal.ts";
 import type {
-  IconName,
   SidebarModel,
   Trail,
   TreeNode,
 } from "../../ui/view-model.ts";
-import { type View, VIEW_LABEL, viewsOf } from "./charts.ts";
-import { groundTruthNode } from "./truth.ts";
 import { int, pct } from "./fmt.ts";
 import {
-  configFor,
   ids,
   latestConfig,
-  latestFit,
   proposalLabel,
-  rankOf,
+  parseSel,
   type State,
 } from "./shared.ts";
-
-const VIEW_ICON: Record<View, IconName> = {
-  fit: "view",
-  residuals: "residuals",
-  landscape: "landscape",
-  envelope: "envelope",
-  frequency: "frequency",
-  "zoom:edges": "zoom",
-};
 
 export function investigationTrail(inv: Investigation): Trail | undefined {
   const state = stateOf(inv), pending = pendingDecisions(inv);
@@ -56,7 +42,6 @@ export function investigationTrail(inv: Investigation): Trail | undefined {
 }
 
 export function fitNode(
-  config: ProjectConfig,
   inv: Investigation,
   fit: Fit,
 ): TreeNode {
@@ -74,15 +59,7 @@ export function fitNode(
         text: `χ² ${fit.chi2N.toFixed(2)}`,
         tone: fit.chi2N <= 2 ? "ok" : "warn",
       },
-    children: fit.state !== "converged"
-      ? null
-      : viewsOf(config, inv, fit).map((v) => ({
-        id: ids.view(inv, fit, v),
-        label: VIEW_LABEL[v],
-        icon: VIEW_ICON[v],
-        selectable: true,
-        children: null,
-      })),
+    children: null,
   };
 }
 
@@ -90,7 +67,6 @@ export function investigationNode(
   project: Project,
   inv: Investigation,
 ): TreeNode {
-  const config = configFor(project, inv);
   const data: TreeNode = {
     id: ids.data(inv),
     label: "Data",
@@ -119,34 +95,8 @@ export function investigationNode(
   };
   const children: TreeNode[] = [
     data,
-    ...inv.fits.map((f) => fitNode(config, inv, f)),
+    ...inv.fits.map((f) => fitNode(inv, f)),
   ];
-  const fit = latestFit(inv);
-  if (fit?.sensitivity) {
-    const rank = rankOf(fit.sensitivity), n = fit.sensitivity.names.length;
-    children.push({
-      id: ids.sens(inv),
-      label: "Sensitivity",
-      icon: "sensitivity",
-      selectable: true,
-      children: null,
-      trail: { text: `rank ${rank}/${n}`, tone: rank < n ? "warn" : "muted" },
-    });
-  } else if (fit?.identification) {
-    const { identified, nonIdentified } = fit.identification,
-      n = identified.length + nonIdentified.length;
-    children.push({
-      id: ids.sens(inv),
-      label: "Sensitivity",
-      icon: "sensitivity",
-      selectable: true,
-      children: null,
-      trail: {
-        text: `${identified.length}/${n}`,
-        tone: nonIdentified.length ? "warn" : "muted",
-      },
-    });
-  }
   for (const p of inv.proposals) {
     const trail: Trail = p.status === "proposed"
       ? { badge: "proposed", tone: "warn" }
@@ -163,25 +113,6 @@ export function investigationNode(
       trail,
     });
   }
-  const v = inv.validation;
-  children.push({
-    id: ids.validate(inv),
-    label: "Validate",
-    icon: "validate",
-    selectable: true,
-    children: null,
-    dim: v.state === "needs-data",
-    trail: v.state === "needs-data"
-      ? { text: "needs data" }
-      : v.state === "summary"
-      ? { text: v.passed ? "passed" : "failed", tone: v.passed ? "ok" : "warn" }
-      : {
-        text: v.state === "passed" ? pct(v.worst.relative) : "failed",
-        tone: v.state === "passed" ? "ok" : "warn",
-      },
-  });
-  const truth = groundTruthNode(inv);
-  if (truth) children.push(truth);
   return {
     id: ids.inv(inv),
     label: investigationName(project, inv),
@@ -216,6 +147,16 @@ function recency(updated: string): number {
   const time = /^(\d{1,2}):(\d{2})$/.exec(updated);
   if (time) return Number.MAX_SAFE_INTEGER - 1440 + Number(time[1]) * 60 + Number(time[2]);
   return Date.parse(updated) || 0;
+}
+
+/** Removed diagnostic leaves still locate their card; the rail selects its owning record. */
+function railSelection(s: State): string | null {
+  const id = s.selected[s.projectId];
+  const project = s.ws.projects.find(p => p.id === s.projectId);
+  const sel = project && id ? parseSel(project, id) : null;
+  if (sel?.kind === "fit" || sel?.kind === "sensitivity") return ids.fit(sel.inv, sel.fit);
+  if (sel?.kind === "validate" || sel?.kind === "truth") return ids.inv(sel.inv);
+  return id ?? null;
 }
 
 export function sidebarModel(s: State): SidebarModel {
@@ -267,7 +208,7 @@ export function sidebarModel(s: State): SidebarModel {
       };
     }),
     treeLabel: "Projects and investigations",
-    selectedId: s.selected[s.projectId] ?? null,
+    selectedId: railSelection(s),
     expandedIds,
   };
 }

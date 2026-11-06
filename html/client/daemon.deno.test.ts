@@ -135,7 +135,7 @@ Deno.test("daemon: the workbench renders the seeded investigation, with gaps sai
   const side = ctl.view().sidebar;
   assertEquals(side.nodes[0].label, "Bench");
   assertStringIncludes(side.nodes[0].children![1].label, "Investigation 1");
-  assertEquals(side.nodes[0].children![1].children!.map((n) => n.label), ["Data", "Fit #1", "Sensitivity", "Sine 0.4 Hz", "Validate"]);
+  assertEquals(side.nodes[0].children![1].children!.map((n) => n.label), ["Data", "Fit #1", "Sine 0.4 Hz"]);
   ctl.handle({ kind: "select", id: "inv_1/fit-1/fit" });
   assertStringIncludes(JSON.stringify(ctl.view().main.body), "fit curve not recorded");
   ctl.handle({ kind: "select", id: "inv_1/fit-1/residuals" });

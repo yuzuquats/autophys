@@ -32,3 +32,16 @@ Deno.test("investigation markup: missing supplemental targets render their expla
   assertStringIncludes(html, 'id="frequency-missing"');
   assertStringIncludes(html, "No frequency data recorded for this fit.");
 });
+
+Deno.test("investigation markup: round diagnostics are local jumps to rendered cards", () => {
+  const copy = structuredClone(body), round = copy.rounds[0];
+  round.landscape = { id: "landscape", heading: "Landscape", blocks: [] };
+  round.extras = [{ id: "frequency", heading: "Frequency", blocks: [] }];
+  const html = mainMarkup({ ...model, body: copy }, 750);
+  assertStringIncludes(html, 'aria-label="Jump to Round 1 diagnostics"');
+  assertStringIncludes(html, 'data-ap-jump="fit">Fit &amp; residuals</button>');
+  for (const id of ["params", "identification", "landscape", "frequency"]) {
+    assertStringIncludes(html, `data-ap-jump="${id}"`);
+    assertStringIncludes(html, `id="${id}"`);
+  }
+});

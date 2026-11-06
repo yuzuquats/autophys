@@ -95,11 +95,17 @@ function investigationMarkup(body: InvestigationBody, width: number, title?: str
       c.blocks.map(blockMarkup).join("") + panels(c.panels ?? [], w, c.id) + rows, summary)
       .replace('<section class=', `<section id="${esc(c.id)}" tabindex="-1" class=`);
   };
-  const jumps = `<nav class="ap-jumps" aria-label="Jump to investigation section">${body.jumps.map((j, i) =>
-    `<button type="button" data-ap-jump="${esc(j.target)}"${i === 0 ? ' aria-current="location"' : ""}>${esc(j.label)}</button>`).join("")}</nav>`;
+  const jumpNav = (items: InvestigationBody["jumps"], label: string) => items.length
+    ? `<nav class="ap-jumps" aria-label="${esc(label)}">${items.map(j =>
+      `<button type="button" data-ap-jump="${esc(j.target)}">${esc(j.label)}</button>`).join("")}</nav>` : "";
+  const jumps = jumpNav(body.jumps, "Jump to investigation section");
   const outcomeWidth = wide && body.outcome.length > 1 ? Math.floor((available - 10) / 2) - 24 : inner;
   const outcome = body.outcome.length ? `<div class="ap-outcome${wide ? " ap-wide" : ""}">${body.outcome.map(c => card(c, outcomeWidth)).join("")}</div>` : "";
   const rounds = body.rounds.map(r => `<details class="ap-round" id="${esc(r.id)}" data-ap-disclosure${r.open ? " open" : ""}><summary class="ap-round-head"><b>${esc(r.title)}</b><span>${esc(r.caption)}</span></summary><div class="ap-round-body">
+    ${jumpNav([
+      ...(r.fit ? [{ label: "Fit & residuals", target: r.fit.id }] : []),
+      ...[r.parameters, r.identifiability, r.landscape, ...r.extras].flatMap(c => c ? [{ label: c.heading, target: c.id }] : []),
+    ], `Jump to ${r.title} diagnostics`)}
     ${card(r.data)}
     <div class="ap-fit-layout${wide ? " ap-wide" : ""}">${r.fit ? card(r.fit, left) : ""}<div class="ap-fit-aside">${r.parameters ? card(r.parameters, right) : ""}${r.identifiability ? card(r.identifiability, right) : ""}</div></div>
     ${r.landscape ? card(r.landscape) : ""}${r.proposals.map(c => card(c)).join("")}

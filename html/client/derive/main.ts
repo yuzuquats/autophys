@@ -212,7 +212,7 @@ export function investigationPage(s: State, project: Project, sel: Exclude<Sel, 
       blocks: [{ kind: "text", text: verdict, lead: true, tone: inv.state === "validated" ? "ok" : "warn" },
         { kind: "text", text: check + " " + params, lead: true }] };
   }
-  const outcome: InvestigationCard[] = finished || sel.kind === "validate" || sel.kind === "truth"
+  const outcome: InvestigationCard[] = finished || inv.validation.state !== "needs-data" || inv.reveal || sel.kind === "validate" || sel.kind === "truth"
     ? [validationCard(c, inv), ...(inv.reveal ? [{ id: anchor(inv, "truth"), heading: "Ground truth", caption: "Revealed after the outcome",
       blocks: [{ kind: "text" as const, text: "Synthetic: truth was hidden from the agent until the outcome." }], panels: truthPanels(inv.reveal) }] : [])] : [];
   const pageRounds = [...rounds].reverse().map(r => {
@@ -271,12 +271,8 @@ export function investigationPage(s: State, project: Project, sel: Exclude<Sel, 
   });
   const jumps: InvestigationBody["jumps"] = [
     { label: "Summary", target: summary.id },
-    ...(outcome.length ? [{ label: "Outcome", target: outcome[0].id }] : []),
-    ...pageRounds.flatMap((r, i) => [{ label: r.title, target: r.id }, ...(!finished && i === 0 ? [
-      ...(r.fit ? [{ label: r.fit.heading, target: r.fit.id }] : []),
-      ...(r.identifiability ? [{ label: "Identifiability", target: r.identifiability.id }] : []),
-      ...r.proposals.map(p => ({ label: "Proposal", target: p.id })),
-    ] : [])]),
+    ...outcome.map(c => ({ label: c.heading, target: c.id })),
+    ...pageRounds.map(r => ({ label: r.title, target: r.id })),
   ];
   return { crumb: [{ label: project.name }, { label: investigationLabel(project, inv) }],
     meta: `${statusText(inv).text} · ${experimentsUsed(inv)} / ${c.budgets.maxExperiments} experiments`, actions: [], credit: "",

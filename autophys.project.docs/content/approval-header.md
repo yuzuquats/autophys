@@ -87,3 +87,29 @@ Before/after captures, comparison.html, source preimages and validation receipts
 yuzuquats, with a small acceptance copy on rwc-01. Additive local commit only,
 coordinated with productionize's ref custodian; no sink, push, native build or
 deployment belongs to this change.
+
+
+## Investigation navigation (2026-11-06)
+
+The operator requested simplifying the investigation tree after reviewing its
+section-only leaves. The existing rail now contains Data and its measurements,
+individual fits and experiment proposals. Fit plots, Sensitivity, Validate and
+Ground truth no longer add tree rows. Record identifiers, status trails, icons,
+connecting lines, New project and Devices stay intact.
+
+The investigation page keeps its scientific content and adds diagnostic jumps
+inside each round. Page-level jumps locate recorded validation and synthetic
+recovery, including checks already recorded before the investigation finishes.
+Legacy diagnostic selections still locate their exact card, opening closed
+rounds and disclosures; the rail highlights the owning fit or investigation.
+No experimental data, decision state or acquisition facts change.
+
+Validation: 127 client/UI tests passed, frozen cached typechecks and fixture
+bundling passed. Real hydrated components were checked at 1280×800 and 390×844:
+legacy targets, local diagnostic focus/scroll, opening supplemental disclosures,
+wrapped navigation without horizontal overflow, and retained rail glyphs/lines.
+Before/after captures and commands are in
+`~/workspace/fleet/evidence/autophys-ux-flow/rail-simplification-20261106/`
+on yuzuquats, with an acceptance copy on rwc-01. These are deterministic renderer
+fixtures, not live experimental records. One additive local commit is admitted
+by productionize; its publication/ref custody stays intact. No deployment.

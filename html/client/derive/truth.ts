@@ -1,11 +1,7 @@
 /** Format the evaluator results exactly as recorded; no scoring or uncertainty estimation. */
-import type { Investigation, Reveal } from "../domain.ts";
-import type { ChartPanel, Layer, TreeNode, XYChart } from "../../ui/view-model.ts";
+import type { Reveal } from "../domain.ts";
+import type { ChartPanel, Layer, XYChart } from "../../ui/view-model.ts";
 import { niceTicks, sig } from "./fmt.ts";
-
-export function groundTruthNode(inv: Investigation): TreeNode | null {
-  return inv.reveal ? { id: inv.id + "/truth", label: "Ground truth", icon: "validate", selectable: true, children: null } : null;
-}
 
 export function truthPanels(reveal: Reveal): ChartPanel[] {
   const qs = reveal.quantities, tolerance = `${+(100 * reveal.tolerance).toPrecision(3)}%`;
