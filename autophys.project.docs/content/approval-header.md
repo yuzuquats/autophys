@@ -123,8 +123,8 @@ receipt, shared lifecycle cards and simplified investigation navigation.
 Independent exact-prefix review was READY. All 129 HTML tests, frozen
 typechecks and whitespace checks passed on the isolated publication prefix.
 The full local tip tree, shared index and worktree were preserved during
-sinking; 15 excluded peer drafts remain local, including the compact
+sinking; 15 excluded peer drafts remained local at that checkpoint, including the compact
 account dropdown. No build or deployment ran during publication.
 Exact allowlist, mapping, reviews, validation and push receipts:
 `fleet/evidence/autophys-ux-flow/ui-publication-20261106/` on yuzuquats.
-This outcome receipt is a local documentation follow-up.
+This outcome receipt was initially retained as a local documentation follow-up.
