@@ -68,7 +68,7 @@ queueMicrotask(() => {
         behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
       });
     });
-    tryNow.before(docs);
+    tryNow.after(docs);
   }
 
   const wordmark = document.querySelector(".ck-brand .ck-wordmark");
