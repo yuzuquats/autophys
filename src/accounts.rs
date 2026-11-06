@@ -354,11 +354,21 @@ pub(crate) fn set_read_only(conn: &Connection, email: &str, read_only: bool) -> 
 }
 
 /// Start a session for `user`; returns the token for the cookie.
-pub(crate) fn session_start(conn: &Connection, user: &User, now: DateTime<Utc>) -> Result<String> {
-    // Housekeeping: expired sessions go on the next sign-in.
-    conn.execute("DELETE FROM sessions WHERE expires <= ?1", [now_text(now)])?;
+pub(crate) fn session_start(
+    conn: &mut Connection,
+    user: &User,
+    previous: Option<&str>,
+    now: DateTime<Utc>,
+) -> Result<String> {
+    // Generate before touching the store. The old token remains valid if any
+    // database write (including insertion of its replacement) fails.
     let token = random_hex(32)?;
-    conn.execute(
+    let tx = conn.transaction()?;
+    tx.execute("DELETE FROM sessions WHERE expires <= ?1", [now_text(now)])?;
+    if let Some(previous) = previous {
+        session_end(&tx, previous)?;
+    }
+    tx.execute(
         "INSERT INTO sessions (sha256, user_id, created, expires) VALUES (?1, ?2, ?3, ?4)",
         params![
             sha256_hex([token.as_bytes()]),
@@ -367,6 +377,7 @@ pub(crate) fn session_start(conn: &Connection, user: &User, now: DateTime<Utc>) 
             now_text(now + SESSION_TTL)
         ],
     )?;
+    tx.commit()?;
     Ok(token)
 }
 
@@ -429,6 +440,51 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let ks = crate::keys::KeyStore::open(dir.path().join("server.db")).unwrap();
         (dir, ks)
+    }
+
+    #[test]
+    fn failed_rotation_preserves_previous_and_expired_sessions() {
+        let (_dir, ks) = db();
+        let inv = ks.users_invite("session@example.org").unwrap();
+        let user = ks
+            .users_accept(&inv.token, "correct horse battery")
+            .unwrap();
+        let previous = ks.session_start(&user).unwrap();
+        let mut conn = Connection::open(_dir.path().join("server.db")).unwrap();
+        conn.execute(
+            "INSERT INTO sessions (sha256, user_id, created, expires) VALUES ('expired', ?1, '2000-01-01', '2000-01-02')",
+            [&user.id],
+        ).unwrap();
+        conn.execute_batch(
+            "CREATE TRIGGER refuse_session BEFORE INSERT ON sessions BEGIN
+             SELECT RAISE(ABORT, 'injected insert failure'); END;",
+        )
+        .unwrap();
+        assert!(session_start(&mut conn, &user, Some(&previous), Utc::now()).is_err());
+        assert!(ks.session_user(&previous).unwrap().is_some());
+        let expired: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM sessions WHERE sha256 = 'expired'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            expired, 1,
+            "housekeeping must roll back with the replacement"
+        );
+        conn.execute_batch("DROP TRIGGER refuse_session").unwrap();
+        let replacement = ks.session_replace(&user, Some(&previous)).unwrap();
+        assert!(ks.session_user(&previous).unwrap().is_none());
+        assert_eq!(ks.session_user(&replacement).unwrap(), Some(user));
+        let expired: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM sessions WHERE sha256 = 'expired'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(expired, 0);
     }
 
     #[test]

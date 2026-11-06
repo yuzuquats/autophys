@@ -23,7 +23,7 @@ import { mountGuidedTour } from "./guided-tour.ts";
 import { contentTransitionStyles } from "./content-transition.ts";
 import { landingDocs } from "./docs.ts";
 import { quietLoading, signedOutView } from "../client/derive/signed-out.ts";
-import { signInInPlace, takeSignInError, showSignInError } from "./sign-in-in-place.ts";
+import { cancelAccountBadge, signInInPlace, takeSignInError, showSignInError } from "./sign-in-in-place.ts";
 import { mountAccount } from "./account-header.ts";
 import "./brand.ts";
 import "./light-only.ts";
@@ -246,6 +246,7 @@ const app: Cookbook.App = {
 const docs = landingDocs();
 Cookbook.mount({ deck, onStage: (stage) => docs.onStage(stage), tutorial: { start: () => { if (!walkthroughRequested) return []; walkthroughRequested = false; return guided?.source.start() ?? []; }, finish: result => guided?.source.finish?.(result) }, status: null, labels: { sidebar: "Workspace" } }).run(app);
 function onContextChanged(next: AppContext): void {
+  cancelAccountBadge();
   context = next; SIGNED_OUT = !next.principal; walkthroughRequested = false;
   const bootstrap = document.getElementById("ap-context");
   if (bootstrap) bootstrap.textContent = JSON.stringify(next);

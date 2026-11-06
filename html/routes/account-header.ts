@@ -4,7 +4,7 @@ import { initHtmlElement } from "@tento-ui/init/html-element.global";
 import { Dialog } from "@tento-ui/components/dialog/dialog";
 import { signInFields } from "../ui/sign-in-fields.ts";
 import { SIGN_IN_TITLE, SIGN_IN_DESCRIPTION } from "../client/derive/signed-out.ts";
-import { signInInPlace } from "./sign-in-in-place.ts";
+import { cancelAccountBadge, signInInPlace } from "./sign-in-in-place.ts";
 
 const formStyles = `
 :host { --bg:#fff;--text-pri:#141414;--text-sec:#5b5b5b;--blue:#141414;--bg-hover-opaque:#efefef;
@@ -91,6 +91,7 @@ export function mountAccount(
     const button = form.querySelector<HTMLButtonElement>("button[type=submit]");
     if (button) button.disabled = true;
     form.querySelector("[role=alert]")?.remove();
+    cancelAccountBadge();
     onSigningOut(true);
     let ended = false;
     try {

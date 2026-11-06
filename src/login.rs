@@ -226,7 +226,55 @@ struct LoginForm {
     next: Option<String>,
 }
 
-async fn login(
+async fn login(api: web::Data<Api>, req: HttpRequest, form: web::Form<LoginForm>) -> HttpResponse {
+    let result = login_attempt(api, req.clone(), form).await;
+    sign_in_response(&req, result)
+}
+
+/// Fixed public errors with an opaque reference; details stay in the server log.
+fn sign_in_response(req: &HttpRequest, result: Result<HttpResponse>) -> HttpResponse {
+    let reference = crate::keys::random_hex(8).ok();
+    let mut response = match result {
+        Ok(response) => response,
+        Err(error) => {
+            if let Some(reference) = &reference {
+                eprintln!("sign-in request {reference} failed: {error}");
+            } else {
+                eprintln!("sign-in request failed: {error}");
+            }
+            let (code, message) = match error.status() {
+                403 => (
+                    "forbidden",
+                    "This page couldn't sign you in. Reload it and try again.",
+                ),
+                404 => (
+                    "workspace_unavailable",
+                    "Your account's workspace is unavailable. Contact the account owner.",
+                ),
+                _ => (
+                    "unavailable",
+                    "Autophys is temporarily unavailable. Try again in a moment.",
+                ),
+            };
+            login_error(
+                req,
+                actix_web::http::StatusCode::from_u16(error.status())
+                    .unwrap_or(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR),
+                code,
+                message,
+            )
+        }
+    };
+    if let Some(reference) = reference {
+        response.headers_mut().insert(
+            header::HeaderName::from_static("x-request-id"),
+            header::HeaderValue::from_str(&reference).expect("hex request reference"),
+        );
+    }
+    response
+}
+
+async fn login_attempt(
     api: web::Data<Api>,
     req: HttpRequest,
     form: web::Form<LoginForm>,
@@ -284,23 +332,41 @@ async fn login(
 async fn start_session(api: &Api, req: &HttpRequest, user: User, to: &str) -> Result<HttpResponse> {
     let resolver = api.clone();
     let account = user.clone();
-    blocking(move || {
-        resolver.scoped(
-            &crate::http::Caller::Member(account),
-            crate::http::auth::Credential::Local,
-        )
+    let context = blocking(move || {
+        resolver
+            .scoped(
+                &crate::http::Caller::Member(account),
+                crate::http::auth::Credential::Local,
+            )?
+            .context
+            .ok_or_else(|| ApiError::Internal("sign-in context missing".into()))
     })
     .await?;
     let keys = api.keys.clone();
     let previous = req.cookie(LOGIN_COOKIE).map(|c| c.value().to_string());
-    let token = blocking(move || {
-        if let Some(token) = previous {
-            keys.session_end(&token)?;
-        }
-        keys.session_start(&user)
-    })
-    .await?;
-    let mut resp = see_other(to);
+    let token = blocking(move || keys.session_replace(&user, previous.as_deref())).await?;
+    // Fetch submits receive everything needed to enter the workspace, without
+    // waiting on cosmetic badge/avatar requests. Native forms still navigate.
+    let wants_json = req
+        .headers()
+        .get(header::ACCEPT)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| {
+            v.split(',')
+                .any(|part| part.trim().split(';').next() == Some("application/json"))
+        });
+    let navigation = req
+        .headers()
+        .get("sec-fetch-mode")
+        .and_then(|v| v.to_str().ok())
+        == Some("navigate");
+    let mut resp = if wants_json && !navigation {
+        HttpResponse::Ok()
+            .insert_header((header::CACHE_CONTROL, "no-store"))
+            .json(json!({ "badge": account_control(&context), "context": context }))
+    } else {
+        see_other(to)
+    };
     resp.add_cookie(&session_cookie(api, token))
         .map_err(|e| ApiError::Internal(format!("set cookie: {e}")))?;
     Ok(resp)
@@ -316,13 +382,27 @@ async fn demo_sign_in(
     api: web::Data<Api>,
     req: HttpRequest,
     form: web::Form<DemoForm>,
+) -> HttpResponse {
+    let result = demo_attempt(api, req.clone(), form).await;
+    sign_in_response(&req, result)
+}
+
+async fn demo_attempt(
+    api: web::Data<Api>,
+    req: HttpRequest,
+    form: web::Form<DemoForm>,
 ) -> Result<HttpResponse> {
     form_origin(&req, api.options())?;
     let next = safe_next(form.next.as_deref());
     let keys = api.keys.clone();
     match blocking(move || keys.users_demo()).await? {
         Some(user) => start_session(&api, &req, user, &next).await,
-        None => Err(ApiError::not_found("demo account")),
+        None => Ok(login_error(
+            &req,
+            actix_web::http::StatusCode::NOT_FOUND,
+            "demo_unavailable",
+            "Demo sign-in is unavailable right now. Try again later or sign in with your account.",
+        )),
     }
 }
 
@@ -498,6 +578,7 @@ pub fn account_control(context: &crate::workspaces::AppContext) -> String {
         return anonymous_badge(context.auth.allow_demo);
     };
     let name = escape(&profile.display_name);
+    let principal_id = escape(&profile.id);
     let initial = escape(
         &profile
             .display_name
@@ -533,7 +614,7 @@ pub fn account_control(context: &crate::workspaces::AppContext) -> String {
         ""
     };
     format!(
-        "<details id=\"ap-account\" data-signed-in=\"true\"><summary class=\"ap-acct-btn\" aria-label=\"Account: {name}\"><span class=\"ap-acct-avatar\" aria-hidden=\"true\">{initial}{image}</span></summary><div class=\"ap-acct-card\"><span class=\"ap-acct-name\">{name}</span>{email}{permission}{logout}</div></details>{ACCOUNT_STYLE}"
+        "<details id=\"ap-account\" data-signed-in=\"true\" data-principal-id=\"{principal_id}\"><summary class=\"ap-acct-btn\" aria-label=\"Account: {name}\"><span class=\"ap-acct-avatar\" aria-hidden=\"true\">{initial}{image}</span></summary><div class=\"ap-acct-card\"><span class=\"ap-acct-name\">{name}</span>{email}{permission}{logout}</div></details>{ACCOUNT_STYLE}"
     )
 }
 

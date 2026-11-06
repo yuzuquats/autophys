@@ -675,7 +675,16 @@ impl KeyStore {
 
     /// Start a sign-in session; the token goes in the cookie.
     pub fn session_start(&self, user: &crate::accounts::User) -> Result<String> {
-        crate::accounts::session_start(&*self.conn()?, user, Utc::now())
+        self.session_replace(user, None)
+    }
+
+    /// Rotate a browser session atomically; failed replacement keeps the old one.
+    pub fn session_replace(
+        &self,
+        user: &crate::accounts::User,
+        previous: Option<&str>,
+    ) -> Result<String> {
+        crate::accounts::session_start(&mut *self.conn()?, user, previous, Utc::now())
     }
 
     /// The signed-in account behind a session cookie.

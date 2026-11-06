@@ -198,3 +198,51 @@ executor stopped before release/package/install. Finish this scoped commit and
 read-only review, stop isolated browser/daemon/tunnel callers, then record exact
 commit/tree/file hashes and release the source-write hold for the next native
 admission. No additional source writes, Cargo or deploy during that admission.
+
+
+### Demo sign-in hardening — 2026-11-06
+
+Fetch sign-in now returns the resolved account context and the shared
+server-rendered profile control in the session-cookie response. The workspace
+can enter immediately without waiting for a second context or badge request;
+profile images load independently. Native form submissions still redirect.
+Against an older daemon's 303 response, the client resolves context, enters the
+workspace, and gives its cosmetic badge refresh two seconds. Session changes
+and sign-out cancel that refresh so late account markup cannot overwrite the
+new identity.
+
+Errors distinguish invalid credentials, throttling, unavailable demo/workspace,
+temporary server failure and failure to confirm an accepted session. Only fixed
+public messages are shown. Internal handler errors stay in the server log with
+an opaque request reference; browser diagnostics contain only stage/status/code
+and that reference. Demo submission sends only its destination and never selects
+the password field on failure. Demo continues to be an ordinary persisted
+read-only account, with no bundled records or special walkthrough.
+
+Session rotation now performs expiry cleanup, previous-token removal and
+replacement insertion in one SQLite transaction. Random-token generation happens
+first. Any failed write rolls back all session changes. No schema or dependency
+change is required.
+
+Deno application-entry checking and the offline sign-in module bundle passed.
+Native and regression sources compile; an offline debug build passed with
+incremental compilation disabled. Eight focused browser cases checked error
+messages, focus, retry controls and single-response entry; additional delayed
+and stale-badge checks verified timeout and identity cancellation. Seven manual
+checks against an isolated daemon and synthetic account DB covered invitation,
+ordinary sign-in, demo read-only rotation, native redirect, Origin rejection,
+disabled demo, and forced insertion failure with retained old session and
+rolled-back expiry cleanup. The new store regression is compiled but unrun.
+No test suite, installation, service restart or deployment was performed.
+The original reported incident remains unconfirmed; deployment-time 502s were
+separately established in the drawer deployment record.
+
+Evidence and custody are at fleet/evidence/autophys-auth-hardening/.
+Both native operations used the two shared locks and bounded allocation;
+compile/build growth was approximately 0.47/1.63 GiB, free space stayed above
+136 GiB, and no new incremental cache was created. Owned temporary daemon and
+browser callers are stopped. Source remains uncommitted under the operator's
+ref/commit hold for polish's publication; the existing 36 completed auth
+Change-Ids are separately offered for joint review in
+joint-prerequisite-scope.json. This hardening delta is excluded from that
+handoff. Publication readiness of a newly assembled prefix is not inferred.
