@@ -6,12 +6,12 @@ ${scope} .ck-panel-body:has(> .ck-details-slot > .ap-experiment-card) { overflow
 ${scope} .ck-details-slot:has(> .ap-experiment-card) { display:flex;flex:1;min-height:0; }
 ${scope} .ap-experiment-card { position:relative;isolation:isolate;display:flex;flex-direction:column;flex:1;min-width:0;min-height:0;overflow-wrap:anywhere; }
 ${scope} .ap-experiment-scroll { flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;scroll-padding:12px;scrollbar-width:thin; }
-${scope} .ap-experiment-header { display:block;flex:none;padding:12px; }
+${scope} .ap-experiment-header { display:block;flex:none;padding:8px 12px; }
 ${scope} .ap-experiment-header std-list-cell-layout, ${scope} .ap-experiment-header .ap-cell-text { display:block;min-width:0;width:100%; }
-${scope} .ap-experiment-header .ap-dname { display:flex;align-items:baseline;gap:6px;margin:0;font:600 14px/20px var(--ap-font); }
+${scope} .ap-experiment-header .ap-dname { display:flex;align-items:baseline;gap:6px;margin:0;font:600 14px/18px var(--ap-font); }
 ${scope} .ap-experiment-header .ap-dname [data-ap-icon] { align-self:center; }
-${scope} .ap-experiment-source { margin:3px 0 0;color:var(--ap-sec);font:12px/17px var(--ap-font); }
-${scope} .ap-experiment-header .ap-status { margin:6px 0 0;font:12px/17px var(--ap-font); }
+${scope} .ap-experiment-source { margin:2px 0 0;color:var(--ap-sec);font:12px/16px var(--ap-font); }
+${scope} .ap-experiment-header .ap-status { margin:2px 0 0;font:12px/16px var(--ap-font); }
 ${scope} .ap-experiment-body { padding:0 12px 12px; }
 ${scope} .ap-experiment-section + .ap-experiment-section { margin-top:18px; }
 ${scope} .ap-experiment-section .ap-sub { margin:0 0 7px; }

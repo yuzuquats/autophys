@@ -117,3 +117,16 @@ fleet/evidence/autophys-ux-flow/implementation-20261105/approval-footer/.
 Matched captures, validation.json and comparison.html are at the same workspace
 evidence path on rwc-01. Validation used deterministic fixture data and no live
 writes. This iteration is committed locally; no new push or deployment requested.
+
+
+## Compact approval header — 2026-11-05
+
+Reduced header vertical padding from 12 to 8 px, tightened title/metadata line
+heights and set metadata gaps to 2 px. Font sizes, identity, provenance and
+status text are preserved. Actual header height is 87 → 70 px at both desktop
+1280×800 and phone 390×844. The footer bounds are identical before/after, and the
+single supporting accordion remains intact. A longer approved status wraps.
+Frozen cached stylesheet typecheck passed; this CSS-only change adds no tests.
+Real-component source captures and measurements are retained under
+fleet/evidence/autophys-ux-flow/implementation-20261105/approval-header/ on rwc-01;
+bundles are at the same path on yuzuquats. Committed locally; no push/deployment.
