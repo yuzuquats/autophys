@@ -50,6 +50,21 @@ The documentation receipt is external at
 The existing `tasks.json` CLI fallback remains in use; no SQLite write or fresh
 runtime CLI probe was made under the documentation-only admission.
 
+## SDK-PARITY-01 — Rust memory and JSONL recorded investigations
+
+Review status: **operator-confirmed**. Implementation status: **pending**.
+
+For A5, the operator chose **Add memory and JSONL (Recommended)**. Rust is
+to support full recorded investigations in memory and append-only JSONL,
+analogous to Python. Paired lifecycle checks must cover `run`, `propose`,
+`approve`, `attach` and `resume` where applicable, including backend effects;
+idiomatic Rust APIs are allowed.
+
+Temporary and lightweight recorded experiments should have analogous workflows
+in both SDKs. This walkthrough records scope only and does not start
+implementation or claim Rust memory/JSONL investigation backends exist. A5
+remains open; historical scores, findings and evidence limits remain unchanged.
+
 ## Retained baseline evidence, not current-revision acceptance
 
 At the frozen baseline on yuzuquats Linux x86_64 (i7-12700K, Python 3.12.3, NumPy 1.26.4, SciPy 1.11.4, Rust/Cargo 1.98 nightly), the fresh SDK-only native build ran offline with a locked dependency graph. Ten Rust artifacts passed **109 tests**, and rustdoc passed **1 doctest**; every result reported zero failed/ignored. These include numerical/vector/workbook conformance, investigation loops, remote transport, battery, display and curves/reveal checks.
