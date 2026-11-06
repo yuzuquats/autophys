@@ -323,7 +323,7 @@ async fn sign_in_gates_the_app_and_the_browser_api() {
     )
     .await;
     assert!(
-        frag.contains("demo@lab.org") && frag.contains("Demo account"),
+        frag.contains("demo@lab.org") && frag.contains("Read-only"),
         "{frag}"
     );
     assert!(
@@ -463,8 +463,56 @@ async fn sign_in_gates_the_app_and_the_browser_api() {
 async fn api_keys_still_work_and_approvals_record_the_person() {
     let f = login_fixture();
     let app = app!(f.api);
-    // Pairing and keyed calls are untouched by --login.
-    let key = pair(&app, &f.api, "lab-pc").await;
+    // A cloud device is approved by its account so its key and the browser
+    // resolve the same workspace. Legacy unbound approvals must stay refused.
+    let invite = f.api.keys.users_invite("ada@lab.org").unwrap();
+    let user = f
+        .api
+        .keys
+        .users_accept(&invite.token, "longenough1")
+        .unwrap();
+    let login = f.api.keys.session_start(&user).unwrap();
+    let legacy = f.api.keys.pair_start("legacy", "test").unwrap();
+    f.api.keys.pair_approve(&legacy.user_code).unwrap();
+    assert!(
+        f.api.keys.pair_poll(&legacy.device_code).is_err(),
+        "cloud pairing requires an account binding"
+    );
+    let (s, start) = call(
+        &app,
+        post(
+            "/pair/start",
+            None,
+            &json!({"device_name": "lab-pc", "client": "test"}),
+        )
+        .to_request(),
+    )
+    .await;
+    assert_eq!(s, 200, "{start}");
+    let approve = public(post(
+        &format!("/pairings/{}/approve", start["user_code"].as_str().unwrap()),
+        None,
+        &json!({}),
+    ))
+    .insert_header(("origin", PUBLIC))
+    .cookie(actix_web::cookie::Cookie::new(
+        "autophys_login",
+        login.clone(),
+    ));
+    let (s, approval) = call(&app, approve.to_request()).await;
+    assert_eq!(s, 200, "{approval}");
+    let (s, issued) = call(
+        &app,
+        post(
+            "/pair/poll",
+            None,
+            &json!({"device_code": start["device_code"]}),
+        )
+        .to_request(),
+    )
+    .await;
+    assert_eq!(s, 200, "{issued}");
+    let key = issued["api_key"].as_str().unwrap().to_string();
     let k = Some(key.as_str());
     let (_, p) = call(
         &app,
@@ -495,14 +543,7 @@ async fn api_keys_still_work_and_approvals_record_the_person() {
         201
     );
 
-    // A signed-in browser approves; the page claims to be "james".
-    let invite = f.api.keys.users_invite("ada@lab.org").unwrap();
-    let user = f
-        .api
-        .keys
-        .users_accept(&invite.token, "longenough1")
-        .unwrap();
-    let login = f.api.keys.session_start(&user).unwrap();
+    // The same signed-in account approves; the page claims to be "james".
     let approve = json!({"id": "a1", "kind": "proposal", "payload": {"proposal_id": "p1", "event": "approved", "by": "james"}});
     let req = public(post(&format!("{base}/p1/approvals"), None, &approve))
         .insert_header(("origin", PUBLIC))
@@ -535,7 +576,37 @@ async fn without_login_the_local_browser_rules_are_unchanged() {
         "autophys_session",
     )
     .await;
-    assert!(s == 200 && session.is_some() && !page.contains("ap-account"));
+    assert_eq!(s, 200, "{page}");
+    assert!(
+        session.is_some(),
+        "local documents still issue a browser session"
+    );
+    assert!(
+        page.contains("id=\"ap-account\"") && page.contains("data-signed-in=\"true\""),
+        "{page}"
+    );
+    assert!(
+        page.contains("id=\"ap-context\""),
+        "local identity is bootstrapped"
+    );
+    assert!(
+        !page.contains("/api/auth/logout"),
+        "local mode has no cloud sign-out"
+    );
+    let (s, context) = call(
+        &app,
+        browser(
+            &f.api,
+            test::TestRequest::get().uri("/api/v1/context"),
+            false,
+        )
+        .to_request(),
+    )
+    .await;
+    assert_eq!(s, 200, "{context}");
+    assert_eq!(context["principal"]["id"], "local");
+    assert_eq!(context["capabilities"]["read"], true);
+    assert_eq!(context["auth"]["canSignOut"], false);
     assert_eq!(
         call(
             &app,

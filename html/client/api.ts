@@ -4,6 +4,7 @@
  * wire.ts maps recorded results; tests may supply an in-memory Source.
  */
 import type { Pairing, Workspace } from "./domain.ts";
+import type { AppContext } from "./context.ts";
 import type { Decision } from "./proposal.ts";
 import { pairingOf, type WirePairing, type WireRecord, type WireWorkspace, WireModel } from "./wire.ts";
 
@@ -271,4 +272,11 @@ export function daemon(opts: DaemonOptions = {}): Source {
       },
     },
   };
+}
+
+/** Refresh session identity without caching credentials or workspace capabilities. */
+export async function readContext(http: typeof globalThis.fetch = globalThis.fetch): Promise<AppContext> {
+  const r = await http("/api/v1/context", { credentials: "same-origin", cache: "no-store", signal: AbortSignal.timeout(10_000) });
+  if (!r.ok) throw new Error("Couldn't resolve your workspace. Reload to try again.");
+  return r.json();
 }

@@ -85,6 +85,7 @@ function fakeDaemon(answer: (c: Call) => Response | undefined = () => undefined)
       const own = answer(c);
       if (own) return Promise.resolve(own);
       if (c.url === "/api/v1/workspace") return Promise.resolve(Response.json(ws));
+      if (c.url === "/api/v1/context") return Promise.resolve(Response.json({ principal: null, workspace: null }));
       if (c.url === "/api/v1/pairings") return Promise.resolve(Response.json({ pairings: [] }));
       return Promise.resolve(Response.json({ error: "not_found", message: "unknown route" }, { status: 404 }));
     },

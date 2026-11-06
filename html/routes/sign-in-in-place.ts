@@ -1,4 +1,4 @@
-import { readContext, type AppContext } from "../client/context.ts";
+import { readContext, type AppContext } from "./context.ts";
 /**
  * `serve --login`, signed out: the main pane's sign-in card submits in place. A full page load
  * would boot on the landing page and replay the drawer's landing-to-app slide, the panel entry

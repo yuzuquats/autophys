@@ -123,9 +123,11 @@ Deno.test("workspace refresh: closing during a pending read neither publishes no
   const refresh = store.refreshWorkspace();
   store.subscribe(() => { notifications++; });
   store.close();
+  assertEquals(store.snapshot(), null, "closing drops the previous account's data");
+  assertEquals(notifications, 1, "closing publishes the cleared state once");
   resolve({ ...fixture, gseq: "closed:42" });
   await refresh;
-  assertEquals(store.snapshot(), fixture);
+  assertEquals(store.snapshot(), null, "the late read cannot restore private data");
   assertEquals(streams, 1);
-  assertEquals(notifications, 0);
+  assertEquals(notifications, 1, "the late read cannot publish");
 });
