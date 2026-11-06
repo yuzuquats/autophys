@@ -56,7 +56,7 @@ to use your own cell data, connect a cycler, or choose a model-backed policy.
 ## Use your own model
 
 Built-in models cover batteries, oscillators and thermal systems. Use the
-[Python SDK](sdks/python/README.md) or [Rust SDK](sdks/rust/README.md) to supply
+[Python SDK](sdks/python/README.md) or [Rust SDK](autophys.project.docs/content/rust-sdk.md) to supply
 a model and measurements, or [connect Muse](autophys.project.docs/content/muse-plugin.md)
 to the investigation tools. Model-backed agents require provider setup.
 

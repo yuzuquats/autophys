@@ -36,3 +36,7 @@ The allowlist, exact-prefix review, validation and final push receipt live in
 fleet/evidence/autophys-readme-marketing/publication/ on yuzuquats. Unrelated
 SDK, auth and UI drafts remain outside the publication set. No deployment is
 part of this work.
+
+The Rust SDK link uses the existing published guide rather than depending on
+an unpublished per-language README. The prefix check caught that dependency
+before publication.
