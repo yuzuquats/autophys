@@ -38,7 +38,7 @@ from pathlib import Path
 
 from .bench import STRATEGY_SETTINGS, strategy_settings
 from .reasoner import BudgetError
-from .research import _InvalidEdit, _write_json, evaluate, improves, paired_bootstrap, require_replay, score, validate_edit
+from .research import _InvalidEdit, _write_json, evaluate, improves, paired_bootstrap, require_replay, score, validate_edit, proposer_report
 from .synthetic import CASES, PLANTED_CASES
 
 HISTORY_LIMIT = 20
@@ -362,7 +362,7 @@ def autoloop(*, researcher, output_dir, playbook="default", cases=None, train_se
                  "incumbent_score": state["incumbent_score"], "hypothesis": None, "prediction": None}
         call = {"history": _history(run.journal())} if takes_history else {}
         try:
-            proposal = researcher.propose(text, report, **call)
+            proposal = researcher.propose(text, proposer_report(report), **call)
         except BudgetError:
             stop = "researcher budget error"
             break

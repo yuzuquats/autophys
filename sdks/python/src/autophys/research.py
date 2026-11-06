@@ -130,7 +130,26 @@ def validate_edit(original, proposed):
     return proposed
 
 
+def proposer_report(report):
+    """Training score feedback without evaluator truth or final-test diagnostics.
+
+    Full reports stay in evaluator sidecars. This is a structural boundary for
+    cooperative researchers, not a sandbox against code reading the run directory.
+    """
+    oracle = {"truth", "quantities", "rel_errors", "max_rel_error", "test_rmse",
+              "diagnosis_correct", "log_errors"}
+    def clean(value):
+        if isinstance(value, dict):
+            return {k: clean(v) for k, v in value.items() if k not in oracle}
+        if isinstance(value, (list, tuple)):
+            return [clean(v) for v in value
+                    if not (isinstance(v, dict) and v.get("kind") == "reveal")]
+        return value
+    return clean(report)
+
+
 def proposal_prompt(playbook_text, report, history=None):
+    report = proposer_report(report)
     # Remove volatile record identities/timing from cassette request keys.
     def stable(value):
         volatile = {"investigation", "project_id", "id", "ts", "hash", "prev_hash", "wall_s", "elapsed_ms", "latency_ms", "reasoner", "plot_artifacts"}
@@ -419,7 +438,7 @@ def research(*, researcher, output_dir, playbook="default", cases=None, train_se
     history = []
     for index in range(1, iterations + 1):
         try:
-            proposal = researcher.propose(text, report)
+            proposal = researcher.propose(text, proposer_report(report))
             if proposal is None:
                 break
             if isinstance(proposal, dict):
