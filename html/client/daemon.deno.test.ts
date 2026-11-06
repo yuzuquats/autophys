@@ -383,7 +383,7 @@ Deno.test("daemon: a 401 POST asks for reauth and preserves the recorded proposa
 
 Deno.test("daemon: SSE auth failure probes the cookie, reauthenticates once and stops reconnecting", async () => {
   let expired = false, reauth = 0;
-  const d = fakeDaemon((c) => expired && c.url === "/api/v1/pairings" ? Response.json({ error: "unauthorized" }, { status: 401 }) : undefined);
+  const d = fakeDaemon((c) => expired && (c.url === "/api/v1/context" || c.url === "/api/v1/pairings") ? Response.json({ error: "unauthorized" }, { status: 401 }) : undefined);
   const store = new Store(daemon({ ...d.opts, reauth: () => { reauth++; } }));
   await store.start();
   await settle();
