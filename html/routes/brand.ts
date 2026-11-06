@@ -30,11 +30,29 @@ queueMicrotask(() => {
     ${surfaceFinishStyles}
     .ck-header { --ck-gutter: 28px; }
     .ck-header .ck-nav-links { gap: 16px; }
+    .ck-header .ap-docs-link { display: inline-flex; align-items: center; min-height: 44px;
+      color: var(--ck-ink); text-decoration: none; white-space: nowrap; }
+    .ck-header .ap-docs-link:hover { text-decoration: underline; text-underline-offset: 4px; }
+    .ck-header .ap-docs-link:focus-visible { outline: 2px solid var(--ck-ink); outline-offset: 3px; }
     .ck-header .ck-brand { padding-left: 28px; }
+    @media (max-width: 359px) {
+      .ck-header, .ck-header[data-app] { --ck-gutter: 16px; }
+      .ck-header .ck-nav { gap: 12px; }
+    }
   `;
   document.head.append(navigationStyle);
   const landing = document.querySelector<HTMLElement>(".ck-landing");
   if (landing) installSurfaceFinish(landing);
+
+  const tryNow = document.querySelector<HTMLAnchorElement>(".ck-header .ck-open-link");
+  if (tryNow) {
+    tryNow.textContent = "Try now";
+    const docs = document.createElement("a");
+    docs.className = "ap-docs-link";
+    docs.href = "/#docs";
+    docs.textContent = "Docs";
+    tryNow.before(docs);
+  }
 
   const wordmark = document.querySelector(".ck-brand .ck-wordmark");
   if (

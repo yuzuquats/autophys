@@ -562,6 +562,7 @@ const NODE_VIEWS: Documentation.Props["nodeViews"] = {
  */
 export function landingDocs(): { onStage(stage: Cookbook.Stage): void; mount(): void } {
   const section = document.createElement("section");
+  section.id = "docs";
   section.className = "ap-landing-docs";
   section.setAttribute("aria-label", "Documentation");
   return {
