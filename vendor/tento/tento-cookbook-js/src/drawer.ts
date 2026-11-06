@@ -12,6 +12,8 @@ export type Drawer = {
   close(): void;
   /** Show the tutorial from its first step: opens the app from the deck, or lowers the surface back to the tour. */
   tour(): void;
+  /** Discard retained lessons; keep the current route and drawer open state. */
+  endTour(): void;
 };
 
 /**
@@ -214,6 +216,10 @@ export function installDrawer(parts: {
     },
     open: () => open(),
     close: () => close(),
+    endTour() {
+      tutorial.clear();
+      if (stage === "tour") void setStage("app");
+    },
     tour() {
       if (stage === "landing") open();
       else if (stage === "tour") tutorial.start();

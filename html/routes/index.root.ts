@@ -222,6 +222,7 @@ const app: Cookbook.App = {
     let stopSignIn: (() => void) | undefined;
     resumeSession = () => {
       stopSignIn?.(); stopSignIn = undefined;
+      shell.endTour?.();
       guided?.dispose(); clearInterval(poll); poll = undefined;
       ctl.reset(makeStore(), environment());
       guided = mountGuidedTour({ controller: ctl, signedIn: () => !SIGNED_OUT, redraw });

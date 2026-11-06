@@ -103,6 +103,7 @@ export function createTutorial(source: TutorialSource): Tutorial {
     title.textContent = step.title;
     body.textContent = step.body;
     back.hidden = stepper.index === 0;
+    back.disabled = false; next.disabled = false;
     next.textContent = stepper.last ? "Done" : "Next →";
     if (animate) { for (const target of [title, body]) settleIn(target); }
     step.enter?.();
@@ -130,13 +131,23 @@ export function createTutorial(source: TutorialSource): Tutorial {
   }
 
   function end(): void {
-    if (!active) return;
+    const wasActive = active;
     active = false;
     session++;
     shown++;
     rings.hide();
     stepper = null;
-    if (!isStepList(source)) source.finish?.({ completed });
+    steps = [];
+    title.textContent = "";
+    body.textContent = "";
+    bars.replaceChildren();
+    bars.removeAttribute("aria-label");
+    delete bars.dataset.count;
+    preview.replaceChildren();
+    el.removeAttribute("data-preview");
+    back.disabled = true; next.disabled = true;
+    next.textContent = "";
+    if (wasActive && !isStepList(source)) source.finish?.({ completed });
   }
 
   const api: Tutorial = {

@@ -165,3 +165,36 @@ Capacity recovered, so the in-place sign-out refinement is now live at `6efe1f3-
 The staged Deno entry check, offline web build and pack passed. Focused browser checks exercised the full packaged bundle on cloned account state: closed-drawer logout preserved query/hash/history/time origin and 120px scroll, open-workspace logout cleared prior account data and showed inline sign-in without reload, and signing back in restored persisted records. Public-site checks confirmed both drawer states preserve the page, with no credential autofocus. No test suites ran. Local/public health matched web ID `1f3352cf33b665b2c5fdeaedf9e9d4b840913f8906dacee59b87fac5c7282e60`. The owned qualification daemon, tunnel and preview tab were stopped.
 
 Evidence, unit rollback and native/dependency correspondence: the same scratch entry's `content/signout-deploy-d629592/`; the completed window companion is `~/.local/state/productionize/autophys-sdks-20261105/repair-round-1-qualification/deploy-window-signout-d629592.json`. The prior `6efe1f3-auth-c58c041-20261106` package remains the immediate rollback.
+
+
+### Publication review and account walkthrough teardown — 2026-11-06
+
+The independent review of the 35-change account/auth scope returned changes
+required. Account transitions now cancel the cookbook tutorial, discard retained
+steps, lesson text, progress, previews and highlights, and return an open tutorial
+to app stage without changing URL/history. The controller then resets for the new
+account. TypeScript checking and an offline web build passed. Focused browser
+qualification on copied account state verified clearing at initial and later
+lessons, preserved URL/history/document, and a different account's workspace and
+newly started walkthrough. No test suite, Cargo build or deployment ran.
+
+Evidence: the registered account-deploy scratch entry's
+`content/account-publication-20261106/`: scope and exact patches, independent
+round-one review, source/allocation and browser qualification receipts. The
+reported live Continue as demo error was not reproduced: both public inline and
+modal paths established the persisted read-only user and one project; repeated
+public/loopback requests returned 303. Its cause remains unresolved.
+
+Publication stays held: the selected walkthrough requires the separately owned
+8fe65c2 cookbook contract, and sign-out requires 132bd8f's context extraction.
+The preserved merge 35b68ed prevents the skill's required linear sink, and 21
+selected messages need one final trailer block. Do not flatten ancestry, adopt
+peer work or treat the deployed composed bundle as validation of the selected
+prefix. No sink or push has occurred.
+
+Custody: the five tutorial/consumer source edits are owned by this auth session.
+An uncoordinated edit interrupted the peer native qualification window; that
+executor stopped before release/package/install. Finish this scoped commit and
+read-only review, stop isolated browser/daemon/tunnel callers, then record exact
+commit/tree/file hashes and release the source-write hold for the next native
+admission. No additional source writes, Cargo or deploy during that admission.

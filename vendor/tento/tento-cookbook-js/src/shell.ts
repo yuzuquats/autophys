@@ -322,6 +322,7 @@ export function mountHost(options: ShellOptions = {}): CookbookHost {
         setCrumb: (text) => header.setCrumb(text),
         reflow: (change) => panels.reflow(change),
         startTour: () => drawer.tour(),
+        endTour: () => drawer.endTour(),
       };
       let slotsNow = panels.freshSlots();
       const tutorial = createTutorial(options.tutorial ?? shellSteps);

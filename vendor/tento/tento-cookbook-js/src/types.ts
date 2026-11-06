@@ -49,6 +49,8 @@ export interface CookbookShell {
   reflow?(change: () => void): void;
   /** Cookbook extension: show the tutorial from its first step (a "Take the tour" entry). */
   startTour?(): void;
+  /** Clear account-specific lessons and return an open tour to app stage without navigation. */
+  endTour?(): void;
 }
 
 export interface CookbookApp {
