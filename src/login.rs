@@ -578,10 +578,17 @@ const ACCOUNT_STYLE: &str = r#"<style>
 #ap-account .ap-acct-avatar{position:relative;width:32px;height:32px;display:grid;place-items:center;border-radius:50%;overflow:hidden;font-weight:600}
 #ap-account img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}#ap-account img[hidden]{display:none}
 #ap-account svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.4}
-#ap-account .ap-acct-card{position:absolute;z-index:120;right:0;top:calc(100% + 10px);width:max-content;min-width:190px;max-width:min(300px,calc(100vw - 32px));padding:16px;display:grid;gap:8px;background:#fff;border-radius:12px;box-shadow:0 8px 30px rgb(0 0 0 / 16%);color:#141414;overflow-wrap:anywhere}
-#ap-account .ap-acct-name{font-weight:600}#ap-account .ap-acct-email,#ap-account .ap-acct-mode{color:#666;font-size:12px}
-#ap-account form{margin:4px 0 0}#ap-account form button{width:100%;border:0;border-radius:7px;background:#f1f1f1;color:#141414;font:600 13px/1.4 var(--ap-font,system-ui);padding:9px 10px;cursor:pointer;text-align:left}
-#ap-account form button:hover{background:#e6e6e6}
+#ap-account .ap-acct-card{position:absolute;z-index:120;right:0;top:calc(100% + 8px);width:220px;max-width:calc(100vw - 32px);padding:4px;background:#fff;border-radius:10px;box-shadow:0 7px 22px rgb(20 30 23 / 13%),0 2px 4px rgb(20 30 23 / 4%);color:#202421;overflow-wrap:anywhere}
+#ap-account .ap-acct-identity{padding:4px 8px 5px}#ap-account .ap-acct-identity-top{display:flex;align-items:center;gap:8px;min-width:0}
+#ap-account .ap-acct-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;line-height:18px;font-weight:600}
+#ap-account .ap-acct-email{display:block;color:#656c67;font-size:12px;line-height:17px}
+#ap-account .ap-acct-mode{margin-left:auto;flex:none;color:#68716b;font-size:11px;line-height:16px;white-space:nowrap}
+#ap-account .ap-acct-actions{margin:3px 2px 0;padding:3px 0 0;border:0;border-top:1px solid #e9ece9}
+#ap-account .ap-acct-action{display:flex;align-items:center;width:100%;min-height:26px;padding:3px 8px;border:0;border-radius:5px;background:transparent;color:#303832;font:400 13px/20px var(--ap-font,system-ui);cursor:pointer;text-align:left}
+#ap-account .ap-acct-action:hover{background:#edf0ed}#ap-account .ap-acct-action:active{background:#e2e8e2}
+#ap-account .ap-acct-action:focus-visible{outline:2px solid #141414;outline-offset:-2px}
+#ap-account .ap-acct-action:disabled{opacity:.55;cursor:wait}
+@media(pointer:coarse){#ap-account .ap-acct-action{min-height:44px}}
 </style>"#;
 
 /// Shared photo/initial control for local and account sessions. No deployment badge.
@@ -621,12 +628,12 @@ pub fn account_control(context: &crate::workspaces::AppContext) -> String {
         "<span class=\"ap-acct-mode\">Read-only</span>"
     };
     let logout = if context.auth.can_sign_out {
-        "<form method=\"post\" action=\"/api/auth/logout\"><button type=\"submit\">Sign out</button></form>"
+        "<form class=\"ap-acct-actions\" method=\"post\" action=\"/api/auth/logout\"><button class=\"ap-acct-action\" type=\"submit\">Sign out</button></form>"
     } else {
         ""
     };
     format!(
-        "<details id=\"ap-account\" data-signed-in=\"true\" data-principal-id=\"{principal_id}\"><summary class=\"ap-acct-btn\" aria-label=\"Account: {name}\"><span class=\"ap-acct-avatar\" aria-hidden=\"true\">{initial}{image}</span></summary><div class=\"ap-acct-card\"><span class=\"ap-acct-name\">{name}</span>{email}{permission}{logout}</div></details>{ACCOUNT_STYLE}"
+        "<details id=\"ap-account\" data-signed-in=\"true\" data-principal-id=\"{principal_id}\"><summary class=\"ap-acct-btn\" aria-label=\"Account: {name}\"><span class=\"ap-acct-avatar\" aria-hidden=\"true\">{initial}{image}</span></summary><div class=\"ap-acct-card\"><div class=\"ap-acct-identity\"><div class=\"ap-acct-identity-top\"><span class=\"ap-acct-name\" title=\"{name}\">{name}</span>{permission}</div>{email}</div>{logout}</div></details>{ACCOUNT_STYLE}"
     )
 }
 

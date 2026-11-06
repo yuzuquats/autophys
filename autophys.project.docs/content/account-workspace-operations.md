@@ -309,3 +309,21 @@ the persisted read-only account; its session was signed out afterward. Evidence:
 fleet/evidence/autophys-single-sign-in/validation.json. No native build, suite,
 deployment or push ran. The scoped local commit remains separate from
 productionize’s reviewed publication prefix.
+
+
+### Compact account dropdown — 2026-11-06
+
+The approved dense menu is 220px wide with 4px outer padding and 26px desktop
+action rows. Name and read-only status share one line, with email beneath.
+Long names truncate with their full escaped value in a title; email wraps.
+The existing profile bubble and native sign-out form remain. Shared action
+and divider styles leave room for future options; no placeholder actions ship.
+Coarse-pointer devices retain 44px action targets.
+
+Nine focused browser checks covered desktop and 390px layout, keyboard focus,
+Escape/outside dismissal, long escaped profiles, local profiles without sign-out,
+the coarse-pointer rule and actual sign-out. Checks rendered the exact extracted
+Rust template/CSS into the existing live header in an owned incognito tab; they
+do not qualify a newly compiled daemon. Sign-out cleared the session and the tab
+was closed. Edition-2024 rustfmt and diff checks passed. No native build, suite,
+deployment or push ran. Evidence: fleet/evidence/autophys-compact-account-menu/.
