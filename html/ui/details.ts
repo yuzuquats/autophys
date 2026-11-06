@@ -4,7 +4,7 @@
  * meters, fields and links, an optional decision row of exactly two buttons and an optional
  * row of other buttons. Fields report raw text; the caller validates it.
  */
-import { experimentDetailsMarkup, isExperimentDetails } from "./details-experiment.ts";
+import { experimentDetailsMarkup, type ExperimentRows, isExperimentDetails } from "./details-experiment.ts";
 import { skeletonMarkup } from "./state-markup.ts";
 import { blockMarkup } from "./blocks.ts";
 import { ICONS } from "./icons.ts";
@@ -15,9 +15,9 @@ import type { Block, DetailsModel, Tag } from "./view-model.ts";
 /** Class names (and the card-name attribute) the host page's own recipes expect. */
 export type DetailsClasses = { name?: string; status?: string; decision?: string; button?: string; primary?: string; cardNameAttribute?: string };
 
-export function detailsMarkup(model: DetailsModel, classes: DetailsClasses = {}, experimentOpen = true): string {
+export function detailsMarkup(model: DetailsModel, classes: DetailsClasses = {}, experimentRows: ExperimentRows = {}): string {
   if (model.placeholder) return skeletonMarkup("details");
-  if (isExperimentDetails(model)) return experimentDetailsMarkup(model, classes, experimentOpen);
+  if (isExperimentDetails(model)) return experimentDetailsMarkup(model, classes, experimentRows);
   const name = [classes.name ?? "", "ap-dname"].filter(Boolean).join(" ");
   const status = [classes.status ?? "", "ap-status", model.status.tone ? `ap-t-${model.status.tone}` : ""].filter(Boolean).join(" ");
   const card = model.cardName ? ` ${classes.cardNameAttribute ?? "data-card-name"}` : "";
@@ -62,16 +62,20 @@ export class AutophysDetails {
     const active = root.activeElement as HTMLInputElement | null;
     const key = !model.placeholder && isExperimentDetails(model) ? model.experiment.key : null;
     const sameExperiment = key !== null && key === this.experimentKey;
-    const disclosure = this.host.querySelector<HTMLDetailsElement>("[data-ap-experiment]");
-    // Read the DOM synchronously: a redraw can precede the native toggle event.
-    const open = sameExperiment ? disclosure?.open ?? true : true;
-    const summaryFocused = sameExperiment && active === disclosure?.querySelector("summary");
+    // Read every row synchronously: redraw can precede native toggle events.
+    const rows: Record<string, boolean> = {};
+    let focusedRow: string | null = null;
+    if (sameExperiment) for (const row of this.host.querySelectorAll<HTMLDetailsElement>("[data-ap-experiment-row]")) {
+      const id = row.getAttribute("data-ap-experiment-row")!;
+      rows[id] = row.open;
+      if (active === row.querySelector("summary")) focusedRow = id;
+    }
     const field = active && this.host.contains(active) && active.getAttribute(ATTR.role) === "field" ? active.getAttribute(ATTR.name) : null;
     const caret = field ? [active!.selectionStart, active!.selectionEnd] as const : null;
     this.experimentKey = key;
-    this.host.innerHTML = detailsMarkup(model, this.classes, open);
+    this.host.innerHTML = detailsMarkup(model, this.classes, rows);
     this.hydrate(this.host);
-    if (summaryFocused) this.host.querySelector<HTMLElement>("[data-ap-experiment] > summary")?.focus({ preventScroll: true });
+    if (focusedRow !== null) this.host.querySelector<HTMLElement>(`[data-ap-experiment-row="${CSS.escape(focusedRow)}"] > summary`)?.focus({ preventScroll: true });
     if (!field || key !== null && !sameExperiment) return;
     const next = this.host.querySelector<HTMLInputElement>(`[${ATTR.name}="${CSS.escape(field)}"]`);
     if (!next) return;

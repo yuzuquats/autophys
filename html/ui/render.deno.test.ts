@@ -240,14 +240,31 @@ Deno.test("pairing markup associates unbroken codes and actions with each card",
   assertStringIncludes(card, 'id="ap-action-pair-deny:LHMX-5814"');
 });
 
-Deno.test("experiment card: closed details keep escaped save failures beside decisions", () => {
-  const model = { ...proposal, experiment: { key: "bench/p1", caption: "Bench A · p1", notice: "Approve refused <409>" } };
-  const html = detailsMarkup(model, classes, false), alert = html.indexOf('role="alert"');
-  assertStringIncludes(html, "<details data-ap-experiment>");
-  assert(alert > html.indexOf("</details>"), "feedback is visible outside the closed disclosure");
+Deno.test("experiment card: supporting rows disclose without hiding the decision or save failures", () => {
+  const model = { ...proposal, experiment: { key: "bench/p1", caption: "Bench A · p1", notice: "Approve refused <409>" },
+    sections: [
+      { heading: "Preview", blocks: [{ kind: "text" as const, text: "Recorded trace" }] },
+      { heading: "Experiment", blocks: [{ kind: "text" as const, text: "Recorded settings" }] },
+      { heading: "Expected", blocks: [{ kind: "text" as const, text: "Conditional uncertainty" }] },
+      { heading: "So far", blocks: [{ kind: "text" as const, text: "Recorded budget" }] },
+    ], footnote: "Pinned config" };
+  const html = detailsMarkup(model, classes), alert = html.indexOf('role="alert"');
+  assertStringIncludes(html, '<std-round floating');
+  assertStringIncludes(html, '<header class="ap-experiment-header" data-ap-cell>');
+  assert(!html.includes("data-ap-experiment>"), "the experiment itself has no disclosure");
+  assertStringIncludes(html, 'data-ap-experiment-row="Preview">');
+  assertStringIncludes(html, 'data-ap-experiment-row="So far">');
+  assertStringIncludes(html, 'data-ap-experiment-row="provenance">');
+  assert(html.indexOf("Recorded settings") < html.indexOf("<details"), "settings remain visible");
+  assert(html.indexOf("Conditional uncertainty") < html.indexOf("<details"), "expected result remains visible");
+  assert(alert < html.indexOf("<details"), "feedback is outside all disclosures");
   assertStringIncludes(html.slice(alert), "Approve refused &lt;409&gt;");
   assertStringIncludes(html.slice(alert), 'data-ap-name="approve"');
   assertEquals(count(html, "Approve refused"), 1);
+  const expanded = detailsMarkup(model, classes, { Preview: true, provenance: true });
+  assertStringIncludes(expanded, 'data-ap-experiment-row="Preview" open>');
+  assertStringIncludes(expanded, 'data-ap-experiment-row="So far">');
+  assertStringIncludes(expanded, 'data-ap-experiment-row="provenance" open>');
   const cleared = { ...model, experiment: { ...model.experiment, notice: undefined } };
-  assert(!detailsMarkup(cleared, classes, false).includes('role="alert"'));
+  assert(!detailsMarkup(cleared, classes).includes('role="alert"'));
 });

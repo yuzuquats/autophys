@@ -62,3 +62,33 @@ recorded condition numbers, including summary-only records; Validate retains
 measurement/fit and worst-parameter 2σ relative uncertainty when recorded.
 Missing summary-only values remain explicit. Preservation regressions cover both
 losses/variants, full and summary-only identifiability, and validation records.
+
+
+## Approval card constituent disclosures — 2026-11-05
+
+Operator direction: use std-round and keep the card itself open; only constituent
+rows may collapse. The card now uses the existing floating std-round component
+and a static hydrated list-cell header. Settings, conditional expected result,
+decision controls and escaped save errors remain outside disclosures. Preview,
+So far and Provenance are independent native disclosure rows. Their open states,
+summary focus and field focus/caret survive same-record rerenders; changing the
+selected record resets the supporting rows.
+
+UI-approval-rows-1 (agent-chosen, pending operator review): supporting rows start
+closed, and decisions follow Expected before supporting material. This exposes
+the approval contract in the initial viewport without removing scientific facts.
+The alternative is to open Preview initially or place it before the settings,
+which gives the drive/response plots earlier space and pushes decisions down.
+Reversing this is a small renderer-only ordering/default change; no data or API
+migration is involved.
+
+Matched real-component desktop and phone captures, including an open Preview,
+are in rwc-01 fleet/evidence/autophys-ux-flow/implementation-20261105/approval-rows/
+(comparison.html, validation.json, screenshots/). Owner evidence retains the
+before/after bundles and capture entry. Frozen cached typechecks and 32 scoped
+Deno tests passed; the renderer test passed again after moving the actions.
+Browser checks verified actual std-round/list-cell hydration, independent
+synchronous disclosure state, summary focus, caret, record reset, native click,
+read-only/invalid approval, draft precision suppression, escaped save failure,
+and phone overflow. This is fixture validation, with no live record writes.
+The iteration is committed locally; no new source push or deployment requested.
