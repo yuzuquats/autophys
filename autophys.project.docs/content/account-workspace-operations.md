@@ -155,3 +155,13 @@ Deployment remains held: the fresh capacity check reported approximately 4.05 Gi
 ## Current deployment gate reconciliation — 2026-11-06
 
 [Login and HTML gate reconciliation](login-gate-reconciliation.md) records the six current-master fixture/boundary repairs, reproduced native failures, and the remaining capacity and full-suite qualification prerequisites. Packaging remains held below the operator's disk floor; no gate is bypassed.
+
+## Superseded build cleanup and sign-out deployment, 2026-11-06
+
+At the operator's request, removed 31 superseded installed Autophys releases after an explicit per-file manifest, ELF/contents inspection, runtime-selector scan and privileged process/open-file checks. The two removal passes reclaimed 672,100,352 bytes of observed filesystem space (640.97 MiB); larger concurrent free-space changes belong to other work. Only the new live package and its immediate rollback remain. Source, databases, dependency caches, SDK campaign artifacts and qualification evidence were preserved. Removal manifests retain metadata, hashes and provenance at `scratch/autophys-account-deploy-3e79416b743e417ba9000675932916f6.scratch-entry/content/old-build-prune-20261106/`.
+
+Capacity recovered, so the in-place sign-out refinement is now live at `6efe1f3-auth-c58c041-web-d629592-20261106`. It reuses the unchanged qualified native binary from the prior sign-in deployment. The web overlay carries account/header and session-reset changes from `d629592`, plus the browser-context extraction dependency from `132bd8f`; the retained baseline and all overlay hashes are recorded in `SOURCE.json`. No native/Cargo build or database migration ran. The web-only allocation stayed within the declared bounds.
+
+The staged Deno entry check, offline web build and pack passed. Focused browser checks exercised the full packaged bundle on cloned account state: closed-drawer logout preserved query/hash/history/time origin and 120px scroll, open-workspace logout cleared prior account data and showed inline sign-in without reload, and signing back in restored persisted records. Public-site checks confirmed both drawer states preserve the page, with no credential autofocus. No test suites ran. Local/public health matched web ID `1f3352cf33b665b2c5fdeaedf9e9d4b840913f8906dacee59b87fac5c7282e60`. The owned qualification daemon, tunnel and preview tab were stopped.
+
+Evidence, unit rollback and native/dependency correspondence: the same scratch entry's `content/signout-deploy-d629592/`; the completed window companion is `~/.local/state/productionize/autophys-sdks-20261105/repair-round-1-qualification/deploy-window-signout-d629592.json`. The prior `6efe1f3-auth-c58c041-20261106` package remains the immediate rollback.
