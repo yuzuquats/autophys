@@ -35,7 +35,27 @@ const formStyles = `
 
 export function mountAccount(onSignedIn: (context: AppContext) => void): void {
   initHtmlElement();
-  const account = document.getElementById("ap-account");
+  let account = document.getElementById("ap-account");
+  // Hydrate the anonymous server link into the same details/summary avatar
+  // control used by account sessions, before the header's first paint.
+  if (account?.dataset.signedIn === "false" && account instanceof HTMLAnchorElement) {
+    const control = document.createElement("details");
+    control.id = account.id;
+    Object.assign(control.dataset, account.dataset);
+    const button = document.createElement("summary");
+    button.className = "ap-acct-btn";
+    button.setAttribute("aria-label", "Sign in");
+    button.setAttribute("aria-haspopup", "dialog");
+    button.title = "Sign in";
+    const avatar = document.createElement("span");
+    avatar.className = "ap-acct-avatar";
+    avatar.setAttribute("aria-hidden", "true");
+    avatar.append(...account.childNodes);
+    button.append(avatar);
+    control.append(button);
+    account.replaceWith(control);
+    account = control;
+  }
   const links = document.querySelector(".ck-header .ck-nav-links");
   if (account && links && account.parentElement !== links) links.append(account);
   const hideBrokenImages = () => {
@@ -56,13 +76,12 @@ export function mountAccount(onSignedIn: (context: AppContext) => void): void {
       details.querySelector<HTMLElement>("summary")?.focus({ preventScroll: true });
     }
   }, { capture: true });
-  if (account?.dataset.signedIn === "false") account.setAttribute("aria-haspopup", "dialog");
   const overlayStyle = document.createElement("style");
   overlayStyle.textContent = "body { --bg-overlay:rgb(0 0 0 / 32%); }";
   document.head.append(overlayStyle);
   let modal: Dialog | null = null;
   document.addEventListener("click", event => {
-    const trigger = (event.target as Element).closest?.<HTMLAnchorElement>("#ap-account[data-signed-in=false]");
+    const trigger = (event.target as Element).closest?.<HTMLElement>("#ap-account[data-signed-in=false]");
     if (!trigger || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
     if (modal) return;
@@ -88,7 +107,7 @@ export function mountAccount(onSignedIn: (context: AppContext) => void): void {
         modal = null;
         // The shared restore ran while the header was inert. Restore after
         // releasing it, including the new badge when sign-in replaced it.
-        const focus = trigger.isConnected ? trigger : document.querySelector<HTMLElement>("#ap-account summary,#ap-account button");
+        const focus = trigger.isConnected ? trigger.querySelector<HTMLElement>("summary") : document.querySelector<HTMLElement>("#ap-account summary,#ap-account button");
         focus?.focus({ preventScroll: true });
       },
     });

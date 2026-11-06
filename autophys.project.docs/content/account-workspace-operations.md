@@ -20,6 +20,12 @@ See `deployment.json`, `build-result.json`, `release-qualification.json`, `publi
 
 The exclusive native build window is closed. Its completion receipt at `~/.local/state/productionize/autophys-sdks-20261105/repair-round-1-qualification/deploy-window-completion.json` records 17.805 GiB free at handoff, unchanged native inputs and retained SDK artifacts, and no further auth Cargo/native source or target writes. The SDK owner received the handoff and must freshly check its gates before resuming.
 
+## Profile control refinement — pending deployment
+
+The signed-out server link is now hydrated before the header paints into the same `details > summary.ap-acct-btn > .ap-acct-avatar` structure as the signed-in control. Both use the existing 36 px circular button, hover and focus styling; the anonymous avatar shows a neutral profile silhouette. Sign-in still opens the shared modal, and dismissal restores focus to the summary.
+
+Deno type-checking, a focused browser bundle and the design detector passed. An isolated collaborative-browser check using that actual module plus production server markup/CSS confirmed matching dimensions before and after normal demo sign-in, Enter/Escape handling, focus restoration and a 390 px mobile layout without overflow. Evidence: the deployment scratch entry's `profile-control/qualification.json`. No native source, Cargo target, service or deployed browser bundle was changed by this refinement.
+
 ## Configure a profile or workspace
 
 All examples run on the server with its intended server database. Replace the paths and account addresses deliberately. Mapping, key, profile and seed commands preview by default; add `--apply` only to apply that specific operation. Opening an older server database applies the additive metadata schema migration even for `workspace list`; dry-run refers to the requested mapping/profile/import.
