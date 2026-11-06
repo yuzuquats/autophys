@@ -232,39 +232,20 @@ async fn login(api: web::Data<Api>, req: HttpRequest, form: web::Form<LoginForm>
 }
 
 /// Fixed public errors with an opaque reference; details stay in the server log.
-fn sign_in_response(req: &HttpRequest, result: Result<HttpResponse>) -> HttpResponse {
+fn sign_in_failure(req: &HttpRequest, error: ApiError, code: &str, message: &str) -> HttpResponse {
     let reference = crate::keys::random_hex(8).ok();
-    let mut response = match result {
-        Ok(response) => response,
-        Err(error) => {
-            if let Some(reference) = &reference {
-                eprintln!("sign-in request {reference} failed: {error}");
-            } else {
-                eprintln!("sign-in request failed: {error}");
-            }
-            let (code, message) = match error.status() {
-                403 => (
-                    "forbidden",
-                    "This page couldn't sign you in. Reload it and try again.",
-                ),
-                404 => (
-                    "workspace_unavailable",
-                    "Your account's workspace is unavailable. Contact the account owner.",
-                ),
-                _ => (
-                    "unavailable",
-                    "Autophys is temporarily unavailable. Try again in a moment.",
-                ),
-            };
-            login_error(
-                req,
-                actix_web::http::StatusCode::from_u16(error.status())
-                    .unwrap_or(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR),
-                code,
-                message,
-            )
-        }
-    };
+    if let Some(reference) = &reference {
+        eprintln!("sign-in request {reference} failed: {error}");
+    } else {
+        eprintln!("sign-in request failed: {error}");
+    }
+    let mut response = login_error(
+        req,
+        actix_web::http::StatusCode::from_u16(error.status())
+            .unwrap_or(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR),
+        code,
+        message,
+    );
     if let Some(reference) = reference {
         response.headers_mut().insert(
             header::HeaderName::from_static("x-request-id"),
@@ -272,6 +253,26 @@ fn sign_in_response(req: &HttpRequest, result: Result<HttpResponse>) -> HttpResp
         );
     }
     response
+}
+
+fn sign_in_response(req: &HttpRequest, result: Result<HttpResponse>) -> HttpResponse {
+    match result {
+        Ok(response) => response,
+        Err(error) => {
+            let (code, message) = if error.status() == 403 {
+                (
+                    "forbidden",
+                    "This page couldn't sign you in. Reload it and try again.",
+                )
+            } else {
+                (
+                    "unavailable",
+                    "Autophys is temporarily unavailable. Try again in a moment.",
+                )
+            };
+            sign_in_failure(req, error, code, message)
+        }
+    }
 }
 
 async fn login_attempt(
@@ -332,7 +333,7 @@ async fn login_attempt(
 async fn start_session(api: &Api, req: &HttpRequest, user: User, to: &str) -> Result<HttpResponse> {
     let resolver = api.clone();
     let account = user.clone();
-    let context = blocking(move || {
+    let context = match blocking(move || {
         resolver
             .scoped(
                 &crate::http::Caller::Member(account),
@@ -341,7 +342,18 @@ async fn start_session(api: &Api, req: &HttpRequest, user: User, to: &str) -> Re
             .context
             .ok_or_else(|| ApiError::Internal("sign-in context missing".into()))
     })
-    .await?;
+    .await
+    {
+        Ok(context) => context,
+        Err(error) => {
+            return Ok(sign_in_failure(
+                req,
+                error,
+                "workspace_unavailable",
+                "Your account's workspace is unavailable. Contact the account owner.",
+            ));
+        }
+    };
     let keys = api.keys.clone();
     let previous = req.cookie(LOGIN_COOKIE).map(|c| c.value().to_string());
     let token = blocking(move || keys.session_replace(&user, previous.as_deref())).await?;

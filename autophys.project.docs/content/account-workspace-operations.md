@@ -241,8 +241,29 @@ Evidence and custody are at fleet/evidence/autophys-auth-hardening/.
 Both native operations used the two shared locks and bounded allocation;
 compile/build growth was approximately 0.47/1.63 GiB, free space stayed above
 136 GiB, and no new incremental cache was created. Owned temporary daemon and
-browser callers are stopped. Source remains uncommitted under the operator's
-ref/commit hold for polish's publication; the existing 36 completed auth
+browser callers are stopped. At this qualification checkpoint, source remained
+uncommitted under the operator's ref/commit hold for polish's publication; the existing 36 completed auth
 Change-Ids are separately offered for joint review in
 joint-prerequisite-scope.json. This hardening delta is excluded from that
 handoff. Publication readiness of a newly assembled prefix is not inferred.
+
+
+### Sign-in review recovery classification — 2026-11-06
+
+Independent review found that missing membership and a changed canonical
+workspace path both return 403, which had been classified as an Origin failure.
+Workspace resolution now reports the fixed workspace_unavailable recovery code
+before any session mutation; Origin refusal retains its separate reload message.
+Internal details remain server-side with the same opaque reference as the
+response. This also applies to native form fallback errors.
+
+The one admitted offline debug/manual qualification attempt passed in 8.4 seconds.
+All nine isolated account checks passed, including both workspace403 cases with
+the previous account's session retained, rollback after forced insert failure,
+ordinary/demo sign-in, native redirect and Origin refusal. No production account
+data was copied. Free before/minimum/after was
+146,105,520,128 / 145,523,593,216 / 146,105,118,720 bytes; peak target growth was
+581,853,184 bytes, final growth 311,296 bytes. Both locks and all owned callers
+were released. No suite, deployment or automatic retry ran. The scoped forward
+fix and earlier hardening remain excluded above polish's joint prerequisite
+prefix; the final publication boundary still needs independent review.
