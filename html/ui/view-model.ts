@@ -145,9 +145,11 @@ export type Link = { label: string; id: string };
 /** Proposal identity and ranking provenance are separate navigation relationships. */
 export type ExperimentHeader = {
   investigation: Link;
-  proposal: string;
+  /** Project context for an investigation; proposals use the investigation link. */
+  project?: string;
+  proposal?: string;
   sourceFit: Crumb;
-  state: "pending" | "approved" | "rejected";
+  state: "pending" | "approved" | "rejected" | "running" | "validated" | "inconclusive" | "awaiting-approval" | "awaiting-data" | "awaiting-agent";
 };
 
 export type TextStep = { label: string; delayMs: number };

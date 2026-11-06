@@ -65,8 +65,8 @@ export function detailsModel(s: State): DetailsModel {
   }) };
   // A refused write (a 409 from the daemon, say) stays visible above the panel until the next pick.
   if (s.notice && "experiment" in m) {
-    const experiment = (m as ProposalDetailsModel).experiment;
-    return { ...m, experiment: { ...experiment, notice: s.notice } } as ProposalDetailsModel;
+    const experiment = (m as ExperimentCardDetails).experiment;
+    return { ...m, experiment: { ...experiment, notice: s.notice } } as ExperimentCardDetails;
   }
   return s.notice ? { ...m, sections: [{ heading: "Not saved", blocks: [{ kind: "text", text: s.notice, tone: "danger" }] }, ...m.sections] } : m;
 }
@@ -76,7 +76,7 @@ function selectedDetails(s: State): DetailsModel {
   const sel = parseSel(project, s.selected[project.id] ?? "") ?? parseSel(project, defaultSelection(project))!;
   if (sel.kind === "config") return configDetails(s, project);
   const proposal = decisionProposal(sel.inv, sel);
-  if (!proposal) return investigationDetails(project, sel.inv);
+  if (!proposal || stateOf(sel.inv) === "running" && sel.kind !== "proposal") return investigationDetails(project, sel.inv);
   const decision = proposalDetails(s, project, sel.inv, proposal);
   const budget = investigationDetails(project, sel.inv).sections.find(x => x.heading === "Budget used")!;
   return { ...decision, sections: [...decision.sections, { ...budget, heading: "So far" }],
@@ -109,12 +109,28 @@ export function configDetails(s: State, project: Project): DetailsModel {
   };
 }
 
-function investigationDetails(project: Project, inv: Investigation): DetailsModel {
-  const c = configFor(project, inv), st = statusText(inv);
+function investigationDetails(project: Project, inv: Investigation): ExperimentCardDetails {
+  const c = configFor(project, inv), state = stateOf(inv), fit = latestFit(inv);
+  const st = state === "running" && !inv.progress ? { text: `Running · ${inv.host}`, tone: "run" as const } : statusText(inv);
   const used = experimentsUsed(inv);
   return {
-    icon: "investigation", title: investigationLabel(project, inv), status: st,
+    icon: "investigation", title: investigationLabel(project, inv), cardName: true, status: st,
+    experiment: {
+      key: JSON.stringify([project.id, inv.id]),
+      caption: `${project.name} · ${investigationLabel(project, inv)}`,
+      header: {
+        project: project.name,
+        investigation: { label: investigationLabel(project, inv), id: ids.inv(inv) },
+        sourceFit: fit ? { label: `Fit #${fit.n}`, id: ids.fit(inv, fit) } : { label: "Not recorded" },
+        state,
+      },
+    },
     sections: [
+      ...(state === "running" ? [{ heading: "Progress", blocks: [{ kind: "facts" as const, rows: [
+        { label: "Agent steps", value: inv.progress ? `${inv.progress.done} / ${inv.progress.total}` : "Not recorded" },
+        { label: "Host", value: inv.host },
+      ] }] }] : []),
+      ...validationDetails(inv),
       { heading: "Budget used", blocks: [{ kind: "meters", rows: [
         { label: "Agent steps", value: `${inv.budget.steps} / ${c.budgets.maxSteps}`, fraction: inv.budget.steps / c.budgets.maxSteps, tone: stateOf(inv) === "running" ? "run" : undefined },
         { label: "Simulations", value: `${int(inv.budget.simulations)} / ${int(c.budgets.maxSimulations)}`, fraction: inv.budget.simulations / c.budgets.maxSimulations },
@@ -135,10 +151,28 @@ function investigationDetails(project: Project, inv: Investigation): DetailsMode
   };
 }
 
-/** Local structural extension: client derivation does not import a UI renderer. */
-type ProposalDetailsModel = DetailsModel & { experiment: { key: string; caption: string; header?: ExperimentHeader; notice?: string } };
+/** Validation retains its recorded scope and evidence in the shared lifecycle card. */
+function validationDetails(inv: Investigation): Section[] {
+  const v = inv.validation;
+  if (v.state === "needs-data") return inv.state === "validated" || inv.state === "inconclusive"
+    ? [{ heading: "Validation", blocks: [{ kind: "missing", title: "No validation check recorded", description: "The investigation state has no recorded held-out check to inspect." }] }] : [];
+  const passed = v.state === "summary" ? v.passed : v.state === "passed";
+  return [{ heading: "Validation", caption: "Recorded held-out check; this result applies to the listed data.", blocks: [{ kind: "facts", rows: [
+    { label: "Check", value: passed ? "Passed" : "Failed", tone: passed ? "ok" : "warn" },
+    { label: "χ²/N", value: sig(v.chi2N, 3) },
+    { label: "Acceptance threshold", value: `≤ ${sig(v.threshold, 3)}` },
+    { label: "Measurement", value: v.state === "summary" ? v.measurements.join(", ") || "Not recorded" : v.measurement },
+    ...(v.state === "summary" ? [{ label: "Worst parameter", value: "Not recorded" }] : [
+      { label: "Fit", value: `Fit #${v.fit}` },
+      { label: "Worst parameter", value: `${v.worst.param} ${pct(v.worst.relative)} (2σ relative)` },
+    ]),
+  ] }] }];
+}
 
-function proposalDetails(s: State, project: Project, inv: Investigation, p: Proposal): ProposalDetailsModel {
+/** Local structural extension: client derivation does not import a UI renderer. */
+type ExperimentCardDetails = DetailsModel & { experiment: { key: string; caption: string; header?: ExperimentHeader; notice?: string } };
+
+function proposalDetails(s: State, project: Project, inv: Investigation, p: Proposal): ExperimentCardDetails {
   const c = configFor(project, inv), changed = edited(p), spec = specOf(c, p.experiment);
   const shown = displayedFields(s, inv, p);
   const drafts = p.fields.map((f) => s.drafts[draftKey(inv, p, f.name)]);

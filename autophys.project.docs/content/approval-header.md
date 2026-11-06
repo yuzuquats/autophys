@@ -48,3 +48,42 @@ Six scoped commits were fast-forward pushed; 104 unrelated commits stayed local.
 The full tip tree, shared index and worktree were preserved. No deployment.
 See the linked evidence directory for comparison.html and final review, install
 and push receipts. This publication receipt is a local documentation follow-up.
+
+## Shared lifecycle cards (2026-11-06)
+
+The operator requested merging the validated, running, proposed and related
+Details presentations. Investigation states now use the same std-round card as
+proposal review: tertiary breadcrumb above the title, accessible status control,
+independently expandable middle rows and stationary actions. Proposal decision
+receipts and editing behavior remain specific to their proposal; an investigation
+outcome is not an approval decision. Running investigation anchors show progress
+instead of an older proposal, while explicit proposal selection retains that
+proposal's review.
+
+Validation displays the recorded check, threshold, measurement identity and
+available fit/worst-parameter uncertainty, qualifying its scope to those data.
+Summary-only checks explicitly lack the worst-parameter record. Existing result,
+budget, data and reproducibility facts remain available. Live progress updates
+keep the investigation identity, row state and focused summary; refused writes
+remain escaped and visible outside all disclosures.
+
+Agent-chosen, pending operator review (LC-01): investigation progress/result/
+validation rows start open; budget, data and run rows start closed. This puts
+the current scientific result before supporting details in the narrow panel.
+The alternative is opening every row, which places more content below the fold.
+Reversal is a small change to the shared renderer's supporting-section set;
+there is no persisted-data change. Proposal defaults stay as previously selected.
+
+Owner checks: 124 client/UI tests passed, cached/frozen typechecks passed, and
+real hydrated renderer fixtures were inspected at 1280×800 and 390×844 for
+proposed, approved, rejected, running and validated states. In all five states
+at both sizes, no horizontal card overflow was observed and the action footer
+stayed stationary while content scrolled. Progress rerender retained the closed
+row, DOM identity and keyboard focus; save-error visibility and escaping passed.
+Captures are deterministic fixture evidence, not live experimental records.
+
+Before/after captures, comparison.html, source preimages and validation receipts:
+`~/workspace/fleet/evidence/autophys-ux-flow/lifecycle-cards-20261106/` on
+yuzuquats, with a small acceptance copy on rwc-01. Additive local commit only,
+coordinated with productionize's ref custodian; no sink, push, native build or
+deployment belongs to this change.

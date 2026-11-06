@@ -1,7 +1,7 @@
 /** Scoped experiment Details refinement; compose after autophysStyles. */
 export function detailsExperimentStyles(scope: string): string {
   return `
-/* Only proposal Details opt into a full-height card; other records keep shell scrolling. */
+/* Investigation and proposal Details share one card; configuration keeps shell scrolling. */
 ${scope} .ck-panel-body:has(> .ck-details-slot > .ap-experiment-card) { overflow:hidden;padding-bottom:8px; }
 ${scope} .ck-details-slot:has(> .ap-experiment-card) { display:flex;flex:1;min-height:0; }
 ${scope} .ap-experiment-card { position:relative;isolation:isolate;display:flex;flex-direction:column;flex:1;min-width:0;min-height:0;overflow-wrap:anywhere; }
@@ -23,7 +23,9 @@ ${scope} .ap-experiment-title-row .ap-dname { flex:1; }
 ${scope} .ap-experiment-separator { flex:none; }
 ${scope} .ap-experiment-fit { margin:2px 0 0;color:var(--ap-sec);font:11px/15px var(--ap-font); }
 ${scope} .ap-review-control { position:relative;display:block;flex:none;width:24px;height:24px;color:var(--ap-warn); }
-${scope} .ap-review-control[data-state="approved"] { color:var(--ap-ok); }
+${scope} .ap-review-control[data-state="approved"], ${scope} .ap-review-control[data-state="validated"] { color:var(--ap-ok); }
+${scope} .ap-review-control[data-state="running"] { color:var(--ap-run); }
+${scope} .ap-review-control[data-state="awaiting-data"], ${scope} .ap-review-control[data-state="awaiting-agent"] { color:var(--ap-sec); }
 ${scope} .ap-review-control[data-state="rejected"] { color:var(--ap-danger); }
 ${scope} .ap-review-status { display:block;box-sizing:border-box;width:24px;height:24px;padding:0;border:0;border-radius:4px;appearance:none;background:transparent;color:inherit;cursor:pointer;anchor-name:--ap-review-status; }
 ${scope} .ap-review-control > svg { position:absolute;inset:2px;width:20px;height:20px;pointer-events:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round; }

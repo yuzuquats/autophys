@@ -1,5 +1,5 @@
 /// <reference lib="dom" />
-/** Proposal-only presentation metadata; the shared DetailsModel remains unchanged. */
+/** Shared investigation and experiment card presentation; domain state stays in derivation. */
 import { blockMarkup } from "./blocks.ts";
 import { buttonMarkup } from "./actions.ts";
 import { ICONS } from "./icons.ts";
@@ -18,11 +18,16 @@ function recordLink(crumb: Crumb): string {
     : `<span>${esc(crumb.label)}</span>`;
 }
 
-/** One clipboard silhouette; its interior mark distinguishes review outcomes. */
+/** One clipboard silhouette; its interior mark distinguishes lifecycle states. */
 function reviewIcon(state: ExperimentHeader["state"]): string {
-  const mark = state === "pending"
-    ? '<circle cx="7" cy="12" r=".75" fill="currentColor" stroke="none"/><circle cx="10" cy="12" r=".75" fill="currentColor" stroke="none"/><circle cx="13" cy="12" r=".75" fill="currentColor" stroke="none"/>'
-    : state === "approved" ? '<path d="m7 11.5 2 2 4-4"/>' : '<path d="m8 9.5 4 4m0-4-4 4"/>';
+  const mark = state === "approved" || state === "validated"
+    ? '<path d="m7 11.5 2 2 4-4"/>'
+    : state === "rejected" ? '<path d="m8 9.5 4 4m0-4-4 4"/>'
+    : state === "inconclusive" ? '<path d="M10 8.5v3.5"/><circle cx="10" cy="14" r=".75" fill="currentColor" stroke="none"/>'
+    : state === "running" ? '<path d="m8 8 5 3.5L8 15Z"/>'
+    : state === "awaiting-data" ? '<path d="M10 8v6m-2-2 2 2 2-2"/>'
+    : state === "awaiting-agent" ? '<circle cx="10" cy="11.5" r="3"/><path d="M10 9.5v2l1.5 1"/>'
+    : '<circle cx="7" cy="12" r=".75" fill="currentColor" stroke="none"/><circle cx="10" cy="12" r=".75" fill="currentColor" stroke="none"/><circle cx="13" cy="12" r=".75" fill="currentColor" stroke="none"/>';
   return `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6.5 3.5h-1a1.5 1.5 0 0 0-1.5 1.5v11a1.5 1.5 0 0 0 1.5 1.5h9A1.5 1.5 0 0 0 16 16V5a1.5 1.5 0 0 0-1.5-1.5h-1"/><rect x="7" y="2" width="6" height="3" rx="1"/>${mark}</svg>`;
 }
 
@@ -30,21 +35,24 @@ function headerMarkup(model: ExperimentDetailsModel, name: string, status: strin
   const h = model.experiment.header;
   const title = `<h3 id="ap-experiment-name" class="${esc(name)}" ${classes.cardNameAttribute ?? "data-card-name"}>${!h ? ICONS[model.icon] : ""}<span>${esc(model.title)}</span></h3>`;
   if (!h) return `${title}<p class="ap-experiment-source" id="ap-experiment-source">${esc(model.experiment.caption)}</p><p class="${esc(status)}" id="ap-status" role="status">${esc(model.status.text)}</p>`;
-  return `<nav class="ap-experiment-breadcrumb" id="ap-experiment-source" aria-label="Proposal location"><ol>
-    <li>${recordLink(h.investigation)}</li><li><span class="ap-experiment-separator" aria-hidden="true">›</span><span aria-current="page">${esc(h.proposal)}</span></li>
+  const location = h.proposal
+    ? `<li>${recordLink(h.investigation)}</li><li><span class="ap-experiment-separator" aria-hidden="true">›</span><span aria-current="page">${esc(h.proposal)}</span></li>`
+    : `<li>${esc(h.project ?? h.investigation.label)}</li><li><span class="ap-experiment-separator" aria-hidden="true">›</span><span aria-current="page">Investigation</span></li>`;
+  return `<nav class="ap-experiment-breadcrumb" id="ap-experiment-source" aria-label="${h.proposal ? "Proposal" : "Investigation"} location"><ol>
+    ${location}
   </ol></nav>
   <div class="ap-experiment-title-row">${title}
     <span class="ap-review-control" data-state="${esc(h.state)}"><input type="button" class="ap-review-status" data-state="${esc(h.state)}" value="" popovertarget="ap-review-status-popover" aria-label="${esc(model.status.text)}" title="${esc(model.status.text)}">${reviewIcon(h.state)}</span>
     <div class="ap-review-tooltip" id="ap-review-status-popover" popover>${esc(model.status.text)}</div>
     ${h.state === "pending" ? `<span class="ap-review-announcement" id="ap-status" role="status">${esc(model.status.text)}</span>` : ""}
   </div>
-  <p class="ap-experiment-fit">Ranked at ${recordLink(h.sourceFit)}</p>`;
+  <p class="ap-experiment-fit">${h.proposal ? "Ranked at" : "Latest fit ·"} ${recordLink(h.sourceFit)}</p>`;
 }
 
 
 /** Classify by derived record metadata, never by human-facing status text. */
 export function isExperimentDetails(model: DetailsModel): model is ExperimentDetailsModel {
-  return model.icon === "proposal" && model.cardName === true && "experiment" in model;
+  return model.cardName === true && "experiment" in model;
 }
 
 function disclosure(key: string, heading: string, body: string, rows: ExperimentRows, defaultOpen = false): string {
@@ -59,7 +67,8 @@ export function experimentDetailsMarkup(model: ExperimentDetailsModel, classes: 
   const status = [classes.status ?? "", "ap-status", model.status.tone ? `ap-t-${model.status.tone}` : ""].filter(Boolean).join(" ");
   // One flat accordion in the middle; every named section owns its disclosure.
   // Keep editable settings and the expected result open on first review.
-  const supporting = new Set(["Preview", "So far"]);
+  const supporting = new Set(model.experiment.header && !model.experiment.header.proposal
+    ? ["Budget used", "Data", "Run"] : ["Preview", "So far"]);
   const sections = [
     ...model.sections.filter(s => !supporting.has(s.heading ?? "")),
     ...model.sections.filter(s => supporting.has(s.heading ?? "")),
