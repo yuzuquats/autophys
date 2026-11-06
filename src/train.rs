@@ -1397,7 +1397,9 @@ fn eval_modal(flags: &Flags, run: &str, gate: Value) -> Result<Value> {
         flags.get("seeds"),
         flags.all("case"),
         out,
-        flags.get("model-assets").map(PathBuf::from).or_else(|| env_path("AUTOPHYS_TRAIN_MODEL_ASSETS")).as_deref(),
+        flags.get("model-assets").map(PathBuf::from)
+            .or_else(|| env_path("AUTOPHYS_TRAIN_MODEL_ASSETS"))
+            .map(absolute).transpose()?.as_deref(),
     )
     .map(|(report, _)| report)
 }
@@ -2608,10 +2610,21 @@ impl LoopDriver<'_> {
         let data = self.dir.join(format!("iter-{iteration}")).join("data");
         if let Ok(m) = read_json(&manifest_path) {
             let ours = data.canonicalize().ok().map(|d| d.display().to_string());
-            if m["status"] == "completed"
-                && ours.is_some()
-                && m.pointer("/data/dir").and_then(Value::as_str) == ours.as_deref()
-            {
+            if m["status"] == "completed" {
+                let expected_hparams: Vec<String> = HYPERPARAMETERS.iter().flat_map(|flag| {
+                    candidate.hparams.get(&flag.replace('-', "_")).map(|value|
+                        vec![format!("--{flag}"), value.to_string()]).unwrap_or_default()
+                }).collect();
+                if ours.is_none()
+                    || m["name"] != run_name || m["backend"] != "modal"
+                    || m["base_model"] != self.plan.base_model
+                    || m.pointer("/data/dir").and_then(Value::as_str) != ours.as_deref()
+                    || m["data"] != dataset_identity(&data)?
+                    || m["hyperparameters"] != json!(expected_hparams)
+                    || m.pointer("/plan/model_assets") != self.plan.asset_identity.as_ref()
+                {
+                    bail!("completed run {run_name:?} differs from this loop's data/model/assets/hyperparameters; preserve it and choose a new loop name");
+                }
                 // Trained before an interruption; its spend was charged then.
                 return Ok(json!({"run": run_name, "reused": true, "gpu_seconds": 0.0}));
             }
