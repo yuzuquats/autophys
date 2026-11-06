@@ -241,7 +241,7 @@ All native workspace suites completed: **238 passed, 2 ignored, 0 failed**.
 During the subsequent HTML run, concurrent account/tutorial UI changes appeared
 in index.root.ts and vendored cookbook drawer/shell/tutorial/types. At 45.7
 seconds the source monitor terminated this operation's process group. Those
-peer edits are preserved, with their owner asked to finish and commit them.
+peer edits are preserved, with autophys/auth asked to finish and commit them.
 The one-attempt admission is consumed: **no retry, release build, packaging,
 installation or service restart occurred**. The live service still reports
 `6efe1f3-auth-c58c041`; incremental UI fixes are not deployed.
@@ -258,3 +258,24 @@ native attempt requires a new explicit admission and exact source freeze.
 Evidence: `fleet/evidence/autophys-drawer/diff-native-{admission,window,handoff}.json`,
 `diff-deploy.log`, `diff-html.log`, `diff-types.log`, and
 `diff-browser-results.json`. No source push.
+
+
+### Writer attribution corrected — 2026-11-06 02:48Z
+
+Polish's initial attribution of the five endTour hunks to autophys/ui was an
+unsupported inference and is withdrawn. The UI run denies owner writes and
+retains only its local ignored mocks; its last owned source commit is 132bd8f.
+The monitor proves a source change, not which agent wrote it.
+
+The successful SSH Python write is established in the rwc-01 provider log at
+02:43:21.612–02:43:21.688Z, command
+`exec-f342e1c8-5039-46d8-ba66-067aa53470b6`, provider session
+`01a1aa99-72e6-7d53-9b7b-013723828bf2`. Its exact five replacements match the
+retained patch. That session maps to
+[autophys/auth](t3-thread://v1/6b67785d-927e-4f2a-9044-9898649f5b9e),
+in a different T3 project; its transcript confirms the walkthrough fix.
+The auth owner has been asked to finish/review/commit its own hunks and return
+custody before a new admission. UI has no action to commit those files.
+Structured evidence, log lines, writer preimages pointer and corrected handoff
+are under `fleet/evidence/autophys-drawer/endtour-writer-attribution.json` and
+`diff-native-handoff.json`. No source hunks were changed, no native retry.
