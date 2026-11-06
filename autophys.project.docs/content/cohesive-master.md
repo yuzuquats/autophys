@@ -11,7 +11,7 @@ The rwc-dev-01 audit found cancelling staged rollbacks mixed with an uncommitted
 4. Read the external correspondence manifests before approving ancestry reconciliation or consumer finalization.
 ```
 
-The implementation commits are 8e08c42456951ceec479e3157a6b6c227b17619e (training/labeling), 03989b38e4bbd5527f95a3f4b87dfd0a57428ffd (compatible UI/docs/protocol), and 879180e270a5f2cf44fbb480a9342d88cc91cd20 (completed-run identity and caller-relative eval assets). Their reviewed source anchor is tree 790623390d5177e983edea47918676a0d79c8a40. A reconciliation merge keeps its first parent's verified integrated tree and adds exact audited master 7332ee88d6887761f0ec613310dfac2604fd6c91 as second parent. It never adopts that stale source tree. The final external candidate binding records the resulting HEAD, parents and source digest.
+The implementation commits are 8e08c42456951ceec479e3157a6b6c227b17619e (training/labeling), 03989b38e4bbd5527f95a3f4b87dfd0a57428ffd (compatible UI/docs/protocol), and 879180e270a5f2cf44fbb480a9342d88cc91cd20 (completed-run identity and caller-relative eval assets). The auth fixture also follows the current /context probe in 96a308d018f0ae963662b506160277a1ff040f89. The correspondence anchor is that commit, tree d3644e47547d8bf89205c0765cd6b7980d0e12ca. Reconciliation merge 35b68ed8199d660561c26638a0fc41bcf467f3fc retains tree 13e0f938db2232d7bff30b5de092c8cd8fd5ab5f identical to first parent b1ab538590143efdc7f7b11269586e191baf9b85, with exact audited master 7332ee88d6887761f0ec613310dfac2604fd6c91 as second parent. The later test-fixture repair is a forward commit; the stale source tree was never adopted. The final external candidate binding records the resulting HEAD, parents and source digest.
 
 ## The coverage is a correspondence, not a blanket restore
 
@@ -41,8 +41,8 @@ Bulky correspondence remains on rwc-01 at /Users/james/.local/state/productioniz
 
 These manifest hashes bind the source anchor above. The final candidate binding proves that every referenced current path is unchanged through the doc receipt and reconciliation merge:
 
-- adoption-map-final.json: `76bdd07d34b2b01875c637e814440884076a2bb1c1d33ae35b1dbac584df958e`
-- fourteen-commit-dispositions-final.json: `0d9b906814453e758c69acf13b5ea06f4f2b24ea5770659664a8051358c90b15`
-- historical-dispositions-final.json: `97b1058234c107453a37975c4dfd5f5b396bd82a8907f9613ab514f6848ce7c7`
-- ignored-build-correspondence-final.json: `bfe7b287e3a7ebb9d80e55a26423af8ce07ce22514a840ea70b544127da7cf8b`
-- correspondence-summary.json: `d74cf4931ba786c8646fb16e586bdf708845cc5fdaaa53144219810a879067e6`
+- adoption-map-final.json: `138648d0d2300a106b75ed101e9ef21677644377287869fc6f20e3a03dc556d7`
+- fourteen-commit-dispositions-final.json: `53ff1bd37e03457786073b264ae3bd3a79fc68535f7e7c4ec57ba814e1ad3d97`
+- historical-dispositions-final.json: `58040ada1a14665154371dcc17cbeb74881037007eae119c591d51ad9b564f65`
+- ignored-build-correspondence-final.json: `d6b4ac024b65b850da8cc5c9b4051424bb4c9016e16610e9a74e0d09f24dae28`
+- correspondence-summary.json: `c52dc7aa15e96890084cdc4410fea4dd5b108386f5b8bf5786035ec699589ca1`
