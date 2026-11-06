@@ -335,17 +335,43 @@ fn stalled_stream_headers_retry_within_attempt_budget() {
 
 #[test]
 fn paired_target_normalization_before_effects() {
- assert_eq!(crate::connect(None).unwrap().root(),crate::connect(Some("")).unwrap().root());
- assert_eq!(Remote::new("HTTPS://LOCALHOST:443/","key").unwrap().base(),"https://localhost/api/v1");
- for text in ["http://localhost","HTTP://LOCALHOST:80/","http://LOCALHOST/"] {
-  assert_eq!(Remote::new(text,"key").unwrap().base(),"http://localhost/api/v1");
- }
- for text in ["http://user:private@localhost","http://localhost?x","http://localhost#x","http:/broken","ftp://localhost","https://localhost:99999"] {
-  let e=Remote::new(text,"key").unwrap_err();assert!(!e.to_string().contains("private"));
- }
- let temp=tempfile::tempdir().unwrap();let c=crate::connect(Some(temp.path().to_str().unwrap())).unwrap();
- assert!(c.open_project("missing").is_err());assert_eq!(std::fs::read_dir(temp.path()).unwrap().count(),0);
- let a=c.project("created").unwrap();let b=c.open_project("created").unwrap();assert_eq!(a.id(),b.id());assert_eq!(c.projects().unwrap().len(),1);
+    assert_eq!(crate::connect(None).unwrap().root(), crate::connect(Some("")).unwrap().root());
+    for (text, expected) in [
+        ("HTTPS://LOCALHOST:443/", "https://localhost/api/v1"),
+        ("http://localhost", "http://localhost/api/v1"),
+        ("HTTP://LOCALHOST:80/", "http://localhost/api/v1"),
+        ("http://LOCALHOST/", "http://localhost/api/v1"),
+        ("http://localhost:", "http://localhost/api/v1"),
+        ("http://localhost:00080/", "http://localhost/api/v1"),
+        ("https://localhost:0", "https://localhost:0/api/v1"),
+        ("https://localhost:65535", "https://localhost:65535/api/v1"),
+        ("HTTP://[::1]:80/", "http://[::1]/api/v1"),
+        ("https://[::1]:443/prefix/", "https://[::1]/prefix/api/v1"),
+        ("https://[::1]:8443", "https://[::1]:8443/api/v1"),
+    ] {
+        assert_eq!(Remote::new(text, "key").unwrap().base(), expected, "{text}");
+    }
+    for text in ["http://user:private@localhost", "http://localhost?x", "http://localhost#x",
+        "http:/broken", "ftp://localhost", "https://localhost:99999", "http://localhost:65536",
+        "http://localhost:abc", "http://localhost:-1", "http://localhost:+80",
+        "http://[::1]:99999", "http://[::1]:abc", "http://[::1"] {
+        let e = Remote::new(text, "key").unwrap_err();
+        assert!(!e.to_string().contains("private"));
+        assert!(crate::Client::connect_remote(text, "key").is_err());
+        assert!(crate::connect(Some(text)).is_err());
+    }
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("not-created");
+    let c = crate::connect(Some(root.to_str().unwrap())).unwrap();
+    assert!(c.open_project("missing").is_err());
+    assert!(!root.exists());
+    let (a, created) = c.ensure_project("created").unwrap();
+    assert!(created);
+    let (b, created) = c.ensure_project("created").unwrap();
+    assert!(!created);
+    assert_eq!(a.id(), b.id());
+    assert_eq!(a.id(), c.open_project("created").unwrap().id());
+    assert_eq!(c.projects().unwrap().len(), 1);
 }
 
 #[test]

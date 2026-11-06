@@ -478,19 +478,58 @@ fn core_finite_noise_and_fit_negative_inputs_before_simulation() {
 #[test]
 fn core_validation_requires_finite_samples() {
  for kind in ["absent","empty","missing","partial","normal"] {
-  let (p,ds,_)=input();let mut obs=ds.split("train");let mut val=ds.split("validation")[0].clone();
+  // Same seed/settings as Python test_validation_requires_usable_evidence.
+  // Short training barely identifies R; a long extrapolation need not validate.
+  let (view, _) = autophys::synthetic::thermal_case(0, 2, 0., 0.).unwrap();
+  let mut p = Project::new("core", view.simulator);
+  p.initial = [("C".into(), 500.), ("R".into(), 2.)].into_iter().collect();
+  p.noise.bias = "off".into();
+  let mut obs=view.dataset.split("train");let mut val=view.dataset.split("validation")[0].clone();
   if kind=="empty" {val.t.clear();for y in val.y.values_mut(){y.clear();}}
   if kind=="missing" {for y in val.y.values_mut(){y.fill(f64::NAN);}}
   if kind=="partial" {for y in val.y.values_mut(){for i in (0..y.len()).step_by(2){y[i]=f64::NAN;}}}
   if kind!="absent" {obs.push(val.clone());}
   let temp=tempfile::tempdir().unwrap();let c=autophys::connect(Some(temp.path().to_str().unwrap())).unwrap();let wb=c.project_with(p).unwrap();
   let mut inv=wb.investigate(Dataset::new(obs).unwrap(),ProposalRunner,ScriptedPolicy::default()).unwrap();
-  inv.tool_optimize_parameters(Some(0),"linear").unwrap();
+  inv.tool_optimize_parameters(None,"linear").unwrap();
+  let calls = inv.project.simulator.calls();
   let out=inv.tool_validate_predictions().unwrap();
-  if ["absent","empty","missing"].contains(&kind) {assert_eq!(out,json!({"available":false,"passed":false}),"{kind}");}
-  else {assert_eq!(out["passed"],true,"{kind}: {out}");assert_eq!(out["n"],val.n_samples());}
+  eprintln!("validation {kind}: {out}");
+  if ["absent","empty","missing"].contains(&kind) {
+   assert_eq!(out,json!({"available":false,"passed":false}),"{kind}");
+   assert_eq!(inv.project.simulator.calls(), calls);
+  } else {
+   assert_eq!(out["available"],true);assert_eq!(out["passed"],true,"{kind}: {out}");
+   assert_eq!(out["n"],val.n_samples());assert!(val.n_samples()>0);
+   assert!(out["chi2_per_n"].as_f64().unwrap() < 2.);
+  }
   assert!(wb.verify().unwrap().ok);
  }
+}
+#[test]
+fn core_validation_rejects_unsupported_long_extrapolation() {
+    for partial in [false, true] {
+        let (p, ds, _) = input();
+        let mut observations = ds.split("train");
+        let mut val = ds.split("validation")[0].clone();
+        if partial {
+            for y in val.y.values_mut() {
+                for i in (0..y.len()).step_by(2) { y[i] = f64::NAN; }
+            }
+        }
+        let n = val.n_samples();
+        observations.push(val);
+        let temp = tempfile::tempdir().unwrap();
+        let c = autophys::connect(Some(temp.path().to_str().unwrap())).unwrap();
+        let wb = c.project_with(p).unwrap();
+        let mut inv = wb.investigate(Dataset::new(observations).unwrap(), ProposalRunner, ScriptedPolicy::default()).unwrap();
+        inv.tool_optimize_parameters(Some(0), "linear").unwrap();
+        let out = inv.tool_validate_predictions().unwrap();
+        eprintln!("long extrapolation partial={partial}: {out}");
+        assert_eq!(out["available"], true);assert_eq!(out["passed"], false);
+        assert_eq!(out["n"], n);assert!(out["chi2_per_n"].as_f64().unwrap() > 2.);
+        assert!(wb.verify().unwrap().ok);
+    }
 }
 #[test]
 fn core_owned_and_public_configuration_drift() {

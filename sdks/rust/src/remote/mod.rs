@@ -86,9 +86,21 @@ pub(crate) fn normalize_server(server: &str) -> Result<String> {
     let authority = uri.authority().ok_or_else(bad)?;
     if authority.as_str().contains('@') || !authority.as_str().is_ascii() { return Err(bad()); }
     let host = uri.host().filter(|s| !s.is_empty()).ok_or_else(bad)?.to_ascii_lowercase();
-    let port = uri.port_u16();
-    // Reject an invalid/out-of-range port instead of treating it as absent.
-    if authority.port().is_some() && port.is_none() { return Err(bad()); }
+    // Authority::port() discards invalid/out-of-range text, just like port_u16().
+    // Inspect the explicit suffix first, keeping IPv6 colons inside the brackets.
+    let authority_text = authority.as_str();
+    let port_text = if authority_text.starts_with('[') {
+        authority_text.split_once(']').and_then(|(_, tail)| tail.strip_prefix(':'))
+    } else {
+        authority_text.split_once(':').map(|(_, port)| port)
+    };
+    let port = match port_text.filter(|text| !text.is_empty()) {
+        Some(text) if text.bytes().all(|b| b.is_ascii_digit()) => {
+            Some(text.parse::<u16>().map_err(|_| bad())?)
+        }
+        Some(_) => return Err(bad()),
+        None => None,
+    };
     let port = port.filter(|p| *p != if scheme == "http" {80} else {443});
     Ok(format!("{scheme}://{host}{}{}", port.map(|p|format!(":{p}")).unwrap_or_default(), uri.path().trim_end_matches('/')))
 }

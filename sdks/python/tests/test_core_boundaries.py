@@ -166,9 +166,20 @@ def test_target_policy_and_explicit_open_create(tmp_path, monkeypatch):
     assert ap.connect().root == ap.connect("").root == tmp_path / "default"
     assert str(ap.connect(".").root) == "."
     assert ap.connect(str(tmp_path / "one.ap-workbook")).only == tmp_path / "one.ap-workbook"
-    for target in ["HTTP://LOCALHOST:80/", "http://localhost"]:
-        assert ap.connect(target, api_key="key").store.base == "http://localhost/api/v1"
-    for target in ["http://u:private@localhost", "http://localhost?x", "http://localhost#x", "http:/broken", "ftp://localhost", "https://localhost:99999"]:
+    for target, expected in [
+        ("HTTP://LOCALHOST:80/", "http://localhost/api/v1"),
+        ("http://localhost", "http://localhost/api/v1"),
+        ("HTTPS://LOCALHOST:443/", "https://localhost/api/v1"),
+        ("http://localhost:", "http://localhost/api/v1"),
+        ("http://localhost:00080/", "http://localhost/api/v1"),
+        ("https://localhost:0", "https://localhost:0/api/v1"),
+        ("https://localhost:65535", "https://localhost:65535/api/v1"),
+        ("HTTP://[::1]:80/", "http://[::1]/api/v1"),
+        ("https://[::1]:443/prefix/", "https://[::1]/prefix/api/v1"),
+        ("https://[::1]:8443", "https://[::1]:8443/api/v1"),
+    ]:
+        assert ap.connect(target, api_key="key").store.base == expected
+    for target in ["http://u:private@localhost", "http://localhost?x", "http://localhost#x", "http:/broken", "ftp://localhost", "https://localhost:99999", "http://localhost:65536", "http://localhost:abc", "http://localhost:-1", "http://localhost:+80", "http://[::1]:99999", "http://[::1]:abc", "http://[::1"]:
         with pytest.raises(StoreError, match="invalid daemon URL"):
             ap.connect(target, api_key="key")
     assert not list(tmp_path.iterdir())

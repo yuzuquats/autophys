@@ -1,6 +1,6 @@
 # Attachment visibility and executable configuration must agree with the recorded workbook
 
-Status: round 1 implementation committed in `3bb0db904f44868847c7d7464632d31aa195bda4`; current qualification is blocked on resource/source stability. Baseline judges identify one shared atomicity blocker and paired trust/scientific boundary defects; scores remain baseline judgments, not acceptance evidence.
+Status: round 1 implementation committed in `3bb0db904f44868847c7d7464632d31aa195bda4`; bounded paired qualification and the two native repairs are recorded in [round1-native-repair.md](round1-native-repair.md). Deferred campaign findings and independent rejudging remain open. Baseline judges identify one shared atomicity blocker and paired trust/scientific boundary defects; scores remain baseline judgments, not acceptance evidence.
 
 Two remote record POSTs commit independently. Retrying them can repair a partial attachment but cannot prevent a reader seeing it or another writer leaving an orphan. The daemon should expose an additive attachment operation using the existing workbook immediate transaction, keeping approval checks, global record identity/replay decisions, measurement and proposal projection under that transaction. Existing single-record endpoints retain their meaning. Format 1 and canonical hashes stay unchanged, and historical records are not migrated.
 

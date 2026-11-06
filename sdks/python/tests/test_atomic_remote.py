@@ -13,7 +13,7 @@ from urllib.parse import urlsplit
 
 import pytest
 import autophys as ap
-from autophys.agent import Investigation
+from autophys.agent import Investigation, ToolError
 from autophys.http import HttpStore, HttpError
 from autophys.store import StoreError
 from test_cross_writer import daemon, BIN
@@ -69,6 +69,11 @@ def test_real_daemon_race_matrix_no_orphans_and_one_cost(daemon):
                     if language in ("python", "local-python"):
                         current.attach_data(pid, obs); return True
                     return peer(daemon, inv, obs, target=str(daemon["coll"]) if language == "local-rust" else None)["ok"]
+                except ToolError as error:
+                    # The winner may commit before the losing client's precheck.
+                    # Only the expected already-attached refusal is a valid loss.
+                    assert " is data_attached; approve it before attaching data" in str(error)
+                    return False
                 except (StoreError, HttpError): return False
         try:
             with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
@@ -185,3 +190,35 @@ def test_real_retained_blob_handles_and_record_references(daemon):
     assert base64.b64decode(resumed.plot_images[0]["data"])==b"A image"
     assert peer(daemon,action="blobs")["ok"]
     assert a.verify()["ok"] and b.verify()["ok"]
+
+
+def test_real_paired_explicit_open_and_create_effects(daemon):
+    def books():
+        return {p.name: p.read_bytes() for p in daemon["coll"].glob("*.ap-workbook")}
+    def rust(target, action, name):
+        body = {"target": target, "key": daemon["key"], "action": action, "name": name}
+        p = subprocess.run([PEER], input=json.dumps(body), text=True, capture_output=True, timeout=20)
+        assert p.returncode == 0, p.stderr
+        return json.loads(p.stdout)
+    for remote in [False, True]:
+        target = daemon["url"] if remote else str(daemon["coll"])
+        for language in ["python", "rust"]:
+            name = f"explicit-{language}-{remote}"
+            before = books()
+            with ap.connect(target, **({"api_key": daemon["key"]} if remote else {})) as c:
+                if language == "python":
+                    with pytest.raises(StoreError): c.open_project(name)
+                else:
+                    missing = rust(target, "open", name)
+                    assert not missing["ok"] and missing["status"] == 404
+                assert books() == before, (remote, language, "missing open wrote workbook")
+                if language == "python":
+                    a = c.ensure_project(name); b = c.ensure_project(name)
+                    assert a.project_id == b.project_id == c.open_project(name).project_id
+                else:
+                    a = rust(target, "ensure", name); b = rust(target, "ensure", name)
+                    opened = rust(target, "open", name)
+                    assert a["ok"] and b["ok"] and opened["ok"]
+                    assert a["result"]["created"] and not b["result"]["created"]
+                    assert a["result"]["id"] == b["result"]["id"] == opened["result"]["id"]
+                assert len(books()) == len(before) + 1

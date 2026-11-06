@@ -1,15 +1,22 @@
-# SDK core repairs are committed; current acceptance remains blocked
+# SDK round1 native repairs are qualified; deferred campaign work remains
 
-Status: all five baseline judges finished; first bounded core remediation is committed but not qualified or rejudged. The campaign is unfinished and no dimension meets a verified final target. Source commit `3bb0db904f44868847c7d7464632d31aa195bda4` follows plan `5ccb97011980ae7df9f180e0e34e1110784f5cc4`.
+The two native failures reported in the preceding qualification are repaired.
+[round1-native-repair.md](round1-native-repair.md) records the invalid-port cause,
+the scientifically unsupported long-extrapolation fixture, unchanged contracts,
+and exact acceptance limits. Fresh native checks: **78 passed, zero failures**.
+Identified paired remote/local Python union: **39 passed, zero skips** after the
+specific losing-writer harness correction; combined current Python source proof
+is **153 passed+1provider skip+568 unexecuted=722 collected**. Installed wheel204
+is separate carried evidence, with38package members still matching source.
+Forty-four prior native passes are historical; their consumed SDK library differs.
 
-The round adds a dedicated atomic attachment operation used by both HTTP SDKs, credential destination binding, workbook-owned Python blob views, executable configuration drift checks, finite data/noise and fit-input checks, optional Python HTTP error paths, and additive explicit open/create counterparts. [core-remediation.md](core-remediation.md) documents record compatibility and reversible choices pending operator review. All Q1–Q7/A1–A4/A7/T01–T03 acceptance remains open until current paired qualification succeeds.
-
-One earlier boundary run reported **27 passed, 1 failed in 2.91s**: empty validation grids reached curve generation during fitting. Both curve adapters were subsequently changed to skip empty grids; that correction and later edits have not been rerun. Earlier direct native source compilation succeeded using read-only audited dependency artifacts, but the daemon guard then detected unrelated `src/keys.rs` drift. Those artifacts do not qualify current source. The real-daemon race/fault/restart, retained-image/blob, Rust remote and current regression drafts remain unexecuted.
-
-The latest runnable preflight stopped before launch because boot free space was below the **13 GiB proactive threshold** (12.74 GiB at handoff). Aggregate campaign allocation is approximately **6.95 GiB**, including the entire unchanged prior campaign; the 8 GiB ceiling was not crossed. A shared native/auth workstream also changed daemon inputs during compilation. Its edits are preserved; only the two attachment additions were carved from `src/http.rs`. After the executor stopped, host-wide free space fell below the 12 GiB hard floor: **11.45 GiB** at the final read-only dependency check, while campaign allocation grew by less than 1 MiB. A later sample was **11.27 GiB**. Restore the host above 13 GiB before launch, preferably about 13.5 GiB for the planned native/test outputs (roughly **2.3 GiB recovery** relative to that later sample), and establish stable native inputs before qualifying. Root dependency configuration also changed in peer work; current SDK code alone cannot certify that unbuilt native graph. No cleanup or budget bypass was performed.
-
-The new regression draft covers paired finite-noise/initial/validation/configuration/error/target boundaries, old-server refusal without fallback, and real-daemon Python/Python, Rust/Rust, Python/Rust and remote/local attachments with second-insert failure, dropped responses, restart, observers, retry/conflict and single experiment cost. These are authored checks, not passing results. Exact attempt logs, resource stops, source/artifact manifests, known limitations and the next bounded qualification command list are in `~/.local/state/productionize/autophys-sdks-20261105/repair-round-1-core/packet.md` on yuzuquats. Parent custody resumes with fallback task `sdk-core-round-1` blocked on qualification capacity.
-
+The campaign is unfinished and has not been rejudged. Baseline scores below are
+unchanged. Deferred A5/A6/FS01/FS02/PERF01/PERF02 and two T04 research shards remain
+open; none is waived. The completed narrow batch used parent-authorized384MiB,
+proactive aggregate7.85GiB/free13GiB, hard8GiB/free12GiB, preserving prior artifacts
+and the fixed deployed6efe1f3. Exact final resources, identity and task custody
+are in the external native-repair-refreeze packet. Parent owns further remediation
+and rejudge scheduling. The following baseline section is historical evidence.
 
 The operator requires Rust and Python to be analogous. [brief.md](brief.md) maps corresponding capabilities, concepts, formats, defaults, validation/errors and effects, while allowing idiomatic APIs. It also distinguishes intentional API shape differences from unexplained behavior and Python-only tooling. Judge that contract before proposing repairs.
 

@@ -1,4 +1,7 @@
-# Round 1 qualification ran; two native failures remain
+# Round 1 qualification before native repair
+
+Historical assessed state: its two native failures are resolved and bounded
+current evidence is recorded in [round1-native-repair.md](round1-native-repair.md).
 
 Owner yuzuquats, canonical Autophys master; campaign `autophys-sdks-20261105`.
 This continuation tests the implementation in `3bb0db9` and last_wait fix in
