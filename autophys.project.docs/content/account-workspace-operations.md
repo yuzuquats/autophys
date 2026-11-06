@@ -20,11 +20,15 @@ See `deployment.json`, `build-result.json`, `release-qualification.json`, `publi
 
 The exclusive native build window is closed. Its completion receipt at `~/.local/state/productionize/autophys-sdks-20261105/repair-round-1-qualification/deploy-window-completion.json` records 17.805 GiB free at handoff, unchanged native inputs and retained SDK artifacts, and no further auth Cargo/native source or target writes. The SDK owner received the handoff and must freshly check its gates before resuming.
 
-## Profile control refinement — pending deployment
+## Profile control refinement — deployed 2026-11-06
 
 The signed-out server link is now hydrated before the header paints into the same `details > summary.ap-acct-btn > .ap-acct-avatar` structure as the signed-in control. Both use the existing 36 px circular button, hover and focus styling; the anonymous avatar shows a neutral profile silhouette. Sign-in still opens the shared modal, and dismissal restores focus to the summary.
 
-Deno type-checking, a focused browser bundle and the design detector passed. An isolated collaborative-browser check using that actual module plus production server markup/CSS confirmed matching dimensions before and after normal demo sign-in, Enter/Escape handling, focus restoration and a 390 px mobile layout without overflow. Evidence: the deployment scratch entry's `profile-control/qualification.json`. No native source, Cargo target, service or deployed browser bundle was changed by this refinement.
+Deno type-checking, a focused browser bundle and the design detector passed. An isolated collaborative-browser check using that actual module plus production server markup/CSS confirmed matching dimensions before and after normal demo sign-in, Enter/Escape handling, focus restoration and a 390 px mobile layout without overflow. Predeployment evidence: the deployment scratch entry's `profile-control/qualification.json`.
+
+The avatar change (`c0f577a`) and 16 px header gap (`6550d2d`) are deployed in `6efe1f3-web-6550d2d-20261106`. The web tree uses the previous deployed browser baseline plus only `html/routes/account-header.ts` and `html/routes/brand.ts` from those commits; unrelated peer and SDK changes were excluded. The native executable prefix matches the prior qualified release byte for byte. Public health retains native commit `6efe1f3` and reports new web ID `9ecaf8db6ad61d186391fd6522d38c26cc73a36114d45242d30334ea156ff466`.
+
+Live desktop/mobile checks confirmed a 36 px avatar and 16 px gap, sign-in and Escape focus restoration, demo's unchanged 29 read-only records, and Open app navigation. Temporary packaging ran in RAM after the initial disk gate stopped the build. The revised allocation capped disk growth at 48 MiB and stopped before 12.125 GiB free; no native/Cargo build or database migration ran. The prior release and service-unit backup remain retained. Deployment, build identity, allocation and browser receipts are in the same deployment scratch entry under `header-deploy-6550d2d/`.
 
 ## Configure a profile or workspace
 
