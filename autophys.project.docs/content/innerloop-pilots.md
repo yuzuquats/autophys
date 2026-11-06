@@ -13,7 +13,13 @@ The immutable scientific schedule and thresholds remain in [innerloop-experiment
 | Offline lifecycle | existing lifecycle/assets/provider-facade tests | no provider, GPU or live training |
 ```
 
-Decision PILOT-01, agent-chosen, pending operator review: replace raw proposer feedback with a copied report excluding reveal records and evaluator-only fields. Training aggregate score feedback is retained by design; final audit never influences candidate selection. The observed default passed post-outcome reveals into a researcher. Keeping that path would expose hidden physical parameters. Raw evaluator sidecars/workbooks remain unchanged for analysis; this is a cooperative structural boundary, not a hostile-code sandbox. Reverse by reverting the scoped Python change before any confirmation; expected cost one small forward commit, then new review and pilot.
+**Decision PILOT-01: keep filtered feedback.**
+
+**Review status: operator-confirmed.** In the invoked `/open-questions` walkthrough, the operator explicitly answered **"Keep filtered feedback (Recommended)"**. The researcher/proposer receives training scores and action evidence, but no synthetic evaluator truth, reveal records or final-test diagnostics. Full evaluator reports remain available for analysis. This is a cooperative data boundary, not a sandbox.
+
+**Implementation status: implemented** in `sdks/python/src/autophys/research.py` and `sdks/python/src/autophys/autoloop.py`. **Real-path/resume qualification remains open.** This documentation-only decision record adds no test evidence or readiness claim and grants no confirmation-run approval.
+
+**Historical agent choice and reason (initially pending operator review):** replace raw proposer feedback with a copied report excluding reveal records and evaluator-only fields. Training aggregate score feedback is retained by design; final audit never influences candidate selection. The observed default passed post-outcome reveals into a researcher. Keeping that path would expose hidden physical parameters. Raw evaluator sidecars/workbooks remain unchanged for analysis; this is a cooperative structural boundary, not a hostile-code sandbox. Reverse by reverting the scoped Python change before any confirmation; expected cost one small forward commit, then new review and pilot.
 
 Decision PILOT-02, agent-chosen, pending operator review: execute a hashed, read-only owner-produced Python source capsule on rwc-dev-01, without moving its consumer refs while the parent finalizer uses them. This qualifies the recorded capsule, not an arbitrary checkout HEAD. The alternative is to wait for consumer-ref custody to transfer. Reversal costs only selecting the same committed source after safe fast-forward; no data migration.
 
