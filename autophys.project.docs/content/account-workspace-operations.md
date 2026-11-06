@@ -38,6 +38,12 @@ Live checks confirmed both labels and destinations, app opening, documentation n
 
 A follow-up anchor alignment issue was found: a fresh Docs load from the app can clamp scrolling while the documentation is still empty, leaving the section 398 px below the viewport top. Fix `d8c9841` scrolls after documentation binding. Its package is retained at `6efe1f3-web-d8c9841-20261106`, but is **inactive**: activation stopped when unrelated host allocation reduced free space to about 11.8 GiB, below the mandatory 12 GiB floor and the 12.125 GiB activation guard. Receipts are under `docs-deploy-d8c9841/`, including `activation-held.json`. Restore capacity and recheck live identity before activating it; retain the prior releases, source and backups.
 
+## Same-page Docs scrolling — pending deployment
+
+The Docs click handler now scrolls the visible landing section smoothly in the current document, preserving query parameters and adding `#docs` without a reload. Repeated clicks do not add duplicate history entries. Reduced-motion preference uses immediate scrolling. Modified clicks and navigation from the workbench retain the normal `/#docs` link.
+
+Type-checking and the design detector passed. Focused preview checks confirmed mouse and keyboard activation reached the section at viewport top without replacing the browser document or losing `?view=pitch`. Evidence: `profile-control/docs-same-page-qualification.json` in the deployment scratch entry. This source change remains undeployed alongside the earlier anchor-rendering fix; the host capacity gate remains in force.
+
 ## Configure a profile or workspace
 
 All examples run on the server with its intended server database. Replace the paths and account addresses deliberately. Mapping, key, profile and seed commands preview by default; add `--apply` only to apply that specific operation. Opening an older server database applies the additive metadata schema migration even for `workspace list`; dry-run refers to the requested mapping/profile/import.

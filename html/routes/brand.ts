@@ -51,6 +51,23 @@ queueMicrotask(() => {
     docs.className = "ap-docs-link";
     docs.href = "/#docs";
     docs.textContent = "Docs";
+    docs.addEventListener("click", event => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const section = document.getElementById("docs");
+      // The workbench hides the landing document; keep its ordinary /#docs
+      // navigation. On the landing, scroll without reloading or dropping queries.
+      if (!section || document.documentElement.dataset.ckStage !== "landing") return;
+      event.preventDefault();
+      if (location.hash !== "#docs") {
+        const url = new URL(location.href);
+        url.hash = "docs";
+        history.pushState(history.state, "", url);
+      }
+      section.scrollIntoView({
+        block: "start",
+        behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
+      });
+    });
     tryNow.before(docs);
   }
 
