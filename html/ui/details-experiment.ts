@@ -35,8 +35,10 @@ export function experimentDetailsMarkup(model: ExperimentDetailsModel, classes: 
   }));
   const core = sections.filter(s => !supporting.has(s.heading ?? "")).map(s =>
     `<section class="ap-experiment-section">${s.heading ? `<h4 class="ap-sub">${esc(s.heading)}</h4>` : ""}${s.body}</section>`).join("");
-  const extra = sections.filter(s => supporting.has(s.heading ?? "")).map(s => disclosure(s.heading!, s.heading!, s.body, rows)).join("");
-  const provenance = model.footnote ? disclosure("provenance", "Provenance", `<p class="ap-footnote">${esc(model.footnote)}</p>`, rows) : "";
+  const extra = sections.filter(s => supporting.has(s.heading ?? "")).map(s =>
+    `<section class="ap-experiment-section"><h4 class="ap-sub">${esc(s.heading!)}</h4>${s.body}</section>`).join("");
+  const provenance = model.footnote ? `<section class="ap-experiment-section"><h4 class="ap-sub">Provenance</h4><p class="ap-footnote">${esc(model.footnote)}</p></section>` : "";
+  const context = extra || provenance ? disclosure("supporting", "Supporting details", extra + provenance, rows) : "";
   const decision = model.decision ? `<div class="${esc([classes.decision ?? "", "ap-decision"].filter(Boolean).join(" "))}">${model.decision.map(a => buttonMarkup(a, classes)).join("")}</div>` : "";
   const actions = model.actions?.length ? `<div class="ap-actions${model.actions.length === 1 ? " ap-one" : ""}">${model.actions.map(a => buttonMarkup(a, classes)).join("")}</div>` : "";
   return `<section class="ap-experiment-card" aria-labelledby="ap-experiment-name">
@@ -46,9 +48,13 @@ export function experimentDetailsMarkup(model: ExperimentDetailsModel, classes: 
       <p class="ap-experiment-source" id="ap-experiment-source">${esc(model.experiment.caption)}</p>
       <p class="${esc(status)}" id="ap-status" role="status">${esc(model.status.text)}</p>
     </header>
-    <div class="ap-experiment-body">${core}</div>
-    ${model.experiment.notice ? `<section class="ap-experiment-notice" role="alert"><h4 class="ap-sub">Not saved</h4>${blockMarkup({ kind: "text", text: model.experiment.notice, tone: "danger" })}</section>` : ""}
-    ${decision || actions ? `<footer class="ap-experiment-actions">${decision}${actions}</footer>` : ""}
-    ${extra}${provenance}
+    <div class="ap-experiment-scroll">
+      <div class="ap-experiment-body">${core}</div>
+      ${context}
+    </div>
+    ${decision || actions || model.experiment.notice ? `<footer class="ap-experiment-actions">
+      ${model.experiment.notice ? `<section class="ap-experiment-notice" role="alert"><h4 class="ap-sub">Not saved</h4>${blockMarkup({ kind: "text", text: model.experiment.notice, tone: "danger" })}</section>` : ""}
+      ${decision}${actions}
+    </footer>` : ""}
   </section>`;
 }

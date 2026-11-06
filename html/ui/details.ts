@@ -63,6 +63,7 @@ export class AutophysDetails {
     const key = !model.placeholder && isExperimentDetails(model) ? model.experiment.key : null;
     const sameExperiment = key !== null && key === this.experimentKey;
     // Read every row synchronously: redraw can precede native toggle events.
+    const scrollTop = sameExperiment ? this.host.querySelector(".ap-experiment-scroll")?.scrollTop ?? 0 : 0;
     const rows: Record<string, boolean> = {};
     let focusedRow: string | null = null;
     if (sameExperiment) for (const row of this.host.querySelectorAll<HTMLDetailsElement>("[data-ap-experiment-row]")) {
@@ -75,6 +76,8 @@ export class AutophysDetails {
     this.experimentKey = key;
     this.host.innerHTML = detailsMarkup(model, this.classes, rows);
     this.hydrate(this.host);
+    const scroll = this.host.querySelector(".ap-experiment-scroll");
+    if (scroll) scroll.scrollTop = scrollTop;
     if (focusedRow !== null) this.host.querySelector<HTMLElement>(`[data-ap-experiment-row="${CSS.escape(focusedRow)}"] > summary`)?.focus({ preventScroll: true });
     if (!field || key !== null && !sameExperiment) return;
     const next = this.host.querySelector<HTMLInputElement>(`[${ATTR.name}="${CSS.escape(field)}"]`);

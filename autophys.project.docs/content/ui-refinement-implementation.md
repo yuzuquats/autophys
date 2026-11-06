@@ -92,3 +92,28 @@ synchronous disclosure state, summary focus, caret, record reset, native click,
 read-only/invalid approval, draft precision suppression, escaped save failure,
 and phone overflow. This is fixture validation, with no live record writes.
 The iteration is committed locally; no new source push or deployment requested.
+
+
+## Single supporting accordion and anchored decisions — 2026-11-05
+
+The operator superseded UI-approval-rows-1: Approve/Reject/Report belong at the
+bottom, with one accordion in the middle. Preview, So far and Provenance now
+share one Supporting details disclosure. The std-round card fills the existing
+Details area. Its identity header and action footer remain stationary while
+settings, expected result and supporting evidence scroll between them. Proposal
+layout styles are scoped by card presence; generic Details keeps its existing
+shell scrolling. No cookbook or rail source changed.
+
+The footer also keeps escaped save failures visible, with long errors locally
+scrollable. Same-record rerenders retain middle scroll, accordion state, summary
+focus and field caret. Selecting a different record resets middle state.
+Frozen cached typechecks and 32 scoped Deno tests passed. Real-component browser
+checks cover desktop 1280×800, phone 390×844 and short phone 390×500: footer
+position through expansion/scrolling, long errors, read-only/invalid approval,
+stale precision suppression, focus/caret, and Configuration scrolling restoration.
+
+Before/after bundles are retained on yuzuquats under
+fleet/evidence/autophys-ux-flow/implementation-20261105/approval-footer/.
+Matched captures, validation.json and comparison.html are at the same workspace
+evidence path on rwc-01. Validation used deterministic fixture data and no live
+writes. This iteration is committed locally; no new push or deployment requested.
