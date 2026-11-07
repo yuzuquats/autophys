@@ -423,8 +423,10 @@ on rwc-dev-01.
 
 ## M-4 image input (Python), 2026-11-04
 
-- **Opt-in only:** `ModelSpec(images=True)`, `bench --images`,
-  `research --images` (policy) and `--researcher-images`. Without it every
+- **Opt-in only:** `ModelSpec(images=True)`; the former Python
+  `bench --images`, `research --images` and `--researcher-images` flags
+  went with the Python CLI (cli.md CLI-11), and the Rust binary refuses
+  them. Without it every
   request is byte-identical to before, so cassettes and hashes are
   unchanged. Opting in asserts that the model accepts images: whether Muse
   Spark and Wonder do is not verified. Known text-only models and the
