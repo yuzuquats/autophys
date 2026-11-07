@@ -176,7 +176,13 @@ fn connect_with_json_keeps_stdout_one_object() {
     let mut first = String::new();
     stderr.read_line(&mut first).unwrap();
     let code = first.trim().rsplit(' ').next().unwrap().to_string();
-    assert!(d.admin(&["pair", "approve", &code]).status.success());
+    let approve = d.admin(&["pair", "approve", &code]);
+    assert!(
+        approve.status.success(),
+        "first stderr line {first:?}; approve: {}{}",
+        String::from_utf8_lossy(&approve.stdout),
+        String::from_utf8_lossy(&approve.stderr)
+    );
     let out = connect.wait_with_output().unwrap();
     assert!(out.status.success());
     let doc: Value = serde_json::from_slice(&out.stdout).unwrap();
