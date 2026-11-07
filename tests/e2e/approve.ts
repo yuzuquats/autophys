@@ -3,7 +3,7 @@
 // a proposal -> Approve, on the fixtures Source. Fails on any console error,
 // page error, failed request or HTTP status >= 400.
 //
-//   deno run -A e2e/approve.ts <autophys-binary> <screenshot-dir> [-- <serve args>]
+//   deno run -A tests/e2e/approve.ts <autophys-binary> <screenshot-dir> [-- <serve args>]
 //
 // The script owns both children: the server is killed by PID and the browser
 // (launched with pipe: true, so it exits with this process) is closed in a

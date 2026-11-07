@@ -57,7 +57,7 @@ deno check --config html/deno.json html/routes/index.root.ts
 autophys build-web --out <owned-output>/web/autophys
 ```
 
-The maintained daemon/browser drivers in `e2e/` use isolated SDK-seeded daemons.
+The maintained daemon/browser drivers in `tests/e2e/` use isolated SDK-seeded daemons.
 Test suites require separate authorization when the operator requests build-only
 validation. See [contributor setup](../CONTRIBUTING.md) and
 [the UI implementation record](../autophys.project.docs/content/ui.md).

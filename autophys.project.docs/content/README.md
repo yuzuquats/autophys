@@ -36,7 +36,7 @@ src/server.rs             loopback refusal, serve (embedded app, dev build + wat
 html/routes/              index.anon.html + index.root.ts (the composition root) + content.ts
 html/ui/  html/client/    imported from tento-autophys-js (tento 645a1155c)
 html/tsconfig.json        esbuild aliases into vendor/tento; html/deno.json the same for deno test
-e2e/approve.ts            serve on 4795, deck -> app -> proposal -> Approve, headless
+tests/e2e/approve.ts      serve on 4795, deck -> app -> proposal -> Approve, headless
 ops/                      deploy.sh (release build + build-web + pack), release.sh (archives), unit template
 vendor/                   hackathon/lib's vendored tento tree
 sdks/python/              the SDK (sdk.md)

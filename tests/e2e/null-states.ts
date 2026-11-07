@@ -1,6 +1,6 @@
 /** Exercise null states against isolated empty + SDK-seeded daemons.
  * Network fault/delay and project-only responses are deliberate browser test inputs.
- * usage: deno run -A html/e2e/null-states.ts <seeded-base> <empty-base> <shots>
+ * usage: deno run -A tests/e2e/null-states.ts <seeded-base> <empty-base> <shots>
  */
 import type { Page, HTTPRequest } from "npm:puppeteer-core@22.7.1";
 const [base, emptyBase, out] = Deno.args;

@@ -12,7 +12,7 @@ display metadata and asks people to approve experiments.
 | `html/client/`, `html/ui/` | wire models, presentation derivation and browser views |
 | `tests/` | daemon contracts and shared workbook/numerical conformance inputs |
 | `examples/` | the example projects `autophys new --example` writes, embedded in the binary (`build.rs`), each with its own README |
-| `e2e/`, `html/e2e/` | optional daemon/browser flows; use a temporary collection and a spare port |
+| `tests/e2e/` | optional daemon/browser flows; use a temporary collection and a spare port |
 | `plugins/` | optional agent integrations; Muse is not a daemon dependency |
 | `train/sft/` | optional policy dataset, provider and evaluation workers, embedded in the binary for `autophys train` |
 | `ops/package.sh` | Linux single-file packaging with an explicit destination |

@@ -2,7 +2,7 @@
 /**
  * The layering of html/: ui/ and client/ each have their own boundary test; this one checks
  * that routes/ (the composition root) is the only place they meet the cookbook, and that
- * nothing else holds code at the top. e2e/ holds browser drivers run against a served page;
+ * nothing else holds code at the top. The browser drivers in tests/e2e/ run against a served page;
  * nothing imports them and they import no layer.
  */
 import { assert, assertEquals } from "jsr:@std/assert@1";
@@ -13,11 +13,12 @@ Deno.test("layers: only ui/, client/ and routes/ hold code; only routes/ imports
   const top: string[] = [];
   for await (const e of Deno.readDir(ROOT)) top.push(e.isDirectory ? `${e.name}/` : e.name);
   assertEquals(top.filter((n) => n.endsWith(".ts")).sort(), ["boundary.deno.test.ts"]);
-  assertEquals(top.filter((n) => n.endsWith("/")).sort(), ["client/", "e2e/", "routes/", "ui/"]);
-  for await (const e of Deno.readDir(new URL("e2e/", ROOT))) {
+  assertEquals(top.filter((n) => n.endsWith("/")).sort(), ["client/", "routes/", "ui/"]);
+  const E2E = new URL("../tests/e2e/", ROOT);
+  for await (const e of Deno.readDir(E2E)) {
     if (!e.name.endsWith(".ts")) continue;
-    const src = await Deno.readTextFile(new URL(`e2e/${e.name}`, ROOT));
-    assert(!/from\s+["']\.\.\/(ui|client|routes)\//.test(src), `e2e/${e.name} imports a layer`);
+    const src = await Deno.readTextFile(new URL(e.name, E2E));
+    assert(!/html\/(ui|client|routes)\//.test(src), `tests/e2e/${e.name} imports a layer`);
   }
   const root = await Deno.readTextFile(new URL("routes/index.root.ts", ROOT));
   for (const spec of ["@tento-cookbook/lib.ts", "../client/store.ts", "../client/controller.ts", "../ui/sidebar.ts"]) assert(root.includes(`"${spec}"`), `the root imports ${spec}`);

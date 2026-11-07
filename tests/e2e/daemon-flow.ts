@@ -6,7 +6,7 @@
 //             a device pairing is approved in the UI (O-3) and its key then attaches the
 //             experiment's data, which C sees arrive over SSE.
 //
-//   deno run -A html/e2e/daemon-flow.ts <base-url> <screenshot-dir>
+//   deno run -A tests/e2e/daemon-flow.ts <base-url> <screenshot-dir>
 //
 // The daemon must hold exactly one investigation with one proposal awaiting approval (the
 // SDK seed in ui.md). Fails on any console error, page error, failed request or HTTP status

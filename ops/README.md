@@ -46,6 +46,6 @@ use SSH, or need Lona. Existing private reverse-proxy/fleet registrations live
 outside this repo and are not required for standalone operation.
 
 `check-flow.ts` is the older cookbook browser flow, kept at its existing path
-for callers; current flows also live under `e2e/` and `html/e2e/`. They require
+for callers; current flows also live under `tests/e2e/`. They require
 a browser and configured isolated state. Do not point a write/approval driver
 at your live collection as a substitute for a test fixture.

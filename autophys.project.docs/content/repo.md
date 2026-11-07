@@ -69,8 +69,7 @@ with no folder beside it (B-1).
 │   ├── ui/                              view-only components (was tento-autophys-js/ui)
 │   └── client/                          store · derive · controller · fixtures
 ├── sdks/python/                         pyproject.toml, src/autophys/, tests/
-├── tests/                               actix contract tests for /api/v1
-├── e2e/                                 real daemon + SDK benchmark + headless Approve
+├── tests/                               actix contract tests for /api/v1; e2e/ holds the browser drivers
 ├── ops/                                 deploy.sh, systemd/autophys.service.in (current template path)
 └── autophys.project.docs/content/       the one record
 ```
@@ -102,7 +101,7 @@ tento/tento-autophys-js       ui + client + root
 tento/tento-autophys-py       SDK
 experiments/autophys          B1 server + shell, its own record
 == after: one repo, one shared dependency
-autophys/{src, html, sdks/python, tests, e2e, ops, autophys.project.docs}
+autophys/{src, html, sdks/python, tests, ops, autophys.project.docs}
 tento/tento-cookbook-js       the shell, reusable by any app
 ```
 
@@ -208,7 +207,7 @@ web types, so the switch only touches `http.rs`.
 cargo test                                   # daemon + actix contract tests
 deno test --allow-read html/                 # ui + client boundary/render/flow tests
 python -m pytest sdks/python                 # SDK, against the fake server
-e2e/run                                      # real daemon + SDK benchmark + headless approve
+tests/e2e/approve.ts                         # real daemon + SDK benchmark + headless approve
 autophys serve                               # dev: bundles html/routes, rebuilds on change
 autophys build-web                           # deploy: prebuilt route tree
 ops/deploy.sh                                # build-web + pack into one bin, install, restart unit
