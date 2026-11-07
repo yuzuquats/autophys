@@ -1,7 +1,7 @@
 # Examples: templates, demos and backtests
 
 Status: draft spec, rev 2 (2026-11-07). Not implemented. Every choice
-EX-1..EX-9 is an operator decision (2026-11-07; EX-4..EX-8 answered in the
+EX-1..EX-10 is an operator decision (2026-11-07; EX-4..EX-8 answered in the
 /open-questions walkthrough that day). EX-7 and EX-8 differ from the agent's
 recommendation; see the table.
 
@@ -219,22 +219,33 @@ CI runs dataset cases from a pre-populated cache of that directory.
 
 The existing commands read backtest examples instead of the hard-coded
 tables. `bench`, `research` and `train eval` select what to run with one
-repeatable flag, `--example TARGET`, the same flag `new` takes (EX-9):
+repeatable flag, `--example REF`, the same flag `new` takes (EX-9). A
+reference is `[SCHEME:]SOURCE[#CASE]` (EX-10), after Node's `node:fs`,
+Nix flake references (`github:owner/repo#pkg`) and Terraform module
+sources:
 
-- `--example NAME` is a built-in example (for `bench`, every case in it);
-  `--example NAME/CASE` is one case.
-- A target starting with `./`, `../`, `/` or `~`, or naming an existing
-  `*.backtest` folder, is a path; anything after the folder is a case.
+| Scheme | Source | Shorthand |
+|---|---|---|
+| `builtin:` | an example built into the binary: `builtin:battery` | a bare name, `battery` |
+| `path:` | a local example folder: `path:cells/a17.backtest` | anything starting with `./`, `../`, `/` or `~` |
+| `github:`, `https:` (later) | `github:owner/repo/dir/x.backtest@REV`, an archive URL | none |
+
+- `#CASE` picks one case; without it `bench` runs every case of the example.
+  The first `#` ends the source, so a case never collides with path
+  segments. `new` refuses a `#CASE`: it sets up whole examples.
+- A bare name is always `builtin:`, never a local folder. If a local folder
+  of that name exists, the error or note says to use `./NAME` or `path:`.
 - No `--example` runs every built-in backtest (today's default suite). An
-  unknown target fails and lists what exists; nothing is guessed.
+  unknown reference fails and lists what exists; nothing is guessed, and an
+  unknown scheme is an error.
 - Case names are local to their example, so a bare example name is never
   ambiguous:
 
   | Today's `--case` | Becomes |
   |---|---|
-  | `battery`, `battery-short-only`, `battery-biased` (planted) | `battery/full`, `battery/short-only`, `battery/biased` |
-  | `oscillator`, `oscillator-free-only` | `oscillator/full`, `oscillator/free-only` |
-  | `thermal`, `thermal-short-only` | `thermal/full`, `thermal/short-only` |
+  | `battery`, `battery-short-only`, `battery-biased` (planted) | `battery#full`, `battery#short-only`, `battery#biased` |
+  | `oscillator`, `oscillator-free-only` | `oscillator#full`, `oscillator#free-only` |
+  | `thermal`, `thermal-short-only` | `thermal#full`, `thermal#short-only` |
 
 - `--case OLD-NAME` keeps working through that table with a deprecation
   note on stderr, and the loader maps old names in recorded replay files and
@@ -245,9 +256,9 @@ autophys examples                                  # every example, grouped by k
 autophys new DIR --example battery-fit             # demo (aliases keep v0.1.1 names working)
 autophys new DIR --example blank --lang rust       # template
 autophys bench --example battery --policy scripted --seeds 5
-autophys bench --example battery/short-only --example oscillator \
+autophys bench --example builtin:battery#short-only --example oscillator \
     --policy reason --model muse-spark-1.3 --route meta --record run.jsonl
-autophys bench --example ./my-cell.backtest --policy reason --model … --replay run.jsonl
+autophys bench --example ./my-cell.backtest#cell-a17 --policy reason --model … --replay run.jsonl
 ```
 
 - **One run** is (case, seed, policy, model spec, playbook), and produces one
@@ -289,7 +300,8 @@ autophys bench --example ./my-cell.backtest --policy reason --model … --replay
 | EX-5 | In a dataset case the model's experiment menu is exactly the recorded runs; the score is held-out prediction error, plus parameter error only when truth is known | operator, 2026-11-07 (recommended option) | offer the full menu and refuse unrecorded requests (realistic, but mostly measures refusal handling) | change the runner's catalogue; small |
 | EX-6 | Phased: phase 1 backtests use only the built-in simulators (`battery_ecm`, `oscillator`, `thermal`), so both SDKs run every case; phase 3 adds a backtest's own Python simulator through the `autophys.worker` that `mcp` uses | operator, 2026-11-07 (recommended option) | built-in only; or own simulator first | resequence the plan; small |
 | EX-7 | Backtest datasets are always downloaded by URL and sha256 into the data dir, never embedded; demos keep bundled data; CI uses a cache | operator, 2026-11-07 (agent recommended embedding files under 1 MB) | embed small files; embed everything | allow embedding again; small |
-| EX-9 | `bench`, `research` and `train eval` drop `--case` for one repeatable `--example TARGET` (`example`, `example/case`, or a `.backtest` path with an optional `/case`); case names become local (`battery/full`, …); old `--case` names, replay files and results map through a table | operator, 2026-11-07 (agent recommended a positional `TARGET`; operator chose the flag, matching `new --example`) | positional `bench [TARGET...]`; or keeping `--example` and `--case` as two levels | rename the flag; small while `bench` is a developer tool |
+| EX-10 | `--example` takes `[SCHEME:]SOURCE[#CASE]`: `builtin:` (bare names) and `path:` (`./`, `../`, `/`, `~`) now, `github:`/`https:` later; `#` separates the case, replacing EX-9's `/`, which would collide with path segments in remote sources | operator, 2026-11-07 (recommended option) | schemes with `/` for cases; no schemes (EX-9 as first recorded) | change the separator or drop the prefixes; small until references appear in stored results and docs |
+| EX-9 | `bench`, `research` and `train eval` drop `--case` for one repeatable `--example TARGET` (`example`, `example/case` — separator superseded by EX-10's `#` — or a `.backtest` path with an optional case); case names become local (`battery#full`, …); old `--case` names, replay files and results map through a table | operator, 2026-11-07 (agent recommended a positional `TARGET`; operator chose the flag, matching `new --example`) | positional `bench [TARGET...]`; or keeping `--example` and `--case` as two levels | rename the flag; small while `bench` is a developer tool |
 | EX-8 | The demo (`closed_loop.py` `HIDDEN_CELL`, `battery_fit.py` `TRUTH`) and `battery.backtest`'s baseline truth are separate copies with no required link or check | operator, 2026-11-07 ("separate copies is fine"; this replaced an interrupted "load from backtest" answer; agent recommended separate copies plus a CI equality check) | a CI check that the values match; or loading the demo's cell from the backtest | add the check; trivial |
 
 ## Plan
