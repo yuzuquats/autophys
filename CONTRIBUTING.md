@@ -6,9 +6,9 @@ for bundled SQLite. Linux x86_64 is the Round 2 verification host. Native
 macOS packaging still needs its own qualification. No fleet tool, sibling
 checkout, private hostname or service registration is needed.
 
-The license declarations currently disagree and vendored library grants are
-incomplete. [The dependency notes](vendor/README.md) identify the release
-blocker; these instructions do not grant redistribution permission.
+autophys is dual licensed MIT OR Apache-2.0 ([NOTICE](NOTICE)); contributions
+are accepted under the same terms. [The dependency notes](vendor/README.md)
+cover the vendored libraries and the parts that keep their own licenses.
 
 ## Python SDK and examples
 

@@ -8,7 +8,8 @@ version = "0.1.0"
 description = "AI-guided calibration of physics simulators: fits, identifiability, experiment design, agent loop"
 readme = "README.md"
 requires-python = ">=3.10"
-license = "Apache-2.0"
+license = "MIT OR Apache-2.0"
+license-files = ["LICENSE-MIT", "LICENSE-APACHE"]
 dependencies = ["numpy>=1.24", "scipy>=1.10"]
 
 [project.optional-dependencies]

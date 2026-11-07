@@ -1,4 +1,4 @@
-# Vendored dependencies and release blockers
+# Vendored dependencies
 
 `vendor/tento/` is source committed into Autophys, not a Git submodule,
 symlink or reference to `../tento`. Cargo and both browser import maps resolve
@@ -32,14 +32,22 @@ for the entire current snapshot. The exact bytes are identified by the committed
 `vendor/tento` Git tree and the package lock, not by an unrelated host checkout's
 HEAD. Preserve this history and the patched crates' attribution.
 
-The root and Rust SDK declare `license = "UNLICENSED"` and `publish = false`;
-Python declares `Apache-2.0` but has no included top-level license text. Most
-vendored Tento crates omit license fields/text. These are **release blockers**:
-the owner must choose the product license, confirm rights to redistribute the
-vendored source and provide the appropriate grants/notices/provenance. No license
-choice, source publication or permission to redistribute is implied by this
-cleanup. Broader extraction/pruning of upstream libraries is a separate design
-change; it must retain their actual transitive closure and existing notices.
+## License
+
+The operator chose the product license on 2026-11-07: autophys is dual
+licensed **MIT OR Apache-2.0** (root `LICENSE-MIT`, `LICENSE-APACHE` and
+`NOTICE`). The root and Rust SDK manifests and the Python SDK declare that
+expression. As copyright holder, the operator licensed this `vendor/tento`
+copy under the same terms; the grant lives in the root `NOTICE`, so the
+vendored bytes are unchanged. (The pinned manifest that
+`vendor/patches/autophys-bundler-context/verify.py` checks already predates
+the 2026-11-05 vendor commits de82de9, 6e71f05 and 139bcd8, so the check
+fails on 95bccea too; re-pinning it is separate work.) Crates there that already declare MIT keep that declaration. The
+patched crates under `vendor/tento/vendor/` and the prebuilt editor bundles
+in `html/routes/js/` keep their own licenses (`licenses/web-editors.txt`).
+Release archives add `THIRD-PARTY-LICENSES.txt` for every compiled crate.
+Broader extraction/pruning of upstream libraries is a separate design change;
+it must retain their actual transitive closure and existing notices.
 
 ## App-owned bundler context patch (Round 2)
 

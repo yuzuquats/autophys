@@ -106,3 +106,11 @@ this record I81f7837f7c0ee007ff06.
 | FC-1r2 | Rev 2 of fit-curves-and-truth.md: Rust's fit curves match Python's within numerical tolerance (`rtol=1e-5, atol=1e-8`), not byte for byte, because two independently solved ODEs cannot agree to the byte; `reveal` records stay byte-for-byte identical | **operator, 2026-11-04** (relayed) | no code change; `sdks/rust` conformance tests keep the tolerance for curves and exact bytes for reveal |
 | GT-1 | Synthetic and benchmark investigations append a `reveal` record after `outcome`: per identifiable quantity, the truth, the estimate, the ratio, the ±1σ ratio and whether it is within tolerance. The UI shows a Ground truth page. An SDK refuses to resume an investigation once it has a reveal. Reason: this keeps the truth hidden from the agent by construction. Strongest alternative: show the truth only in the offline `research.py` scores, which needs no new record kind but leaves no page to look at. Reversal: drop the kind and the endpoint; there is no migration, because older workbooks have no reveal | **agent-chosen, pending operator review** | `synthetic.py`, `bench.py`, daemon kinds and endpoint, `html/client` |
 ```
+
+## License and first release, 2026-11-07
+
+| ID | Decision | Source | State |
+| --- | --- | --- | --- |
+| LIC-1 | autophys is dual licensed **MIT OR Apache-2.0**: root `LICENSE-MIT`, `LICENSE-APACHE` and `NOTICE`; the root and Rust SDK manifests and the Python SDK (with its own copies of both files) declare that expression. Before: Cargo said UNLICENSED, Python said Apache-2.0 with no text, and vendor/README.md listed this as a release blocker. | operator, 2026-11-07 (chose the recommended dual license) | implemented |
+| LIC-2 | The `vendor/tento` copy of the operator's Tento libraries is licensed under the same terms through the root `NOTICE`. Vendored bytes stay unchanged (no license fields are added to their manifests); crates that already declare MIT keep it. Patched third-party crates and the prebuilt editor bundles keep their own licenses (`licenses/web-editors.txt`). | operator, 2026-11-07 (granted for the autophys copy only; tento's own repository is unchanged) | implemented |
+

@@ -239,9 +239,13 @@ Start with [CONTRIBUTING.md](CONTRIBUTING.md) and the
 [repository map](docs/README.md). The daemon, browser and SDKs build from this
 checkout; no Lona account, fleet CLI or sibling repository is required.
 Optional model providers, Muse and systemd deployment have separate setup.
-Licensing must be reconciled before an open-source release; see
-[vendor/README.md](vendor/README.md).
 
 Working on battery characterization? Real-cell CSVs and OCV tables, HPPC
 run/rest budgets, and feedback on the R1/C1 trade-off would help ground the
 examples in lab practice.
+
+## License
+
+Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or
+[MIT license](LICENSE-MIT) at your option; see [NOTICE](NOTICE) for the
+vendored and third-party parts.

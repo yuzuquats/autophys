@@ -3,7 +3,8 @@
 Current contributor setup and layout are in [CONTRIBUTING.md](../../CONTRIBUTING.md)
 and [docs/README.md](../../docs/README.md). The bounded OSS portability batch is
 implemented and awaiting independent review; [oss-layout.md](oss-layout.md)
-records exact committed-export checks, retained dependencies and license blockers.
+records exact committed-export checks and retained dependencies; the license
+blockers it lists were resolved on 2026-11-07 (decisions LIC-1, LIC-2).
 The earlier skeleton/restructure description below remains historical context.
 
 Status: rev 4 (2026-11-04). The repo is restructured per the operator's
