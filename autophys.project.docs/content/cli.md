@@ -1,6 +1,7 @@
 # autophys CLI: one command, the Rust binary; the SDKs are libraries
 
-Status: phase A published, 2026-11-06; phase B implemented locally, 2026-11-06. Thread autophys/run.
+Status: phase A published, 2026-11-06; phase B and the CLI-11 worker (option A)
+implemented locally, 2026-11-06. Thread autophys/run.
 
 ## Why
 
@@ -21,6 +22,7 @@ gives them the fit, the loop or pairing without cloning the repo.
 | CLI-1 | The only CLI is the Rust `autophys` binary. `sdks/python` and `sdks/rust` are libraries for developers: the core primitives to import and use in code. The CLI drives them. No SDK ships a console script. | operator, 2026-11-06 |
 | CLI-2 | The CLI sets up a new project for Python or Rust. | operator, 2026-11-06 |
 | CLI-3 | A new project depends on the SDK through a git dependency on the private repo `github.com/yuzuquats/autophys`. The SDKs will be published later; the scaffold then switches to registry versions. | operator, 2026-11-06 |
+| CLI-11 | Operator 2026-11-06: option A — Rust mcp drives a Python simulator worker for module:project refs. `autophys mcp --project mypkg.module:project` spawns `python -m autophys.worker` from the Python SDK (an internal protocol endpoint, no console script) and calls the user's simulator through it; tools, fits and records stay in the binary. Replaces the phase B refusal recorded under that id. | operator, 2026-11-06 |
 ```
 
 ## Agent choices (pending operator review)
@@ -36,7 +38,8 @@ gives them the fit, the loop or pairing without cloning the repo.
 | CLI-9 | The pinned REV is `AUTOPHYS_SOURCE_COMMIT`, a new build.rs variable: `AUTOPHYS_COMMIT` when the release scripts stamp it, else `git rev-parse HEAD` at build time, else empty (then `new` asks for `--sdk-rev`). `--version` and `/api/healthz` keep reporting `AUTOPHYS_COMMIT` or `dev`. `--sdk-repo GIT_URL` overrides the repository (testing unpublished commits; a Python `file:///PATH` is written as `file://localhost/PATH`, which pip requires). `AUTOPHYS_PYTHON` overrides `python3` for the venv. | stamp HEAD into `BuildInfo` too, so `--version` names the commit of every build | one build.rs line and the docs |
 | CLI-10 | *Superseded by phase B (CLI-11).* Without the console script, the Muse plugin's source manifest and `build.py` default launch `python3 -m autophys.cli mcp`; a generated bundle still uses the explicit venv interpreter. `mcp` stays in the Python SDK (it serves the user's Python simulator). | keep a console script just for `mcp` | restore the entry point and the plugin default |
 | CLI-12 | The removal gate (CLI-5: "reproduce their replayed results") was applied as *decisions match*: cases, steps, requests, diagnoses, accepted playbooks, journals and costs identical, solver counts and scores close (bench `simulations` up to 11%, scores up to 6.4%, research `mean_log_error` up to 11.8% under a 50% tolerance). `parity.sh` did not fail on the strict bench comparator, which exits 1. | require bit-identical scores, which means porting the Python solver's exact evaluation sequence | restore the Python modules from `c086d5b` until exact parity |
-| CLI-11 | Phase B ports `mcp` to the Rust binary and the plugin launches `autophys mcp`. It serves the built-in projects (`--project battery_ecm`); a Python `module:project` reference, which the Python server loaded from the user's simulator, is refused. `bench --images` and `research --researcher-images` are refused too: plots need the Python renderer. | keep a Python `mcp` for user-defined Python simulators (CLI-10 as written) | restore `autophys.mcp` from `c086d5b` and the plugin's `--python` launcher |
+| CLI-13 | The CLI-11 worker. Protocol `autophys-worker` version 1: newline-delimited JSON, a startup frame with the simulator schema, display declaration, Project settings, the Python `source_hash` and `config_version`, then `simulate` requests answered in order; user stdout is redirected to stderr. The reusable client is `autophys::worker` in `sdks/rust` (a `FunctionSimulator` whose calls go to the child, serialized by a mutex, child killed on drop); the spawn policy is `src/devtools/python.rs`. Interpreter: `--python`, else `python` in `.autophys-mcp.json` (relative to the working directory), else `AUTOPHYS_PYTHON`, else `python3`. The module is imported with `--root` first on `sys.path`, the worker keeping the server's working directory and environment, as the former Python server did. The rebuilt project must reproduce the worker's config version or the server refuses to start, so records always match what Python writes. User exceptions arrive as `SimulationError` (a fit treats them as a failed trial point, as in Python); a crash or protocol fault fails the tool call with the reference and the worker's stderr tail. The protocol version must match exactly. | embed CPython in the binary (PyO3), or keep a separate Python `mcp` server | the pipe is internal to one commit's binary and SDK; changing the transport touches `worker.py`, `worker.rs` and their tests only |
+| CLI-11 (phase B part) | `bench --images` and `research --researcher-images` stay refused: plots need the Python renderer. The operator's CLI-11 decision covers the MCP simulator only. | render plots through the same worker | add a `plot` op to the worker |
 ```
 
 ## Phases
@@ -178,10 +181,57 @@ Validation at `872dc0e`: `cargo test --workspace --locked --no-fail-fast`
 277 passed, 0 failed, 2 ignored. Python SDK `pytest -q` after the removal:
 610 passed, 5 skipped.
 
+### CLI-11 worker result (2026-11-06)
+
+Local commits (Project: autophys): `Ia2cb7216c33d9f154763dd1515897f49`
+(`python -m autophys.worker` in the Python SDK and the `autophys::worker`
+client in `sdks/rust`, with their tests and the `tests/fixtures/python_lab`
+module), `Id704a8346e917a5cd05824e25fef5ca1` (`autophys mcp --project
+mypkg.module:project` and `--python`, the plugin builder's `--python`, the
+integration tests) and `Ia1b6c8d2ae50643e50d7df3f6ee32c21` (docs and this
+record). Choices the decision left open are CLI-13.
+
+Parity, offline, debug binary against the Python `mcp` server exported at
+`c086d5b`, both serving the fixture `decaylab:project` (y = A exp(-k t)
+with a deterministic 0.01 sin(7t) wobble on the CSVs) through the same 12
+JSON-RPC requests (initialize, tools/list, describe, import, fit,
+identifiability, rank, propose, status, an unknown proposal, report, ping).
+Scripts and outputs are in `~/.cache/autophys/cli-11-worker/` on
+rwc-dev-01 (`parity.sh`, `parity-summary.txt`).
+
+- The config version is identical (`sha256:adf95e6a…d03279`), so the
+  records carry the same simulator source hash and configuration as the
+  Python server wrote. Tool list and schemas identical.
+- Decisions identical: identified `[A, k]` in both; ranking order
+  `short, long`; proposal `proposed` with 10 outlook simulations; report
+  `awaiting_data` with the same reason; 84 simulations in both
+  investigations.
+- Numbers close: fit A 2.0047488991068105 (Python) vs 2.0047488991045577
+  (Rust), relative 1.1e-12; k 0.8024507992590093 vs 0.8024507992566328,
+  3.0e-12; chi2_per_n 0.46441672251031135 vs 0.4644167225103122; nfev 66
+  in both; condition number 3.18579307312659 vs 3.185793073128619; rank
+  scores agree to about 1e-11 relative.
+- The only differing responses are the workbook paths (two output
+  directories) in describe, propose and status.
+
+Validation: `cargo test --workspace --locked --no-fail-fast` with
+`AUTOPHYS_PYTHON` set to the venv: 282 passed, 0 failed, 2 ignored (277
+before, plus 3 `worker` unit tests and 2 `devtools` tests; without an SDK
+interpreter those 2 skip with a message). Python SDK `pytest -q` with
+`AUTOPHYS_RUST_BIN`: 619 passed, 5 skipped (7 new worker tests, 2 new
+plugin tests). `cargo clippy --workspace --all-targets` reports nothing in
+the new code.
+
 ## Remaining work
 
-- Operator review of CLI-11: user-defined Python simulators can no longer
-  be served over MCP, and plot images are refused.
+- Operator review of CLI-13 (the worker's protocol and spawn policy) and of
+  the plot-image refusal kept from phase B.
+- `bench` and `research` run the planted synthetic cases only; they take no
+  project reference, so the worker is not wired into them. A user's
+  simulator in those loops would need a case definition (truth parameters,
+  experiments) as well as the simulator.
+- A worker that hangs (an infinite loop in user code, or on import) blocks
+  the MCP call; there is no per-call timeout.
 - Exact solver parity, if wanted: the remaining differences come from the
   fit's evaluation count, not from loop logic.
 - `autophys investigations` prints whole investigation records in text

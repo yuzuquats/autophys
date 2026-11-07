@@ -119,7 +119,7 @@ python3 plugins/muse-autophys/build.py \\
 muse plugins install "$HOME/.cache/autophys-muse-plugin"
 \`\`\`
 
-The server is part of the \`autophys\` binary and serves the built-in \`battery_ecm\` project; it cannot import a Python simulator, so a \`mypkg.module:project\` reference is refused. Set \`--root\` to the directory that holds your measurement CSVs. Muse starts the bundled server itself; running \`autophys mcp\` by hand starts a separate server and does not configure the plugin.
+The server is part of the \`autophys\` binary. Besides the built-in \`battery_ecm\` project it serves your own Python simulator: pass \`--project mypkg.module:project\` (a \`Project\` or an \`@ap.simulator\` in a module under \`--root\`) and \`--python\` with an interpreter that has the SDK and your lab's dependencies. The binary runs the fit, identifiability, ranking and proposals and calls your simulator in that interpreter for each evaluation; records carry its source hash exactly as the Python SDK writes them. Set \`--root\` to the directory that holds your measurement CSVs and lab module. Muse starts the bundled server itself; running \`autophys mcp\` by hand starts a separate server and does not configure the plugin.
 
 Tools: \`describe_project\`, \`import_measurements\`, \`fit\`, \`identifiability\`, \`rank_experiments\`, \`propose_experiment\`, \`status\`, \`attach_data\` and \`report\`. There is no approve or reject tool: experiments are approved here, in the browser.
 
@@ -447,6 +447,7 @@ $A research --output-dir ./research-1 --replay policy.jsonl --researcher-replay 
 $A autoloop --output-dir ./autoloop-1 --policy fake-reasoner --researcher heuristic --max-iterations 3
 $A export-trajectories ./research-1 --output decisions.jsonl
 $A mcp --project battery_ecm --workbook ~/autophys
+$A mcp --project mylab.cell:project --python ./.venv/bin/python --workbook ~/autophys
 \`\`\`
 
 Errors go to stderr with exit status 2. Plot images (\`--images\`, \`--researcher-images\`) need the Python SDK's plot renderer and are refused by the binary; a Python program can still attach plots through the SDK's reasoners.
@@ -457,7 +458,7 @@ Errors go to stderr with exit status 2. Plot images (\`--images\`, \`--researche
 | \`research\` | Improve a playbook. \`--output-dir DIR\` is required and must not exist yet. The defaults are one iteration, one job, the \`reason\` policy and the API researcher. The options are listed below. |
 | \`autoloop\` | Improve a playbook until a stop condition, with a journal and resumable state. It takes the \`research\` options plus the ones listed below. \`--output-dir DIR\` is required, and must be new unless you pass \`--resume\`. |
 | \`export-trajectories SOURCE\` | Write each recorded reasoner decision in a workbook, collection or research directory as one JSONL line. \`--output FILE\` (a new file; default stdout). |
-| \`mcp\` | Serve the calibration tools over MCP stdio (stdout carries only protocol messages). \`--project\` (the built-in \`battery_ecm\`, the default), \`--workbook\` (a collection directory, an \`.ap-workbook\` file or a daemon URL), \`--investigation ID\` (resume one), \`--root DIR\` (default the current directory), \`--playbook\`, \`--config FILE\` (default \`.autophys-mcp.json\`). |
+| \`mcp\` | Serve the calibration tools over MCP stdio (stdout carries only protocol messages). \`--project\` (the built-in \`battery_ecm\`, the default, or \`mypkg.module:project\`: a \`Project\` or \`@ap.simulator\` imported from \`--root\`), \`--python PATH\` (the interpreter for a \`module:project\`; default \`AUTOPHYS_PYTHON\`, else \`python3\`), \`--workbook\` (a collection directory, an \`.ap-workbook\` file or a daemon URL), \`--investigation ID\` (resume one), \`--root DIR\` (default the current directory), \`--playbook\`, \`--config FILE\` (default \`.autophys-mcp.json\`, which may set \`project\`, \`workbook\`, \`investigation\`, \`root\`, \`playbook\` and \`python\`). |
 
 The benchmark cases are \`oscillator-free-only\`, \`oscillator\`, \`thermal-short-only\`, \`thermal\`, \`battery-short-only\` and \`battery\`. The planted \`battery-biased\` case runs only when named.
 

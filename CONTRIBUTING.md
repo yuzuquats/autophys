@@ -26,7 +26,9 @@ NumPy and SciPy are required; plotting is optional, and a project made with
 installs its own plotting environment. The SDK installs no console script:
 `autophys` is the Rust binary, which also runs the developer commands (`bench`,
 `research`, `autoloop`, `export-trajectories` and the Muse plugin's `mcp`
-server). Their tests are `cargo test --test devtools`; the Muse plugin's
+server). Their tests are `cargo test --test devtools`; its tests of `mcp`
+over a Python lab simulator run when `AUTOPHYS_PYTHON` (else `python3`) has
+NumPy and SciPy, and skip with a message otherwise. The Muse plugin's
 protocol tests in `sdks/python/tests/test_muse_plugin.py` run with
 `AUTOPHYS_RUST_BIN` set (and the `mcp` client package). Pure local/scripted work needs
 no model account. Provider routes require explicit configuration and keys;

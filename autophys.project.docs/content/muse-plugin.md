@@ -3,8 +3,10 @@
 Status: offline integration built, rev 3, 2026-11-06. The MCP server is the
 Rust `autophys mcp` command (one-CLI plan phase B, [cli.md](cli.md)); it
 replaced the Python `autophys.mcp` server with the same nine tools, input
-schemas and JSON results. Live Meta execution awaits an operator-approved
-token budget; the echo provider does not exercise MCP.
+schemas and JSON results. Since the CLI-11 decision (operator, 2026-11-06)
+it serves a user's Python simulator through a Python SDK worker. Live Meta
+execution awaits an operator-approved token budget; the echo provider does
+not exercise MCP.
 
 An engineer opens Muse Code in a lab repo and asks it to calibrate a cell
 from `pulses.csv`. Muse imports measurements, fits the local simulator,
@@ -28,8 +30,11 @@ lab repo / pulses.csv → Muse Code + canonical playbook
 ```
 
 The process runs next to the measurements. It serves the built-in
-`battery_ecm` project; since rev 3 a Python `mypkg.module:project` reference
-is refused, because the binary cannot import Python code (cli.md CLI-11).
+`battery_ecm` project or a Python `mypkg.module:project` reference (a
+`Project` or `@ap.simulator` under `--root`): for the latter it starts
+`python -m autophys.worker` in the interpreter named by `--python`
+(default `AUTOPHYS_PYTHON`, else `python3`) and calls the simulator there,
+while the fit, SVD, ranking and proposals run in the binary (cli.md CLI-11).
 Neither the daemon nor Muse runs numerical code on behalf of the server. The
 optional SSH bridge keeps the same stdio transport while running `autophys
 mcp` on a remote host (the hackathon's split-host setup).
@@ -65,7 +70,9 @@ approve any experiment. The source bundle can also be installed directly
 with `muse plugins install plugins/muse-autophys`: it launches
 `autophys mcp` from PATH and reads `.autophys-mcp.json` in the working
 directory. The supported keys are `project`, `workbook`, `root`,
-`investigation` and `playbook`. CLI flags override the file.
+`investigation`, `playbook` and `python`. CLI flags override the file.
+`build.py --project mylab.cell:project --python /lab/.venv/bin/python`
+writes both into the generated bundle's configuration.
 
 Tell Muse:
 

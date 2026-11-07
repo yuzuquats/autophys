@@ -87,8 +87,11 @@ the saved key. Proposals are approved in the browser, or with
 
 `muse plugins install plugins/muse-autophys` installs a native bundle with the
 canonical playbook. Its stdio MCP server is the Rust `autophys mcp` command
-(`autophys` on PATH, or a binary named with `build.py --autophys`); it serves
-the built-in `battery_ecm` project and cannot import a Python simulator.
+(`autophys` on PATH, or a binary named with `build.py --autophys`). It serves
+the built-in `battery_ecm` project, or your simulator with `--project
+mypkg.module:project` (a `Project` or `@ap.simulator`): the binary starts this
+SDK as a worker (`python -m autophys.worker`, internal) in the interpreter
+named by `--python` and calls the simulator there.
 Experiments are approved in the browser; there is no approve or reject MCP
 tool. See the [demo and verification guide](../../autophys.project.docs/content/muse-plugin.md).
 

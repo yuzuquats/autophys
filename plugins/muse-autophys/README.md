@@ -32,9 +32,29 @@ python3 plugins/muse-autophys/build.py --output /tmp/my-autophys-plugin \
 muse plugins install /tmp/my-autophys-plugin
 ```
 
-The server is the Rust binary and serves the built-in `battery_ecm` project;
-it cannot import a Python simulator (`--project mypkg.module:project` is
-refused). No simulator is loaded in the daemon.
+For your own simulator use `--project mypkg.module:project` (a `Project` or
+an `@ap.simulator` in a module under `--root`) and `--python` naming an
+interpreter that has the autophys SDK and the lab's dependencies (default
+`AUTOPHYS_PYTHON`, else `python3`):
+
+```sh
+python3 plugins/muse-autophys/build.py --output /tmp/my-autophys-plugin \
+  --autophys "$PWD/target/release/autophys" \
+  --project mylab.cell:project --python /absolute/path/to/lab/.venv/bin/python \
+  --workbook /absolute/path/to/autophys-books --root /absolute/path/to/lab
+```
+
+`autophys mcp` then starts that interpreter as a simulator worker
+(`python -m autophys.worker`, an internal pipe protocol, not a command to run
+yourself), imports the module with the lab root first on `sys.path`, and calls
+your simulator for every evaluation; fitting, identifiability, ranking and
+proposals run in the binary. Records carry the Python simulator's source hash
+and the Python SDK's config version, so they match what a Python program
+writes to the same workbook. Your `print` output goes to the server's stderr.
+In `.autophys-mcp.json` the same is
+`{"project":"mylab.cell:project","python":".venv/bin/python",...}`; a relative
+`python` path is resolved from the working directory. The local process
+imports trusted lab code; no simulator is loaded in the daemon.
 
 The builder copies `sdks/python/src/autophys/playbooks/default/SKILL.md`
 byte for byte and records its sha256 in playbook.json. Rebuild after a canonical
@@ -43,6 +63,8 @@ maps the strategy to the nine MCP tools.
 
 CSV battery defaults are time (seconds), current (A, positive discharging), and
 voltage (V); specify sigma as `{"v":0.002}` for a 2 mV noise standard deviation.
+For other projects the defaults are a `time` column plus one column named
+after each output; pass `columns` to map different headers.
 The built-in path supports the declared discharge_1A, pulse_2A and pulse_train
 waveforms and grids. A mismatched waveform or time grid fails, so real lab
 experiments must be declared accurately rather than guessed.
@@ -53,7 +75,8 @@ and offline verification receipt.
 For measurements on another machine, the builder accepts an optional SSH stdio
 bridge. Configure your own SSH host and remote paths; the `autophys` binary
 must already be installed there (`--autophys` names it; default `autophys` on
-the remote PATH):
+the remote PATH), and for a Python project the SDK too (`--python` names the
+remote interpreter):
 
 ```sh
 python3 plugins/muse-autophys/build.py --output /tmp/autophys-ssh-plugin \
