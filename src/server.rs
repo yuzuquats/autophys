@@ -29,6 +29,7 @@ pub const USAGE: &str =
        autophys new DIR --lang python|rust [--example battery-fit|blank] [--name NAME]
                     [--no-install] [--sdk-rev REV]
        autophys connect [URL] [--name NAME] | whoami [--json]
+       autophys bench | research | autoloop | export-trajectories | mcp   (developer tools; autophys <command> --help)
        autophys pair list | pair approve <CODE> | pair deny <CODE>
        autophys keys list [--json] | keys revoke <KEY_ID>
        autophys users list | users add <EMAIL> [--read-only] | users set <EMAIL> --read-only|--read-write|--demo|--no-demo | users remove <EMAIL>

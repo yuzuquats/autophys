@@ -8,12 +8,15 @@
 //! `autophys pair | keys | db | users`; [`accounts`] and [`login`] are the
 //! invite-only browser sign-in of `serve --login`. On the user's side,
 //! [`device`] is `autophys connect | whoami` and [`scaffold`] is
-//! `autophys new`.
+//! `autophys new`. [`devtools`] holds the developer commands on the SDK
+//! primitives: `bench`, `research`, `autoloop`, `export-trajectories` and
+//! the stdio MCP server `mcp`.
 
 pub mod accounts;
 pub mod admin;
 pub mod app;
 pub mod device;
+pub mod devtools;
 pub mod embedded;
 pub mod error;
 pub mod http;

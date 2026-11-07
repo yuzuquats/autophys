@@ -17,6 +17,11 @@ pub fn scripts() -> Scripts<()> {
         .add_command(new)
         .add_command(connect)
         .add_command(whoami)
+        .add_command(bench)
+        .add_command(research)
+        .add_command(autoloop)
+        .add_command(export_trajectories)
+        .add_command(mcp)
         .add_subcommand("pair", pair_commands())
         .add_subcommand("keys", keys_commands())
         .add_subcommand("users", users_commands())
@@ -186,6 +191,59 @@ async fn whoami(_: (), args: Option<Vec<String>>) -> tento_sh::Result<Value> {
         user_args(args),
         &mut std::io::stdout(),
     ))
+}
+
+/// Like [`user_result`] for the developer commands: the failure goes to
+/// stderr and ends the process with its status.
+fn devtool(result: Result<(), crate::devtools::Failure>) -> tento_sh::Result<Value> {
+    let _ = std::io::stdout().flush();
+    match result {
+        Ok(()) => Ok(Value::Null),
+        Err(failure) => {
+            eprintln!("autophys: {}", failure.message);
+            std::process::exit(failure.code.into());
+        }
+    }
+}
+
+#[command(
+    name = "bench",
+    description = "Run the synthetic benchmark (offline): [--jobs N] [--seeds 3] [--case NAME]... [--policy scripted|fake-reasoner|reason]... [--model M --route meta|baseten|lane|muse --effort E --playbook P --replay FILE --record FILE] [--json]"
+)]
+async fn bench(_: (), args: Option<Vec<String>>) -> tento_sh::Result<Value> {
+    devtool(crate::devtools::bench::command(user_args(args), &mut std::io::stdout()))
+}
+
+#[command(
+    name = "research",
+    description = "Evaluate and improve playbook strategies (offline by default): --output-dir DIR [--playbook P] [--case NAME]... [--train-seeds 0,1,2] [--heldout-seeds 3,4] [--iterations 1] [--policy reason|scripted|fake-reasoner] [--researcher api|muse|scripted|heuristic] [--edit SKILL.md]... [--replay FILE] [--researcher-replay FILE] [--jobs N]"
+)]
+async fn research(_: (), args: Option<Vec<String>>) -> tento_sh::Result<Value> {
+    devtool(crate::devtools::research::command(user_args(args), &mut std::io::stdout()))
+}
+
+#[command(
+    name = "autoloop",
+    description = "Research until a stop condition, with a journal and resume: --output-dir DIR [research flags] [--resume] [--max-iterations 10] [--patience 3] [--max-usd X] [--max-wall-s S] [--acceptance auto|lexicographic|bootstrap] [--repeats 1] [--alpha 0.05]"
+)]
+async fn autoloop(_: (), args: Option<Vec<String>>) -> tento_sh::Result<Value> {
+    devtool(crate::devtools::autoloop::command(user_args(args), &mut std::io::stdout()))
+}
+
+#[command(
+    name = "export-trajectories",
+    description = "Export recorded reasoner decisions as JSONL: SOURCE (a directory or .ap-workbook) [--output NEW_FILE]"
+)]
+async fn export_trajectories(_: (), args: Option<Vec<String>>) -> tento_sh::Result<Value> {
+    devtool(crate::devtools::trajectories::command(user_args(args), &mut std::io::stdout()))
+}
+
+#[command(
+    name = "mcp",
+    description = "Serve the calibration tools over MCP stdio (Muse Code plugin): [--project battery_ecm] [--workbook DIR|FILE|URL] [--investigation ID] [--root DIR] [--playbook SKILL.md] [--expected-playbook-sha256 HEX] [--config FILE]; reads .autophys-mcp.json in the working directory"
+)]
+async fn mcp(_: (), args: Option<Vec<String>>) -> tento_sh::Result<Value> {
+    devtool(crate::devtools::mcp::command(args.unwrap_or_default()))
 }
 
 fn description(root: &Scripts<()>) -> Value {
