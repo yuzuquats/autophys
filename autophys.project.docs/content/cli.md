@@ -1,7 +1,9 @@
 # autophys CLI: one command, the Rust binary; the SDKs are libraries
 
-Status: phase A published, 2026-11-06; phase B and the CLI-11 worker (option A)
-implemented locally, 2026-11-06. Thread autophys/run.
+Status: phases A and B and the CLI-11 worker (option A) published,
+2026-11-06 (origin `ef602bf..b06da66`, then `b06da66..2a75846`). Agent
+choices CLI-4..CLI-9 and CLI-12..CLI-14 await operator review. Thread
+autophys/run.
 
 ## Why
 
@@ -130,7 +132,7 @@ reproduce on the plan commit): `deno test` type-checks
 
 ## Phase B result (2026-11-06)
 
-Local commits (Project: autophys) above the phase A publication:
+Published in `b06da66..2a75846` (Project: autophys), above phase A:
 `I9ea207fdf2c2df9388057ddb90237547` (the `sdks/rust` primitives: heuristic
 brains and typed playbook settings, `external_step`, `measurements`, the
 `muse` route, the planted synthetic cases, Python-compatible JSON, random
@@ -183,7 +185,7 @@ Validation at `872dc0e`: `cargo test --workspace --locked --no-fail-fast`
 
 ### CLI-11 worker result (2026-11-06)
 
-Local commits (Project: autophys): `Ia2cb7216c33d9f154763dd1515897f49`
+Published in the same range (Project: autophys): `Ia2cb7216c33d9f154763dd1515897f49`
 (`python -m autophys.worker` in the Python SDK and the `autophys::worker`
 client in `sdks/rust`, with their tests and the `tests/fixtures/python_lab`
 module), `Id704a8346e917a5cd05824e25fef5ca1` (`autophys mcp --project
@@ -262,10 +264,30 @@ reruns and the full rerun). `pytest -q` of `test_worker.py`,
 passed, 1 skipped (the live smoke). `cargo clippy --workspace --all-targets`
 reports nothing in the changed code.
 
+## Publication (2026-11-06)
+
+`b06da66..2a75846`, 11 commits, pushed as a fast-forward on the operator's
+"sink and push". Three Opus review rounds: round 1 (phase B as first
+committed) asked for the CLI-11 decision, the parity wording, the
+`sdk.md` `--images` lines and the plugin's PATH step; round 2
+(with the worker) found integer-typed Python labs refused (fixed by
+`Iee8d57257061b809b70fe547eeaabe7b`); round 3 was ready. At `2a75846`:
+`cargo test --workspace` 288 passed, 0 failed, 2 ignored, with the worker
+tests running; Python SDK `pytest` 620 passed, 5 skipped. Receipt:
+rwc-dev-01 `~/workspace/fleet/evidence/autophys/onecli-phaseb-publication-20261106.md`.
+
 ## Remaining work
 
-- Operator review of CLI-13 (the worker's protocol and spawn policy) and of
-  the plot-image refusal kept from phase B (CLI-14).
+- Operator review of the agent choices: CLI-4..CLI-9 (phase A, see the
+  table), CLI-12 (removal gate applied as "decisions match"), CLI-13 (the
+  worker's protocol and spawn policy) and CLI-14 (plot images refused).
+- For remote workbooks, a Python lab's display bytes are still
+  canonicalised from Rust's float values, so integer-typed display
+  settings may hash differently from what the Python SDK writes.
+- Minor, from the last review: the worker's pre-handshake line read is
+  bounded only after a full line arrives; any non-empty `CI` (even
+  `CI=false`) makes the worker tests required; external Rust code can no
+  longer build a `Project { .. }` literal.
 - `bench` and `research` run the planted synthetic cases only; they take no
   project reference, so the worker is not wired into them. A user's
   simulator in those loops would need a case definition (truth parameters,

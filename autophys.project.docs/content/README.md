@@ -23,7 +23,7 @@ verification pages.
 
 The approved [account-backed workspace spec](account-workspace.md) defines local/cloud profiles, read-only demo sign-in, workspace isolation and a walkthrough of the active account. [Operations and qualification](account-workspace-operations.md) records the implementation, migration commands, isolated evidence and production rollout boundary.
 
-[cli.md](cli.md) is the plan for one CLI: the Rust `autophys` binary drives both SDKs, sets up new Python or Rust projects (`autophys new`) and replaced `examples/battery_fit/run.sh` and the Python console script (CLI-1..CLI-10). Phase A (`new`, `connect`, `whoami`, `templates/`) is implemented; phase B moves the developer commands.
+[cli.md](cli.md) is the plan for one CLI: the Rust `autophys` binary drives both SDKs, sets up new Python or Rust projects (`autophys new`) and replaced `examples/battery_fit/run.sh` and the Python console script (CLI-1..CLI-14). Both phases are published: phase A (`new`, `connect`, `whoami`, `templates/`) and phase B (`bench`, `research`, `autoloop`, `export-trajectories` and `mcp` in Rust; `mcp` runs a user's Python simulator through `python -m autophys.worker`).
 
 ## Shape after the restructure
 
