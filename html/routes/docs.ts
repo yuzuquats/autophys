@@ -47,7 +47,7 @@ When parameters are tied together, autophys ranks the candidate experiments by F
 
 ## Quick start: fit a battery cell
 
-You need the \`autophys\` command, Python 3.10 or newer and git. This local fit needs no account or API key.
+You need the \`autophys\` command ([download a release](https://github.com/yuzuquats/autophys/releases) for Linux x86_64 or Apple silicon macOS, or build it as under Reference), Python 3.10 or newer and git. This local fit needs no account or API key.
 
 \`\`\`sh
 autophys new my-cell --lang python    # the battery-fit template, with its own .venv
@@ -333,7 +333,7 @@ thermal fake-reasoner validated requested=pulse
 
 The \`autophys\` command is one Rust binary built from \`src/\`. It sets up projects (\`new\`), connects a device to a daemon (\`connect\`, \`whoami\`), serves this workbench and the \`/api/v1\` endpoints, manages browser accounts, device keys and workbooks, reviews proposals, and drives policy training. It also runs the developer tools on the SDK primitives: \`bench\`, \`research\`, \`autoloop\`, \`export-trajectories\` and \`mcp\`, the Muse plugin's MCP server. The Python and Rust SDKs are libraries and install no command.
 
-Building from source needs Rust (edition 2024) and a C toolchain, and building the browser app needs Deno 2; the Tento sources it uses are vendored in the repository. From the repository root:
+Each [GitHub release](https://github.com/yuzuquats/autophys/releases) has a prebuilt \`autophys\` for Linux x86_64 (glibc 2.39 or newer) and Apple silicon macOS, with this workbench built in. Building from source needs Rust (edition 2024) and a C toolchain, and building the browser app needs Deno 2; the Tento sources it uses are vendored in the repository. From the repository root:
 
 \`\`\`sh
 # The autophys command (Rust)
@@ -345,7 +345,7 @@ python3 -m venv .venv
 .venv/bin/pip install -e sdks/python
 \`\`\`
 
-The examples below use \`./target/release/autophys\` for the \`autophys\` command. If \`CARGO_TARGET_DIR\` is set, the daemon binary is under that directory instead of \`./target\`. On Linux, \`ops/package.sh --out /absolute/path/to/autophys\` builds and packs one executable that serves its embedded app without Deno or the checkout.
+The examples below use \`./target/release/autophys\` for the \`autophys\` command. If \`CARGO_TARGET_DIR\` is set, the daemon binary is under that directory instead of \`./target\`. On Linux, \`ops/package.sh --out /absolute/path/to/autophys\` builds and packs one executable that serves its embedded app without Deno or the checkout; \`ops/release.sh --out-dir DIR\` builds the release archive for this host, Linux or macOS.
 
 ### The autophys command
 

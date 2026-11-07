@@ -34,13 +34,10 @@ python3 -m venv .venv
 .venv/bin/python -m pip install .
 ```
 
-The `autophys` commands below assume the binary is on your PATH (or use its
-full path, such as `REPO/target/release/autophys` in the autophys checkout you built). The SDK dependency is a git
-URL on a private GitHub repository: fetching it over https needs GitHub
-credentials (a credential helper or token); with SSH-only access, rewrite the
-URL to `ssh://git@github.com/yuzuquats/autophys` or set
-`git config --global url."git@github.com:".insteadOf "https://github.com/"`,
-and for Cargo also `CARGO_NET_GIT_FETCH_WITH_CLI=true`.
+The `autophys` commands below assume the binary is on your PATH, from a
+[release](https://github.com/yuzuquats/autophys/releases) or built from
+source (or use its full path). The SDK dependency is a git URL on the public
+GitHub repository, fetched over https with no credentials.
 
 ## 1. Run the demo
 

@@ -2,11 +2,12 @@
 
 autophys meets engineers inside the agent they already use.
 
-Build the `autophys` binary, put it on PATH, then install this native Muse
-Code 1.4.14 bundle:
+Put the `autophys` binary on PATH, from a
+[release](https://github.com/yuzuquats/autophys/releases) or built from this
+checkout, then install this native Muse Code 1.4.14 bundle:
 
 ```sh
-cargo build --release --bin autophys
+cargo build --release --bin autophys                            # or use a release's autophys
 install -m 755 target/release/autophys ~/.local/bin/autophys   # any PATH dir
 muse plugins install ./plugins/muse-autophys
 ```

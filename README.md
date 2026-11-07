@@ -24,34 +24,42 @@ held-out data.
 ## Install a release
 
 Each [release](https://github.com/yuzuquats/autophys/releases) has an archive
-for Linux x86_64 (`x86_64-unknown-linux-gnu`) and Apple silicon macOS
-(`aarch64-apple-darwin`). It holds one `autophys` executable with the web app
-built in, plus the license notices; nothing else needs installing to serve.
+for Linux x86_64 (`x86_64-unknown-linux-gnu`, glibc 2.39 or newer, such as
+Ubuntu 24.04 or Debian 13) and Apple silicon macOS (`aarch64-apple-darwin`).
+It holds one `autophys` executable with the web app built in, plus the license
+notices. Serving needs nothing else installed.
 
 ```sh
-curl -fLO https://github.com/yuzuquats/autophys/releases/download/v0.1.1/autophys-v0.1.1-x86_64-unknown-linux-gnu.tar.gz
-tar -xzf autophys-v0.1.1-x86_64-unknown-linux-gnu.tar.gz
-cd autophys-v0.1.1-x86_64-unknown-linux-gnu
-./autophys serve          # the workbench and API on http://127.0.0.1:4794
+target=x86_64-unknown-linux-gnu      # or aarch64-apple-darwin on an Apple silicon Mac
+curl -fLO https://github.com/yuzuquats/autophys/releases/download/v0.1.1/autophys-v0.1.1-$target.tar.gz
+tar -xzf autophys-v0.1.1-$target.tar.gz
+install -m 755 autophys-v0.1.1-$target/autophys ~/.local/bin/autophys   # or any directory on your PATH
+autophys serve          # the workbench and API on http://127.0.0.1:4794
 ```
 
-Put that `autophys` on your PATH and use it wherever the examples below build
-one. The macOS executable is ad-hoc signed, not notarized: a copy downloaded
-with a browser is quarantined, so download with `curl` as above or run
+The macOS executable is ad-hoc signed, not notarized. A copy downloaded with a
+browser is quarantined, so download with `curl` as above, or run
 `xattr -d com.apple.quarantine autophys`.
 
-## Try the battery example
-
-You need Rust (to build the `autophys` command), Python 3.10 or newer, and Git.
-`autophys new` creates a project whose SDK dependency is pinned to the commit
-the command was built from; this local example needs no account or provider key.
+To build from source instead, you need Rust:
 
 ```sh
 git clone https://github.com/yuzuquats/autophys.git
 cd autophys
 cargo build --release --locked --bin autophys
-./target/release/autophys new ../my-cell --lang python   # the battery-fit project, with its own .venv
-cd ../my-cell
+export PATH="$PWD/target/release:$PATH"
+```
+
+## Try the battery example
+
+You need the `autophys` command on your PATH ([installed](#install-a-release)
+or built from source), Python 3.10 or newer, and Git. `autophys new` creates a
+project whose SDK dependency is pinned to the commit the command was built
+from. This local example needs no account or provider key.
+
+```sh
+autophys new my-cell --lang python   # the battery-fit project, with its own .venv
+cd my-cell
 .venv/bin/python battery_fit.py data/short.csv --out short.png
 ```
 
@@ -79,17 +87,14 @@ proposes the next test, you approve it, and its data is attached and refitted.
 The result is then checked against data the fit never saw. It all runs
 locally, with no account, server or model key.
 
-**1. Build the CLI and create a project.** If you already followed the
-battery example above, run only the `export PATH` line from its `autophys`
-checkout, `cd` back to `my-cell`, and go on to step 2.
+**1. Create a project.** With `autophys` on your PATH
+([install a release](#install-a-release) or build it from source), create the
+project. If you already followed the battery example above, `cd` to its
+`my-cell` and go on to step 2.
 
 ```sh
-git clone https://github.com/yuzuquats/autophys.git
-cd autophys
-cargo build --release --locked --bin autophys
-export PATH="$PWD/target/release:$PATH"
-autophys new ../my-cell --lang python
-cd ../my-cell
+autophys new my-cell --lang python
+cd my-cell
 ```
 
 `autophys new` copies the battery-fit template and creates its Python
