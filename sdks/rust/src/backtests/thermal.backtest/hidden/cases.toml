@@ -1,0 +1,25 @@
+# Hidden from every policy: the system the model must discover.
+[truth]
+C = 500.0
+R = 2.0
+
+[noise]
+sigma = { T = 0.05 }
+
+[[test]]
+name = "pulse_15W"
+kind = "pulse"
+power = 15.0
+on = 900.0
+duration = 4000.0
+rate = 0.1
+
+[case.short-only]
+combos = { C = { C = 1.0 } }
+expected_non_identified = ["R"]
+note = "Over 120 s of a 1000 s time constant the response is nearly linear in t/C; R only bends it."
+
+[case.full]
+combos = { C = { C = 1.0 }, R = { R = 1.0 } }
+expected_non_identified = []
+note = "Over 120 s of a 1000 s time constant the response is nearly linear in t/C; R only bends it."

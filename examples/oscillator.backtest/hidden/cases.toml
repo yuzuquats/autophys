@@ -1,0 +1,33 @@
+# Hidden from every policy: the system the model must discover.
+[truth]
+m = 2.0
+c = 0.8
+k = 15.0
+
+[noise]
+sigma = { x = 0.01 }
+
+[[test]]
+name = "sine_0.3Hz"
+duration = 10.0
+rate = 100.0
+kind = "sine"
+amplitude = 1.5
+freq = 0.3
+
+[[test]]
+name = "step_1N"
+duration = 10.0
+rate = 100.0
+kind = "step"
+amplitude = 1.0
+
+[case.free-only]
+combos = { "c/m" = { c = 1.0, m = -1.0 }, "k/m" = { k = 1.0, m = -1.0 } }
+expected_non_identified = ["m", "c", "k"]
+note = "A free response depends only on c/m and k/m: scaling m, c, k together is invisible."
+
+[case.full]
+combos = { m = { m = 1.0 }, c = { c = 1.0 }, k = { k = 1.0 } }
+expected_non_identified = []
+note = "A free response depends only on c/m and k/m: scaling m, c, k together is invisible."

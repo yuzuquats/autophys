@@ -1,0 +1,24 @@
+# A backtest manifest: see autophys.project.docs/content/examples.md.
+# This file is what the model is told. hidden/cases.toml holds the truth
+# and the held-out test experiments; it is never shown to a policy.
+kind = "backtest"
+title = "Thermal RC: discover C and R"
+summary = "A short heating step pins down the heat capacity but barely the thermal resistance."
+languages = []
+
+[system]
+model = "thermal_rc"
+
+[[case]]
+name = "short-only"
+id = "thermal-short-only"
+budget = { max_experiments = 0 }
+train = ["step_short"]
+validation = [{ name = "step_short_5W", kind = "step", power = 5.0, duration = 120.0, rate = 1.0 }]
+
+[[case]]
+name = "full"
+id = "thermal"
+budget = { max_experiments = 2 }
+train = ["step_short"]
+validation = [{ name = "step_short_5W", kind = "step", power = 5.0, duration = 120.0, rate = 1.0 }]

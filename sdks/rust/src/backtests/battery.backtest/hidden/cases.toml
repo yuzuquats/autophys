@@ -1,0 +1,35 @@
+# Hidden from every policy: the system the model must discover.
+[truth]
+R0 = 0.025
+R1 = 0.045
+C1 = 1600.0
+
+[noise]
+sigma = { v = 0.002 }
+
+[[test]]
+name = "unseen_train"
+kind = "pulse_train"
+current = 1.5
+on = 40.0
+off = 60.0
+duration = 500.0
+rate = 1.0
+capacity_ah = 2.5
+soc0 = 0.9
+
+[case.short-only]
+combos = { R0 = { R0 = 1.0 }, C1 = { C1 = 1.0 } }
+expected_non_identified = ["R1"]
+note = "A 6 s pulse against a 72 s RC time constant resolves the instantaneous I R0 drop and initial I/C1 slope; R1 needs a longer polarization and relaxation trace."
+
+[case.full]
+combos = { R0 = { R0 = 1.0 }, R1 = { R1 = 1.0 }, C1 = { C1 = 1.0 } }
+expected_non_identified = []
+note = "A 6 s pulse against a 72 s RC time constant resolves the instantaneous I R0 drop and initial I/C1 slope; R1 needs a longer polarization and relaxation trace."
+
+[case.biased]
+bias = { v = 0.01 }
+combos = { R0 = { R0 = 1.0 }, R1 = { R1 = 1.0 }, C1 = { C1 = 1.0 } }
+expected_non_identified = []
+note = "A 6 s pulse against a 72 s RC time constant resolves the instantaneous I R0 drop and initial I/C1 slope; R1 needs a longer polarization and relaxation trace."

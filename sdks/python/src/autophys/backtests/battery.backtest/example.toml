@@ -1,0 +1,37 @@
+# A backtest manifest: see autophys.project.docs/content/examples.md.
+# This file is what the model is told. hidden/cases.toml holds the truth
+# and the held-out test experiments; it is never shown to a policy.
+kind = "backtest"
+title = "Battery 1RC: discover R0, R1 and C1"
+summary = "A cell behind a cycler. A short pulse fixes the ohmic drop and the initial polarization slope; R1 needs a longer polarization and relaxation trace."
+languages = []
+
+[system]
+model = "battery_ecm"
+# Each catalog experiment costs setup_hours plus its duration in test hours.
+experiment_cost = { setup_hours = 1.0 }
+
+[[case]]
+name = "short-only"
+id = "battery-short-only"
+budget = { max_experiments = 0, max_test_hours = 3.0 }
+train = [{ name = "pulse_short", kind = "pulse", current = 2.0, on = 6.0, duration = 25.0, rate = 32.0, capacity_ah = 2.5, soc0 = 0.9 }]
+validation = [{ name = "pulse_short_1A", kind = "pulse", current = 1.0, on = 6.0, duration = 25.0, rate = 32.0, capacity_ah = 2.5, soc0 = 0.9 }]
+
+[[case]]
+name = "full"
+id = "battery"
+budget = { max_experiments = 2, max_test_hours = 3.0 }
+train = [{ name = "pulse_short", kind = "pulse", current = 2.0, on = 6.0, duration = 25.0, rate = 32.0, capacity_ah = 2.5, soc0 = 0.9 }]
+validation = [{ name = "pulse_short_1A", kind = "pulse", current = 1.0, on = 6.0, duration = 25.0, rate = 32.0, capacity_ah = 2.5, soc0 = 0.9 }]
+
+# Planted: the voltage sensor reads high (hidden). Comparing the sensor-bias
+# variant when the fit is poor validates the cell; never comparing ends
+# inconclusive. Not in the default suite.
+[[case]]
+name = "biased"
+id = "battery-biased"
+suite = false
+budget = { max_experiments = 2, max_test_hours = 3.0 }
+train = [{ name = "pulse_short", kind = "pulse", current = 2.0, on = 6.0, duration = 25.0, rate = 32.0, capacity_ah = 2.5, soc0 = 0.9 }]
+validation = [{ name = "pulse_short_1A", kind = "pulse", current = 1.0, on = 6.0, duration = 25.0, rate = 32.0, capacity_ah = 2.5, soc0 = 0.9 }]

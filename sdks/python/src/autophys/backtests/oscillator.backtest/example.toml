@@ -1,0 +1,24 @@
+# A backtest manifest: see autophys.project.docs/content/examples.md.
+# This file is what the model is told. hidden/cases.toml holds the truth
+# and the held-out test experiments; it is never shown to a policy.
+kind = "backtest"
+title = "Mass-spring-damper: discover m, c and k"
+summary = "A free response only fixes c/m and k/m; a forced experiment is needed to separate the mass."
+languages = []
+
+[system]
+model = "oscillator"
+
+[[case]]
+name = "free-only"
+id = "oscillator-free-only"
+budget = { max_experiments = 0 }
+train = ["free"]
+validation = [{ name = "free_neg", duration = 10.0, rate = 100.0, kind = "free", x0 = -0.08, v0 = 0.05 }]
+
+[[case]]
+name = "full"
+id = "oscillator"
+budget = { max_experiments = 2 }
+train = ["free"]
+validation = [{ name = "free_neg", duration = 10.0, rate = 100.0, kind = "free", x0 = -0.08, v0 = 0.05 }]

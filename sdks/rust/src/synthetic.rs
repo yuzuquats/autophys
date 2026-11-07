@@ -3,7 +3,6 @@ use crate::{
     agent::Runner,
     data::{Dataset, Observation},
     fit::rng::NumpyRng,
-    models,
     simulator::*,
 };
 use indexmap::IndexMap;
@@ -277,7 +276,7 @@ fn params(a: &[(&str, f64)]) -> Params {
     a.iter().map(|(k, v)| ((*k).into(), *v)).collect()
 }
 #[allow(clippy::too_many_arguments)]
-fn build(
+pub(crate) fn build(
     name: &str,
     sim: FunctionSimulator,
     truth: Params,
@@ -352,185 +351,90 @@ fn build(
         },
     ))
 }
+/// A declared built-in case with the SDK helpers' changes applied.
+fn declared(
+    example: &str,
+    case: &str,
+    seed: u64,
+    o: crate::backtest::Overrides,
+) -> Result<(CaseView, Evaluator)> {
+    let b = crate::backtest::Backtest::builtin(example)?;
+    b.build(b.case(case)?, seed, &o)
+}
+fn bias_on(channel: &str, bias: f64) -> Option<Params> {
+    (bias != 0.).then(|| params(&[(channel, bias)]))
+}
+/// `examples/oscillator.backtest`: `free-only` when `max_experiments` is 0,
+/// else `full`, with that budget, a sensor `bias` and a `missing` fraction.
 pub fn oscillator_case(
     seed: u64,
     max_experiments: usize,
     bias: f64,
     missing: f64,
 ) -> Result<(CaseView, Evaluator)> {
-    let sim = models::oscillator();
-    let truth = params(&[("m", 2.), ("c", 0.8), ("k", 15.)]);
-    let ambiguous = max_experiments == 0;
-    let combos = if ambiguous {
-        [
-            ("c/m".into(), params(&[("c", 1.), ("m", -1.)])),
-            ("k/m".into(), params(&[("k", 1.), ("m", -1.)])),
-        ]
-        .into_iter()
-        .collect()
-    } else {
-        truth
-            .keys()
-            .map(|k| (k.clone(), [(k.clone(), 1.)].into_iter().collect()))
-            .collect()
-    };
-    let expected = if ambiguous {
-        truth.keys().cloned().collect()
-    } else {
-        BTreeSet::new()
-    };
-    let mut noise = NoiseModel::new(params(&[("x", 0.01)]));
-    if bias != 0. {
-        noise.bias.insert("x".into(), bias);
-    }
-    noise.missing_fraction = missing;
-    build(
-        if ambiguous {
-            "oscillator-free-only"
-        } else {
-            "oscillator"
-        },
-        sim,
-        truth,
-        noise,
+    let case = if max_experiments == 0 { "free-only" } else { "full" };
+    declared(
+        "oscillator",
+        case,
         seed,
-        vec![json!("free")],
-        vec![
-            json!({"name":"free_neg","kind":"free","x0":-0.08,"v0":0.05,"duration":10.,"rate":100.}),
-        ],
-        vec![
-            json!({"name":"sine_0.3Hz","kind":"sine","amplitude":1.5,"freq":0.3,"duration":10.,"rate":100.}),
-            json!({"name":"step_1N","kind":"step","amplitude":1.,"duration":10.,"rate":100.}),
-        ],
-        max_experiments,
-        combos,
-        expected,
-        "A free response depends only on c/m and k/m: scaling m, c, k together is invisible.",
+        crate::backtest::Overrides {
+            max_experiments: Some(max_experiments),
+            bias: bias_on("x", bias),
+            missing: Some(missing),
+        },
     )
 }
+/// `examples/thermal.backtest`: `short-only` when `max_experiments` is 0,
+/// else `full`.
 pub fn thermal_case(
     seed: u64,
     max_experiments: usize,
     bias: f64,
     missing: f64,
 ) -> Result<(CaseView, Evaluator)> {
-    let truth = params(&[("C", 500.), ("R", 2.)]);
-    let short = max_experiments == 0;
-    let combos = if short {
-        [("C".into(), params(&[("C", 1.)]))].into_iter().collect()
-    } else {
-        truth
-            .keys()
-            .map(|k| (k.clone(), [(k.clone(), 1.)].into_iter().collect()))
-            .collect()
-    };
-    let expected = if short {
-        ["R".into()].into_iter().collect()
-    } else {
-        BTreeSet::new()
-    };
-    let mut noise = NoiseModel::new(params(&[("T", 0.05)]));
-    if bias != 0. {
-        noise.bias.insert("T".into(), bias);
-    }
-    noise.missing_fraction = missing;
-    build(
-        if short {
-            "thermal-short-only"
-        } else {
-            "thermal"
-        },
-        models::thermal_rc(),
-        truth,
-        noise,
+    let case = if max_experiments == 0 { "short-only" } else { "full" };
+    declared(
+        "thermal",
+        case,
         seed,
-        vec![json!("step_short")],
-        vec![json!({"name":"step_short_5W","kind":"step","power":5.,"duration":120.,"rate":1.})],
-        vec![
-            json!({"name":"pulse_15W","kind":"pulse","power":15.,"on":900.,"duration":4000.,"rate":0.1}),
-        ],
-        max_experiments,
-        combos,
-        expected,
-        "Over 120 s of a 1000 s time constant the response is nearly linear in t/C; R only bends it.",
+        crate::backtest::Overrides {
+            max_experiments: Some(max_experiments),
+            bias: bias_on("T", bias),
+            missing: Some(missing),
+        },
     )
 }
 pub const BATTERY_TRUTH: [(&str, f64); 3] = [("R0", 0.025), ("R1", 0.045), ("C1", 1600.)];
-/// MQ-5: a short pulse measures the ohmic drop and initial polarization slope.
+/// MQ-5 (`examples/battery.backtest`): a short pulse measures the ohmic drop
+/// and initial polarization slope.
 pub fn battery_case(seed: u64, max_experiments: usize) -> Result<(CaseView, Evaluator)> {
     battery_case_with(seed, max_experiments, 0.)
 }
 /// [`battery_case`] with a constant voltage-sensor offset `bias` (V) added
-/// to every measurement; a nonzero bias names the case `battery-biased`.
+/// to every measurement; a nonzero bias is the planted `battery-biased` case
+/// (unless `max_experiments` is 0, which is `battery-short-only`).
 pub fn battery_case_with(
     seed: u64,
     max_experiments: usize,
     bias: f64,
 ) -> Result<(CaseView, Evaluator)> {
-    let sim = models::battery_ecm();
-    let truth = params(&BATTERY_TRUTH);
-    let short = max_experiments == 0;
-    let pulse = |name: &str, current: f64, on: f64| json!({"name":name,"kind":"pulse","current":current,"on":on,"duration":25.,"rate":32.,"capacity_ah":2.5,"soc0":0.9});
-    let combos = if short {
-        [
-            ("R0".into(), params(&[("R0", 1.)])),
-            ("C1".into(), params(&[("C1", 1.)])),
-        ]
-        .into_iter()
-        .collect()
+    let case = if max_experiments == 0 {
+        "short-only"
+    } else if bias != 0. {
+        "biased"
     } else {
-        truth
-            .keys()
-            .map(|k| (k.clone(), [(k.clone(), 1.)].into_iter().collect()))
-            .collect()
+        "full"
     };
-    let expected = if short {
-        ["R1".into()].into_iter().collect()
-    } else {
-        BTreeSet::new()
-    };
-    let catalog = sim
-        .experiments
-        .iter()
-        .map(|(n, e)| {
-            Ok((
-                n.clone(),
-                crate::project::CatalogEntry {
-                    max_runs: None,
-                    cost_hours: Some(1.0 + number(e, "duration")? / 3600.0),
-                    ..Default::default()
-                },
-            ))
-        })
-        .collect::<Result<IndexMap<_, _>>>()?;
-    let (mut view, ev) = build(
-        if short {
-            "battery-short-only"
-        } else if bias != 0. {
-            "battery-biased"
-        } else {
-            "battery"
-        },
-        sim,
-        truth,
-        NoiseModel {
-            bias: if bias != 0. { params(&[("v", bias)]) } else { Params::new() },
-            ..NoiseModel::new(params(&[("v", 0.002)]))
-        },
+    declared(
+        "battery",
+        case,
         seed,
-        vec![pulse("pulse_short", 2., 6.)],
-        vec![pulse("pulse_short_1A", 1., 6.)],
-        vec![
-            json!({"name":"unseen_train","kind":"pulse_train","current":1.5,"on":40.,"off":60.,"duration":500.,"rate":1.,"capacity_ah":2.5,"soc0":0.9}),
-        ],
-        max_experiments,
-        combos,
-        expected,
-        "A 6 s pulse against a 72 s RC time constant resolves the instantaneous I R0 drop and initial I/C1 slope; R1 needs a longer polarization and relaxation trace.",
-    )?;
-    view.max_test_hours = Some(3.);
-    view.catalog = Some(catalog);
-    Ok((view, ev))
+        crate::backtest::Overrides {
+            max_experiments: Some(max_experiments),
+            bias: bias_on("v", bias),
+            missing: None,
+        },
+    )
 }
 /// The benchmark suite, in Python `CASES` order.
 pub const CASES: [&str; 6] = [
@@ -556,22 +460,16 @@ pub fn case_project(view: &CaseView) -> crate::project::Project {
     p.budgets.max_test_hours = view.max_test_hours;
     p
 }
-/// A case by name, from [`CASES`] or [`PLANTED_CASES`].
+/// A case by stable id (from [`CASES`] or [`PLANTED_CASES`]) or by
+/// reference (`battery#full`, `./x.backtest#case`); see [`crate::backtest`].
 pub fn case(name: &str, seed: u64) -> Result<(CaseView, Evaluator)> {
-    match name {
-        "battery-biased" => battery_case_with(seed, 2, 0.01),
-        "oscillator" => oscillator_case(seed, 2, 0., 0.),
-        "oscillator-free-only" => oscillator_case(seed, 0, 0., 0.),
-        "thermal" => thermal_case(seed, 2, 0., 0.),
-        "thermal-short-only" => thermal_case(seed, 0, 0., 0.),
-        "battery" => battery_case(seed, 2),
-        "battery-short-only" => battery_case(seed, 0),
-        _ => Err(invalid("unknown synthetic case")),
-    }
+    let (b, case) = crate::backtest::resolve_case(name)?;
+    b.build(b.case(&case)?, seed, &crate::backtest::Overrides::default())
 }
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models;
     #[test]
     fn reproducible() {
         let sim = models::thermal_rc();

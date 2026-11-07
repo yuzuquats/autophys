@@ -19,6 +19,9 @@ serde = { version = "1.0.216", features = ["derive"] }
 serde_json = { version = "1.0.133", features = ["float_roundtrip", "preserve_order"] }
 sha2 = "0.10.8"
 thiserror = "1.0.61"
+# Backtest manifests (examples/*.backtest); preserve_order keeps their
+# experiment settings in the order written, as Python's tomllib does.
+toml = { version = "0.8", features = ["preserve_order"] }
 
 # Phase 2: ordered schemas, native linear algebra and SciPy-compatible numerics.
 indexmap = { version = "2", features = ["serde"] }

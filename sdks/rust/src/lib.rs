@@ -56,6 +56,7 @@ pub use workbook::{
 };
 
 pub mod agent;
+pub mod backtest;
 pub mod data;
 pub mod curves;
 pub mod design;

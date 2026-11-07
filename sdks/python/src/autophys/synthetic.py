@@ -246,53 +246,30 @@ def _build(
     return view, ev
 
 
-def _osc_custom(name: str, **kw) -> dict:
-    return {"name": name, "duration": 10.0, "rate": 100.0, **kw}
+def _declared(example: str, case: str, seed: int, **overrides):
+    """A declared built-in case (``examples/<example>.backtest``) with the helpers' changes."""
+    from .backtest import Backtest
+
+    b = Backtest.builtin(example)
+    return b.build(b.case(case), seed, **overrides)
 
 
 def oscillator_case(seed: int = 0, *, max_experiments: int = 2, bias: float = 0.0, missing: float = 0.0):
-    """Free-response oscillator; the forced experiments must be requested."""
-    from .models import oscillator
+    """Free-response oscillator; the forced experiments must be requested.
 
-    ambiguous = max_experiments == 0
-    combos = {"c/m": {"c": 1.0, "m": -1.0}, "k/m": {"k": 1.0, "m": -1.0}}
-    if not ambiguous:
-        combos = {"m": {"m": 1.0}, "c": {"c": 1.0}, "k": {"k": 1.0}}
-    return _build(
-        "oscillator-free-only" if ambiguous else "oscillator",
-        oscillator,
-        OSC_TRUTH,
-        NoiseModel({"x": 0.01}, {"x": bias} if bias else {}, missing),
-        seed,
-        train=["free"],
-        validation=[_osc_custom("free_neg", kind="free", x0=-0.08, v0=0.05)],
-        test=[_osc_custom("sine_0.3Hz", kind="sine", amplitude=1.5, freq=0.3), _osc_custom("step_1N", kind="step", amplitude=1.0)],
-        max_experiments=max_experiments,
-        combos=combos,
-        expected={"m", "c", "k"} if ambiguous else set(),
-        note="A free response depends only on c/m and k/m: scaling m, c, k together is invisible.",
-    )
+    ``examples/oscillator.backtest``: ``free-only`` when ``max_experiments`` is 0, else ``full``.
+    """
+    return _declared("oscillator", "free-only" if max_experiments == 0 else "full", seed,
+                     max_experiments=max_experiments, bias={"x": bias} if bias else None, missing=missing)
 
 
 def thermal_case(seed: int = 0, *, max_experiments: int = 2, bias: float = 0.0, missing: float = 0.0):
-    """A short heating step pins down C but barely R; a longer experiment fixes R."""
-    from .models import thermal_rc
+    """A short heating step pins down C but barely R; a longer experiment fixes R.
 
-    short_only = max_experiments == 0
-    return _build(
-        "thermal-short-only" if short_only else "thermal",
-        thermal_rc,
-        THERMAL_TRUTH,
-        NoiseModel({"T": 0.05}, {"T": bias} if bias else {}, missing),
-        seed,
-        train=["step_short"],
-        validation=[{"name": "step_short_5W", "kind": "step", "power": 5.0, "duration": 120.0, "rate": 1.0}],
-        test=[{"name": "pulse_15W", "kind": "pulse", "power": 15.0, "on": 900.0, "duration": 4000.0, "rate": 0.1}],
-        max_experiments=max_experiments,
-        combos={"C": {"C": 1.0}} if short_only else {"C": {"C": 1.0}, "R": {"R": 1.0}},
-        expected={"R"} if short_only else set(),
-        note="Over 120 s of a 1000 s time constant the response is nearly linear in t/C; R only bends it.",
-    )
+    ``examples/thermal.backtest``: ``short-only`` when ``max_experiments`` is 0, else ``full``.
+    """
+    return _declared("thermal", "short-only" if max_experiments == 0 else "full", seed,
+                     max_experiments=max_experiments, bias={"T": bias} if bias else None, missing=missing)
 
 
 BATTERY_TRUTH = {"R0": 0.025, "R1": 0.045, "C1": 1600.0}
@@ -302,57 +279,50 @@ def battery_case(seed: int = 0, *, max_experiments: int = 2, bias: float = 0.0):
     """A short pulse measures the ohmic drop and initial polarization slope.
 
     ``bias`` adds a constant voltage-sensor offset (V) to every measurement.
+    ``examples/battery.backtest``: ``short-only`` when ``max_experiments`` is 0,
+    else ``biased`` with a bias, else ``full``.
     """
-    from .models.battery import battery_ecm, KNOWN
-
-    short = max_experiments == 0
-    def pulse(name, current, on=6.0):
-        return {"name": name, "kind": "pulse", "current": current, "on": on,
-                "duration": 25.0, "rate": 32.0, **KNOWN}
-    view, ev = _build(
-        "battery-short-only" if short else "battery-biased" if bias else "battery", battery_ecm, BATTERY_TRUTH,
-        NoiseModel({"v": 0.002}, {"v": bias} if bias else {}), seed,
-        train=[pulse("pulse_short", 2.0)],
-        validation=[pulse("pulse_short_1A", 1.0, 6.0)],
-        test=[{"name": "unseen_train", "kind": "pulse_train", "current": 1.5,
-               "on": 40.0, "off": 60.0, "duration": 500.0, "rate": 1.0, **KNOWN}],
-        max_experiments=max_experiments,
-        combos={"R0": {"R0": 1.0}, "C1": {"C1": 1.0}} if short else
-               {k: {k: 1.0} for k in BATTERY_TRUTH},
-        expected={"R1"} if short else set(),
-        note="A 6 s pulse against a 72 s RC time constant resolves the instantaneous I R0 drop and initial I/C1 slope; R1 needs a longer polarization and relaxation trace.",
-    )
-    view.max_test_hours = 3.0
-    view.catalog = {n: {"max_runs": None, "cost_hours": 1.0 + e["duration"] / 3600.0}
-                    for n, e in battery_ecm.experiments.items()}
-    return view, ev
+    case = "short-only" if max_experiments == 0 else "biased" if bias else "full"
+    return _declared("battery", case, seed, max_experiments=max_experiments, bias={"v": bias} if bias else None)
 
 
-CASES = {
-    "oscillator-free-only": lambda seed: oscillator_case(seed, max_experiments=0),
-    "oscillator": lambda seed: oscillator_case(seed, max_experiments=2),
-    "thermal-short-only": lambda seed: thermal_case(seed, max_experiments=0),
-    "thermal": lambda seed: thermal_case(seed, max_experiments=2),
-    "battery-short-only": lambda seed: battery_case(seed, max_experiments=0),
-    "battery": lambda seed: battery_case(seed, max_experiments=2),
-}
+def _factory(case_id: str):
+    def make(seed: int):
+        from .backtest import resolve_case
 
-# Cases with a known strategy fix, used to check that the research loop finds it.
-# They are not in CASES: the benchmark suite (and its Rust mirror) stays as is.
-PLANTED_CASES = {
-    # The voltage sensor reads 10 mV high. Comparing the sensor-bias variant when
-    # the fit is poor validates the cell; never comparing ends inconclusive.
-    "battery-biased": lambda seed: battery_case(seed, max_experiments=2, bias=0.01),
-}
+        b, name = resolve_case(case_id)
+        return b.build(b.case(name), seed)
+    return make
+
+
+def _catalogue():
+    from .backtest import planted, suite
+
+    return {c: _factory(c) for c in suite()}, {c: _factory(c) for c in planted()}
+
+
+# The benchmark suite (``examples/*.backtest`` cases in the default suite), and
+# the planted cases with a known strategy fix, used to check that the research
+# loop finds it (``battery-biased``: the voltage sensor reads 10 mV high).
+CASES, PLANTED_CASES = _catalogue()
 
 
 def case(name: str):
-    """A case factory by name, from the benchmark suite or the planted checks."""
+    """A case factory by stable id (``battery``) or reference (``battery#full``, ``./x.backtest#c``)."""
     if name in CASES:
         return CASES[name]
     if name in PLANTED_CASES:
         return PLANTED_CASES[name]
-    raise KeyError(f"unknown case {name!r}")
+    from .backtest import resolve_case
+
+    try:
+        resolve_case(name)
+    except (KeyError, ValueError, OSError) as e:
+        raise KeyError(f"unknown case {name!r}: {e}") from None
+    return _factory(name)
+
+
+_case_factory = case  # run_case's argument is named ``case``
 
 
 # --------------------------------------------------------------------------
@@ -442,10 +412,7 @@ def run_case(case: str, policy: str, seed: int, store=None, **reason_options) ->
         with WorkbookStore(workbook_path) as workbook:
             return run_case(case, policy, seed, store=workbook, **reason_options)
     render_images = reason_options.pop("render_images", False)
-    factory = CASES.get(case) or PLANTED_CASES.get(case)
-    if factory is None:
-        raise KeyError(f"unknown case {case!r}")
-    view, evaluator = factory(seed)
+    view, evaluator = _case_factory(case)(seed)
     project = case_project(view)
     if policy == "reason":
         selected_policy = POLICIES[policy](**reason_options)
