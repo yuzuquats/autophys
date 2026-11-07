@@ -120,8 +120,10 @@ pub fn tools() -> Value {
     ])
 }
 
-/// The built-in projects `--project` may name.
-pub fn load_project(reference: &str) -> Result<Project, String> {
+/// The project `--project` names: the built-in `battery_ecm`, or a Python
+/// `mypkg.module:project` (a `Project` or `@ap.simulator`) imported from the
+/// lab `root` by a worker running `python` (cli.md CLI-11).
+pub fn load_project(reference: &str, root: &Path, python: &str) -> Result<Project, String> {
     match reference {
         "battery_ecm" => {
             let mut p = Project::new("battery_ecm", autophys::models::battery_ecm());
@@ -132,10 +134,8 @@ pub fn load_project(reference: &str) -> Result<Project, String> {
                 .collect();
             Ok(p)
         }
-        r if r.contains(':') => Err(format!(
-            "project {r} is Python code; the autophys CLI serves its built-in projects (battery_ecm). Use the Python SDK's MCPSession-free API from your own program, or declare the model in Rust"
-        )),
-        _ => Err("project must be battery_ecm".into()),
+        r if super::python::is_reference(r) => super::python::load(r, root, python),
+        _ => Err("project must be battery_ecm or mypkg.module:project".into()),
     }
 }
 
@@ -676,7 +676,7 @@ pub fn serve(session: &mut Session) -> std::io::Result<()> {
     Ok(())
 }
 
-pub const USAGE: &str = "usage: autophys mcp [--project battery_ecm] [--workbook DIR|FILE|URL] [--investigation ID] [--root DIR] [--playbook SKILL.md] [--expected-playbook-sha256 HEX] [--config FILE]";
+pub const USAGE: &str = "usage: autophys mcp [--project battery_ecm|mypkg.module:project] [--python PATH] [--workbook DIR|FILE|URL] [--investigation ID] [--root DIR] [--playbook SKILL.md] [--expected-playbook-sha256 HEX] [--config FILE]";
 
 /// `autophys mcp`.
 pub fn command(words: Vec<String>) -> Result<(), Failure> {
@@ -688,6 +688,7 @@ pub fn command(words: Vec<String>) -> Result<(), Failure> {
         ("playbook", Kind::Value),
         ("expected-playbook-sha256", Kind::Value),
         ("config", Kind::Value),
+        ("python", Kind::Value),
     ];
     let args = Args::parse(words, &spec, USAGE)?;
     if !args.positional.is_empty() {
@@ -722,7 +723,15 @@ pub fn command(words: Vec<String>) -> Result<(), Failure> {
         .flatten()
         .map(|(k, _)| k)
         .filter(|k| {
-            !["project", "workbook", "investigation", "root", "playbook"].contains(&k.as_str())
+            ![
+                "project",
+                "workbook",
+                "investigation",
+                "root",
+                "playbook",
+                "python",
+            ]
+            .contains(&k.as_str())
         })
         .collect();
     unknown.sort();
@@ -748,8 +757,21 @@ pub fn command(words: Vec<String>) -> Result<(), Failure> {
     let book = load_playbook(playbook.as_deref().unwrap_or("default"))
         .map_err(|e| Failure::error(e.to_string()))?;
     require_digest(&book, expected).map_err(Failure::error)?;
-    let project = load_project(&pick("project").unwrap_or_else(|| "battery_ecm".into()))
-        .map_err(Failure::error)?;
+    // A configured interpreter path is relative to the working directory; a
+    // bare name is looked up on PATH.
+    let python = super::python::interpreter(pick("python").map(|p| {
+        if p.contains('/') {
+            cwd.join(expand(&p)).display().to_string()
+        } else {
+            p
+        }
+    }));
+    let project = load_project(
+        &pick("project").unwrap_or_else(|| "battery_ecm".into()),
+        &root,
+        &python,
+    )
+    .map_err(Failure::error)?;
     let workbook = pick("workbook");
     let mut session = Session::new(
         project,

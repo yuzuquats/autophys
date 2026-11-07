@@ -1,5 +1,6 @@
 //! The developer commands (`bench`, `research`, `autoloop`,
-//! `export-trajectories`, `mcp`), offline. Expected outcomes are the Python
+//! `export-trajectories`, `mcp`), offline; `mcp` also over a Python lab
+//! simulator when an interpreter with the SDK is available. Expected outcomes are the Python
 //! reference's (the former `sdks/python/tests/test_{bench,research_planted,
 //! autoloop,mcp}.py`), on the same planted cases, seeds and edits.
 use autophys_cli::devtools::{
@@ -806,6 +807,264 @@ fn mcp_refuses_a_different_strategy_before_opening_a_workbook() {
         "--root",
         temp.path().to_str().unwrap(),
     ]);
+    // A Python reference is imported by a worker; this module does not exist.
     assert_eq!(code, 2);
-    assert!(err.contains("built-in projects"), "{err}");
+    assert!(err.contains("mypkg.module:project"), "{err}");
+    assert!(!err.contains("built-in projects"), "{err}");
+}
+
+/// The fixture lab (`tests/fixtures/python_lab`) and an interpreter that can
+/// import the checkout's Python SDK (`AUTOPHYS_PYTHON`, else `python3`, with
+/// `sdks/python/src` on `PYTHONPATH`), or `None` when NumPy/SciPy are missing.
+fn python_lab() -> Option<(String, String, PathBuf)> {
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let python = std::env::var("AUTOPHYS_PYTHON")
+        .ok()
+        .filter(|p| !p.is_empty())
+        .unwrap_or_else(|| "python3".into());
+    let mut path = repo.join("sdks/python/src").display().to_string();
+    if let Ok(old) = std::env::var("PYTHONPATH")
+        && !old.is_empty()
+    {
+        path = format!("{path}:{old}");
+    }
+    let probe = Command::new(&python)
+        .args(["-c", "import autophys.worker, numpy, scipy"])
+        .env("PYTHONPATH", &path)
+        .output();
+    match probe {
+        Ok(out) if out.status.success() => {
+            Some((python, path, repo.join("tests/fixtures/python_lab")))
+        }
+        _ => {
+            eprintln!(
+                "SKIPPED: {python} cannot import the autophys SDK with NumPy and SciPy; set AUTOPHYS_PYTHON to such an interpreter (e.g. a venv with sdks/python installed) to run the Python worker tests"
+            );
+            None
+        }
+    }
+}
+
+fn write_decay_csv(path: &Path, duration: f64, rate: f64) {
+    let n = (duration * rate).round() as usize;
+    let mut text = String::from("time,y\n");
+    for i in 0..=n {
+        let t = if i == n {
+            duration
+        } else {
+            duration * i as f64 / n as f64
+        };
+        let y = 2.0 * (-0.8 * t).exp();
+        text.push_str(&format!(
+            "{},{}\n",
+            autophys::canonical::py_float_repr(t),
+            autophys::canonical::py_float_repr(y)
+        ));
+    }
+    std::fs::write(path, text).unwrap();
+}
+
+#[test]
+fn mcp_serves_a_python_simulator_through_the_worker() {
+    let Some((python, pythonpath, fixture)) = python_lab() else {
+        return;
+    };
+    let temp = tempfile::tempdir().unwrap();
+    let lab = temp.path().join("lab");
+    std::fs::create_dir(&lab).unwrap();
+    std::fs::copy(fixture.join("decaylab.py"), lab.join("decaylab.py")).unwrap();
+    write_decay_csv(&lab.join("short.csv"), 2.0, 20.0);
+    write_decay_csv(&lab.join("long.csv"), 10.0, 5.0);
+    let books = temp.path().join("books");
+    // The interpreter comes from the lab configuration; the module from --root.
+    std::fs::write(
+        temp.path().join(".autophys-mcp.json"),
+        json!({"python": python, "root": "lab"}).to_string(),
+    )
+    .unwrap();
+    let mut child = Command::new(BIN)
+        .args([
+            "mcp",
+            "--project",
+            "decaylab:project",
+            "--workbook",
+            books.to_str().unwrap(),
+        ])
+        .current_dir(temp.path())
+        .env("PYTHONPATH", &pythonpath)
+        .env_remove("AUTOPHYS_PYTHON")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    let mut out = BufReader::new(child.stdout.take().unwrap());
+    writeln!(stdin, "{}", json!({"jsonrpc": "2.0", "id": 0, "method": "initialize", "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "0"}}})).unwrap();
+    writeln!(
+        stdin,
+        "{}",
+        json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+    )
+    .unwrap();
+    stdin.flush().unwrap();
+    let mut line = String::new();
+    out.read_line(&mut line).unwrap();
+    let init: Value = serde_json::from_str(&line).unwrap();
+    assert_eq!(init["result"]["serverInfo"]["name"], "autophys");
+    line.clear();
+    out.read_line(&mut line).unwrap();
+    let tools: Value = serde_json::from_str(&line).unwrap();
+    assert_eq!(tools["result"]["tools"].as_array().unwrap().len(), 9);
+    let text = |r: &Value| -> Value {
+        assert_eq!(r["isError"], false, "{r}");
+        serde_json::from_str(r["content"][0]["text"].as_str().unwrap()).unwrap()
+    };
+    let info = text(&mcp_call(
+        &mut stdin,
+        &mut out,
+        2,
+        "describe_project",
+        json!({}),
+    ));
+    assert_eq!(info["name"], "decay_lab");
+    assert_eq!(info["parameters"]["k"]["unit"], "1/s");
+    assert_eq!(info["outputs"], json!(["y"]));
+    let imported = text(&mcp_call(
+        &mut stdin,
+        &mut out,
+        3,
+        "import_measurements",
+        json!({"path": "short.csv", "experiment": "short", "sigma": {"y": 0.01}}),
+    ));
+    let inv = imported["investigation"].as_str().unwrap().to_string();
+    let fit = text(&mcp_call(
+        &mut stdin,
+        &mut out,
+        4,
+        "fit",
+        json!({"n_starts": 2}),
+    ));
+    let estimate = |fit: &Value, k: &str| fit["params"][k].as_f64().unwrap_or(f64::NAN);
+    assert!((estimate(&fit, "A") - 2.0).abs() < 1e-4, "{fit}");
+    assert!((estimate(&fit, "k") - 0.8).abs() < 1e-4, "{fit}");
+    let ident = text(&mcp_call(
+        &mut stdin,
+        &mut out,
+        5,
+        "identifiability",
+        json!({}),
+    ));
+    assert_eq!(ident["parameters"]["A"]["identified"], true, "{ident}");
+    let proposed = text(&mcp_call(
+        &mut stdin,
+        &mut out,
+        6,
+        "propose_experiment",
+        json!({"experiment": "long", "rationale": "see the tail"}),
+    ));
+    let pid = proposed["proposal_id"].as_str().unwrap().to_string();
+    let client = autophys::connect(Some(books.to_str().unwrap())).unwrap();
+    client
+        .find_investigation(&inv)
+        .unwrap()
+        .approve(&pid, "reviewer", None)
+        .unwrap();
+    text(&mcp_call(
+        &mut stdin,
+        &mut out,
+        7,
+        "attach_data",
+        json!({"proposal_id": pid, "path": "long.csv", "sigma": {"y": 0.01}}),
+    ));
+    text(&mcp_call(
+        &mut stdin,
+        &mut out,
+        8,
+        "fit",
+        json!({"n_starts": 2}),
+    ));
+    let report = text(&mcp_call(&mut stdin, &mut out, 9, "report", json!({})));
+    assert_eq!(report["experiments"], 1, "{report}");
+    // No validation split was imported, so the verdict stops short of validated.
+    assert_eq!(report["status"], "inconclusive", "{report}");
+    assert_eq!(report["identified"], json!(["A", "k"]), "{report}");
+    assert!((report["estimate"]["k"].as_f64().unwrap() - 0.8).abs() < 1e-6);
+    drop(stdin);
+    let done = child.wait_with_output().unwrap();
+    assert!(done.status.success());
+    let stderr = String::from_utf8_lossy(&done.stderr);
+    // User prints reach stderr, not the protocol stream.
+    assert!(
+        stderr.contains("decaylab imported") && stderr.contains("simulating"),
+        "{stderr}"
+    );
+    // The records carry the Python simulator's own source hash.
+    let wb = client.open_project("decay_lab").unwrap();
+    let configs: String = wb
+        .config_versions()
+        .unwrap()
+        .iter()
+        .map(|c| format!("{} {}\n", c.version, c.config))
+        .collect();
+    let python_hash = Command::new(&python)
+        .args(["-c", "import decaylab; print(decaylab.project.simulator.source_hash, decaylab.project.config_version)"])
+        .current_dir(&lab)
+        .env("PYTHONPATH", format!("{}:{pythonpath}", lab.display()))
+        .output()
+        .unwrap();
+    let printed = String::from_utf8_lossy(&python_hash.stdout);
+    let mut words = printed.lines().last().unwrap().split_whitespace();
+    let (source_hash, config_version) = (words.next().unwrap(), words.next().unwrap());
+    assert!(configs.contains(source_hash), "{configs}");
+    assert!(configs.contains(config_version), "{configs}");
+}
+
+#[test]
+fn mcp_reports_a_crashed_python_simulator_with_its_stderr() {
+    let Some((python, pythonpath, fixture)) = python_lab() else {
+        return;
+    };
+    let temp = tempfile::tempdir().unwrap();
+    std::fs::copy(fixture.join("decaylab.py"), temp.path().join("decaylab.py")).unwrap();
+    let mut child = Command::new(BIN)
+        .args([
+            "mcp",
+            "--project",
+            "decaylab:crashes",
+            "--python",
+            &python,
+            "--root",
+            temp.path().to_str().unwrap(),
+            "--workbook",
+            temp.path().join("books").to_str().unwrap(),
+        ])
+        .current_dir(temp.path())
+        .env("PYTHONPATH", &pythonpath)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    let mut out = BufReader::new(child.stdout.take().unwrap());
+    std::fs::write(temp.path().join("e.csv"), "time,y\n0,1\n0.5,1\n1,1\n").unwrap();
+    let r = mcp_call(
+        &mut stdin,
+        &mut out,
+        1,
+        "import_measurements",
+        json!({"path": "e.csv", "experiment": "e", "sigma": {"y": 0.1}}),
+    );
+    // Opening the investigation needs no simulation; the fit does.
+    assert_eq!(r["isError"], false, "{r}");
+    let r = mcp_call(&mut stdin, &mut out, 2, "fit", json!({}));
+    let message = r["content"][0]["text"].as_str().unwrap();
+    assert_eq!(r["isError"], true, "{r}");
+    assert!(
+        message.contains("decaylab:crashes") && message.contains("about to fall over"),
+        "{message}"
+    );
+    drop(stdin);
+    child.wait().unwrap();
 }

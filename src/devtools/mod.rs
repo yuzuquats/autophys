@@ -7,6 +7,7 @@
 pub mod autoloop;
 pub mod bench;
 pub mod mcp;
+pub mod python;
 pub mod research;
 pub mod trajectories;
 

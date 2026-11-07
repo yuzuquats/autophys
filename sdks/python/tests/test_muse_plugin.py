@@ -14,6 +14,7 @@ import runpy
 import shlex
 import shutil
 import subprocess
+import sys
 
 import pytest
 
@@ -133,6 +134,18 @@ async def _call(client, name, arguments=None, error=False):
     return text if error else json.loads(text)
 
 
+def test_builder_passes_the_worker_interpreter_for_a_python_project(tmp_path):
+    build = builder()
+    local = build(tmp_path / "local", project="lab.model:project", python="/lab/venv/bin/python", root=str(tmp_path))
+    assert json.loads((local / "mcp-config.json").read_text()) == {
+        "project": "lab.model:project", "root": str(tmp_path), "python": "/lab/venv/bin/python"}
+    remote = build(tmp_path / "remote", project="lab.model:project", python="/remote venv/bin/python",
+                   ssh_host="lab-host")
+    script = (remote / "mcp-stdio.sh").read_text()
+    assert shlex.split(shlex.split(script.splitlines()[1])[3])[-4:] == [
+        "--project", "lab.model:project", "--python", "/remote venv/bin/python"]
+
+
 @rust
 def test_bundle_serves_the_rust_mcp_tools_over_stdio(tmp_path):
     pytest.importorskip("mcp")
@@ -173,6 +186,44 @@ def test_bundle_serves_the_rust_mcp_tools_over_stdio(tmp_path):
                 assert report["status"] == "awaiting_data"
     asyncio.run(check())
 
+
+
+@rust
+def test_bundle_serves_a_python_simulator_through_the_worker(tmp_path):
+    """CLI-11: a module:project reference runs in a Python SDK worker."""
+    pytest.importorskip("mcp")
+    from mcp import ClientSession, StdioServerParameters
+    from mcp.client.stdio import stdio_client
+    import numpy as np
+    from autophys.simulator import time_grid
+    repo = Path(__file__).resolve().parents[3]
+    lab = tmp_path / "lab"
+    lab.mkdir()
+    shutil.copy(repo / "tests/fixtures/python_lab/decaylab.py", lab / "decaylab.py")
+    t = time_grid({"duration": 2.0, "rate": 20.0})
+    with open(lab / "short.csv", "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["time", "y"])
+        w.writerows(zip(map(repr, t.tolist()), map(repr, (2.0 * np.exp(-0.8 * t)).tolist())))
+    bundle = builder()(tmp_path / "bundle", autophys=BIN, project="decaylab:project", root=str(lab),
+                       workbook=str(tmp_path / "books"), python=sys.executable)
+    src = str(repo / "sdks/python/src")
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join(filter(None, [src, os.environ.get("PYTHONPATH")]))}
+
+    async def check():
+        params = StdioServerParameters(command=str(bundle / "mcp-stdio.sh"), cwd=str(lab), env=env)
+        async with stdio_client(params) as (read, write):
+            async with ClientSession(read, write) as client:
+                await client.initialize()
+                info = await _call(client, "describe_project")
+                assert info["name"] == "decay_lab" and info["parameters"]["k"]["unit"] == "1/s"
+                await _call(client, "import_measurements", {"path": "short.csv", "experiment": "short",
+                                                             "sigma": {"y": 0.01}})
+                fit = await _call(client, "fit", {"n_starts": 2})
+                assert fit["converged"] and abs(fit["params"]["k"] - 0.8) < 1e-4
+                ident = await _call(client, "identifiability")
+                assert ident["identified"] == ["A", "k"]
+    asyncio.run(check())
 
 @rust
 def test_remote_wrapper_refuses_a_distinct_strategy_before_opening_books(tmp_path):

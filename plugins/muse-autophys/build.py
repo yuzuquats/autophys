@@ -2,6 +2,8 @@
 """Build a native Muse bundle, copying the SDK playbook without rewriting it.
 
 The MCP server is the Rust ``autophys mcp`` command (cli.md CLI-1, phase B).
+A ``--project mypkg.module:project`` (a Project or ``@ap.simulator``) is served
+through a Python SDK worker (CLI-11); ``--python`` names its interpreter.
 """
 import argparse
 import hashlib
@@ -14,7 +16,8 @@ import shlex
 DEFAULT_AUTOPHYS = "autophys"  # the autophys binary on PATH
 
 
-def build(output, *, autophys=DEFAULT_AUTOPHYS, project=None, workbook=None, root=None, playbook=None, ssh_host=None):
+def build(output, *, autophys=DEFAULT_AUTOPHYS, project=None, workbook=None, root=None, playbook=None, ssh_host=None,
+          python=None):
     source = Path(__file__).resolve().parent
     canonical = Path(playbook) if playbook else source.parents[1] / "sdks/python/src/autophys/playbooks/default/SKILL.md"
     if not canonical.is_file() and not playbook:
@@ -34,7 +37,7 @@ def build(output, *, autophys=DEFAULT_AUTOPHYS, project=None, workbook=None, roo
     skill.parent.mkdir(parents=True, exist_ok=True)
     skill.write_bytes(canonical.read_bytes())
     digest = hashlib.sha256(skill.read_bytes()).hexdigest()
-    config = {k: str(v) for k, v in (("project", project), ("workbook", workbook), ("root", root)) if v}
+    config = {k: str(v) for k, v in (("project", project), ("workbook", workbook), ("root", root), ("python", python)) if v}
     if ssh_host:
         # The wrapper is a normal hashed plugin source. It carries no credentials;
         # the autophys binary, workbook and lab are on the remote host.
@@ -78,7 +81,9 @@ if __name__ == "__main__":
     parser.add_argument("--output", required=True, help="new output directory, or this source bundle to refresh")
     parser.add_argument("--autophys", default=DEFAULT_AUTOPHYS,
                         help="the autophys binary (default autophys on PATH; with --ssh-host, its path on the remote host)")
-    parser.add_argument("--project", help="built-in project (battery_ecm)")
+    parser.add_argument("--project", help="battery_ecm, or mypkg.module:project for your Python simulator")
+    parser.add_argument("--python", help="interpreter with the autophys SDK and the lab's dependencies, for a module:project "
+                        "(default AUTOPHYS_PYTHON, else python3; with --ssh-host, its path on the remote host)")
     parser.add_argument("--workbook")
     parser.add_argument("--root")
     parser.add_argument("--playbook", help="override canonical SKILL.md location")
