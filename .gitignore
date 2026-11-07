@@ -6,3 +6,8 @@ vendor/tento/target/
 # Optional contributor environments and local build output.
 /.venv/
 /.venv-train/
+
+# Claude Code local agent config (may hold local permissions or secrets);
+# shared skills under .claude/skills stay tracked.
+.claude/*
+!.claude/skills/
