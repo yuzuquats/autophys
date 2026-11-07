@@ -21,6 +21,25 @@ AutoPhys flags the ambiguity and recommends a test to separate them. Run the
 test, attach the measurements, and refit before checking predictions against
 held-out data.
 
+## Install a release
+
+Each [release](https://github.com/yuzuquats/autophys/releases) has an archive
+for Linux x86_64 (`x86_64-unknown-linux-gnu`) and Apple silicon macOS
+(`aarch64-apple-darwin`). It holds one `autophys` executable with the web app
+built in, plus the license notices; nothing else needs installing to serve.
+
+```sh
+curl -fLO https://github.com/yuzuquats/autophys/releases/download/v0.1.0/autophys-v0.1.0-x86_64-unknown-linux-gnu.tar.gz
+tar -xzf autophys-v0.1.0-x86_64-unknown-linux-gnu.tar.gz
+cd autophys-v0.1.0-x86_64-unknown-linux-gnu
+./autophys serve          # the workbench and API on http://127.0.0.1:4794
+```
+
+Put that `autophys` on your PATH and use it wherever the examples below build
+one. The macOS executable is ad-hoc signed, not notarized: a copy downloaded
+with a browser is quarantined, so download with `curl` as above or run
+`xattr -d com.apple.quarantine autophys`.
+
 ## Try the battery example
 
 You need Rust (to build the `autophys` command), Python 3.10 or newer, and Git.

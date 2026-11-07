@@ -9,6 +9,21 @@ the browser payload, so consumers do not need this source checkout, Deno or
 a sibling Tento installation to serve it. A source build still needs public
 registry/JSR/npm/esbuild dependencies or their caches.
 
+## Release archives
+
+`release.sh --out-dir /absolute/dir` builds this host's
+`autophys-v<version>-<target>.tar.gz` and a `.sha256` beside it, from a clean
+committed checkout. It runs the same tests as `package.sh`, packs the single
+executable (Linux through `package.sh`; macOS relinks with the web ZIP in the
+`__AUTOPHYS,__web` section), and adds `LICENSE-MIT`, `LICENSE-APACHE`,
+`NOTICE`, `README.md` and `THIRD-PARTY-LICENSES.txt`. That last file comes from
+`third-party-licenses.py`, which walks the locked Cargo graph for the target and
+copies each third-party crate's license files, then appends
+`licenses/web-editors.txt`. Before archiving, the script serves the packed file
+alone with an empty HOME and checks `/api/healthz` reports this commit and an
+embedded `web_id`. It publishes nothing; upload the archives to a GitHub
+release from a tag on the same commit.
+
 ## Optional Linux systemd user service
 
 `deploy.sh` is a service installer, not a test command. It builds/tests,
