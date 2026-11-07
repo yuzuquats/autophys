@@ -63,6 +63,26 @@ A run may finish without requesting more data. `ProposalRunner` waits for
 approved external measurements; it does not acquire them. Use measured training
 and separate validation observations for a scientific workflow.
 
+## Use it in a project
+
+The SDK is a library; it installs no command. The `autophys` command is the
+Rust binary, which sets up a project that depends on this SDK and connects
+the device to a server:
+
+```sh
+autophys new my-cell --lang python                  # battery-fit template, .venv installed
+autophys new my-model --lang python --example blank
+autophys connect https://your-server                # once per device; saves ~/.config/autophys/credentials
+autophys whoami
+```
+
+The project's `pyproject.toml` depends on
+`autophys @ git+https://github.com/yuzuquats/autophys@REV#subdirectory=sdks/python`,
+pinned to the commit the `autophys` binary was built from (`--sdk-rev` picks
+another). After `autophys connect`, `ap.connect("https://your-server")` finds
+the saved key. Proposals are approved in the browser, or with
+`autophys approve INVESTIGATION PROPOSAL`.
+
 ## Muse Code plugin
 
 Install the optional MCP dependency with `pip install -e 'sdks/python[mcp]'`
@@ -77,8 +97,10 @@ for explicit venv configuration and the built-in battery CSV path.
 ## Offline benchmarks, research and trajectory export
 
 In the activated contributor environment from [CONTRIBUTING.md](../../CONTRIBUTING.md),
-use the SDK module entry point from the repository root (the Rust daemon also
-uses the command name `autophys`):
+run the SDK's developer commands through its module entry point from the
+repository root. The SDK installs no console script; the `autophys` command is
+the Rust binary, and these commands move to it in phase B of the
+[one-CLI plan](../../autophys.project.docs/content/cli.md):
 
 ```sh
 PYTHONDONTWRITEBYTECODE=1 python -m autophys.cli bench --seeds 5 --jobs 4
@@ -95,9 +117,9 @@ the initial and retained strategies on held-out seeds. Defaults are all cases,
 train 0,1,2, held-out 3,4, Spark policy and Wonder API researcher.
 
 ```sh
-autophys research --playbook default --iterations 2 --jobs 4   --replay policy-cassette.jsonl --researcher-replay researcher-cassette.jsonl   --output-dir ./research-result
-autophys export-trajectories ./research-result --output ./decisions.jsonl
-autophys export-trajectories ./collection
+python -m autophys.cli research --playbook default --iterations 2 --jobs 4   --replay policy-cassette.jsonl --researcher-replay researcher-cassette.jsonl   --output-dir ./research-result
+python -m autophys.cli export-trajectories ./research-result --output ./decisions.jsonl
+python -m autophys.cli export-trajectories ./collection
 ```
 
 Replay cassettes must cover the chosen cases, seeds and strategies; the bundled
@@ -204,7 +226,7 @@ documentation refresh does not run examples or establish SDK readiness.
 | `client.py` | `connect`, `LocalClient`, `RemoteClient`, `Workbook` |
 | `store.py`, `http.py` | append-only public `MemoryStore`/`JsonlStore` backends; `HttpStore` (`/api/v1`, record stream), pairing and credentials |
 
-| `bench.py`, `cli.py` | benchmark runner; `autophys pair`, `whoami`, `bench` |
+| `bench.py`, `cli.py` | benchmark runner; `python -m autophys.cli` developer commands (`bench`, `research`, `autoloop`, `export-trajectories`, `mcp`) |
 
 **Identifiability rule.** With weighted residuals and log-parameter
 coordinates, `1/s_i` for a Jacobian singular value is the one-sigma
@@ -289,7 +311,8 @@ id returns the stored record. The server assigns `seq` and chains
 `hash = sha256(prev_hash + canonical {id, kind, payload})`. Kinds:
 `investigation`, `measurement`, `run`, `step`, `proposal`, `outcome`.
 Credentials live in `~/.config/autophys/credentials` (JSON, mode 0600) or
-`AUTOPHYS_API_KEY`; the CLI never prints a key.
+`AUTOPHYS_API_KEY`; `autophys connect` writes the file, and neither the SDKs
+nor the CLI print a key.
 
 **Waiting for an approval.** `Investigation.run()` never blocks: a proposal
 ends the run with status `awaiting_data`. `Investigation.wait_for_approval()`

@@ -1,0 +1,8 @@
+
+fit: chi2/N = 0.90 (converged; ~1 means the residuals match sigma)
+  R0  = 0.024773 ohm       ±0.8%  identified
+  R1  = 0.042943 ohm   unbounded  NOT identified
+  C1  = 1556.9 F     unbounded  NOT identified
+  tied: R1^1 * C1^0.28 (practical)
+
+curve: short.csv (short.csv: measured, fitted and residual by time)

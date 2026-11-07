@@ -1,14 +1,15 @@
 """The closed loop: fit a starting test, propose the next cycler test, approve it, attach its data, refit.
 
-    ./run.sh agent tests                          # the cycler tests the agent may propose
-    ./run.sh agent start --simulate               # demo: a virtual cycler with a hidden cell
-    ./run.sh agent start --data CELL.csv --test quick_pulse --sigma 0.002
-    ./run.sh agent status                         # where the proposal stands
-    ./run.sh agent approve                        # approve from this terminal (or in the browser)
-    ./run.sh agent continue --simulate            # or --data NEXT.csv; add --wait to wait for approval
+    python closed_loop.py tests                   # the cycler tests the agent may propose
+    python closed_loop.py start --simulate        # demo: a virtual cycler with a hidden cell
+    python closed_loop.py start --data CELL.csv --test quick_pulse --sigma 0.002
+    python closed_loop.py continue --simulate     # or --data NEXT.csv; add --wait to wait for approval
 
-Records go to AUTOPHYS_SERVER if it is set (pair first with `autophys pair`),
-otherwise to a local workbook in ~/autophys. The policy that decides each step
+A person approves each proposal, in the browser or with the autophys CLI
+(`autophys approve INVESTIGATION PROPOSAL`); `autophys investigations` shows
+where it stands. Records go to AUTOPHYS_SERVER if it is set (connect this
+device first with `autophys connect URL`), otherwise to a local workbook in
+~/autophys. Settings are read from .env in this folder, if present. The policy that decides each step
 is `scripted` (the built-in Fisher-ranking strategy, no network) or `model`
 (a language model configured by AUTOPHYS_REASON_* in .env, reading the
 autophys playbook). The fit, identifiability check and ranking always run here.
@@ -34,6 +35,23 @@ from autophys.synthetic import NoiseModel, observe
 
 HERE = Path(__file__).resolve().parent
 STATE = HERE / ".agent-state.json"
+
+
+def load_env(path: Path = HERE / ".env") -> None:
+    """KEY=VALUE lines from .env; variables already set in the environment win."""
+    if not path.exists():
+        return
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.removeprefix("export ").split("=", 1)
+        value = value.split(" #", 1)[0].strip().strip("\"'")
+        if value:
+            os.environ.setdefault(key.strip(), value)
+
+
+load_env()
 HIDDEN_CELL = {"R0": 0.025, "R1": 0.045, "C1": 1600.0}  # used only by --simulate
 SIGMA = 0.002
 CELL = {"capacity_ah": 2.5, "soc0": 0.9, "rate": 2.0}
@@ -107,7 +125,7 @@ def make_policy(kind: str):
 
 def load_state() -> dict:
     if not STATE.exists():
-        sys.exit("no investigation yet: run `./run.sh agent start --simulate` first")
+        sys.exit("no investigation yet: run `python closed_loop.py start --simulate` first")
     return json.loads(STATE.read_text())
 
 
@@ -144,7 +162,7 @@ def measured(path: str, name: str, settings: dict, sigma: float, columns: str, s
     off = np.abs(i - i_prog) > tol
     if off.mean() > 0.02:
         sys.exit(f"{path}: the current differs from the {name} program at {off.mean():.0%} of samples; "
-                 "run the program as listed by `./run.sh agent tests`")
+                 "run the program as listed by `python closed_loop.py tests`")
     return ap.Observation(experiment=name, settings=settings, t=grid, y={"v": np.interp(grid, t, v)},
                           sigma={"v": sigma}, split=split, meta={"file": Path(path).name})
 
@@ -155,6 +173,11 @@ def hours(seconds: float) -> str:
 
 def describe(settings: dict) -> str:
     return ", ".join(("rest" if a == 0 else f"{a:+g} A") + f" {s:g} s" for a, s in settings["steps"])
+
+
+def approve_command(inv) -> str:
+    server = target()
+    return f"autophys approve {inv.id} {inv.pending}" + (f" --target {server}" if server else "")
 
 
 def where() -> str:
@@ -187,8 +210,8 @@ def print_outcome(inv, out) -> None:
         if rec.get("rationale"):
             print(f"  why: {rec['rationale']}")
         print(f"  proposal {inv.pending} in investigation {inv.id}")
-        print(f"  approve it in {where()}, or with `./run.sh agent approve`")
-        print("  then: ./run.sh agent continue --simulate   (or --data NEXT.csv after running the test)")
+        print(f"  approve it in {where()}, or with `{approve_command(inv)}`")
+        print("  then: python closed_loop.py continue --simulate   (or --data NEXT.csv after running the test)")
 
 
 def plot(inv, params: dict, path: Path) -> None:
@@ -224,7 +247,7 @@ def cmd_tests(args) -> None:
 
 def cmd_start(args) -> None:
     if args.test not in TESTS:
-        sys.exit(f"unknown test {args.test}; see `./run.sh agent tests`")
+        sys.exit(f"unknown test {args.test}; see `python closed_loop.py tests`")
     settings = cell.experiment(args.test)
     if args.simulate:
         obs = [simulated(args.test, settings, seed=0), simulated("check", CHECK, seed=100)]
@@ -240,25 +263,6 @@ def cmd_start(args) -> None:
     save_state(investigation=inv.id, policy=args.policy, server=target())
     print(f"investigation {inv.id} ({args.policy} policy) -> {where()}")
     finish(inv, inv.run(), args)
-
-
-def cmd_status(args) -> None:
-    state = load_state()
-    inv = resume(state)
-    print(f"investigation {inv.id} ({state['policy']} policy) in {where()}")
-    if not inv.pending:
-        print("no proposal is waiting" + (f"; last outcome: {inv.outcome.status}" if inv.outcome else ""))
-        return
-    st = inv.store.proposal_status(inv.id, inv.pending)
-    print(f"proposal {inv.pending}: {st['experiment']} is {st['status']}")
-
-
-def cmd_approve(args) -> None:
-    inv = resume(load_state())
-    if not inv.pending:
-        sys.exit("no proposal is waiting")
-    inv.approve(inv.pending, by=args.by)
-    print(f"approved {inv.pending} as {args.by!r}; next: ./run.sh agent continue --simulate (or --data NEXT.csv)")
 
 
 def cmd_continue(args) -> None:
@@ -304,15 +308,12 @@ def main(argv=None) -> None:
                            help="who decides each step: built-in strategy, or the model set in .env")
 
     data_args(sub.add_parser("start", help="start an investigation from a first test"), True)
-    sub.add_parser("status", help="show the waiting proposal")
-    pa = sub.add_parser("approve", help="approve the waiting proposal from this terminal")
-    pa.add_argument("--by", default=os.environ.get("USER", "terminal"))
     pc = sub.add_parser("continue", help="attach the approved test's data and refit")
     data_args(pc, False)
     pc.add_argument("--wait", action="store_true", help="wait for the approval instead of exiting")
     pc.add_argument("--timeout", type=float, default=3600)
     args = p.parse_args(argv)
-    {"tests": cmd_tests, "start": cmd_start, "status": cmd_status, "approve": cmd_approve, "continue": cmd_continue}[args.cmd](args)
+    {"tests": cmd_tests, "start": cmd_start, "continue": cmd_continue}[args.cmd](args)
 
 
 if __name__ == "__main__":

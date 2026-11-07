@@ -22,10 +22,10 @@ python -m pytest -q sdks/python/tests
 ```
 
 NumPy and SciPy are required. MCP (`./sdks/python[mcp]`) and plotting are
-optional; the [battery example](examples/battery_fit/README.md) installs its
-own plotting environment. Python's `autophys` entry point and the Rust daemon
-share a command name, so use `python -m autophys.cli` for SDK commands and an
-explicit Cargo binary path for daemon commands. Pure local/scripted work needs
+optional; a project made with `autophys new` (from
+[templates/](templates/battery-fit/python/README.md)) installs its own
+plotting environment. The SDK installs no console script: `autophys` is the
+Rust binary, and the SDK's developer commands run as `python -m autophys.cli`. Pure local/scripted work needs
 no model account. Provider routes require explicit configuration and keys;
 replay tests do not call a provider. Cross-writer tests require
 `AUTOPHYS_RUST_BIN` and `AUTOPHYS_RUST_WEB_ROOT`; without those, they skip and

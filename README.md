@@ -23,13 +23,17 @@ held-out data.
 
 ## Try the battery example
 
-You need Git and Python 3.10 or newer. The first run installs the Python SDK
-and plotting dependencies; this local example needs no account or provider key.
+You need Rust (to build the `autophys` command), Python 3.10 or newer, and Git.
+`autophys new` creates a project whose SDK dependency is pinned to the commit
+the command was built from; this local example needs no account or provider key.
 
 ```sh
 git clone https://github.com/yuzuquats/autophys.git
-cd autophys/examples/battery_fit
-./run.sh data/short.csv --out short.png
+cd autophys
+cargo build --release --locked --bin autophys
+./target/release/autophys new ../my-cell --lang python   # the battery-fit project, with its own .venv
+cd ../my-cell
+.venv/bin/python battery_fit.py data/short.csv --out short.png
 ```
 
 The curve fits, but the abbreviated parameter verdict is:
@@ -43,15 +47,18 @@ C1  NOT identified
 Then run the complete loop with a simulated cell and the default scripted policy:
 
 ```sh
-./run.sh agent start --simulate
-./run.sh agent approve
-./run.sh agent continue --simulate
+.venv/bin/python closed_loop.py start --simulate
+autophys approve INVESTIGATION PROPOSAL     # the ids start prints; or approve in the browser
+.venv/bin/python closed_loop.py continue --simulate
 ```
 
 It ranks the next test, waits for approval, attaches synthetic measurements,
 refits, and checks predictions against data kept out of the fit. The
-[battery guide](examples/battery_fit/README.md) explains the results and how
-to use your own cell data, import measurements from a cycler, or choose a model-backed policy.
+project's README ([source](templates/battery-fit/python/README.md)) explains
+the results and how to use your own cell data, import measurements from a
+cycler, or choose a model-backed policy. `--lang rust` creates the same fit in
+Rust, and `--example blank` an empty project; `autophys connect URL` pairs the
+device with a server once.
 
 ## Use your own model
 

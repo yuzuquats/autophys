@@ -1,0 +1,13 @@
+[package]
+name = "{{crate_name}}"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+# The autophys SDK, pinned to one commit of its repository.
+autophys = { git = "{{sdk_repo}}", rev = "{{sdk_rev}}" }
+serde_json = "1"
+
+# A project of its own, even when created inside another Cargo workspace.
+[workspace]

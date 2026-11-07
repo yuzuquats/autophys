@@ -8,7 +8,10 @@ import shutil
 import shlex
 
 
-def build(output, *, python="autophys", project=None, workbook=None, root=None, playbook=None, ssh_host=None, source_root=None):
+DEFAULT_PYTHON = "python3"  # the SDK installs no console script (cli.md CLI-1)
+
+
+def build(output, *, python=DEFAULT_PYTHON, project=None, workbook=None, root=None, playbook=None, ssh_host=None, source_root=None):
     if source_root and not ssh_host:
         raise SystemExit("--source-root is only used with --ssh-host")
     source = Path(__file__).resolve().parent
@@ -29,11 +32,12 @@ def build(output, *, python="autophys", project=None, workbook=None, root=None, 
     skill = output / "skills/autophys/SKILL.md"
     skill.parent.mkdir(parents=True, exist_ok=True)
     skill.write_bytes(canonical.read_bytes())
-    command = [python] if python == "autophys" else [str(Path(python).expanduser().absolute()), "-m", "autophys.cli"]
+    interpreter = python if python == DEFAULT_PYTHON else str(Path(python).expanduser().absolute())
+    command = [interpreter, "-m", "autophys.cli"]
     command += ["mcp"]
     config = {k: str(v) for k, v in (("project", project), ("workbook", workbook), ("root", root)) if v}
     if ssh_host:
-        if python == "autophys":
+        if python == DEFAULT_PYTHON:
             raise SystemExit("--ssh-host requires --python with the remote SDK interpreter path")
         # The wrapper is a normal hashed plugin source. It carries no credentials.
         remote = [python, "-m", "autophys.cli", "mcp", "--expected-playbook-sha256", hashlib.sha256(skill.read_bytes()).hexdigest()]
@@ -79,7 +83,7 @@ def build(output, *, python="autophys", project=None, workbook=None, root=None, 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", required=True, help="new output directory, or this source bundle to refresh")
-    parser.add_argument("--python", default="autophys", help="absolute SDK venv Python (default autophys on PATH)")
+    parser.add_argument("--python", default=DEFAULT_PYTHON, help="absolute SDK venv Python (default python3 on PATH)")
     parser.add_argument("--project")
     parser.add_argument("--workbook")
     parser.add_argument("--root")

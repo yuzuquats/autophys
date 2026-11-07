@@ -14,15 +14,16 @@ Muse may request trust for the MCP capability; use the IDs returned by install
 or inspect with `muse plugins approve autophys`. This trusts tool definitions,
 not experiment proposals. Experiment approval stays in the autophys browser.
 
-The source manifest launches `autophys mcp` from PATH, with
+The source manifest launches `python3 -m autophys.cli mcp` from PATH, with
 `.autophys-mcp.json` in the lab working directory:
 
 ```json
 {"project":"battery_ecm","workbook":"/absolute/path/to/autophys-books","root":"/absolute/path/to/lab"}
 ```
 
-The Python CLI and Rust daemon both use the name autophys. Prefer an explicit
-venv Python in a generated bundle to avoid PATH ambiguity:
+The SDK installs no console script (the `autophys` command is the Rust
+binary). Prefer an explicit venv Python in a generated bundle, so the server
+runs in the environment that has the SDK:
 
 ```sh
 python3 plugins/muse-autophys/build.py --output /tmp/my-autophys-plugin \

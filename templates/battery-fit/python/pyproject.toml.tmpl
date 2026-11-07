@@ -1,0 +1,18 @@
+[project]
+name = "{{name}}"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    # The autophys SDK, pinned to one commit of its repository.
+    "autophys @ git+{{sdk_repo}}@{{sdk_rev}}#subdirectory=sdks/python",
+    "matplotlib",
+]
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+# The scripts here are run directly; installing the project installs only
+# its dependencies.
+[tool.setuptools]
+py-modules = []

@@ -62,7 +62,7 @@ The plugin installation is one command; Muse's separate approval trusts the
 MCP capability definition, as required for third-party plugins. It does not
 approve any experiment. The source bundle can also be installed directly
 with `muse plugins install plugins/muse-autophys`: it launches
-`autophys mcp` from PATH and reads `.autophys-mcp.json` in the working
+`python3 -m autophys.cli mcp` from PATH and reads `.autophys-mcp.json` in the working
 directory. The supported keys are `project`, `workbook`, `root`,
 `investigation` and `playbook`. CLI flags override the file.
 

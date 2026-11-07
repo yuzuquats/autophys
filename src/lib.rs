@@ -6,16 +6,20 @@
 //! crate (`sdks/rust`) over a collection of `.ap-workbook` files; [`keys`]
 //! holds the server's own database of API keys and pairings; [`admin`] is
 //! `autophys pair | keys | db | users`; [`accounts`] and [`login`] are the
-//! invite-only browser sign-in of `serve --login`.
+//! invite-only browser sign-in of `serve --login`. On the user's side,
+//! [`device`] is `autophys connect | whoami` and [`scaffold`] is
+//! `autophys new`.
 
 pub mod accounts;
 pub mod admin;
 pub mod app;
+pub mod device;
 pub mod embedded;
 pub mod error;
 pub mod http;
 pub mod keys;
 pub mod login;
+pub mod scaffold;
 pub mod scripts;
 pub mod server;
 pub mod train;

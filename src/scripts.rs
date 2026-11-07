@@ -14,6 +14,9 @@ pub fn scripts() -> Scripts<()> {
         .add_command(build_web)
         .add_command(pack)
         .add_command(workspace)
+        .add_command(new)
+        .add_command(connect)
+        .add_command(whoami)
         .add_subcommand("pair", pair_commands())
         .add_subcommand("keys", keys_commands())
         .add_subcommand("users", users_commands())
@@ -123,6 +126,66 @@ async fn train_loop(_: (), args: Option<Vec<String>>) -> tento_sh::Result<Value>
 )]
 async fn train_loops(_: (), args: Option<Vec<String>>) -> tento_sh::Result<Value> {
     train_result(crate::train::loops(args.unwrap_or_default()))
+}
+
+/// Whether this invocation asked for `--json`. The dispatcher consumes the
+/// flag before a raw-argument command sees its words, so [`run`] records it.
+static JSON_OUTPUT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// A raw-argument user command's words, with `--json` restored.
+fn user_args(args: Option<Vec<String>>) -> Vec<String> {
+    let mut args = args.unwrap_or_default();
+    if JSON_OUTPUT.load(std::sync::atomic::Ordering::Relaxed) && !args.iter().any(|w| w == "--json")
+    {
+        args.push("--json".into());
+    }
+    args
+}
+
+/// Like [`train_result`]: report a failure and end the process with its
+/// status, so usage text never lands on stdout ahead of `--json` output.
+fn user_result(result: Result<Value, crate::device::Failure>) -> tento_sh::Result<Value> {
+    match result {
+        Ok(value) => Ok(value),
+        Err(failure) => {
+            let _ = std::io::stdout().flush();
+            eprintln!("autophys: {}", failure.message);
+            std::process::exit(failure.code.into());
+        }
+    }
+}
+
+#[command(
+    name = "new",
+    description = "Create a project from a template: DIR --lang python|rust [--example battery-fit|blank] [--name NAME] [--no-install] [--sdk-rev REV] [--sdk-repo GIT_URL]; Python projects get a .venv (python3, or AUTOPHYS_PYTHON)"
+)]
+async fn new(_: (), args: Option<Vec<String>>) -> tento_sh::Result<Value> {
+    user_result(crate::scaffold::new(
+        user_args(args),
+        &mut std::io::stdout(),
+    ))
+}
+
+#[command(
+    name = "connect",
+    description = "Connect this device to a server (device-code pairing) and save its key: [URL] [--name NAME]; URL defaults to AUTOPHYS_SERVER, the saved server, or http://127.0.0.1:4794"
+)]
+async fn connect(_: (), args: Option<Vec<String>>) -> tento_sh::Result<Value> {
+    user_result(crate::device::connect(
+        user_args(args),
+        &mut std::io::stdout(),
+    ))
+}
+
+#[command(
+    name = "whoami",
+    description = "Show the account, workspace and device this device's key belongs to: [--server URL] [--json]"
+)]
+async fn whoami(_: (), args: Option<Vec<String>>) -> tento_sh::Result<Value> {
+    user_result(crate::device::whoami(
+        user_args(args),
+        &mut std::io::stdout(),
+    ))
 }
 
 fn description(root: &Scripts<()>) -> Value {
@@ -493,6 +556,7 @@ pub async fn run(mut argv: Vec<String>, out: &mut impl Write) -> u8 {
     use tento_sh::dispatch::Callable;
     let scripts = scripts();
     let json = argv.iter().any(|word| word == "--json");
+    JSON_OUTPUT.store(json, std::sync::atomic::Ordering::Relaxed);
     let help = argv
         .iter()
         .skip(1)

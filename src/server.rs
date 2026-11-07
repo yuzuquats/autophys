@@ -26,6 +26,9 @@ pub const USAGE: &str =
                       [--login] [--public-url https://host]
        autophys build-web [--out DIR] [--bundle FILE]
        autophys pack --web-root DIR --out FILE [--no-maps]
+       autophys new DIR --lang python|rust [--example battery-fit|blank] [--name NAME]
+                    [--no-install] [--sdk-rev REV]
+       autophys connect [URL] [--name NAME] | whoami [--json]
        autophys pair list | pair approve <CODE> | pair deny <CODE>
        autophys keys list [--json] | keys revoke <KEY_ID>
        autophys users list | users add <EMAIL> [--read-only] | users set <EMAIL> --read-only|--read-write|--demo|--no-demo | users remove <EMAIL>

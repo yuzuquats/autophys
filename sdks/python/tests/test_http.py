@@ -10,7 +10,8 @@ import pytest
 from fake_server import FakeAutophys
 from autophys import cli
 from autophys.agent import Investigation, ProposalRunner, ScriptedPolicy
-from autophys.http import DEFAULT_SERVER, HttpError, HttpStore, iter_sse, load_credentials, request_json
+from autophys.http import (AuthError, DEFAULT_SERVER, HttpError, HttpStore, iter_sse, load_credentials, pair_poll,
+                           pair_start, request_json, save_credentials, whoami)
 from autophys.project import Budgets, Project
 from autophys.reasoner import HttpReasoner, ReasonerError, parse_json_content
 from autophys.store import config_hash
@@ -87,49 +88,58 @@ def test_investigation_over_http_with_dashboard_approval(server):
     assert server.investigations[inv.id]["config_version"] == project.config_version
 
 
-def test_cli_pair_saves_0600_and_never_prints_key(server, config_dir):
-    out = io.StringIO()
-    assert cli.main(["pair", "--server", server.url, "--name", "lab-pc"], out=out) == 0
-    text = out.getvalue()
-    path = config_dir / "credentials"
+def _pair(url, name, sleep=lambda s: None):
+    start = pair_start(url, name)
+    return pair_poll(url, start, name, sleep=sleep)
+
+
+def test_pairing_saves_0600_and_whoami_reads_it(server, config_dir):
+    # The device flow the Rust `autophys connect` drives, through the SDK's
+    # own pairing client: the key file is private and its repr hides the key.
+    creds = _pair(server.url, "lab-pc")
+    path = save_credentials(creds)
     saved = json.loads(path.read_text())
+    assert path == config_dir / "credentials"
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
-    assert saved["api_key"].startswith("apk_") and saved["api_key"] not in text
-    assert "ABCD-" in text and "https://example.test/autophys/pair" in text
-    out = io.StringIO()
-    assert cli.main(["whoami", "--json"], out=out) == 0
-    me = json.loads(out.getvalue())
+    assert saved["api_key"].startswith("apk_") and saved["api_key"] not in repr(creds)
+    me = whoami(load_credentials())
     assert me["device_name"] == "lab-pc" and me["workspace"] == "ws_demo"
-    assert saved["api_key"] not in out.getvalue()
+    assert saved["api_key"] not in json.dumps(me)
 
 
-def test_cli_pair_uses_autophys_server_on_first_pair(server, config_dir, monkeypatch):
+def test_saved_credentials_follow_autophys_server(server, config_dir, monkeypatch):
+    save_credentials(_pair(server.url, "lab-pc"))
     monkeypatch.setenv("AUTOPHYS_SERVER", server.url)
-    out = io.StringIO()
-    assert cli.main(["pair", "--name", "lab-pc"], out=out) == 0
-    assert json.loads((config_dir / "credentials").read_text())["server"] == server.url
+    assert load_credentials().server == server.url
 
 
-def test_cli_pair_denied(config_dir):
+def test_pairing_denied(config_dir):
     with FakeAutophys(deny=True) as s:
-        out = io.StringIO()
-        assert cli.main(["pair", "--server", s.url], out=out) == 1
-        assert "access_denied" in out.getvalue()
+        with pytest.raises(HttpError) as e:
+            _pair(s.url, "lab-pc")
+        assert e.value.error == "access_denied"
     assert not (config_dir / "credentials").exists()
 
 
-def test_cli_whoami_env_key_and_unpaired(server, config_dir, monkeypatch):
-    out = io.StringIO()
-    assert cli.main(["whoami", "--server", server.url], out=out) == 1
-    assert "not paired" in out.getvalue()
+def test_whoami_env_key_and_unpaired(server, config_dir, monkeypatch):
+    assert load_credentials(server.url) is None
     key = server.issue_key(account="env@example.com")
     monkeypatch.setenv("AUTOPHYS_API_KEY", key)
-    out = io.StringIO()
-    assert cli.main(["whoami", "--server", server.url], out=out) == 0
-    assert "env@example.com" in out.getvalue() and key not in out.getvalue()
+    me = whoami(load_credentials(server.url))
+    assert me["account"] == "env@example.com" and key not in json.dumps(me)
     monkeypatch.setenv("AUTOPHYS_API_KEY", "apk_revoked")
-    out = io.StringIO()
-    assert cli.main(["whoami", "--server", server.url], out=out) == 1 and "rejected" in out.getvalue()
+    with pytest.raises(AuthError):
+        whoami(load_credentials(server.url))
+
+
+def test_sdk_ships_no_console_script():
+    # CLI-1: the only `autophys` command is the Rust binary.
+    from pathlib import Path
+    pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    if not pyproject.exists():
+        pytest.skip("pyproject.toml is not part of the installed package")
+    assert "[project.scripts]" not in pyproject.read_text()
+    assert {"pair", "whoami"}.isdisjoint(cli.build_parser()._subparsers._group_actions[0].choices)
 
 
 def test_credentials_with_open_mode_are_refused(config_dir):

@@ -87,7 +87,7 @@ function selectedDetails(s: State): DetailsModel {
 /** O-3: devices waiting to pair, each approvable here (or with `autophys pair approve` on the host). */
 export function devices(s: Pick<State, "pairings">): { section: Section; actions: Action[] } | null {
   if (!s.pairings) return null;
-  if (!s.pairings.length) return { section: { heading: "Devices", blocks: [{ kind: "text", text: "No pending connection requests. Connect the Python SDK to your daemon URL to request access, then approve its code here or with autophys pair.", tone: "muted" }] }, actions: [] };
+  if (!s.pairings.length) return { section: { heading: "Devices", blocks: [{ kind: "text", text: "No pending connection requests. Run autophys connect with your daemon URL on a device to request access, then approve its code here or with autophys pair approve.", tone: "muted" }] }, actions: [] };
   return {
     section: { heading: "Devices waiting to pair", blocks: s.pairings.map((p) => ({
       kind: "pairing", device: p.device, code: p.code, client: p.client || "Client not reported", expiry: pairingExpiry(p.expires),

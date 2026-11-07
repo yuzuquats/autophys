@@ -47,16 +47,16 @@ When parameters are tied together, autophys ranks the candidate experiments by F
 
 ## Quick start: fit a battery cell
 
-You need Python 3.10 or newer. This local fit needs no account or API key.
+You need the \`autophys\` command, Python 3.10 or newer and git. This local fit needs no account or API key.
 
 \`\`\`sh
-git clone https://github.com/yuzuquats/autophys.git
-cd autophys/examples/battery_fit
-./run.sh                              # fits the bundled demo cell, writes fit.png
-./run.sh my_cell.csv --sigma 0.002 --ocv my_ocv.csv --out my_cell.png
+autophys new my-cell --lang python    # the battery-fit template, with its own .venv
+cd my-cell
+.venv/bin/python battery_fit.py data/demo.csv     # fits the bundled demo cell, writes fit.png
+.venv/bin/python battery_fit.py my_cell.csv --sigma 0.002 --ocv my_ocv.csv --out my_cell.png
 \`\`\`
 
-\`examples/battery_fit/README.md\` covers inputs, sample data, expected output and how to read the result, including the R1 ↔ C1 trade-off that a single pulse leaves unresolved. Connecting to a remote daemon needs a paired device key, a daemon started with \`serve --login\` needs a browser sign-in, and live model calls need your own provider access.
+The project's README covers inputs, sample data, expected output and how to read the result, including the R1 ↔ C1 trade-off that a single pulse leaves unresolved. \`--lang rust\` creates the same fit in Rust, and \`--example blank\` a minimal project. Recording on a remote daemon needs this device connected once with \`autophys connect URL\` (\`autophys whoami\` shows the account), a daemon started with \`serve --login\` needs a browser sign-in, and live model calls need your own provider access.
 
 ## The closed loop
 
@@ -120,7 +120,7 @@ python3 -m venv .venv
 muse plugins install "$HOME/.cache/autophys-muse-plugin"
 \`\`\`
 
-For your own simulator, pass \`--project mypkg.module:project\` (a \`Project\` or a decorated simulator) and set \`--root\` to the directory that holds it. Muse starts the bundled server itself; running \`autophys mcp\` by hand starts a separate server and does not configure the plugin.
+For your own simulator, pass \`--project mypkg.module:project\` (a \`Project\` or a decorated simulator) and set \`--root\` to the directory that holds it. Muse starts the bundled server itself; running \`python -m autophys.cli mcp\` by hand starts a separate server and does not configure the plugin.
 
 Tools: \`describe_project\`, \`import_measurements\`, \`fit\`, \`identifiability\`, \`rank_experiments\`, \`propose_experiment\`, \`status\`, \`attach_data\` and \`report\`. There is no approve or reject tool: experiments are approved here, in the browser.
 
@@ -134,11 +134,11 @@ The Fit view overlays the recorded initial and fitted model curves on the measur
 
 | Path | What it is |
 | --- | --- |
-| \`examples/battery_fit\` | Fit a measured battery trace, check identifiability, plot the curve. |
-| \`sdks/python\` | Python SDK and CLI: simulator, fit, identifiability, experiment ranking, agent loop, workbook, playbook research, and the MCP server. |
+| \`templates\` | The projects \`autophys new\` creates: battery-fit (fit a measured battery trace, check identifiability, plot the curve; the closed loop) and blank. |
+| \`sdks/python\` | Python SDK: simulator, fit, identifiability, experiment ranking, agent loop, workbook, playbook research, and the MCP server. |
 | \`sdks/rust\` | Rust SDK: local and HTTP workbooks, simulators, numerics and the investigation loop. |
 | \`plugins/muse-autophys\` | Muse Code bundle: the calibration skill, the \`/calibrate\` command and the bundle builder. The MCP server itself is in \`sdks/python\`. |
-| \`src/\`, \`html/\` | Rust daemon and this browser workbench. |
+| \`src/\`, \`html/\` | The Rust \`autophys\` command (daemon, \`new\`, \`connect\`, workbook verbs) and this browser workbench. |
 | \`train/sft\` | Decision datasets, training workers and held-out evaluation for policy training. |
 | \`ops\` | Standalone Linux packaging and optional service setup. |
 | \`vendor/tento\` | The vendored browser compiler, UI and Rust dependencies this checkout builds with. |
@@ -149,7 +149,7 @@ The Fit view overlays the recorded initial and fitted model curves on the measur
 The investigation is the calibration loop. Playbook research runs many investigations to improve the strategy a model policy follows, so the research loop calls the investigation loop; they are nested, not concurrent. Policy training is a separate workflow.
 
 - **Investigation (inner).** One calibration: an agent fits the model, checks identifiability, ranks experiments, requests data and stops. A model policy follows a playbook, a \`SKILL.md\` file; the scripted policy implements the same strategy in code.
-- **Research (outer).** \`autophys research\` improves that playbook. It scores a playbook by running complete investigations on synthetic cases with a hidden truth, asks a researcher model for an edit, and keeps the edit only if the score improves. \`autophys autoloop\` repeats this until a stop condition, keeping a journal and resumable state.
+- **Research (outer).** \`autophys research\` (for now \`python -m autophys.cli research\`; see the reference below) improves that playbook. It scores a playbook by running complete investigations on synthetic cases with a hidden truth, asks a researcher model for an edit, and keeps the edit only if the score improves. \`autophys autoloop\` repeats this until a stop condition, keeping a journal and resumable state.
 - **Policy training.** The daemon's \`train\` commands turn scripted investigation decisions into a dataset, train a model adapter and evaluate it.
 
 Each research step waits for all of its investigations before it decides. The investigations within a step are independent and run on up to \`--jobs\` workers; recording model replies forces them to run one at a time.
@@ -163,9 +163,9 @@ Inside each evaluation, an investigation is not a fixed cycle. At every step the
 
 | Mode | What runs | Where new data comes from |
 | --- | --- | --- |
-| \`autophys research\` | the outer loop, calling many investigations | a synthetic case's hidden truth, with no person in the loop |
-| \`autophys autoloop\` | the outer loop until a stop condition, with a journal and resume | the same synthetic truth |
-| \`autophys bench\` | investigations across policies, cases and seeds, with no playbook search | the same synthetic truth |
+| \`autophys research\` (now \`python -m autophys.cli research\`) | the outer loop, calling many investigations | a synthetic case's hidden truth, with no person in the loop |
+| \`autophys autoloop\` (now \`python -m autophys.cli autoloop\`) | the outer loop until a stop condition, with a journal and resume | the same synthetic truth |
+| \`autophys bench\` (now \`python -m autophys.cli bench\`) | investigations across policies, cases and seeds, with no playbook search | the same synthetic truth |
 | SDK or Muse Code | one investigation at a time, on your simulator and measurements | an experiment you approve here and run on your hardware |
 | Workbench thermal starter | a scripted investigation that the daemon runs | a simulated reference specimen, when you approve |
 | Daemon \`train\` | dataset generation, adapter training and policy evaluation | scripted synthetic trajectories and held-out synthetic cases |
@@ -317,7 +317,7 @@ verified: true
 \`bench\` runs complete investigations on synthetic cases with a known truth, here for the scripted policy and the fake reasoner. It makes no model calls.
 
 \`\`\`sh
-.venv/bin/autophys bench --case thermal --seeds 1 --policy scripted --policy fake-reasoner --json > bench.json
+.venv/bin/python -m autophys.cli bench --case thermal --seeds 1 --policy scripted --policy fake-reasoner --json > bench.json
 .venv/bin/python - <<'PY'
 import json
 for row in json.load(open("bench.json")):
@@ -332,29 +332,29 @@ thermal fake-reasoner validated requested=pulse
 
 ## Reference
 
-Two different programs are called \`autophys\`:
+The \`autophys\` command is one Rust binary built from \`src/\`. It sets up projects (\`new\`), connects a device to a daemon (\`connect\`, \`whoami\`), serves this workbench and the \`/api/v1\` endpoints, manages browser accounts, device keys and workbooks, reviews proposals, and drives policy training. The Python and Rust SDKs are libraries and install no command. The Python SDK's developer commands (\`bench\`, \`research\`, \`autoloop\`, \`export-trajectories\` and \`mcp\`) run as \`python -m autophys.cli\` until they move into the \`autophys\` command.
 
-- The **daemon** is a Rust binary built from \`src/\`. It serves this workbench and the \`/api/v1\` endpoints, manages browser accounts, device keys and workbooks, reviews proposals, and drives policy training. Its commands include \`serve\`, \`build-web\`, \`pack\`, \`users\`, \`approve\`, \`verify\` and \`train\`.
-- The **Python CLI** is the console script the Python SDK installs (\`autophys.cli:main\`). It pairs a device with a daemon, runs benchmarks and playbook research, exports decisions, and serves the Muse Code tools. Its commands include \`pair\`, \`bench\`, \`research\`, \`autoloop\`, \`export-trajectories\` and \`mcp\`.
-
-Install them separately and call each one by path, so you always know which one runs. Building from source needs Rust (edition 2024) and a C toolchain, and building the browser app needs Deno 2; the Tento sources it uses are vendored in the repository. From the repository root:
+Building from source needs Rust (edition 2024) and a C toolchain, and building the browser app needs Deno 2; the Tento sources it uses are vendored in the repository. From the repository root:
 
 \`\`\`sh
-# The daemon (Rust)
+# The autophys command (Rust)
 cargo build --release --bin autophys
-./target/release/autophys --help            # serve, build-web, users, approve, verify, train, …
+./target/release/autophys --help            # new, connect, serve, users, approve, verify, train, …
 
-# The Python SDK and its CLI
+# The Python SDK, for its developer commands
 python3 -m venv .venv
 .venv/bin/pip install -e 'sdks/python[mcp]'
-.venv/bin/autophys --help                   # pair, whoami, bench, research, autoloop, mcp, …
+.venv/bin/python -m autophys.cli --help     # bench, research, autoloop, export-trajectories, mcp
 \`\`\`
 
-The examples below use \`./target/release/autophys\` for the daemon and \`.venv/bin/autophys\` for the Python CLI. If \`CARGO_TARGET_DIR\` is set, the daemon binary is under that directory instead of \`./target\`. On Linux, \`ops/package.sh --out /absolute/path/to/autophys\` builds and packs one executable that serves its embedded app without Deno or the checkout.
+The examples below use \`./target/release/autophys\` for the \`autophys\` command and \`.venv/bin/python -m autophys.cli\` for the SDK's developer commands. If \`CARGO_TARGET_DIR\` is set, the daemon binary is under that directory instead of \`./target\`. On Linux, \`ops/package.sh --out /absolute/path/to/autophys\` builds and packs one executable that serves its embedded app without Deno or the checkout.
 
-### Daemon CLI
+### The autophys command
 
 \`\`\`sh
+./target/release/autophys new my-cell --lang python            # a project; see below
+./target/release/autophys connect https://autophys.example.com --name lab-laptop
+./target/release/autophys whoami
 ./target/release/autophys serve --collection ./autophys-demo   # open http://127.0.0.1:4794
 \`\`\`
 
@@ -370,6 +370,14 @@ $D verify --target ./autophys-demo --json
 
 \`--help\` lists the commands, \`--help --json\` prints the command tree as JSON, and \`--version\` prints the version and build commit (\`dev\` for an unstamped build). Every command accepts \`--json\`. The exit status is 0 on success, 1 on a failure (including a \`verify\` that finds a problem), and 2 for a usage error.
 
+**Projects and devices**
+
+| Command | Options |
+| --- | --- |
+| \`new DIR\` | Create a project in a new or empty directory. \`--lang python\|rust\` (required), \`--example battery-fit\|blank\` (default \`battery-fit\`), \`--name NAME\` (default the directory name), \`--no-install\` (Python: skip creating \`.venv\` and installing), \`--sdk-rev REV\` (default the commit this binary was built from), \`--sdk-repo GIT_URL\` (default \`https://github.com/yuzuquats/autophys\`). The project depends on the SDK through a git dependency pinned to that commit. A Python project gets \`.venv\` from \`python3\` (or \`$AUTOPHYS_PYTHON\`). |
+| \`connect [URL]\` | Connect this device to a daemon by device code; the daemon's operator approves the printed code in the workbench or with \`pair approve\`. The key is saved to \`credentials\` in \`$AUTOPHYS_CONFIG_DIR\` (default \`~/.config/autophys\`, mode 0600), where both SDKs find it, and is never printed. URL defaults to \`$AUTOPHYS_SERVER\`, then the saved server, then \`http://127.0.0.1:4794\`. \`--name\` is the name shown on the approval page (default the hostname). |
+| \`whoami\` | Show the account, workspace and device the key belongs to. \`--server URL\` (same order as \`connect\`). The key comes from \`$AUTOPHYS_API_KEY\` or the saved credentials. |
+
 **Serving and building**
 
 | Command | Options |
@@ -380,7 +388,7 @@ $D verify --target ./autophys-demo --json
 
 **Reading and reviewing workbooks**
 
-These commands take \`--target\`: a collection directory, one \`.ap-workbook\` file, or an \`http(s)://\` daemon URL. The default is \`$AUTOPHYS_HOME\`, or \`~/autophys\` when that is unset. URL targets use the device key from \`AUTOPHYS_API_KEY\`, or the credentials \`pair\` saved in \`$AUTOPHYS_CONFIG_DIR\` (default \`~/.config/autophys\`).
+These commands take \`--target\`: a collection directory, one \`.ap-workbook\` file, or an \`http(s)://\` daemon URL. The default is \`$AUTOPHYS_HOME\`, or \`~/autophys\` when that is unset. URL targets use the device key from \`AUTOPHYS_API_KEY\`, or the credentials \`autophys connect\` saved in \`$AUTOPHYS_CONFIG_DIR\` (default \`~/.config/autophys\`).
 
 | Command | Options |
 | --- | --- |
@@ -397,7 +405,7 @@ The admin commands work on the daemon's own files. Each takes \`--collection DIR
 
 | Command | What it does |
 | --- | --- |
-| \`pair list\`, \`pair approve CODE\`, \`pair deny CODE\` | Review devices waiting to pair (a device starts this with the Python CLI's \`pair\`). |
+| \`pair list\`, \`pair approve CODE\`, \`pair deny CODE\` | Review devices waiting to pair (a device starts this with \`connect\`). |
 | \`keys list\`, \`keys revoke KEY_ID\` | List or revoke paired devices' API keys. |
 | \`users list\` | List browser accounts, with their read-only and demo flags. |
 | \`users add EMAIL\` | Create or re-invite an account, printing a one-time password link valid for seven days. \`--public-url ORIGIN\` sets the link's origin, \`--read-only\` blocks browser writes, and \`--demo\` makes it the single passwordless demo account that anyone can continue as from the sign-in page. |
@@ -432,12 +440,10 @@ The \`train\` commands drive the Python workers in \`train/sft\` (see its \`READ
 
 The \`train\` commands read \`AUTOPHYS_TRAIN_DIR\` and \`AUTOPHYS_TRAIN_PYTHON\`, and URL targets read \`AUTOPHYS_API_KEY\` and \`AUTOPHYS_CONFIG_DIR\`.
 
-### Python CLI
+### Python SDK developer commands
 
 \`\`\`sh
-P=.venv/bin/autophys
-$P pair --server https://autophys.example.com --name lab-laptop
-$P whoami
+P=".venv/bin/python -m autophys.cli"
 $P bench --seeds 5 --jobs 4
 $P research --output-dir ./research-1 --replay policy.jsonl --researcher-replay researcher.jsonl
 $P autoloop --output-dir ./autoloop-1 --policy fake-reasoner --researcher heuristic --max-iterations 3
@@ -447,8 +453,6 @@ $P mcp --project mypkg.module:project --workbook ~/autophys
 
 | Command | Options |
 | --- | --- |
-| \`pair\` | Pair this device with a daemon by device code. The daemon's operator then approves it with \`pair approve\`. \`--server URL\` (default \`$AUTOPHYS_SERVER\`, then the saved server, then \`http://127.0.0.1:4794\`), \`--name\` (the name shown on the approval page; default the hostname). |
-| \`whoami\` | Show the account and workspace this device's key belongs to. \`--server\` (same order as \`pair\`), \`--json\`. |
 | \`bench\` | Run the synthetic benchmark. \`--jobs N\` (default 1), \`--seeds N\` (default 3), \`--case NAME\` (repeatable; default all six cases below), \`--policy scripted\\|fake-reasoner\\|reason\` (repeatable; default \`scripted\` and \`fake-reasoner\`), \`--json\`. For \`--policy reason\`, \`--model\` is required; \`--route meta\\|baseten\\|lane\\|muse\` (default \`meta\`), \`--effort\`, \`--images\`, \`--playbook\`, \`--replay FILE\` and \`--record FILE\` configure the model. |
 | \`research\` | Improve a playbook. \`--output-dir DIR\` is required and must not exist yet. The defaults are one iteration, one job, the \`reason\` policy and the API researcher. The options are listed below. |
 | \`autoloop\` | Improve a playbook until a stop condition, with a journal and resumable state. It takes the \`research\` options plus the ones listed below. \`--output-dir DIR\` is required, and must be new unless you pass \`--resume\`. |
@@ -477,9 +481,9 @@ The benchmark cases are \`oscillator-free-only\`, \`oscillator\`, \`thermal-shor
 | Variable | What it sets |
 | --- | --- |
 | \`AUTOPHYS_HOME\` | The collection \`ap.connect()\` opens when it is given no target (default \`~/autophys\`). |
-| \`AUTOPHYS_API_KEY\` | The key for \`whoami\` and for a remote \`ap.connect\`. When it is unset, the credentials saved by \`pair\` are used. |
-| \`AUTOPHYS_SERVER\` | The daemon \`pair\` and \`whoami\` talk to when \`--server\` is not given; it wins over the saved server. |
-| \`AUTOPHYS_CONFIG_DIR\` | Where \`pair\` saves \`credentials\` (default \`~/.config/autophys\`). |
+| \`AUTOPHYS_API_KEY\` | The key for \`autophys whoami\` and for a remote \`ap.connect\`. When it is unset, the credentials saved by \`autophys connect\` are used. |
+| \`AUTOPHYS_SERVER\` | The daemon \`autophys connect\` and \`whoami\` talk to when no URL is given; it wins over the saved server. |
+| \`AUTOPHYS_CONFIG_DIR\` | Where \`autophys connect\` saves \`credentials\` (default \`~/.config/autophys\`). |
 | \`AUTOPHYS_ALLOW_LIVE_REASON\` | Set it to \`1\` to let \`bench\`, \`research\` and \`autoloop\` make live model calls. Without it, model-backed policies and researchers need a replay. SDK reasoners you build yourself are not gated. |
 | \`AUTOPHYS_REASON_REPLAY\`, \`AUTOPHYS_REASON_RECORD\` | Default cassette paths for \`ap.reasoner_for()\`, to replay or record model replies as JSONL. Explicit arguments win. |
 | \`AUTOPHYS_REASON_ROUTE\`, \`AUTOPHYS_REASON_MODEL\` | Configure \`ap.reasoner_from_env()\`. The route is \`meta\` (the default; key in \`MODEL_API_KEY\`), \`baseten\` (key in \`BASETEN_API_KEY\`; set the model too), \`lane\` or \`muse\`. The default model is \`muse-spark-1.3\`. The CLI ignores these; pass \`--route\` and \`--model\` instead. |
@@ -634,7 +638,7 @@ In the tables, \`Result\` is \`autophys::Result\`, \`Value\` is \`serde_json::Va
 | Name | What it is |
 | --- | --- |
 | \`autophys::connect(target: Option<&str>) -> Result<Client>\` | A collection directory, one \`.ap-workbook\` file, or an \`http(s)://\` daemon URL; \`None\` means the local \`$AUTOPHYS_HOME\`, or \`~/autophys\`. |
-| \`Client::connect_remote(server: &str, api_key: &str) -> Result<Client>\` | Connect to a daemon with an explicit key. For a URL, \`connect\` uses \`AUTOPHYS_API_KEY\`, or the credentials \`pair\` saved in \`$AUTOPHYS_CONFIG_DIR\` (default \`~/.config/autophys\`; keep the file mode \`0600\`). |
+| \`Client::connect_remote(server: &str, api_key: &str) -> Result<Client>\` | Connect to a daemon with an explicit key. For a URL, \`connect\` uses \`AUTOPHYS_API_KEY\`, or the credentials \`autophys connect\` saved in \`$AUTOPHYS_CONFIG_DIR\` (default \`~/.config/autophys\`; keep the file mode \`0600\`). |
 | \`client.projects() -> Result<Vec<Project>>\`, \`client.workbooks() -> Result<Vec<Workbook>>\` | List projects; open every workbook. |
 | \`client.project(name: &str) -> Result<Workbook>\`, \`client.project_by_id(id: &str)\` | Open a workbook by name (created if missing), or an existing one by its \`prj_…\` ID. |
 | \`client.project_with(project: project::Project) -> Result<ProjectWorkbook>\` | Open a workbook with its simulator attached, storing the config version. \`wb.with_project(project)\` attaches one to an open workbook. |

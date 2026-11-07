@@ -71,7 +71,7 @@ pub fn connect(target: Option<&str>) -> Result<Client> {
         let text = crate::remote::normalize_server(text)?;
         let text = text.as_str();
         let creds = crate::remote::auth::load_credentials(Some(text))?.ok_or_else(||
-            Error::BadRequest(format!("no API key for {text}: pass api_key=, set AUTOPHYS_API_KEY or run `autophys pair`")))?;
+            Error::BadRequest(format!("no API key for {text}: pass api_key=, set AUTOPHYS_API_KEY or run `autophys connect`")))?;
         return Client::connect_remote(text, &creds.api_key);
     }
     let path = expand(text);

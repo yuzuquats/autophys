@@ -23,7 +23,7 @@ The yuzuquats original and its venv `~/.cache/modellab/venv` are untouched.
 ```review-table
 | Area              | Before (hacks-site ModelLab)                        | After (autophys sdks/python)                                 |
 | ----------------- | --------------------------------------------------- | ------------------------------------------------------------ |
-| Package, CLI      | `modellab`, `modellab pair/whoami/bench`             | `autophys`, `autophys pair/whoami/bench` (AX-6)               |
+| Package, CLI      | `modellab`, `modellab pair/whoami/bench`             | `autophys` (AX-6); since CLI-1 (cli.md) the only command is the Rust binary (`autophys connect/whoami`), the SDK ships none |
 | Server            | draft `/api/modellab` on `https://hacks.lona.so`     | daemon `/api/v1`, default `http://127.0.0.1:4794`             |
 | Credentials       | `~/.config/modellab/credentials`, `MODELLAB_API_KEY` | `~/.config/autophys/credentials` (0600), `AUTOPHYS_API_KEY`   |
 | Approval wait     | poll `GET …/proposals/{pid}` every 5 s               | consume `GET /stream?after=<gseq>`; poll as the fallback (SD-1) |

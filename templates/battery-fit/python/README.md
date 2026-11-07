@@ -1,18 +1,20 @@
 # Fit a battery cell and see which parameters your data pins down
 
-Everything needed to run this is in this folder. It fits a first-order
-(1RC) battery model to a time / current / voltage CSV, plots the measured and
-fitted voltage, and says which of R0, R1 and C1 the data determines to better
-than ±10%. It runs locally, with no accounts, keys or network calls after
-setup. Section 5 runs the closed loop: an agent proposes the next cycler test,
-a person approves it, and its data is attached and refitted.
+This project was created by `autophys new --lang python --example
+battery-fit`. It fits a first-order (1RC) battery model to a time / current /
+voltage CSV, plots the measured and fitted voltage, and says which of R0, R1
+and C1 the data determines to better than ±10%. It runs locally, with no
+accounts, keys or network calls after setup. Section 5 runs the closed loop:
+an agent proposes the next cycler test, a person approves it, and its data is
+attached and refitted.
 
 ```
-battery_fit/
+.
 ├── README.md          this file
-├── run.sh             one-step setup and run
+├── pyproject.toml     the autophys SDK (pinned to one commit) and matplotlib
+├── .venv/             the environment `autophys new` created
 ├── battery_fit.py     the model, fit, identifiability check and plot
-├── closed_loop.py     the closed loop: propose the next test, approve, attach, refit
+├── closed_loop.py     the closed loop: propose the next test, attach its data, refit
 ├── .env.example       server and model settings for the closed loop; copy to .env
 ├── data/
 │   ├── demo.csv       a made-up cell with a known answer: three pulses and rests, 2 mV noise
@@ -23,18 +25,30 @@ battery_fit/
     └── short.txt short.png
 ```
 
-## 1. Run the demo
-
-You need git and Python 3.10 or newer. From the repo root:
+The commands below use `.venv/bin/python`; after `. .venv/bin/activate`,
+plain `python` works too. If you created the project with `--no-install`, set
+up the environment first (Python 3.10 or newer, and git to fetch the SDK):
 
 ```sh
-cd examples/battery_fit
-./run.sh
+python3 -m venv .venv
+.venv/bin/python -m pip install .
 ```
 
-The first run creates `.venv/` here and installs the autophys SDK (from
-`../../sdks/python`, needing numpy and scipy) and matplotlib. Then it fits
-`data/demo.csv` and writes `fit.png`:
+The `autophys` commands below assume the binary is on your PATH (or use its
+full path, such as `REPO/target/release/autophys` in the autophys checkout you built). The SDK dependency is a git
+URL on a private GitHub repository: fetching it over https needs GitHub
+credentials (a credential helper or token); with SSH-only access, rewrite the
+URL to `ssh://git@github.com/yuzuquats/autophys` or set
+`git config --global url."git@github.com:".insteadOf "https://github.com/"`,
+and for Cargo also `CARGO_NET_GIT_FETCH_WITH_CLI=true`.
+
+## 1. Run the demo
+
+```sh
+.venv/bin/python battery_fit.py data/demo.csv
+```
+
+It fits `data/demo.csv` and writes `fit.png`:
 
 ```
 fit: chi2/N = 0.99 (converged; ~1 means the residuals match sigma)
@@ -54,7 +68,7 @@ top, residuals in mV in the middle, and current at the bottom.
 ## 2. See what the identifiability check adds
 
 ```sh
-./run.sh data/short.csv --out short.png
+.venv/bin/python battery_fit.py data/short.csv --out short.png
 ```
 
 ```
@@ -73,8 +87,8 @@ fixed. A good-looking fit alone would not tell you that.
 ## 3. Fit your own cell
 
 ```sh
-./run.sh /path/to/my_cell.csv --sigma 0.002 --capacity-ah 2.5 --soc0 0.9 \
-  --ocv /path/to/my_ocv.csv --out my_cell.png
+.venv/bin/python battery_fit.py /path/to/my_cell.csv --sigma 0.002 \
+  --capacity-ah 2.5 --soc0 0.9 --ocv /path/to/my_ocv.csv --out my_cell.png
 ```
 
 | Input | What to give | Default |
@@ -90,10 +104,7 @@ fixed. A good-looking fit alone would not tell you that.
 Convert units first if your file uses ms, mA or mV, or if its sign
 convention is positive for charging. The generic OCV table is only a
 placeholder, and a wrong OCV curve will show up as structure in the
-residuals.
-
-You can also run the script directly with any Python environment that has the
-SDK installed: `python battery_fit.py --help`.
+residuals. `python battery_fit.py --help` lists the options.
 
 ## 4. Read the result
 
@@ -119,10 +130,10 @@ data is attached, it refits and checks the result against a held-out test that
 it never fits.
 
 ```sh
-./run.sh agent tests                    # the programs it may propose, plus the held-out check
-./run.sh agent start --simulate         # fit quick_pulse; ends with a proposal
-./run.sh agent approve                  # or approve it in the browser
-./run.sh agent continue --simulate      # attach the test's data, refit, report, write loop.png
+.venv/bin/python closed_loop.py tests              # the programs it may propose, plus the held-out check
+.venv/bin/python closed_loop.py start --simulate   # fit quick_pulse; ends with a proposal
+autophys approve INVESTIGATION PROPOSAL            # as printed by start; or approve it in the browser
+.venv/bin/python closed_loop.py continue --simulate   # attach the test's data, refit, report, write loop.png
 ```
 
 `--simulate` stands in for a cycler. It generates each test's voltage from a
@@ -138,6 +149,7 @@ status: awaiting_data (proposal prop_… awaits approval and data)
   tests run: 2 (quick_pulse, check [held out]), 7 min of cycler time
 
 proposed next test: pulse_ladder (17 min): rest 10 s, +1 A 30 s, rest 300 s, +2 A 30 s, rest 300 s, -1.5 A 30 s, rest 300 s
+  approve it in …, or with `autophys approve inv_… prop_…`
 ```
 
 and the continue like this:
@@ -151,14 +163,21 @@ status: validated
   held-out check: chi2/N 1.04 (passed, threshold 2)
 ```
 
-**With a real cell**, run the programs listed by `./run.sh agent tests` on the
-cycler at 2 Hz, starting at 90% SOC, and export each as a
+The proposal is approved by a person, never by the loop itself: in the
+browser, or with the `autophys` command line tool (`autophys approve`, or
+`autophys reject` with a `--reason`). `autophys investigations` lists the
+investigations and where each stands, and `autophys records INVESTIGATION
+--kind proposal` shows its proposals. Without `--target`, these read the same
+local workbook in `~/autophys` that the loop writes.
+
+**With a real cell**, run the programs listed by `closed_loop.py tests` on
+the cycler at 2 Hz, starting at 90% SOC, and export each as a
 `time,current,voltage` CSV. The script checks that the current matches the
 program, then resamples the voltage onto the program's time grid.
 
 ```sh
-./run.sh agent start --data quick_pulse.csv --validation check.csv --sigma 0.002
-./run.sh agent continue --data pulse_ladder.csv    # after approving and running the proposed test
+.venv/bin/python closed_loop.py start --data quick_pulse.csv --validation check.csv --sigma 0.002
+.venv/bin/python closed_loop.py continue --data pulse_ladder.csv    # after approving and running the proposed test
 ```
 
 The cell's capacity, starting SOC and OCV curve are fixed in `closed_loop.py`
@@ -177,14 +196,14 @@ local workbook in `~/autophys`. To record them on a shared server, where
 proposals are approved in the browser:
 
 ```sh
-cp .env.example .env        # set AUTOPHYS_SERVER
-./run.sh pair               # prints a code; the server's operator approves it
-./run.sh agent start --simulate
-./run.sh agent continue --simulate --wait    # waits for the approval in the browser
+autophys connect https://your-server      # prints a code; the server's operator approves it
+cp .env.example .env                      # set AUTOPHYS_SERVER to the same URL
+.venv/bin/python closed_loop.py start --simulate
+.venv/bin/python closed_loop.py continue --simulate --wait    # waits for the approval in the browser
 ```
 
-`./run.sh agent status` shows where the proposal stands. The current
-investigation's ID is kept in `.agent-state.json` in this folder.
+`autophys whoami` shows the account the saved device key belongs to. The
+current investigation's ID is kept in `.agent-state.json` in this folder.
 
 ## The model
 
