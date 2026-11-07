@@ -1,6 +1,6 @@
 # autophys CLI: one command, the Rust binary; the SDKs are libraries
 
-Status: phase A published, 2026-11-06; phase B planned. Thread autophys/run.
+Status: phase A published, 2026-11-06; phase B implemented locally, 2026-11-06. Thread autophys/run.
 
 ## Why
 
@@ -34,7 +34,9 @@ gives them the fit, the loop or pairing without cloning the repo.
 | CLI-7 | `examples/battery_fit` becomes the `battery-fit` template (Python, plus a Rust port of the fit). `run.sh` is deleted. The loop's `approve` and `status` subcommands are dropped from the example in favour of `autophys approve` and `autophys investigations`; `start` and `continue` stay as the user's own program. | keep `examples/` as a separate copy | restore the folder from history |
 | CLI-8 | Templates live in a top-level `templates/<example>/{common,python,rust}/` tree, the single source (no `examples/`). `build.rs` embeds every file `git ls-files` lists there (tracked plus untracked, minus ignored, so a `.venv` or plot from running a template in place is never embedded; a plain walk without Git). `*.tmpl` files are rendered, everything else is copied byte for byte. | templates under `src/templates/` with an explicit `include_bytes!` list | move the tree and edit `build.rs`; nothing outside the CLI reads it |
 | CLI-9 | The pinned REV is `AUTOPHYS_SOURCE_COMMIT`, a new build.rs variable: `AUTOPHYS_COMMIT` when the release scripts stamp it, else `git rev-parse HEAD` at build time, else empty (then `new` asks for `--sdk-rev`). `--version` and `/api/healthz` keep reporting `AUTOPHYS_COMMIT` or `dev`. `--sdk-repo GIT_URL` overrides the repository (testing unpublished commits; a Python `file:///PATH` is written as `file://localhost/PATH`, which pip requires). `AUTOPHYS_PYTHON` overrides `python3` for the venv. | stamp HEAD into `BuildInfo` too, so `--version` names the commit of every build | one build.rs line and the docs |
-| CLI-10 | Without the console script, the Muse plugin's source manifest and `build.py` default launch `python3 -m autophys.cli mcp`; a generated bundle still uses the explicit venv interpreter. `mcp` stays in the Python SDK (it serves the user's Python simulator). | keep a console script just for `mcp` | restore the entry point and the plugin default |
+| CLI-10 | *Superseded by phase B (CLI-11).* Without the console script, the Muse plugin's source manifest and `build.py` default launch `python3 -m autophys.cli mcp`; a generated bundle still uses the explicit venv interpreter. `mcp` stays in the Python SDK (it serves the user's Python simulator). | keep a console script just for `mcp` | restore the entry point and the plugin default |
+| CLI-12 | The removal gate (CLI-5: "reproduce their replayed results") was applied as *decisions match*: cases, steps, requests, diagnoses, accepted playbooks, journals and costs identical, solver counts and scores close (bench `simulations` up to 11%, scores up to 6.4%, research `mean_log_error` up to 11.8% under a 50% tolerance). `parity.sh` did not fail on the strict bench comparator, which exits 1. | require bit-identical scores, which means porting the Python solver's exact evaluation sequence | restore the Python modules from `c086d5b` until exact parity |
+| CLI-11 | Phase B ports `mcp` to the Rust binary and the plugin launches `autophys mcp`. It serves the built-in projects (`--project battery_ecm`); a Python `module:project` reference, which the Python server loaded from the user's simulator, is refused. `bench --images` and `research --researcher-images` are refused too: plots need the Python renderer. | keep a Python `mcp` for user-defined Python simulators (CLI-10 as written) | restore `autophys.mcp` from `c086d5b` and the plugin's `--python` launcher |
 ```
 
 ## Phases
@@ -123,9 +125,65 @@ reproduce on the plan commit): `deno test` type-checks
 `daemon: display events redraw an open store…` fails its record count
 (3 vs 2) with `--no-check`.
 
+## Phase B result (2026-11-06)
+
+Local commits (Project: autophys) above the phase A publication:
+`I9ea207fdf2c2df9388057ddb90237547` (the `sdks/rust` primitives: heuristic
+brains and typed playbook settings, `external_step`, `measurements`, the
+`muse` route, the planted synthetic cases, Python-compatible JSON, random
+and `unified_diff`), `I60eb6b960b9df72adcf03c63fce56cc7` (`bench`,
+`research`, `autoloop`, `export-trajectories` and `mcp` in `src/devtools`),
+`I810df545b865d31c6c621baf03dca1c9` (the bare playbook name always loads
+the bundled skill, as in Python), `Id4dbfda56a39aceb27d1950adf4f311f`
+(Python `cli.py`, `bench.py`, `research.py`, `autoloop.py`,
+`trajectories.py` and `autophys.mcp` removed; the primitives other code
+imports moved to `autophys.synthetic`, `autophys.heuristic`,
+`autophys.reasoner`, `autophys.measurements` and `autophys.project`; the
+Muse plugin launches `autophys mcp`), `I517ec878b3de768db84bd4dec9d6cccd`
+(docs, `sdk.md`, `muse-plugin.md`, the training guide), plus this record.
+
+Parity, offline, Rust release binary against the Python tree exported
+at `c086d5b` (before removal). Scripts and outputs are in
+`~/.cache/autophys/cli-phase-b/` on rwc-dev-01.
+
+- Decisions match exactly; the solver's work does not. `bench --seeds 3`
+  (6 cases, scripted and fake-reasoner, 36 rows): status, steps,
+  experiments, requested data, test hours, diagnosis, identifiability,
+  calls and cost are identical in every row. `simulations` (objective
+  evaluations of the fit) differs in 32 rows by up to 11% (battery seed 1:
+  557 vs 501), and fake-reasoner prompts differ by at most 5 input tokens
+  because they print the solver's numbers. Fitted errors agree to a
+  worst relative difference of 6.4%; none of 150 floats is bit-identical.
+  The strict comparator (`cmp_bench.py`) therefore exits 1; the plan's
+  "same cases, seeds, decisions and scores" holds for decisions, not for
+  bit-identical scores.
+- `research`, `autoloop` with resume, the bootstrap autoloop and
+  `export-trajectories` on the planted case: playbooks, accepted
+  iterations, journals (hypothesis, prediction, diff, sha256), stop
+  reasons, held-out comparisons, correctness and cost identical
+  (`cmp_loops.py`: 0 problems). The scores themselves (`mean_log_error`)
+  differ by up to 11.8%, which the comparator accepts under a 50% relative
+  tolerance; export prompt tokens are at most 1 apart. `improves()` breaks
+  ties on that score, so on other inputs Rust and Python could accept
+  different candidates; the planted case does not exercise that.
+- `reason` policy through a loopback fake model: each SDK replays its own
+  recording identically (8/8 rows); Rust vs Python differ only in
+  `simulations` and up to 5 input tokens, as above.
+- `mcp`: 14 JSON-RPC requests; the tool list and schemas are identical;
+  2 responses differ: `chi2_per_n` at 1e-23 (5.2258e-23 vs 5.2161e-23),
+  estimates in the 13th significant digit, wall time and the random
+  investigation and proposal ids.
+
+Validation at `872dc0e`: `cargo test --workspace --locked --no-fail-fast`
+277 passed, 0 failed, 2 ignored. Python SDK `pytest -q` after the removal:
+610 passed, 5 skipped.
+
 ## Remaining work
 
-- Phase B (bench, research, autoloop, export-trajectories in Rust).
+- Operator review of CLI-11: user-defined Python simulators can no longer
+  be served over MCP, and plot images are refused.
+- Exact solver parity, if wanted: the remaining differences come from the
+  fit's evaluation count, not from loop logic.
 - `autophys investigations` prints whole investigation records in text
   mode; the template README points users at it, so a compact table would
   help.
