@@ -9,6 +9,7 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::ops::Deref;
+use std::sync::Arc;
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Budgets {
@@ -114,6 +115,15 @@ pub struct Project {
     pub stop: StopRules,
     pub policy: PolicyConfig,
     pub n_starts: usize,
+    /// The configuration another SDK computed for this same project (see
+    /// [`Project::with_recorded_config`]); it is what records pin.
+    recorded: Option<Arc<RecordedConfig>>,
+}
+/// A configuration and its version exactly as another SDK computed them.
+#[derive(Debug)]
+struct RecordedConfig {
+    config: Value,
+    version: String,
 }
 impl Project {
     pub fn new(name: impl Into<String>, simulator: FunctionSimulator) -> Self {
@@ -133,6 +143,7 @@ impl Project {
             stop: Default::default(),
             policy: Default::default(),
             n_starts: 4,
+            recorded: None,
         }
     }
     pub fn validate(&self) -> Result<()> {
@@ -244,7 +255,49 @@ impl Project {
             fixed.iter().map(|k| (k.clone(), self.initial[k])).collect(),
         ))
     }
+    /// The configuration records pin: the recorded one (see
+    /// [`Project::with_recorded_config`]) while this project still matches
+    /// it, else the one computed from the fields.
     pub fn config(&self) -> Value {
+        let computed = self.computed_config();
+        match &self.recorded {
+            Some(r) if numeric_difference(&computed, &r.config, "").is_none() => r.config.clone(),
+            _ => computed,
+        }
+    }
+    /// The version of [`Project::config`]: sha256 of its canonical JSON.
+    pub fn config_version(&self) -> String {
+        let computed = self.computed_config();
+        match &self.recorded {
+            Some(r) if numeric_difference(&computed, &r.config, "").is_none() => r.version.clone(),
+            _ => config_hash(&computed),
+        }
+    }
+    /// Pin `config` and its `version` exactly as another SDK computed them
+    /// for this project, so records carry them byte for byte. The Python SDK
+    /// keeps the integers a lab declares (`initial={"A": 1}` is `1` in its
+    /// config and `1.0` here), so its version of the same configuration can
+    /// differ from the one computed here. Refuses a `config` that does not
+    /// hash to `version`, or that differs from this project's other than in
+    /// how a number is written (`1` and `1.0` are the same value). Changing
+    /// the project's fields afterwards drops the recorded configuration.
+    pub fn with_recorded_config(mut self, config: Value, version: &str) -> Result<Self> {
+        let hashed = config_hash(&config);
+        if hashed != version {
+            return Err(invalid(format!(
+                "the recorded configuration hashes to {hashed}, not to its version {version}"
+            )));
+        }
+        if let Some(diff) = numeric_difference(&self.computed_config(), &config, "config") {
+            return Err(invalid(diff));
+        }
+        self.recorded = Some(Arc::new(RecordedConfig {
+            config,
+            version: version.into(),
+        }));
+        Ok(self)
+    }
+    fn computed_config(&self) -> Value {
         let sim = &self.simulator;
         let params:IndexMap<_,_>=sim.params.iter().map(|(k,s)|(k,json!({"unit":s.unit,"lo":s.lo,"hi":s.hi,"initial":self.initial.get(k),"fixed":self.fixed.contains(k)}))).collect();
         let catalog: IndexMap<_, _> = self
@@ -271,12 +324,78 @@ impl Project {
         }
         json!({"name":self.name,"simulator":{"name":sim.name,"source_hash":sim.source_hash(),"outputs":sim.outputs},"params":params,"catalog":catalog,"noise":self.noise,"budgets":budgets,"stop":self.stop,"policy":self.policy,"n_starts":self.n_starts})
     }
-    pub fn config_version(&self) -> String {
-        use sha2::{Digest, Sha256};
-        format!(
-            "sha256:{:x}",
-            Sha256::digest(crate::canonical::canonical(&self.config()))
-        )
+}
+fn config_hash(config: &Value) -> String {
+    use sha2::{Digest, Sha256};
+    format!(
+        "sha256:{:x}",
+        Sha256::digest(crate::canonical::canonical(config))
+    )
+}
+/// The first place where `rebuilt` and `recorded` differ, described with its
+/// path under `at`; `None` when they are the same JSON up to how numbers are
+/// written (an integer equals the float of the same value, at any depth).
+pub fn numeric_difference(rebuilt: &Value, recorded: &Value, at: &str) -> Option<String> {
+    let path = |k: &str| {
+        if at.is_empty() {
+            k.to_string()
+        } else {
+            format!("{at}.{k}")
+        }
+    };
+    let differ = || {
+        let at = if at.is_empty() {
+            "the configuration"
+        } else {
+            at
+        };
+        Some(format!(
+            "{at} is {rebuilt} here but {recorded} in the recorded configuration"
+        ))
+    };
+    match (rebuilt, recorded) {
+        (Value::Number(a), Value::Number(b)) if same_number(a, b) => None,
+        (Value::Array(a), Value::Array(b)) if a.len() == b.len() => a
+            .iter()
+            .zip(b)
+            .enumerate()
+            .find_map(|(i, (x, y))| numeric_difference(x, y, &format!("{at}[{i}]"))),
+        (Value::Object(a), Value::Object(b)) => {
+            if let Some(k) = b.keys().find(|k| !a.contains_key(*k)) {
+                return Some(format!(
+                    "{} is missing here but present in the recorded configuration",
+                    path(k)
+                ));
+            }
+            a.iter().find_map(|(k, x)| match b.get(k) {
+                Some(y) => numeric_difference(x, y, &path(k)),
+                None => Some(format!(
+                    "{} is present here but missing in the recorded configuration",
+                    path(k)
+                )),
+            })
+        }
+        (Value::Number(_) | Value::Array(_), _) => differ(),
+        (a, b) if a == b => None,
+        _ => differ(),
+    }
+}
+fn same_number(a: &serde_json::Number, b: &serde_json::Number) -> bool {
+    let int = |n: &serde_json::Number| {
+        n.as_i64()
+            .map(i128::from)
+            .or_else(|| n.as_u64().map(i128::from))
+    };
+    // An integral float equals the integer of the same value, compared
+    // exactly, so a large integer never matches a nearby float.
+    let int_float = |i: i128, f: Option<f64>| {
+        f.is_some_and(|f| f.is_finite() && f.fract() == 0. && f.abs() < 1e38 && f as i128 == i)
+    };
+    match (int(a), int(b)) {
+        (Some(x), Some(y)) => x == y,
+        (Some(i), None) => int_float(i, b.as_f64()),
+        (None, Some(i)) => int_float(i, a.as_f64()),
+        (None, None) => a.as_f64() == b.as_f64(),
     }
 }
 pub fn policy_from_config(
@@ -398,5 +517,73 @@ mod tests {
         let (f, v) = p.resolve_free(None).unwrap();
         assert_eq!(f, vec!["R"]);
         assert_eq!(v["C"], 500.);
+    }
+    #[test]
+    fn numbers_compare_by_value_not_spelling() {
+        let rebuilt = json!({"a": 1.0, "b": [2.0, {"c": 3.5}], "d": null, "e": "x"});
+        let recorded = json!({"a": 1, "b": [2, {"c": 3.5}], "d": null, "e": "x"});
+        assert_eq!(numeric_difference(&rebuilt, &recorded, ""), None);
+        assert_eq!(numeric_difference(&json!(0.0), &json!(0), ""), None);
+        assert_eq!(numeric_difference(&json!(-3.0), &json!(-3), ""), None);
+        let other = json!({"a": 1, "b": [2, {"c": 3}], "d": null, "e": "x"});
+        assert_eq!(
+            numeric_difference(&rebuilt, &other, "config").unwrap(),
+            "config.b[1].c is 3.5 here but 3 in the recorded configuration"
+        );
+        assert!(numeric_difference(&json!({"a": 1.5}), &json!({"a": 1}), "").is_some());
+        let missing = numeric_difference(&json!({"a": 1}), &json!({"a": 1, "b": 2}), "").unwrap();
+        assert!(missing.contains("b is missing here"), "{missing}");
+        let extra = numeric_difference(&json!({"a": 1, "b": 2}), &json!({"a": 1}), "").unwrap();
+        assert!(extra.contains("b is present here"), "{extra}");
+        assert!(numeric_difference(&json!([1]), &json!([1, 2]), "").is_some());
+        assert!(numeric_difference(&json!("1"), &json!(1), "").is_some());
+        assert!(numeric_difference(&json!(1), &json!("1"), "").is_some());
+        assert!(numeric_difference(&json!(true), &json!(1), "").is_some());
+        assert!(numeric_difference(&json!(null), &json!(0), "").is_some());
+        // Exact, not through f64: 2^53 + 1 is not the float 2^53.
+        let big = json!(9007199254740993u64);
+        assert!(numeric_difference(&big, &json!(9007199254740992.0), "").is_some());
+        assert!(numeric_difference(&json!(u64::MAX), &json!(u64::MAX), "").is_none());
+    }
+    #[test]
+    fn a_recorded_config_is_authoritative_while_the_project_matches_it() {
+        let mut p = Project::new("x", crate::models::thermal_rc());
+        p.initial.insert("C".into(), 500.);
+        p.stop.validation_threshold = 3.;
+        // What the Python SDK computes for the same lab declared with integers.
+        let mut theirs = p.config();
+        theirs["params"]["C"]["initial"] = json!(500);
+        theirs["stop"]["validation_threshold"] = json!(3);
+        let version = config_hash(&theirs);
+        assert_ne!(version, p.config_version());
+        let recorded = p
+            .clone()
+            .with_recorded_config(theirs.clone(), &version)
+            .unwrap();
+        assert_eq!(recorded.config(), theirs);
+        assert_eq!(recorded.config_version(), version);
+        assert_eq!(recorded.clone().config_version(), version);
+        // A changed project is no longer the recorded one.
+        let mut changed = recorded.clone();
+        changed.stop.validation_threshold = 4.;
+        assert_ne!(changed.config_version(), version);
+        assert_eq!(changed.config()["stop"]["validation_threshold"], json!(4.0));
+        // A genuine difference, or a version that is not the hash, is refused.
+        let mut other = theirs.clone();
+        other["stop"]["validation_threshold"] = json!(5);
+        let e = p
+            .clone()
+            .with_recorded_config(other.clone(), &config_hash(&other))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            e.contains("config.stop.validation_threshold is 3.0 here but 5"),
+            "{e}"
+        );
+        let e = p
+            .with_recorded_config(theirs, "sha256:0")
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("not to its version sha256:0"), "{e}");
     }
 }

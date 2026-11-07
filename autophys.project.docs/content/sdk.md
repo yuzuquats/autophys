@@ -425,7 +425,7 @@ on rwc-dev-01.
 
 - **Opt-in only:** `ModelSpec(images=True)`; the former Python
   `bench --images`, `research --images` and `--researcher-images` flags
-  went with the Python CLI (cli.md CLI-11), and the Rust binary refuses
+  went with the Python CLI (cli.md CLI-14), and the Rust binary refuses
   them. Without it every
   request is byte-identical to before, so cassettes and hashes are
   unchanged. Opting in asserts that the model accepts images: whether Muse

@@ -6,9 +6,10 @@
 //! [`FunctionSimulator`] whose every call is a request to the child, so the
 //! fit, sensitivity, design and investigation code runs unchanged.
 //!
-//! The simulator reports the worker's own source hash and the rebuilt project
-//! must reproduce the worker's config version, so records written through it
-//! match what the worker's SDK writes. Calls are serialized (one request in
+//! The simulator reports the worker's own source hash, and the project
+//! records the worker's own configuration and config version (the rebuilt
+//! one must equal it up to how numbers are written), so records written
+//! through it match what the worker's SDK writes. Calls are serialized (one request in
 //! flight); the child is killed when the last clone of the simulator drops.
 //! What to spawn (interpreter, module, working directory) is the caller's
 //! policy: this module takes a prepared [`Command`].
@@ -35,6 +36,13 @@ pub const PROTOCOL: &str = "autophys-worker";
 pub const VERSION: u64 = 1;
 /// Lines of the worker's stderr kept for failure messages.
 const TAIL: usize = 20;
+/// Lines of other output tolerated on the worker's stdout before its startup
+/// frame (an interpreter's `sitecustomize` or a `.pth` file can print before
+/// the worker redirects stdout), and their total size.
+const PREAMBLE_LINES: usize = 32;
+const PREAMBLE_BYTES: usize = 64 * 1024;
+/// Bytes of that output quoted in errors.
+const PREVIEW: usize = 200;
 
 struct Pipe {
     stdin: Option<ChildStdin>,
@@ -104,15 +112,7 @@ impl Worker {
         });
         let head = {
             let mut pipe = lock(&worker.pipe);
-            let line = worker.read_line(&mut pipe)?;
-            match pyjson::loads(&line) {
-                Ok(v) => v,
-                Err(e) => {
-                    return Err(
-                        worker.fail(&mut pipe, &format!("sent an invalid startup frame ({e})"))
-                    );
-                }
-            }
+            worker.read_startup(&mut pipe)?
         };
         if head["protocol"] != PROTOCOL || head["version"].as_u64() != Some(VERSION) {
             let mut pipe = lock(&worker.pipe);
@@ -205,6 +205,66 @@ impl Worker {
                 Ok(out)
             }
             _ => Err(self.fail(&mut pipe, "sent a result that is not a map of float arrays")),
+        }
+    }
+
+    /// The startup frame: the first line holding a JSON object that begins
+    /// with its `protocol` key. Lines of other output before it (at most
+    /// [`PREAMBLE_LINES`]) are passed on to stderr; output printed without a
+    /// newline shares the frame's line and is cut off.
+    fn read_startup(&self, pipe: &mut Pipe) -> Result<Value> {
+        let mut preview: Vec<u8> = Vec::new();
+        let (mut lines, mut bytes) = (0, 0);
+        let quote =
+            |preview: &[u8]| format!("\"{}\"", String::from_utf8_lossy(preview).escape_debug());
+        let mut buf = Vec::new();
+        loop {
+            buf.clear();
+            match pipe.stdout.read_until(b'\n', &mut buf) {
+                Ok(0) if preview.is_empty() => {
+                    return Err(self.fail(pipe, "exited before its startup frame"));
+                }
+                Ok(0) => {
+                    let what = format!(
+                        "exited before its startup frame, after other output on its stdout (the first bytes: {})",
+                        quote(&preview)
+                    );
+                    return Err(self.fail(pipe, &what));
+                }
+                Ok(_) => {}
+                Err(e) => return Err(self.fail(pipe, &format!("could not be read ({e})"))),
+            }
+            let room = PREVIEW.saturating_sub(preview.len());
+            preview.extend_from_slice(&buf[..room.min(buf.len())]);
+            let text = String::from_utf8_lossy(&buf);
+            if let Some(at) = text.find("{\"protocol\"") {
+                let before = text[..at].trim_end();
+                return match pyjson::loads(text[at..].trim_end()) {
+                    Ok(v) if v.is_object() => {
+                        if !before.is_empty() {
+                            eprintln!("{before}");
+                        }
+                        Ok(v)
+                    }
+                    _ => {
+                        let what = format!(
+                            "sent an unreadable startup frame (the first bytes on its stdout: {})",
+                            quote(&preview)
+                        );
+                        Err(self.fail(pipe, &what))
+                    }
+                };
+            }
+            lines += 1;
+            bytes += buf.len();
+            if lines > PREAMBLE_LINES || bytes > PREAMBLE_BYTES {
+                let what = format!(
+                    "wrote other output to its stdout instead of its startup frame (the first bytes: {}); something the interpreter runs before the worker starts, such as sitecustomize or a .pth file, prints to stdout",
+                    quote(&preview)
+                );
+                return Err(self.fail(pipe, &what));
+            }
+            eprintln!("{}", text.trim_end_matches(['\n', '\r']));
         }
     }
 
@@ -303,13 +363,17 @@ fn field<T: DeserializeOwned>(desc: &Value, key: &str, label: &str) -> Result<T>
 }
 
 /// Spawn a worker and rebuild its project, with a simulator that calls it.
-/// Fails unless the rebuilt project has the worker's config version.
+/// Fails unless the rebuilt project's configuration equals the worker's.
 pub fn project(command: Command, label: &str) -> Result<Project> {
     let (worker, desc) = Worker::spawn(command, label)?;
     from_description(worker, &desc)
 }
 
-/// The project a worker described, its simulator bound to `worker`.
+/// The project a worker described, its simulator bound to `worker`. The
+/// worker's `config` and `config_version` are what its SDK records, so the
+/// project records them too ([`Project::with_recorded_config`]); the project
+/// rebuilt here must equal that configuration up to how numbers are written
+/// (a lab's `1` is `1.0` here).
 pub fn from_description(worker: Arc<Worker>, desc: &Value) -> Result<Project> {
     let label = worker.label().to_string();
     let schema = &desc["simulator"];
@@ -344,28 +408,27 @@ pub fn from_description(worker: Arc<Worker>, desc: &Value) -> Result<Project> {
             inputs: IndexMap::new(),
         });
     }
-    let catalog: IndexMap<String, CatalogEntry> = field(desc, "catalog", &label)?;
-    let project = Project {
-        name: field(desc, "name", &label)?,
-        simulator: sim,
-        initial: field(desc, "initial", &label)?,
-        fixed: field(desc, "fixed", &label)?,
-        catalog,
-        noise: field::<NoiseConfig>(desc, "noise", &label)?,
-        budgets: field::<Budgets>(desc, "budgets", &label)?,
-        stop: field::<StopRules>(desc, "stop", &label)?,
-        policy: field::<PolicyConfig>(desc, "policy", &label)?,
-        n_starts: field(desc, "n_starts", &label)?,
-    };
+    let mut project = Project::new(field::<String>(desc, "name", &label)?, sim);
+    project.initial = field(desc, "initial", &label)?;
+    project.fixed = field(desc, "fixed", &label)?;
+    project.catalog = field::<IndexMap<String, CatalogEntry>>(desc, "catalog", &label)?;
+    project.noise = field::<NoiseConfig>(desc, "noise", &label)?;
+    project.budgets = field::<Budgets>(desc, "budgets", &label)?;
+    project.stop = field::<StopRules>(desc, "stop", &label)?;
+    project.policy = field::<PolicyConfig>(desc, "policy", &label)?;
+    project.n_starts = field(desc, "n_starts", &label)?;
     project.validate()?;
-    let expected = desc["config_version"].as_str().unwrap_or("");
-    let rebuilt = project.config_version();
-    if rebuilt != expected {
-        return Err(invalid(format!(
-            "the project from {label} rebuilds with config version {rebuilt}, but its SDK computes {expected}; records written here would not match the Python SDK's (install the SDK from the same autophys commit as the binary)"
-        )));
-    }
-    Ok(project)
+    let version: String = field(desc, "config_version", &label)?;
+    let config = desc.get("config").cloned().ok_or_else(|| {
+        invalid(format!(
+            "the simulator worker for {label} sent no configuration; its SDK is from another autophys commit (install the SDK from the same autophys commit as the binary)"
+        ))
+    })?;
+    project.with_recorded_config(config, &version).map_err(|e| {
+        invalid(format!(
+            "autophys cannot reproduce the configuration of {label}: {e}. Records written here would not match the Python SDK's, so it is not served"
+        ))
+    })
 }
 
 #[cfg(test)]
@@ -432,5 +495,112 @@ read c; echo 'worker fell over' >&2; exit 3"#
         );
         // Later calls fail fast with the same reason.
         assert_eq!(w.simulate(&p, &e, FIT_OPTIONS).unwrap_err().to_string(), m);
+    }
+
+    #[test]
+    fn output_before_the_startup_frame_is_passed_over() {
+        let script =
+            format!("echo 'conda: activated'; printf 'no newline'; echo '{HEAD}'; cat >/dev/null");
+        let (_, project) = Worker::spawn(sh(&script), "lab:p").unwrap();
+        assert_eq!(project, json!({}));
+    }
+
+    #[test]
+    fn too_much_output_before_the_startup_frame_is_quoted_in_the_error() {
+        let script = format!(
+            "i=0; while [ $i -lt 40 ]; do echo \"site says $i\"; i=$((i+1)); done; echo 'from stderr' >&2; echo '{HEAD}'; cat >/dev/null"
+        );
+        let e = Worker::spawn(sh(&script), "lab:p").unwrap_err().to_string();
+        assert!(
+            e.contains("lab:p") && e.contains("other output to its stdout"),
+            "{e}"
+        );
+        assert!(
+            e.contains("site says 0\\nsite says 1") && !e.contains("site says 39"),
+            "{e}"
+        );
+        assert!(
+            e.contains("sitecustomize") && e.contains("from stderr"),
+            "{e}"
+        );
+        let e = Worker::spawn(
+            sh("echo 'hello from site'; echo 'oops' >&2; exit 1"),
+            "lab:p",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(
+            e.contains("exited before its startup frame, after other output")
+                && e.contains("hello from site")
+                && e.contains("oops"),
+            "{e}"
+        );
+        let e = Worker::spawn(
+            sh(r#"echo '{"protocol": "autophys-worker", oops'; cat >/dev/null"#),
+            "lab:p",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(
+            e.contains("unreadable startup frame") && e.contains("oops"),
+            "{e}"
+        );
+    }
+
+    /// A worker that sends `desc` in its startup frame, and the project it
+    /// describes rebuilt here.
+    fn described(desc: &Value) -> Result<Project> {
+        let head = json!({"protocol": PROTOCOL, "version": VERSION, "ok": true, "project": desc});
+        let (worker, desc) =
+            Worker::spawn(sh(&format!("echo '{head}'; cat >/dev/null")), "lab:p").unwrap();
+        from_description(worker, &desc)
+    }
+
+    #[test]
+    fn the_worker_configuration_is_recorded_and_a_genuine_difference_refused() {
+        let mut p = Project::new("lab", crate::models::thermal_rc());
+        p.initial.insert("C".into(), 500.);
+        let sim = &p.simulator;
+        let mut desc = json!({
+            "name": p.name,
+            "simulator": {"name": sim.name, "params": sim.params.values().collect::<Vec<_>>(),
+                "experiments": sim.experiments, "outputs": sim.outputs, "stochastic": false,
+                "source_hash": sim.source_hash()},
+            "display": null, "initial": p.initial, "fixed": [], "catalog": p.catalog,
+            "noise": p.noise, "budgets": p.budgets, "stop": p.stop, "policy": p.policy,
+            "n_starts": p.n_starts,
+        });
+        // The Python SDK keeps a lab's integers: its config has 500, not 500.0.
+        let mut config = p.config();
+        config["params"]["C"]["initial"] = json!(500);
+        let version = format!(
+            "sha256:{}",
+            crate::canonical::sha256_hex([crate::canonical::canonical(&config).as_bytes()])
+        );
+        assert_ne!(version, p.config_version());
+        desc["config"] = config.clone();
+        desc["config_version"] = json!(version);
+        let rebuilt = described(&desc).unwrap();
+        assert_eq!(rebuilt.config_version(), version);
+        assert_eq!(rebuilt.config(), config);
+        // A configuration this side does not reproduce is refused.
+        config["n_starts"] = json!(9);
+        let other = format!(
+            "sha256:{}",
+            crate::canonical::sha256_hex([crate::canonical::canonical(&config).as_bytes()])
+        );
+        desc["config"] = config;
+        desc["config_version"] = json!(other);
+        let e = described(&desc).unwrap_err().to_string();
+        assert!(
+            e.contains("cannot reproduce the configuration of lab:p")
+                && e.contains("config.n_starts is 4 here but 9")
+                && !e.contains("install the SDK"),
+            "{e}"
+        );
+        // A worker from another commit that sends no configuration.
+        desc.as_object_mut().unwrap().remove("config");
+        let e = described(&desc).unwrap_err().to_string();
+        assert!(e.contains("sent no configuration"), "{e}");
     }
 }

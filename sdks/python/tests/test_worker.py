@@ -19,6 +19,7 @@ import pytest
 from autophys import worker
 from autophys.models.battery import battery_ecm
 from autophys.project import load_project
+from autophys.store import canonical, config_hash
 
 REPO = Path(__file__).resolve().parents[3]
 LAB = REPO / "tests/fixtures/python_lab"
@@ -72,10 +73,25 @@ def test_startup_frame_describes_the_project_with_python_identities(decaylab):
     assert p["noise"] == {"sigma": None, "estimate": False, "bias": "off"}
     assert p["catalog"] == {"short": {"max_runs": None}, "long": {"max_runs": None}}
     assert p["display"] is None and p["n_starts"] == 4
+    # The configuration records pin, exactly as this SDK computes it.
+    assert canonical(p["config"]) == canonical(project.config())
+    assert config_hash(p["config"]) == project.config_version
     proc.stdin.close()
     assert proc.wait(timeout=30) == 0
     # The module's prints went to stderr.
     assert "decaylab imported" in proc.stderr.read()
+
+
+def test_a_lab_declared_with_integers_keeps_them_in_its_configuration(decaylab):
+    proc = spawn("decaylab:integers")
+    p = frame(proc)["project"]
+    project = decaylab.integers
+    # Integers stay integers, so the config version is the one this SDK writes.
+    assert p["config"]["params"]["A"]["initial"] == 3 and type(p["config"]["params"]["A"]["initial"]) is int
+    assert type(p["config"]["stop"]["validation_threshold"]) is int
+    assert p["config_version"] == project.config_version == config_hash(p["config"])
+    proc.stdin.close()
+    assert proc.wait(timeout=30) == 0
 
 
 def test_simulate_returns_the_simulators_exact_floats(decaylab):

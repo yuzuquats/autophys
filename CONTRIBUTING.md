@@ -28,7 +28,8 @@ installs its own plotting environment. The SDK installs no console script:
 `research`, `autoloop`, `export-trajectories` and the Muse plugin's `mcp`
 server). Their tests are `cargo test --test devtools`; its tests of `mcp`
 over a Python lab simulator run when `AUTOPHYS_PYTHON` (else `python3`) has
-NumPy and SciPy, and skip with a message otherwise. The Muse plugin's
+NumPy and SciPy, and skip with a message otherwise (with `CI` set, or
+`AUTOPHYS_REQUIRE_PYTHON=1`, they fail instead of skipping). The Muse plugin's
 protocol tests in `sdks/python/tests/test_muse_plugin.py` run with
 `AUTOPHYS_RUST_BIN` set (and the `mcp` client package). Pure local/scripted work needs
 no model account. Provider routes require explicit configuration and keys;

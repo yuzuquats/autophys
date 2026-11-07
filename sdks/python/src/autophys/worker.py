@@ -13,6 +13,11 @@ the stream. The first frame describes the project, or the load error::
     {"protocol": "autophys-worker", "version": 1, "ok": true, "project": {...}}
     {"protocol": "autophys-worker", "version": 1, "ok": false, "error": {"kind": "load", "message": "..."}}
 
+``project`` carries the simulator schema, the Project settings, and the
+identities records pin: ``config`` (``Project.config()`` as canonical JSON
+reads back, so a lab's integers stay integers) and its ``config_version``.
+The binary records those two verbatim (cli.md CLI-13).
+
 Then one reply per request, in order::
 
     {"id": 1, "op": "simulate", "params": {...}, "experiment": {...}, "options": {"rtol": .., "atol": .., "seed": null}}
@@ -55,6 +60,8 @@ def describe(project) -> dict:
     """The project as the binary rebuilds it: schema, settings and identities."""
     from dataclasses import asdict
 
+    from .store import canonical
+
     sim = project.simulator
     display = None
     if sim.display is not None:
@@ -73,6 +80,7 @@ def describe(project) -> dict:
         "stop": project.config()["stop"],
         "policy": asdict(project.policy),
         "n_starts": project.n_starts,
+        "config": json.loads(canonical(project.config())),
         "config_version": project.config_version,
     }
 

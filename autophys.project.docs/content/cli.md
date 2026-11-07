@@ -38,8 +38,8 @@ gives them the fit, the loop or pairing without cloning the repo.
 | CLI-9 | The pinned REV is `AUTOPHYS_SOURCE_COMMIT`, a new build.rs variable: `AUTOPHYS_COMMIT` when the release scripts stamp it, else `git rev-parse HEAD` at build time, else empty (then `new` asks for `--sdk-rev`). `--version` and `/api/healthz` keep reporting `AUTOPHYS_COMMIT` or `dev`. `--sdk-repo GIT_URL` overrides the repository (testing unpublished commits; a Python `file:///PATH` is written as `file://localhost/PATH`, which pip requires). `AUTOPHYS_PYTHON` overrides `python3` for the venv. | stamp HEAD into `BuildInfo` too, so `--version` names the commit of every build | one build.rs line and the docs |
 | CLI-10 | *Superseded by phase B (CLI-11).* Without the console script, the Muse plugin's source manifest and `build.py` default launch `python3 -m autophys.cli mcp`; a generated bundle still uses the explicit venv interpreter. `mcp` stays in the Python SDK (it serves the user's Python simulator). | keep a console script just for `mcp` | restore the entry point and the plugin default |
 | CLI-12 | The removal gate (CLI-5: "reproduce their replayed results") was applied as *decisions match*: cases, steps, requests, diagnoses, accepted playbooks, journals and costs identical, solver counts and scores close (bench `simulations` up to 11%, scores up to 6.4%, research `mean_log_error` up to 11.8% under a 50% tolerance). `parity.sh` did not fail on the strict bench comparator, which exits 1. | require bit-identical scores, which means porting the Python solver's exact evaluation sequence | restore the Python modules from `c086d5b` until exact parity |
-| CLI-13 | The CLI-11 worker. Protocol `autophys-worker` version 1: newline-delimited JSON, a startup frame with the simulator schema, display declaration, Project settings, the Python `source_hash` and `config_version`, then `simulate` requests answered in order; user stdout is redirected to stderr. The reusable client is `autophys::worker` in `sdks/rust` (a `FunctionSimulator` whose calls go to the child, serialized by a mutex, child killed on drop); the spawn policy is `src/devtools/python.rs`. Interpreter: `--python`, else `python` in `.autophys-mcp.json` (relative to the working directory), else `AUTOPHYS_PYTHON`, else `python3`. The module is imported with `--root` first on `sys.path`, the worker keeping the server's working directory and environment, as the former Python server did. The rebuilt project must reproduce the worker's config version or the server refuses to start, so records always match what Python writes. User exceptions arrive as `SimulationError` (a fit treats them as a failed trial point, as in Python); a crash or protocol fault fails the tool call with the reference and the worker's stderr tail. The protocol version must match exactly. | embed CPython in the binary (PyO3), or keep a separate Python `mcp` server | the pipe is internal to one commit's binary and SDK; changing the transport touches `worker.py`, `worker.rs` and their tests only |
-| CLI-11 (phase B part) | `bench --images` and `research --researcher-images` stay refused: plots need the Python renderer. The operator's CLI-11 decision covers the MCP simulator only. | render plots through the same worker | add a `plot` op to the worker |
+| CLI-13 | The CLI-11 worker. Protocol `autophys-worker` version 1: newline-delimited JSON, a startup frame with the simulator schema, display declaration, Project settings, the Python `source_hash` and `config_version`, then `simulate` requests answered in order; user stdout is redirected to stderr. The reusable client is `autophys::worker` in `sdks/rust` (a `FunctionSimulator` whose calls go to the child, serialized by a mutex, child killed on drop); the spawn policy is `src/devtools/python.rs`. Interpreter: `--python`, else `python` in `.autophys-mcp.json` (relative to the working directory), else `AUTOPHYS_PYTHON`, else `python3`. The module is imported with `--root` first on `sys.path`, the worker keeping the server's working directory and environment, as the former Python server did. The worker's `Project.config()` (as canonical JSON reads back) and `config_version` are authoritative: the server records them verbatim in `config_versions`, investigation heads and `describe_project`, so records byte-match what the Python SDK writes, even for a lab typed with integers (`initial={"A": 1}`, `sigma={"y": 1}`, integer bounds, `StopRules`/`Budgets` values), which Python keeps as integers and Rust reads as floats. At startup the rebuilt Rust project must equal that configuration up to number spelling (`1` equals `1.0`, recursively; integers compared exactly) and the config must hash to the version, or the server refuses to start, naming the first differing path. Python's own config version is unchanged; coercing the lab's integers in Python instead would move existing workbooks to new config versions. The pinned configuration lives on `Project` (a private field set by `Project::with_recorded_config`) and is dropped if the project's fields change. Up to 32 lines (64 KiB) of other output on the worker's stdout before its startup frame (sitecustomize, a `.pth` file) are passed to stderr; more, an unreadable frame, or an exit before it fails with the first 200 bytes received and the stderr tail. User exceptions arrive as `SimulationError` (a fit treats them as a failed trial point, as in Python); a crash or protocol fault fails the tool call with the reference and the worker's stderr tail. The protocol version must match exactly. | embed CPython in the binary (PyO3), or keep a separate Python `mcp` server | the pipe is internal to one commit's binary and SDK; changing the transport touches `worker.py`, `worker.rs` and their tests only |
+| CLI-14 | (Recorded as "CLI-11 (phase B part)" until 2026-11-06.) `bench --images` and `research --researcher-images` stay refused: plots need the Python renderer. The operator's CLI-11 decision covers the MCP simulator only. | render plots through the same worker | add a `plot` op to the worker |
 ```
 
 ## Phases
@@ -222,10 +222,50 @@ interpreter those 2 skip with a message). Python SDK `pytest -q` with
 plugin tests). `cargo clippy --workspace --all-targets` reports nothing in
 the new code.
 
+Review fixes (2026-11-06, `Iee8d57257061b809b70fe547eeaabe7b`):
+
+- B1: a lab typed with integers (`initial={"A": 1}`,
+  `NoiseConfig(sigma={"y": 1})`, `StopRules(validation_threshold=3)`,
+  `Budgets(max_test_hours=5)`, integer bounds) was refused at startup: Python
+  keeps the integers in `Project.config()`, Rust hashed `1.0`, so the config
+  versions differed, although the former Python server served such labs. The
+  startup frame now carries the worker's `config`; the server records it and
+  its `config_version` verbatim and compares the rebuilt project with it by
+  value (CLI-13). Python's config version is unchanged.
+- The error for a genuine difference names the first differing path and no
+  longer suggests reinstalling the SDK; only a missing `config` (a worker
+  from another commit) and a protocol version mismatch still do.
+- Output on the worker's stdout before the handshake is passed over (up to
+  32 lines) or reported with its first 200 bytes and the stderr tail,
+  instead of "invalid startup frame".
+- The Python worker tests in `tests/devtools.rs` fail instead of skipping
+  when `CI` is set or `AUTOPHYS_REQUIRE_PYTHON=1`.
+- The plot-image refusal's agent row, which reused the operator id CLI-11,
+  is CLI-14.
+
+Tests added: `project` unit tests for the by-value comparison (int/float,
+exact large integers, missing and extra keys, type differences) and for the
+recorded configuration (authoritative while the project matches, dropped
+after a change, a genuine difference and a wrong version refused);
+`worker` unit tests for output before the frame and for recording the
+worker's configuration through a fake worker; `devtools`
+`mcp_serves_a_python_lab_declared_with_integers` (fixture
+`decaylab:integers`: the full MCP cycle, one config version recorded, equal
+to Python's `Project.config_version`, pinned by the investigation and
+reported by `describe_project`); Python `test_worker.py` checks the frame's
+`config` against `Project.config()`. Counts: `cargo test --workspace --locked --no-fail-fast` with
+`AUTOPHYS_PYTHON` set: 288 passed, 0 failed, 2 ignored, no `SKIPPED` line
+(an earlier run under load average 20 failed the known-flaky
+`http::binary_exits_cleanly_on_sigterm` once; it passed three isolated
+reruns and the full rerun). `pytest -q` of `test_worker.py`,
+`test_muse_plugin.py` and `test_http.py` with `AUTOPHYS_RUST_BIN`: 36
+passed, 1 skipped (the live smoke). `cargo clippy --workspace --all-targets`
+reports nothing in the changed code.
+
 ## Remaining work
 
 - Operator review of CLI-13 (the worker's protocol and spawn policy) and of
-  the plot-image refusal kept from phase B.
+  the plot-image refusal kept from phase B (CLI-14).
 - `bench` and `research` run the planted synthetic cases only; they take no
   project reference, so the worker is not wired into them. A user's
   simulator in those loops would need a case definition (truth parameters,

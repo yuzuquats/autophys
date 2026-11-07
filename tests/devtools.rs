@@ -816,6 +816,8 @@ fn mcp_refuses_a_different_strategy_before_opening_a_workbook() {
 /// The fixture lab (`tests/fixtures/python_lab`) and an interpreter that can
 /// import the checkout's Python SDK (`AUTOPHYS_PYTHON`, else `python3`, with
 /// `sdks/python/src` on `PYTHONPATH`), or `None` when NumPy/SciPy are missing.
+/// With `CI` set, or `AUTOPHYS_REQUIRE_PYTHON=1`, a missing interpreter fails
+/// the test instead of skipping it.
 fn python_lab() -> Option<(String, String, PathBuf)> {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR"));
     let python = std::env::var("AUTOPHYS_PYTHON")
@@ -836,10 +838,21 @@ fn python_lab() -> Option<(String, String, PathBuf)> {
         Ok(out) if out.status.success() => {
             Some((python, path, repo.join("tests/fixtures/python_lab")))
         }
-        _ => {
-            eprintln!(
-                "SKIPPED: {python} cannot import the autophys SDK with NumPy and SciPy; set AUTOPHYS_PYTHON to such an interpreter (e.g. a venv with sdks/python installed) to run the Python worker tests"
+        failed => {
+            let why = match failed {
+                Ok(out) => String::from_utf8_lossy(&out.stderr).trim().to_string(),
+                Err(e) => e.to_string(),
+            };
+            let message = format!(
+                "{python} cannot import the autophys SDK with NumPy and SciPy ({why}); set AUTOPHYS_PYTHON to such an interpreter (e.g. a venv with sdks/python installed) to run the Python worker tests"
             );
+            let required = std::env::var_os("CI").is_some_and(|v| !v.is_empty())
+                || std::env::var("AUTOPHYS_REQUIRE_PYTHON").is_ok_and(|v| v == "1");
+            assert!(
+                !required,
+                "{message} (required: CI or AUTOPHYS_REQUIRE_PYTHON=1 is set)"
+            );
+            eprintln!("SKIPPED: {message}");
             None
         }
     }
@@ -866,9 +879,24 @@ fn write_decay_csv(path: &Path, duration: f64, rate: f64) {
 
 #[test]
 fn mcp_serves_a_python_simulator_through_the_worker() {
+    serve_decay_lab("project", "decay_lab");
+}
+
+/// B1: a lab typed with integers (initial values, sigma, bounds, stop rules,
+/// budgets) keeps them in Python's configuration; the server records that
+/// configuration and its version rather than refusing to start.
+#[test]
+fn mcp_serves_a_python_lab_declared_with_integers() {
+    serve_decay_lab("integers", "decay_ints");
+}
+
+/// The whole MCP cycle over `decaylab:<attribute>` (a project named `name`);
+/// the records carry the configuration version the Python SDK computes.
+fn serve_decay_lab(attribute: &str, name: &str) {
     let Some((python, pythonpath, fixture)) = python_lab() else {
         return;
     };
+    let reference = format!("decaylab:{attribute}");
     let temp = tempfile::tempdir().unwrap();
     let lab = temp.path().join("lab");
     std::fs::create_dir(&lab).unwrap();
@@ -886,7 +914,7 @@ fn mcp_serves_a_python_simulator_through_the_worker() {
         .args([
             "mcp",
             "--project",
-            "decaylab:project",
+            &reference,
             "--workbook",
             books.to_str().unwrap(),
         ])
@@ -927,7 +955,7 @@ fn mcp_serves_a_python_simulator_through_the_worker() {
         "describe_project",
         json!({}),
     ));
-    assert_eq!(info["name"], "decay_lab");
+    assert_eq!(info["name"], name);
     assert_eq!(info["parameters"]["k"]["unit"], "1/s");
     assert_eq!(info["outputs"], json!(["y"]));
     let imported = text(&mcp_call(
@@ -995,12 +1023,13 @@ fn mcp_serves_a_python_simulator_through_the_worker() {
     assert!(done.status.success());
     let stderr = String::from_utf8_lossy(&done.stderr);
     // User prints reach stderr, not the protocol stream.
-    assert!(
-        stderr.contains("decaylab imported") && stderr.contains("simulating"),
-        "{stderr}"
-    );
-    // The records carry the Python simulator's own source hash.
-    let wb = client.open_project("decay_lab").unwrap();
+    assert!(stderr.contains("decaylab imported"), "{stderr}");
+    if attribute == "project" {
+        assert!(stderr.contains("simulating"), "{stderr}");
+    }
+    // The records carry the Python simulator's own source hash and the
+    // config version the Python SDK computes, and only that version.
+    let wb = client.open_project(name).unwrap();
     let configs: String = wb
         .config_versions()
         .unwrap()
@@ -1008,7 +1037,10 @@ fn mcp_serves_a_python_simulator_through_the_worker() {
         .map(|c| format!("{} {}\n", c.version, c.config))
         .collect();
     let python_hash = Command::new(&python)
-        .args(["-c", "import decaylab; print(decaylab.project.simulator.source_hash, decaylab.project.config_version)"])
+        .args([
+            "-c",
+            &format!("import decaylab; p = decaylab.{attribute}; print(p.simulator.source_hash, p.config_version)"),
+        ])
         .current_dir(&lab)
         .env("PYTHONPATH", format!("{}:{pythonpath}", lab.display()))
         .output()
@@ -1018,6 +1050,13 @@ fn mcp_serves_a_python_simulator_through_the_worker() {
     let (source_hash, config_version) = (words.next().unwrap(), words.next().unwrap());
     assert!(configs.contains(source_hash), "{configs}");
     assert!(configs.contains(config_version), "{configs}");
+    assert_eq!(configs.lines().count(), 1, "{configs}");
+    assert_eq!(info["config_version"], config_version, "{info}");
+    let pinned = client.find_investigation(&inv).unwrap();
+    assert_eq!(
+        pinned.records(None).unwrap()[0].payload["config_version"],
+        config_version
+    );
 }
 
 #[test]
