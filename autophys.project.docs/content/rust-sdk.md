@@ -428,7 +428,13 @@ Serving prefers an explicit web root, then the hydrated embedded tree, then
 the dev build. A compile-time `AUTOPHYS_RELEASE=1` serve refuses a binary
 without a payload. Hydration uses the SHA-256 of the ZIP under the app cache's
 `web/embedded/<sha256>/autophys`, atomically publishes a complete tree, and
-prunes complete entries older than seven days.
+prunes complete entries older than seven days. Since November 7 a running
+`serve` holds a shared lock on its tree (`<sha256>/.in-use`), pruning skips
+any tree it cannot lock exclusively, and reusing a tree refreshes its
+`.complete` time. Before that, a start could delete the tree of another
+running server whose tree had been extracted more than seven days earlier,
+and that server then answered 404 for its pages and scripts. Found by the
+agent review of Studio's copy of this code.
 
 `GET /api/healthz` is now `{ok, version, commit, web_id}`. `web_id` is
 the payload SHA-256 when serving embedded assets and null for an explicit

@@ -233,6 +233,11 @@ pub fn hydrate(exe: &Path, payload: &Payload, cache: &Path) -> Result<PathBuf> {
             tree.join("routes/index.anon.html").is_file(),
             "incomplete embedded web cache"
         );
+        // A reused tree is in use again: restart its age for [`prune`].
+        let _ = OpenOptions::new()
+            .write(true)
+            .open(destination.join(".complete"))
+            .and_then(|marker| marker.set_modified(SystemTime::now()));
         prune(&parent, &payload.id);
         return Ok(tree);
     }
@@ -278,9 +283,27 @@ pub fn hydrate(exe: &Path, payload: &Payload, cache: &Path) -> Result<PathBuf> {
     Ok(tree)
 }
 
+/// A shared lock on a hydrated tree, held by the server that serves it for
+/// its whole lifetime, so another start's [`prune`] never removes it.
+pub struct Hold(#[allow(dead_code)] File);
+
+/// Lock `tree` (a [`hydrate`] result) against pruning until the value drops.
+pub fn hold(tree: &Path) -> Result<Hold> {
+    let destination = tree.parent().context("hydrated tree has no parent")?;
+    let file = OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(destination.join(".in-use"))
+        .with_context(|| format!("open {}/.in-use", destination.display()))?;
+    file.lock_shared().context("lock the hydrated web app")?;
+    Ok(Hold(file))
+}
+
 fn prune(parent: &Path, current: &str) {
     // Keep recent versions for rolling starts. Only remove complete, old,
-    // content-addressed entries belonging to this cache (never staging dirs).
+    // content-addressed entries belonging to this cache (never staging dirs),
+    // and never one a running server holds (see [`hold`]).
     let Ok(entries) = fs::read_dir(parent) else {
         return;
     };
@@ -301,7 +324,18 @@ fn prune(parent: &Path, current: &str) {
             .ok()
             .and_then(|t| SystemTime::now().duration_since(t).ok())
             .is_some_and(|age| age > Duration::from_secs(7 * 24 * 60 * 60));
-        if old {
+        if !old {
+            continue;
+        }
+        let Ok(lock) = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(entry.path().join(".in-use"))
+        else {
+            continue;
+        };
+        if lock.try_lock().is_ok() {
             let _ = fs::remove_dir_all(entry.path());
         }
     }

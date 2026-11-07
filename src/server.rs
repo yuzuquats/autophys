@@ -416,12 +416,15 @@ pub async fn run(serve_config: ServeConfig) -> Result<()> {
         option_env!("AUTOPHYS_RELEASE") != Some("1") || payload.is_some(),
         "release binary has no embedded web payload; run autophys pack after stripping"
     );
+    // Held while serving, so another start's cache pruning keeps this tree.
+    let mut _hold = None;
     let (web_root, build, web_id) = match serve_config.web_root {
         Some(root) => (root, false, None),
         None => match payload {
             Some(payload) => {
                 let cache = AppDirs::resolve(APP_ID)?.cache;
                 let root = crate::embedded::hydrate(&exe, &payload, &cache)?;
+                _hold = Some(crate::embedded::hold(&root)?);
                 (root, false, Some(payload.id))
             }
             None => (default_web_root()?, true, None),

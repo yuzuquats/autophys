@@ -180,6 +180,50 @@ fn hydration_rehashes_payload_and_checks_crc() {
 }
 
 #[test]
+#[cfg(not(target_os = "macos"))]
+fn pruning_skips_trees_a_running_server_holds() {
+    let dir = tempfile::tempdir().unwrap();
+    let tree = tree(dir.path());
+    let exe = executable(dir.path());
+    let cache = dir.path().join("cache");
+    let old = dir.path().join("old");
+    embedded::pack(&exe, &tree, &old, true).unwrap();
+    let old_payload = embedded::locate(&old).unwrap().unwrap();
+    let old_root = embedded::hydrate(&old, &old_payload, &cache).unwrap();
+    let held = embedded::hold(&old_root).unwrap();
+    let marker = old_root.parent().unwrap().join(".complete");
+    let eight_days = std::time::SystemTime::now() - std::time::Duration::from_secs(8 * 24 * 60 * 60);
+    fs::OpenOptions::new().write(true).open(&marker).unwrap().set_modified(eight_days).unwrap();
+    let new = dir.path().join("new");
+    embedded::pack(&exe, &tree, &new, false).unwrap();
+    let new_payload = embedded::locate(&new).unwrap().unwrap();
+    assert_ne!(new_payload.id, old_payload.id);
+    embedded::hydrate(&new, &new_payload, &cache).unwrap();
+    assert!(old_root.join("routes/index.anon.html").is_file(), "a held tree was pruned");
+    drop(held);
+    embedded::hydrate(&new, &new_payload, &cache).unwrap();
+    assert!(!old_root.exists(), "an unheld old tree was kept");
+}
+
+#[test]
+#[cfg(not(target_os = "macos"))]
+fn reusing_a_tree_restarts_its_age() {
+    let dir = tempfile::tempdir().unwrap();
+    let tree = tree(dir.path());
+    let out = dir.path().join("autophys");
+    embedded::pack(&executable(dir.path()), &tree, &out, true).unwrap();
+    let payload = embedded::locate(&out).unwrap().unwrap();
+    let cache = dir.path().join("cache");
+    let root = embedded::hydrate(&out, &payload, &cache).unwrap();
+    let marker = root.parent().unwrap().join(".complete");
+    let long_ago = std::time::SystemTime::now() - std::time::Duration::from_secs(30 * 24 * 60 * 60);
+    fs::OpenOptions::new().write(true).open(&marker).unwrap().set_modified(long_ago).unwrap();
+    embedded::hydrate(&out, &payload, &cache).unwrap();
+    let modified = fs::metadata(&marker).unwrap().modified().unwrap();
+    assert!(modified.elapsed().unwrap() < std::time::Duration::from_secs(60));
+}
+
+#[test]
 #[cfg(target_os = "linux")]
 #[ignore = "requires AUTOPHYS_E2E_WEB_ROOT pointing to a real build-web tree"]
 fn packed_single_file_serves_without_sources() {
