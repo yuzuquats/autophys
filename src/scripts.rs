@@ -240,7 +240,7 @@ async fn export_trajectories(_: (), args: Option<Vec<String>>) -> tento_sh::Resu
 
 #[command(
     name = "mcp",
-    description = "Serve the calibration tools over MCP stdio (Muse Code plugin): [--project battery_ecm] [--workbook DIR|FILE|URL] [--investigation ID] [--root DIR] [--playbook SKILL.md] [--expected-playbook-sha256 HEX] [--config FILE]; reads .autophys-mcp.json in the working directory"
+    description = "Serve the calibration tools over MCP stdio (Muse Code plugin): [--project battery_ecm|mypkg.module:project] [--python PATH] [--workbook DIR|FILE|URL] [--investigation ID] [--root DIR] [--playbook SKILL.md] [--expected-playbook-sha256 HEX] [--config FILE]; reads .autophys-mcp.json in the working directory"
 )]
 async fn mcp(_: (), args: Option<Vec<String>>) -> tento_sh::Result<Value> {
     devtool(crate::devtools::mcp::command(args.unwrap_or_default()))

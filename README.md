@@ -70,6 +70,48 @@ to the investigation tools. Model-backed agents require provider setup.
 Today, AutoPhys fits supplied models and ranks catalog experiments. The
 longer-term goal is to help revise the underlying physics too.
 
+## Commands
+
+Everything runs through the one `autophys` binary; the Python and Rust SDKs
+are libraries. `autophys <command> --help` lists each command's flags.
+
+| Start a project | |
+| --- | --- |
+| `autophys new DIR --lang python\|rust` | Create a project from a template (`--example battery-fit\|blank`); Python projects get a `.venv` |
+| `autophys connect [URL]` | Pair this device with a server and save its key |
+| `autophys whoami` | Show the account, workspace and device the key belongs to |
+
+| Investigations | |
+| --- | --- |
+| `autophys projects` | List projects |
+| `autophys investigations` | List investigations (`--project NAME`) |
+| `autophys records INVESTIGATION` | Read an investigation's records (`--kind KIND`) |
+| `autophys approve INVESTIGATION PROPOSAL` | Approve a proposed experiment (`--settings JSON` to edit it) |
+| `autophys reject INVESTIGATION PROPOSAL` | Reject it (`--reason TEXT`) |
+| `autophys verify` | Check workbook hash chains and projections |
+
+These act on a collection directory, `.ap-workbook` file or server URL given with
+`--target` (default `AUTOPHYS_HOME` or `~/autophys`).
+
+| Agents and research | |
+| --- | --- |
+| `autophys mcp` | Serve the investigation tools to Muse Code over MCP; `--project mypkg.module:project` runs your own Python simulator |
+| `autophys bench` | Run the synthetic benchmark offline (`--policy scripted\|fake-reasoner\|reason`) |
+| `autophys research` | Evaluate and improve playbook strategies (`--output-dir DIR`) |
+| `autophys autoloop` | Keep researching until a stop condition, with a journal and `--resume` |
+| `autophys export-trajectories SOURCE` | Export recorded reasoner decisions as JSONL |
+| `autophys train dataset\|eval\|run\|runs\|loop\|loops` | Build training data, evaluate and fine-tune policies, list runs and loops ([training guide](train/sft/README.md)) |
+
+| Server and administration | |
+| --- | --- |
+| `autophys serve` | Serve the workbench and API on loopback (`--addr 127.0.0.1:4794`) |
+| `autophys pair list\|approve CODE\|deny CODE` | Approve devices that ran `autophys connect` |
+| `autophys keys list\|revoke KEY_ID` | Manage device keys |
+| `autophys users list\|add EMAIL\|set\|remove` | Manage sign-in accounts |
+| `autophys workspace list\|bind\|key\|seed\|profile` | Bind accounts to collections (dry run unless `--apply`) |
+| `autophys db verify` | Verify the server's collection (`--rebuild`) |
+| `autophys build-web`, `autophys pack` | Build the web app and pack a single-file release ([ops](ops/README.md)) |
+
 ## The learning loop
 
 <table>
