@@ -168,10 +168,10 @@ comes from a Meta model yet, and the system prompt hard-codes the
 | M-2 | Playbook skill: the prompt splits into a fixed contract (JSON shape, action list, the identified-claim rule; not editable) and a strategy loaded from `playbooks/<name>/SKILL.md` in Muse skill format. The default strategy is rewritten to reason about information rather than follow the ranking. Pinned on the investigation as `playbook`. | 2 h |
 | M-3 | Usage per step and totals per outcome, normalised across providers, with estimated cost from the price table snapshot pinned on the investigation. | 1 h |
 | M-6 | Retry with jittered backoff on 429, 5xx and timeouts (402 stays terminal: it means billing is not configured). `RecordingReasoner` / `ReplayReasoner` cassettes keyed by the sha256 of the canonical request; replay is the offline demo and the deterministic tests. | 1.5 h |
-| M-7 | `bench --jobs N`: cases × seeds × policies in a bounded pool (threads for model-bound runs, processes for scripted ones). | implemented (Python batch 2; offline tests) |
-| M-9 | Outer loop `autophys research`: frozen train / held-out split, scalar score (diagnosis and status correct first, then error, cost as tiebreak), propose an edit, re-evaluate on train, keep only on improvement, report held-out. Researcher protocol with an API adapter (`ChatReasoner` on Wonder). | implemented (Python batch 2; offline tests) |
-| M-5 | Muse Code CLI researcher adapter: workspace with the skill and failed transcripts, prompt file, `muse exec --json --model muse-wonder-1.0 --workspace DIR`, JSONL events parsed, edited SKILL.md read back and validated. Tested with a fake `muse`. | implemented (Python batch 2; offline tests) |
-| M-8 | `autophys export-trajectories`: JSONL of each decision's contract hash, playbook hash, prompt, raw response, parsed decision, validity and the run's evaluator score. Export only. | implemented (Python batch 2; offline tests) |
+| M-7 | `bench --jobs N`: cases × seeds × policies in a bounded pool (threads for model-bound runs, processes for scripted ones). | implemented (Python batch 2; offline tests); Rust CLI since phase B (cli.md) |
+| M-9 | Outer loop `autophys research`: frozen train / held-out split, scalar score (diagnosis and status correct first, then error, cost as tiebreak), propose an edit, re-evaluate on train, keep only on improvement, report held-out. Researcher protocol with an API adapter (`ChatReasoner` on Wonder). | implemented (Python batch 2; offline tests); Rust CLI since phase B (cli.md) |
+| M-5 | Muse Code CLI researcher adapter: workspace with the skill and failed transcripts, prompt file, `muse exec --json --model muse-wonder-1.0 --workspace DIR`, JSONL events parsed, edited SKILL.md read back and validated. Tested with a fake `muse`. | implemented (Python batch 2; offline tests); Rust CLI since phase B (cli.md) |
+| M-8 | `autophys export-trajectories`: JSONL of each decision's contract hash, playbook hash, prompt, raw response, parsed decision, validity and the run's evaluator score. Export only. | implemented (Python batch 2; offline tests); Rust CLI since phase B (cli.md) |
 | M-4 | Image input: fit and residual plots rendered, stored as blobs, referenced by hash; attached for Wonder (researcher) and for the policy only if the model is image-capable. The hacks reason lane stays text-only. | implemented (I5b9e2d7c0a4f18e3b6d2; see "M-4 image input") |
 ```
 
@@ -587,11 +587,12 @@ the last diagram and table mark proposals that are not built.
 The two loops do not run side by side. The outer loop **calls** the inner
 one: research scores a playbook by running complete investigations, one per
 case and seed, and waits for all of them before it decides whether to keep
-an edit (`research.py`, `research()`).
+an edit (`research()`; Python `research.py` until phase B, now
+`src/devtools/research.rs` in the `autophys` binary, see [cli.md](cli.md)).
 
 ```review-flow
 flowchart TB
-  subgraph OUTER["outer: autophys research (research.py)"]
+  subgraph OUTER["outer: autophys research (src/devtools/research.rs)"]
     B["baseline: evaluate playbook-000<br/>on train seeds"] --> INC["incumbent playbook<br/>and its training report"]
     INC --> LIM{"iterations left?"}
     LIM -->|yes| RS["researcher proposes an edit<br/>from incumbent + training report<br/>API or muse exec"]
@@ -681,7 +682,8 @@ that needs a recorded or live run with real models (MQ-2).
 
 ### The autoloop (implemented 2026-11-04)
 
-`autophys autoloop` (`autoloop.py`) runs the research loop unattended until a
+`autophys autoloop` (`autoloop.py`; since phase B `src/devtools/autoloop.rs`, see
+[cli.md](cli.md)) runs the research loop unattended until a
 stop condition. Each iteration asks the researcher for one playbook edit, scores
 it on the training seeds, and keeps it only if it beats the incumbent
 (`research.improves`). Held-out seeds are scored once, at the end, and are never
@@ -735,9 +737,10 @@ over all six benchmark cases plus `battery-biased` (train seeds 0-2, held-out
 on the base model at chi2/N 6.3-6.5 with an uncompared sensor-bias variant. It
 proposed `compare_variants: on_misfit`, which was kept. Training went from 18 to
 21 of 21 correct and held-out from 12 to 14 of 14, and then it stopped with
-nothing further to propose. `tests/test_autoloop.py` covers that run, the CLI,
+nothing further to propose. `tests/test_autoloop.py` covered that run, the CLI,
 patience, invalid edits (including invalid setting values), the stop file, the
-budget, history, resume, and the bootstrap rule and repeats.
+budget, history, resume, and the bootstrap rule and repeats; since phase B the
+Rust `tests/devtools.rs` and `src/devtools` unit tests cover them (cli.md).
 
 The closed offline loop proves the machinery, not research skill: the heuristic
 researcher only knows two failure patterns. The first live run below replaces it
@@ -836,7 +839,7 @@ flowchart TB
 | AR-3 | Paired, repeated evaluation with a bootstrap acceptance rule (**implemented as `--acceptance bootstrap --repeats N`**) | outer | `improves` accepts any lexicographic gain, which a single noisy reasoner run can produce | small in code, multiplies reasoner cost |
 | AR-4 | Typed strategy settings the researcher may edit alongside the prose: stop thresholds and cost weighting (criterion and fit starts are already per-action arguments) | outer | the prose strategy (M-2) already allows departures from the Fisher ranking; typed settings would make chosen behaviour explicit, reproducible and directly searchable | moderate: the contract and validators |
 | AR-5 | Model discovery: propose rival structures and rank discriminating experiments when validation fails | inner | `compare_models` today compares the base model with generated sensor-bias variants; proposing and evaluating rival physical structures would extend it, and is the part only a model can add | large: numerics in both SDKs |
-| AR-6 | `research --forever` with dollar and test-hour caps, a stop file and resumable state (**implemented as `autophys autoloop`; dollar and wall-time caps, no test-hour cap yet**) | outer | needed to run unattended once MQ-2 allows live calls | moderate |
+| AR-6 | `research --forever` with dollar and test-hour caps, a stop file and resumable state (**implemented as `autophys autoloop`, a Rust CLI command since phase B (cli.md); dollar and wall-time caps, no test-hour cap yet**) | outer | needed to run unattended once MQ-2 allows live calls | moderate |
 ```
 
 None of these changes the workbook format. AR-5 and further live runs need

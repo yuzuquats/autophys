@@ -108,19 +108,18 @@ Each project lives in one workbook, \`<project>.ap-workbook\`, a SQLite file. Re
 
 ## Muse Code plugin
 
-The plugin lets Muse drive the calibration through a local MCP server, while the numerical work stays in the SDK. Build a bundle configured for your project, then install it. From the repository root:
+The plugin lets Muse drive the calibration through a local MCP server, \`autophys mcp\`, while the numerical work stays in the SDK. Build a bundle configured for your project, then install it. From the repository root:
 
 \`\`\`sh
-python3 -m venv .venv
-.venv/bin/pip install -e 'sdks/python[mcp]'
-.venv/bin/python plugins/muse-autophys/build.py \\
+cargo build --release --bin autophys
+python3 plugins/muse-autophys/build.py \\
   --output "$HOME/.cache/autophys-muse-plugin" \\
-  --python "$PWD/.venv/bin/python" \\
+  --autophys "$PWD/target/release/autophys" \\
   --project battery_ecm --workbook "$HOME/autophys" --root "$PWD"
 muse plugins install "$HOME/.cache/autophys-muse-plugin"
 \`\`\`
 
-For your own simulator, pass \`--project mypkg.module:project\` (a \`Project\` or a decorated simulator) and set \`--root\` to the directory that holds it. Muse starts the bundled server itself; running \`python -m autophys.cli mcp\` by hand starts a separate server and does not configure the plugin.
+The server is part of the \`autophys\` binary and serves the built-in \`battery_ecm\` project; it cannot import a Python simulator, so a \`mypkg.module:project\` reference is refused. Set \`--root\` to the directory that holds your measurement CSVs. Muse starts the bundled server itself; running \`autophys mcp\` by hand starts a separate server and does not configure the plugin.
 
 Tools: \`describe_project\`, \`import_measurements\`, \`fit\`, \`identifiability\`, \`rank_experiments\`, \`propose_experiment\`, \`status\`, \`attach_data\` and \`report\`. There is no approve or reject tool: experiments are approved here, in the browser.
 
@@ -149,7 +148,7 @@ The Fit view overlays the recorded initial and fitted model curves on the measur
 The investigation is the calibration loop. Playbook research runs many investigations to improve the strategy a model policy follows, so the research loop calls the investigation loop; they are nested, not concurrent. Policy training is a separate workflow.
 
 - **Investigation (inner).** One calibration: an agent fits the model, checks identifiability, ranks experiments, requests data and stops. A model policy follows a playbook, a \`SKILL.md\` file; the scripted policy implements the same strategy in code.
-- **Research (outer).** \`autophys research\` (for now \`python -m autophys.cli research\`; see the reference below) improves that playbook. It scores a playbook by running complete investigations on synthetic cases with a hidden truth, asks a researcher model for an edit, and keeps the edit only if the score improves. \`autophys autoloop\` repeats this until a stop condition, keeping a journal and resumable state.
+- **Research (outer).** \`autophys research\` improves that playbook. It scores a playbook by running complete investigations on synthetic cases with a hidden truth, asks a researcher model for an edit, and keeps the edit only if the score improves. \`autophys autoloop\` repeats this until a stop condition, keeping a journal and resumable state.
 - **Policy training.** The daemon's \`train\` commands turn scripted investigation decisions into a dataset, train a model adapter and evaluate it.
 
 Each research step waits for all of its investigations before it decides. The investigations within a step are independent and run on up to \`--jobs\` workers; recording model replies forces them to run one at a time.
@@ -163,9 +162,9 @@ Inside each evaluation, an investigation is not a fixed cycle. At every step the
 
 | Mode | What runs | Where new data comes from |
 | --- | --- | --- |
-| \`autophys research\` (now \`python -m autophys.cli research\`) | the outer loop, calling many investigations | a synthetic case's hidden truth, with no person in the loop |
-| \`autophys autoloop\` (now \`python -m autophys.cli autoloop\`) | the outer loop until a stop condition, with a journal and resume | the same synthetic truth |
-| \`autophys bench\` (now \`python -m autophys.cli bench\`) | investigations across policies, cases and seeds, with no playbook search | the same synthetic truth |
+| \`autophys research\` | the outer loop, calling many investigations | a synthetic case's hidden truth, with no person in the loop |
+| \`autophys autoloop\` | the outer loop until a stop condition, with a journal and resume | the same synthetic truth |
+| \`autophys bench\` | investigations across policies, cases and seeds, with no playbook search | the same synthetic truth |
 | SDK or Muse Code | one investigation at a time, on your simulator and measurements | an experiment you approve here and run on your hardware |
 | Workbench thermal starter | a scripted investigation that the daemon runs | a simulated reference specimen, when you approve |
 | Daemon \`train\` | dataset generation, adapter training and policy evaluation | scripted synthetic trajectories and held-out synthetic cases |
@@ -317,8 +316,8 @@ verified: true
 \`bench\` runs complete investigations on synthetic cases with a known truth, here for the scripted policy and the fake reasoner. It makes no model calls.
 
 \`\`\`sh
-.venv/bin/python -m autophys.cli bench --case thermal --seeds 1 --policy scripted --policy fake-reasoner --json > bench.json
-.venv/bin/python - <<'PY'
+./target/release/autophys bench --case thermal --seeds 1 --policy scripted --policy fake-reasoner --json > bench.json
+python3 - <<'PY'
 import json
 for row in json.load(open("bench.json")):
     print(row["case"], row["policy"], row["status"], "requested=" + ",".join(row["requested"]))
@@ -332,22 +331,21 @@ thermal fake-reasoner validated requested=pulse
 
 ## Reference
 
-The \`autophys\` command is one Rust binary built from \`src/\`. It sets up projects (\`new\`), connects a device to a daemon (\`connect\`, \`whoami\`), serves this workbench and the \`/api/v1\` endpoints, manages browser accounts, device keys and workbooks, reviews proposals, and drives policy training. The Python and Rust SDKs are libraries and install no command. The Python SDK's developer commands (\`bench\`, \`research\`, \`autoloop\`, \`export-trajectories\` and \`mcp\`) run as \`python -m autophys.cli\` until they move into the \`autophys\` command.
+The \`autophys\` command is one Rust binary built from \`src/\`. It sets up projects (\`new\`), connects a device to a daemon (\`connect\`, \`whoami\`), serves this workbench and the \`/api/v1\` endpoints, manages browser accounts, device keys and workbooks, reviews proposals, and drives policy training. It also runs the developer tools on the SDK primitives: \`bench\`, \`research\`, \`autoloop\`, \`export-trajectories\` and \`mcp\`, the Muse plugin's MCP server. The Python and Rust SDKs are libraries and install no command.
 
 Building from source needs Rust (edition 2024) and a C toolchain, and building the browser app needs Deno 2; the Tento sources it uses are vendored in the repository. From the repository root:
 
 \`\`\`sh
 # The autophys command (Rust)
 cargo build --release --bin autophys
-./target/release/autophys --help            # new, connect, serve, users, approve, verify, train, …
+./target/release/autophys --help            # new, connect, serve, users, approve, verify, train, bench, research, …
 
-# The Python SDK, for its developer commands
+# The Python SDK, a library for your own programs
 python3 -m venv .venv
-.venv/bin/pip install -e 'sdks/python[mcp]'
-.venv/bin/python -m autophys.cli --help     # bench, research, autoloop, export-trajectories, mcp
+.venv/bin/pip install -e sdks/python
 \`\`\`
 
-The examples below use \`./target/release/autophys\` for the \`autophys\` command and \`.venv/bin/python -m autophys.cli\` for the SDK's developer commands. If \`CARGO_TARGET_DIR\` is set, the daemon binary is under that directory instead of \`./target\`. On Linux, \`ops/package.sh --out /absolute/path/to/autophys\` builds and packs one executable that serves its embedded app without Deno or the checkout.
+The examples below use \`./target/release/autophys\` for the \`autophys\` command. If \`CARGO_TARGET_DIR\` is set, the daemon binary is under that directory instead of \`./target\`. On Linux, \`ops/package.sh --out /absolute/path/to/autophys\` builds and packs one executable that serves its embedded app without Deno or the checkout.
 
 ### The autophys command
 
@@ -440,32 +438,34 @@ The \`train\` commands drive the Python workers in \`train/sft\` (see its \`READ
 
 The \`train\` commands read \`AUTOPHYS_TRAIN_DIR\` and \`AUTOPHYS_TRAIN_PYTHON\`, and URL targets read \`AUTOPHYS_API_KEY\` and \`AUTOPHYS_CONFIG_DIR\`.
 
-### Python SDK developer commands
+### Developer commands
 
 \`\`\`sh
-P=".venv/bin/python -m autophys.cli"
-$P bench --seeds 5 --jobs 4
-$P research --output-dir ./research-1 --replay policy.jsonl --researcher-replay researcher.jsonl
-$P autoloop --output-dir ./autoloop-1 --policy fake-reasoner --researcher heuristic --max-iterations 3
-$P export-trajectories ./research-1 --output decisions.jsonl
-$P mcp --project mypkg.module:project --workbook ~/autophys
+A=./target/release/autophys
+$A bench --seeds 5 --jobs 4
+$A research --output-dir ./research-1 --replay policy.jsonl --researcher-replay researcher.jsonl
+$A autoloop --output-dir ./autoloop-1 --policy fake-reasoner --researcher heuristic --max-iterations 3
+$A export-trajectories ./research-1 --output decisions.jsonl
+$A mcp --project battery_ecm --workbook ~/autophys
 \`\`\`
+
+Errors go to stderr with exit status 2. Plot images (\`--images\`, \`--researcher-images\`) need the Python SDK's plot renderer and are refused by the binary; a Python program can still attach plots through the SDK's reasoners.
 
 | Command | Options |
 | --- | --- |
-| \`bench\` | Run the synthetic benchmark. \`--jobs N\` (default 1), \`--seeds N\` (default 3), \`--case NAME\` (repeatable; default all six cases below), \`--policy scripted\\|fake-reasoner\\|reason\` (repeatable; default \`scripted\` and \`fake-reasoner\`), \`--json\`. For \`--policy reason\`, \`--model\` is required; \`--route meta\\|baseten\\|lane\\|muse\` (default \`meta\`), \`--effort\`, \`--images\`, \`--playbook\`, \`--replay FILE\` and \`--record FILE\` configure the model. |
+| \`bench\` | Run the synthetic benchmark. \`--jobs N\` (default 1), \`--seeds N\` (default 3), \`--case NAME\` (repeatable; default all six cases below), \`--policy scripted\\|fake-reasoner\\|reason\` (repeatable; default \`scripted\` and \`fake-reasoner\`), \`--json\`. For \`--policy reason\`, \`--model\` is required; \`--route meta\\|baseten\\|lane\\|muse\` (default \`meta\`), \`--effort\`, \`--playbook\`, \`--replay FILE\` and \`--record FILE\` configure the model. |
 | \`research\` | Improve a playbook. \`--output-dir DIR\` is required and must not exist yet. The defaults are one iteration, one job, the \`reason\` policy and the API researcher. The options are listed below. |
 | \`autoloop\` | Improve a playbook until a stop condition, with a journal and resumable state. It takes the \`research\` options plus the ones listed below. \`--output-dir DIR\` is required, and must be new unless you pass \`--resume\`. |
 | \`export-trajectories SOURCE\` | Write each recorded reasoner decision in a workbook, collection or research directory as one JSONL line. \`--output FILE\` (a new file; default stdout). |
-| \`mcp\` | Serve the calibration tools over MCP stdio. This needs the \`mcp\` extra. \`--project\` (default \`battery_ecm\`, or \`mypkg.module:project\`), \`--workbook\` (anything \`ap.connect\` accepts), \`--investigation ID\` (resume one), \`--root DIR\` (default the current directory), \`--playbook\`, \`--config FILE\` (default \`.autophys-mcp.json\`). |
+| \`mcp\` | Serve the calibration tools over MCP stdio (stdout carries only protocol messages). \`--project\` (the built-in \`battery_ecm\`, the default), \`--workbook\` (a collection directory, an \`.ap-workbook\` file or a daemon URL), \`--investigation ID\` (resume one), \`--root DIR\` (default the current directory), \`--playbook\`, \`--config FILE\` (default \`.autophys-mcp.json\`). |
 
 The benchmark cases are \`oscillator-free-only\`, \`oscillator\`, \`thermal-short-only\`, \`thermal\`, \`battery-short-only\` and \`battery\`. The planted \`battery-biased\` case runs only when named.
 
 **\`research\` options**
 
 - Run: \`--playbook\` (default \`default\`), \`--case\` (repeatable), \`--train-seeds 0,1,2\`, \`--heldout-seeds 3,4\` (the two sets must not overlap), \`--iterations N\` (default 1), \`--jobs N\` (default 1).
-- Investigation policy: \`--policy reason|scripted|fake-reasoner\` (default \`reason\`), \`--model\` (default \`muse-spark-1.3\`), \`--route meta|baseten|lane|muse\` (default \`meta\`), \`--effort\`, \`--images\`, \`--replay FILE\`, \`--record FILE\`. The \`muse\` route runs one headless \`muse exec\` per decision on your Muse coding plan.
-- Researcher: \`--researcher api|muse|scripted|heuristic\` (default \`api\`), \`--researcher-model\` (default \`muse-wonder-1.0\`), \`--researcher-route meta|baseten\`, \`--researcher-effort\`, \`--researcher-images\`, \`--researcher-replay FILE\`, \`--researcher-record FILE\`. With \`scripted\`, repeat \`--edit FILE\` to supply each complete \`SKILL.md\` edit in order. With \`muse\`, also \`--muse-binary\` (default \`muse\`), \`--timeout\` (seconds, default 300) and \`--max-model-steps\`.
+- Investigation policy: \`--policy reason|scripted|fake-reasoner\` (default \`reason\`), \`--model\` (default \`muse-spark-1.3\`), \`--route meta|baseten|lane|muse\` (default \`meta\`), \`--effort\`, \`--replay FILE\`, \`--record FILE\`. The \`muse\` route runs one headless \`muse exec\` per decision on your Muse coding plan.
+- Researcher: \`--researcher api|muse|scripted|heuristic\` (default \`api\`), \`--researcher-model\` (default \`muse-wonder-1.0\`), \`--researcher-route meta|baseten\`, \`--researcher-effort\`, \`--researcher-replay FILE\`, \`--researcher-record FILE\`. With \`scripted\`, repeat \`--edit FILE\` to supply each complete \`SKILL.md\` edit in order. With \`muse\`, also \`--muse-binary\` (default \`muse\`), \`--timeout\` (seconds, default 300) and \`--max-model-steps\`.
 - Replays: the \`reason\` policy needs \`--replay\`, and the \`api\` and \`muse\` researchers need \`--researcher-replay\`, unless live calls are allowed. The other policies and researchers run offline.
 - Output: the directory holds \`summary.json\`, \`iterations.json\` once an edit has been tried, a \`scores.json\` for each evaluation, one workbook per case and seed, and each candidate playbook as \`playbook-NNN.md\` with a matching \`.sha256\` file. The input playbook is never overwritten.
 

@@ -270,8 +270,8 @@ the parent's resource gate. The existing Project: autophys consolidation plan co
 adoption of this protocol; it grants no experiment execution permission.
 
 Proposed command skeletons (NOT executed; harness CLI to be implemented after gate):
-  python -m pytest -q sdks/python/tests/test_research_planted.py
-  python -m autophys.cli research --policy fake-reasoner --researcher scripted \
+  cargo test --locked --test devtools research_keeps_the_planted_fix
+  autophys research --policy fake-reasoner --researcher scripted \
     --playbook INITIAL --edit USEFUL --edit HARMFUL \
     --case battery-biased --case battery --train-seeds 201,202,203,204,205 \
     --heldout-seeds 901,902,903,904,905 --iterations 2 --output-dir FRESH_OUTPUT

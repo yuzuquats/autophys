@@ -78,7 +78,7 @@ longer-term goal is to help revise the underlying physics too.
 <td width="50%"><img src="docs/images/readme/policy-training.png" alt="Then train the model that runs it. Record decisions, distil the scripted expert today, and plan reinforcement learning." width="640"></td>
 </tr>
 <tr>
-<td valign="top">The inner loop calibrates a physical model. The outer loop evaluates changes to the investigation playbook and keeps those that score better.</td>
+<td valign="top">The inner loop calibrates a physical model. The outer loop evaluates changes to the investigation playbook and keeps those that score better: <code>autophys research</code> and <code>autophys autoloop</code>, offline with the fake reasoner and the heuristic researcher.</td>
 <td valign="top">Policy training is separate from fitting the physical model. The diagram shows the distillation workflow; reinforcement learning is planned. See the <a href="train/sft/README.md">training guide</a> for the current pipeline and its limits.</td>
 </tr>
 </table>

@@ -15,7 +15,7 @@ python -m pip install -e sdks/python
 ```
 
 The [manifest](pyproject.toml) declares NumPy and SciPy as dependencies, plus
-optional `test` and `mcp` extras. See [contributor setup](../../CONTRIBUTING.md).
+an optional `test` extra. See [contributor setup](../../CONTRIBUTING.md).
 Installation from source is separate from qualification of an installed wheel.
 
 ## A local scientific calculation
@@ -85,82 +85,30 @@ the saved key. Proposals are approved in the browser, or with
 
 ## Muse Code plugin
 
-Install the optional MCP dependency with `pip install -e 'sdks/python[mcp]'`
-from the repository root, then `muse plugins install plugins/muse-autophys`.
-The native bundle includes the canonical playbook and a stdio server.
-`python -m autophys.cli mcp --project mypkg.module:project --workbook ~/autophys`
-runs the server next to your simulator. Experiments are approved in the browser;
-there is no approve or reject MCP tool. See the
-[demo and verification guide](../../autophys.project.docs/content/muse-plugin.md)
-for explicit venv configuration and the built-in battery CSV path.
+`muse plugins install plugins/muse-autophys` installs a native bundle with the
+canonical playbook. Its stdio MCP server is the Rust `autophys mcp` command
+(`autophys` on PATH, or a binary named with `build.py --autophys`); it serves
+the built-in `battery_ecm` project and cannot import a Python simulator.
+Experiments are approved in the browser; there is no approve or reject MCP
+tool. See the [demo and verification guide](../../autophys.project.docs/content/muse-plugin.md).
 
-## Offline benchmarks, research and trajectory export
+## Benchmarks, research and trajectory export
 
-In the activated contributor environment from [CONTRIBUTING.md](../../CONTRIBUTING.md),
-run the SDK's developer commands through its module entry point from the
-repository root. The SDK installs no console script; the `autophys` command is
-the Rust binary, and these commands move to it in phase B of the
-[one-CLI plan](../../autophys.project.docs/content/cli.md):
+These are commands of the Rust `autophys` binary since phase B of the
+[one-CLI plan](../../autophys.project.docs/content/cli.md): `autophys bench`,
+`autophys research`, `autophys autoloop` and `autophys export-trajectories`,
+with the flags, defaults and output files the former `python -m autophys.cli`
+had (the [docs page](../../html/routes/docs.ts) lists them). Python is still
+the numerical reference, and the library keeps the pieces a Python program or
+harness needs:
 
-```sh
-PYTHONDONTWRITEBYTECODE=1 python -m autophys.cli bench --seeds 5 --jobs 4
-```
-
-`bench --jobs N` defaults to 1. Scripted/fake units use processes; model-bound
-units use threads. Rows retain case/policy/seed order and match serial output
-except wall time. Recording forces one worker with a warning.
-
-`research` evaluates the initial playbook on train seeds, asks a researcher
-for an edited strategy, validates it, evaluates it on the same train seeds,
-and retains strict lexicographic improvements only. The final report compares
-the initial and retained strategies on held-out seeds. Defaults are all cases,
-train 0,1,2, held-out 3,4, Spark policy and Wonder API researcher.
-
-```sh
-python -m autophys.cli research --playbook default --iterations 2 --jobs 4   --replay policy-cassette.jsonl --researcher-replay researcher-cassette.jsonl   --output-dir ./research-result
-python -m autophys.cli export-trajectories ./research-result --output ./decisions.jsonl
-python -m autophys.cli export-trajectories ./collection
-```
-
-Replay cassettes must cover the chosen cases, seeds and strategies; the bundled
-Spark cassette covers oscillator seed 0 with the default playbook only.
-`--case` is repeatable; `--train-seeds 0,1,2`, `--heldout-seeds 3,4`,
-`--policy scripted|fake-reasoner|reason`, `--model`, `--route`, `--effort`,
-and the analogous `--researcher-model/route/effort` configure the two roles.
-Training and held-out seeds must be disjoint and unique.
-
-The new output directory holds every candidate's SKILL.md bytes and SHA-256,
-one workbook per case/seed in each evaluation, per-run scores and failing
-transcripts in `scores.json`, `iterations.json`, and `summary.json`.
-The input playbook is never overwritten. Scoring first maximizes correct
-status **and** diagnosis, then minimizes mean absolute log fitted/true error
-over identifiable combinations, then total cost. Unknown cost cannot win a
-cost tie; missing estimates score infinite error (written as null in JSON).
-The contract stays in Python; researchers edit only strategy skills.
-
-`--researcher muse` selects the Muse Code adapter. `--muse-binary`,
-`--timeout`, and `--max-model-steps` configure it. Its isolated temporary
-workspace contains SKILL.md, failing transcripts and a prompt file; it disables
-shell, web tools, user questions, reminders and session logs. Keys are read from
-`MODEL_API_KEY` and passed through stdin with `--api-key-stdin`, never argv.
-No Muse installation or model run is needed for tests. The JSONL event schema
-has not been verified against a live run: the defensive parser ignores unknown
-events/non-JSON lines and retains recognized assistant/final text and usage.
-
-Both roles refuse live calls unless `AUTOPHYS_ALLOW_LIVE_REASON=1`.
-`--record` records policy API replies; `--researcher-record` records API
-replies or CLI edited-skill JSONL cassettes, depending on the adapter.
-CLI `--researcher-replay` reads these cassettes (or one saved edited SKILL.md)
-without starting Muse. Researcher request keys omit volatile IDs/timings.
-**MQ-2 remains replay-only: live API and real Muse runs await operator budget
-authorization.** The environment override is a gate, not that authorization.
-
-Trajectory export reads workbooks through the store API in read-only mode,
-including collections and research directories. It emits one JSONL line per
-reasoner decision: investigation/step, contract hash, playbook identity, model,
-recorded messages (null when absent), raw response, parsed decision, validity,
-normalized usage, replay flag and known research score components. Legacy
-provider usage is emitted as null. Output files are created exclusively.
+| Call | What it does |
+| --- | --- |
+| `autophys.synthetic.run_case(case, policy, seed, **options)` | one benchmark investigation (`scripted`, `fake-reasoner`, or `reason` with `model_spec=` and `replay=`/`record=`), scored by the case's evaluator; returns a `BenchRow`. `autophys train eval` uses it. |
+| `autophys.synthetic.case_project(view)`, `CASES`, `PLANTED_CASES`, `POLICIES` | the project a case runs under; the benchmark and planted cases; the policy factories |
+| `autophys.heuristic.heuristic_responder`, `strategy_settings`, `set_setting` | the offline fake-reasoner brain and the typed playbook settings it reads |
+| `autophys.measurements.read_csv(project, root, path, experiment, ...)` | lab CSV import checked against the declared experiment (sigma is never inferred) |
+| `autophys.project.load_project("battery_ecm" or "mypkg.module:project")` | a trusted lab project by reference |
 
 ## Connections and workbooks (W-1..W-8)
 
@@ -225,8 +173,7 @@ documentation refresh does not run examples or establish SDK readiness.
 | `workbook.py` | `WorkbookStore`: the `.ap-workbook` file (format, validation, state machine, projections, `check()`) |
 | `client.py` | `connect`, `LocalClient`, `RemoteClient`, `Workbook` |
 | `store.py`, `http.py` | append-only public `MemoryStore`/`JsonlStore` backends; `HttpStore` (`/api/v1`, record stream), pairing and credentials |
-
-| `bench.py`, `cli.py` | benchmark runner; `python -m autophys.cli` developer commands (`bench`, `research`, `autoloop`, `export-trajectories`, `mcp`) |
+| `heuristic.py`, `measurements.py` | the offline fake-reasoner brain and typed playbook settings; lab CSV import |
 
 **Identifiability rule.** With weighted residuals and log-parameter
 coordinates, `1/s_i` for a Jacobian singular value is the one-sigma

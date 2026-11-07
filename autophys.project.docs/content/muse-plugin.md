@@ -1,8 +1,10 @@
 # autophys meets engineers inside the agent they already use
 
-Status: offline integration built, rev 2, 2026-11-04. The Python MCP server
-and native Muse Code bundle are implemented. Live Meta execution awaits an
-operator-approved token budget; the echo provider does not exercise MCP.
+Status: offline integration built, rev 3, 2026-11-06. The MCP server is the
+Rust `autophys mcp` command (one-CLI plan phase B, [cli.md](cli.md)); it
+replaced the Python `autophys.mcp` server with the same nine tools, input
+schemas and JSON results. Live Meta execution awaits an operator-approved
+token budget; the echo provider does not exercise MCP.
 
 An engineer opens Muse Code in a lab repo and asks it to calibrate a cell
 from `pulses.csv`. Muse imports measurements, fits the local simulator,
@@ -16,7 +18,7 @@ browser. Approval stays with the engineer.
 lab repo / pulses.csv → Muse Code + canonical playbook
                               │ stdio MCP
                               ▼
-                       local Python SDK
+                 autophys mcp (Rust SDK)
                   fit → SVD → rank → proposal
                               │ ap.connect(target)
                               ▼
@@ -25,11 +27,12 @@ lab repo / pulses.csv → Muse Code + canonical playbook
                       attach data → checked report
 ```
 
-The process runs next to the simulator. `--project mypkg.module:project`
-loads a trusted Python `Project` or `@ap.simulator`; `battery_ecm` is the
-built-in shortcut. Neither the daemon nor Muse runs numerical code on behalf
-of the server. The optional SSH bridge keeps the same stdio transport while
-putting the SDK next to a remote simulator (the hackathon's split-host setup).
+The process runs next to the measurements. It serves the built-in
+`battery_ecm` project; since rev 3 a Python `mypkg.module:project` reference
+is refused, because the binary cannot import Python code (cli.md CLI-11).
+Neither the daemon nor Muse runs numerical code on behalf of the server. The
+optional SSH bridge keeps the same stdio transport while running `autophys
+mcp` on a remote host (the hackathon's split-host setup).
 
 `--workbook` accepts the same directory, `.ap-workbook` file or daemon URL
 as `ap.connect(...)`. A local workbook becomes visible when the viewer's
@@ -38,14 +41,13 @@ and pairing flow; no credential is bundled.
 
 ## Install and use in an engineer's lab
 
-From a checkout on the machine that holds the simulator, install the Python
-SDK's optional MCP dependency:
+From a checkout on the machine that holds the measurements, build the
+`autophys` binary and a bundle that launches it:
 
 ```sh
-python3 -m venv .venv
-.venv/bin/pip install -e 'sdks/python[mcp]'
+cargo build --release --bin autophys
 python3 plugins/muse-autophys/build.py --output /tmp/autophys-lab-plugin \
-  --python "$PWD/.venv/bin/python" --project battery_ecm \
+  --autophys "$PWD/target/release/autophys" --project battery_ecm \
   --workbook "$HOME/autophys" --root /absolute/path/to/lab
 muse plugins install /tmp/autophys-lab-plugin
 muse plugins approve autophys
@@ -53,16 +55,15 @@ cd /absolute/path/to/lab
 muse
 ```
 
-Use an absent output directory. The explicit venv executable is intentional:
-the Rust daemon's binary is also named `autophys`. The builder preserves the
-venv interpreter path, including its symlink. For a user-defined simulator,
-replace `battery_ecm` with `mypkg.module:project`.
+Use an absent output directory. `--autophys` defaults to `autophys` on PATH;
+an explicit path is made absolute. With `--ssh-host`, it names the binary on
+the remote host.
 
 The plugin installation is one command; Muse's separate approval trusts the
 MCP capability definition, as required for third-party plugins. It does not
 approve any experiment. The source bundle can also be installed directly
 with `muse plugins install plugins/muse-autophys`: it launches
-`python3 -m autophys.cli mcp` from PATH and reads `.autophys-mcp.json` in the working
+`autophys mcp` from PATH and reads `.autophys-mcp.json` in the working
 directory. The supported keys are `project`, `workbook`, `root`,
 `investigation` and `playbook`. CLI flags override the file.
 
@@ -138,7 +139,7 @@ Agent-chosen, pending operator review. These choices add no workbook format.
 | Id | Choice and reason | Strongest alternative | Reverse |
 | -- | ----------------- | --------------------- | ------- |
 | MP-1 | Stdio, supported by Muse; no listener or separate server lifecycle | Streamable HTTP on 127.0.0.1 needs process supervision | replace adapter and manifest |
-| MP-2 | Official MCP 1.x SDK in optional autophys[mcp], tested with 1.30.0; core keeps numpy/scipy only | Handwritten JSON-RPC duplicates protocol maintenance | replace adapter |
+| MP-2 | (rev 2) Official MCP 1.x SDK in optional autophys[mcp], tested with 1.30.0. **Superseded in rev 3** by CLI-1: a line-delimited JSON-RPC server in `src/devtools/mcp.rs` with the tool schemas FastMCP generated, checked against the Python server's responses and with the official Python MCP client (cli.md phase B) | keep the Python server and the `mcp` extra | restore `autophys.mcp` from history |
 | MP-3 | Nine tools delegate to Investigation; no approve/reject or agent-supplied identified list | Generic Python execution widens the surface | change registrations |
 | MP-4 | Builder copies canonical M-2 SKILL.md byte for byte and records sha256 | A second strategy would drift | rebuild from canonical source |
 | MP-5 | CSV must match a declared battery waveform and grid | Guessing inputs risks fitting the wrong physics | add measured-waveform support with SDK owner |
@@ -268,8 +269,9 @@ The operator can run this sequence on the laptop after approving a token
 budget. It creates explicitly synthetic pulse data on rwc-dev-01; replace it
 with a matching measured CSV for a real lab demonstration. The default daemon
 must be serving `/home/james/autophys` for browser review. The generated
-plugin uses SSH stdio because Muse exists on the laptop and the SDK/simulator
-exist on rwc-dev-01.
+plugin uses SSH stdio because Muse exists on the laptop and the `autophys`
+binary and the measurements are on rwc-dev-01 (rev 3: the server is
+`autophys mcp`; the CSV step still uses the Python SDK's battery model).
 
 ```sh
 demo_remote_dir=$(ssh rwc-dev-01 'mktemp -d /tmp/autophys-muse-demo.XXXXXX')
@@ -289,8 +291,7 @@ with (root / "pulses.csv").open("w") as out:
 PY
 ssh rwc-dev-01 "cd ~/workspace/autophys && python3 plugins/muse-autophys/build.py \
   --output '$demo_remote_dir/plugin' --ssh-host rwc-dev-01 \
-  --python /home/james/.cache/autophys/venv/bin/python \
-  --source-root /home/james/workspace/autophys/sdks/python/src \
+  --autophys /path/to/an/autophys/build/on/rwc-dev-01 \
   --project battery_ecm --workbook /home/james/autophys --root '$demo_remote_dir'"
 demo_local_dir=$(mktemp -d /tmp/autophys-muse-demo.XXXXXX)
 scp -r "rwc-dev-01:$demo_remote_dir/plugin" "$demo_local_dir/plugin"

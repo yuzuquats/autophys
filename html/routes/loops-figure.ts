@@ -5,8 +5,9 @@
  * std-round squircles positioned in the same units. `--u` turns one design unit into the
  * rendered width (a container query unit), so text, boxes and lines scale together.
  *
- * The outer research loop (research.py) evaluates each playbook edit by running one inner
- * investigation loop (agent.py) per case and train seed. The Muse mascot marks the two
+ * The outer research loop (`autophys research`, src/devtools/research.rs) evaluates each
+ * playbook edit by running one inner investigation loop (the SDK agent: sdks/rust
+ * agent/mod.rs, sdks/python agent.py) per case and train seed. The Muse mascot marks the two
  * reasoning agents: the researcher model that edits the playbook, and the policy that picks
  * each investigation action (or a scripted policy). Keep the labels in step with the "How the
  * loops nest" prose in docs.ts and with sdk.md's section of the same name.

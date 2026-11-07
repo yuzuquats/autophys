@@ -6,7 +6,7 @@ display metadata and asks people to approve experiments.
 
 | Path | Responsibility |
 | --- | --- |
-| `src/`, `sql/` | Rust daemon, HTTP/SSE admission, server keys/accounts and database migrations |
+| `src/`, `sql/` | the `autophys` binary: daemon, HTTP/SSE admission, server keys/accounts, database migrations, `new`/`connect`, and the developer commands (`src/devtools`: bench, research, autoloop, export-trajectories, mcp) |
 | `sdks/python/`, `sdks/rust/` | public numerical and workbook APIs; Python is the numerical reference |
 | `html/routes/` | document routes and application composition |
 | `html/client/`, `html/ui/` | wire models, presentation derivation and browser views |

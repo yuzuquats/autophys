@@ -21,11 +21,14 @@ python -m pip install -e './sdks/python[test]'
 python -m pytest -q sdks/python/tests
 ```
 
-NumPy and SciPy are required. MCP (`./sdks/python[mcp]`) and plotting are
-optional; a project made with `autophys new` (from
-[templates/](templates/battery-fit/python/README.md)) installs its own
-plotting environment. The SDK installs no console script: `autophys` is the
-Rust binary, and the SDK's developer commands run as `python -m autophys.cli`. Pure local/scripted work needs
+NumPy and SciPy are required; plotting is optional, and a project made with
+`autophys new` (from [templates/](templates/battery-fit/python/README.md))
+installs its own plotting environment. The SDK installs no console script:
+`autophys` is the Rust binary, which also runs the developer commands (`bench`,
+`research`, `autoloop`, `export-trajectories` and the Muse plugin's `mcp`
+server). Their tests are `cargo test --test devtools`; the Muse plugin's
+protocol tests in `sdks/python/tests/test_muse_plugin.py` run with
+`AUTOPHYS_RUST_BIN` set (and the `mcp` client package). Pure local/scripted work needs
 no model account. Provider routes require explicit configuration and keys;
 replay tests do not call a provider. Cross-writer tests require
 `AUTOPHYS_RUST_BIN` and `AUTOPHYS_RUST_WEB_ROOT`; without those, they skip and

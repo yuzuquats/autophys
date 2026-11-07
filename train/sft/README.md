@@ -15,7 +15,7 @@ Captured by the SDK's own code (`ReasonLanePolicy.decide`), not copied:
 - messages: `[{"role": "developer", "content": system_prompt(playbook)}, {"role": "user", "content": render_facts(facts)}]`
   - The system prompt is `CONTRACT` + the action catalog + `playbooks/default/SKILL.md`, with sha256 `09efc287…1802`.
 - `response_format: {"type": "json_schema", "json_schema": {"name": "decision", "schema": DECISION_SCHEMA}}`.
-- `max_tokens`: 1800, the default via `autophys bench`. No `reasoning_effort` unless `--effort` is given.
+- `max_tokens`: 1800, the default via `autophys bench` and `run_case`. No `reasoning_effort` unless `--effort` is given.
 - The reply is the Decision JSON `{hypothesis, evidence[], action, arguments, expected_information}`. It's checked by `Decision.parse`, and three invalid replies in a row end the run as `failed`.
 
 ## Files
@@ -28,7 +28,7 @@ Captured by the SDK's own code (`ReasonLanePolicy.decide`), not copied:
 | `patch_chat_template.py`, `render.py`, `serving/*.jinja` | Serving template that renders `developer` as `system`, with thinking off by default. Verified byte-identical to the training prompt. |
 | `train_sft.py` | Loops LoRA SFT (`baseten-loops`). Dry run by default (offline); `--live` trains. Guards dedicated trainers: `--allow-dedicated --max-seconds N` (the CLI passes these), otherwise a dedicated trainer is deactivated before training. |
 | `modal_app.py` | Modal backend: `dataset_main` (CPU, one case per container), `train_main` (GPU LoRA SFT plus held-out scoring before and after), `eval_main` (closed-loop benchmark of an adapter, or with `--base-only` the base model, served on localhost in one container). |
-| `eval_heldout.py` | Held-out benchmark of reason vs scripted through `autophys.bench.run_case`, with workbooks, `--record` cassette, `scores.json` and `report.json`. |
+| `eval_heldout.py` | Held-out benchmark of reason vs scripted through the Python SDK's `autophys.synthetic.run_case`, with workbooks, `--record` cassette, `scores.json` and `report.json`. |
 | `selftest_replay.py` | Offline harness check: replays the teacher's answers as a `--route baseten` cassette. |
 | `SDK_BRIEF.md` | SDK issues for the `sdks/python` owner. Nothing in `sdks/` was edited. |
 | `partner.env.example` | Partner hand-off template, with no key value. |
@@ -326,7 +326,7 @@ set -a; . ./partner.env; set +a
 autophys bench --policy reason --policy scripted --route baseten --model "$AUTOPHYS_REASON_MODEL" --seeds 5 --record partner.cassette.jsonl
 ```
 
-Replay offline afterwards with `--replay partner.cassette.jsonl` instead of `--record`. `--seeds 5` runs seeds 0–4. Seeds 0–2 are training seeds, so only 3,4 count as held-out.
+Replay offline afterwards with `--replay partner.cassette.jsonl` instead of `--record`. `autophys bench` is the Rust binary: it sends the training prompts' system prompt and facts format, but the numbers come from the Rust solver, so a cassette it records replays in the binary, not in `eval_heldout.py` (and vice versa). `--seeds 5` runs seeds 0–4. Seeds 0–2 are training seeds, so only 3,4 count as held-out.
 
 ## Local planning assets and diagnostic delivery
 
