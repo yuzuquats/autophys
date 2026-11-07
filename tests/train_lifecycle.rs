@@ -55,8 +55,28 @@ struct Lab {
     root: tempfile::TempDir,
     data: PathBuf,
 }
+/// Bounds for waiting on a precondition (a file, a worker phase). They only
+/// keep a broken test from hanging; the behavior budgets are separate.
+const SETUP: Duration = Duration::from_secs(30);
+
+/// The first launch of a freshly linked executable can take seconds on macOS
+/// (signature assessment of a 100 MB debug binary), which would otherwise be
+/// charged to whichever timed test spawns it first.
+fn warm_binary() {
+    static WARM: std::sync::Once = std::sync::Once::new();
+    WARM.call_once(|| {
+        let status = Command::new(env!("CARGO_BIN_EXE_autophys"))
+            .arg("--version")
+            .stdout(Stdio::null())
+            .status()
+            .unwrap();
+        assert!(status.success());
+    });
+}
+
 impl Lab {
     fn new() -> Self {
+        warm_binary();
         let root = tempfile::tempdir().unwrap();
         let data = root.path().join("data");
         std::fs::create_dir(&data).unwrap();
@@ -140,7 +160,7 @@ fn checked(out: &Output) {
     );
 }
 fn wait_for(path: &Path) {
-    let until = Instant::now() + Duration::from_secs(3);
+    let until = Instant::now() + SETUP;
     while !path.exists() {
         assert!(Instant::now() < until, "missing {}", path.display());
         std::thread::sleep(Duration::from_millis(10));
@@ -338,7 +358,7 @@ fn interrupt_finalizes_local_failure_and_reaps_worker_without_claiming_remote_ca
         .stderr(Stdio::piped())
         .spawn()
         .unwrap();
-    let until = Instant::now() + Duration::from_secs(3);
+    let until = Instant::now() + SETUP;
     loop {
         if lab.dir("interrupt").join("manifest.json").exists()
             && lab.manifest("interrupt")["status"] == "running"
