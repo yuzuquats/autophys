@@ -73,11 +73,12 @@ C1  NOT identified
 
 The [end-to-end walkthrough](#run-an-experiment-end-to-end) below continues
 from here: it lets the agent choose the test that separates R1 from C1. The
-project's README ([source](examples/battery-fit/python/README.md)) explains
+project's README ([source](examples/battery-fit.demo/python/README.md)) explains
 the results and how to use your own cell data, import measurements from a
 cycler, or choose a model-backed policy. `--lang rust` creates the same fit in
-Rust, and `--example blank` an empty project; `autophys connect URL` pairs the
-device with a server once.
+Rust, and `--example blank` an empty project; `autophys examples` lists every
+template, demo and backtest. `autophys connect URL` pairs the device with a
+server once.
 
 ## Run an experiment end to end
 
@@ -189,7 +190,7 @@ This checks the workbook's hash chain and its projections, and reports
 To use a real cell, run the proposed programs on your cycler and pass each
 export with `--data` instead of `--simulate`. To record on a shared server and
 approve in the browser, pair once with `autophys connect URL` and set
-`AUTOPHYS_SERVER`. The [project README](examples/battery-fit/python/README.md#5-run-the-closed-loop)
+`AUTOPHYS_SERVER`. The [project README](examples/battery-fit.demo/python/README.md#5-run-the-closed-loop)
 covers both, and `--policy model` hands the decisions to a language model.
 
 ## Use your own model
@@ -228,7 +229,8 @@ These act on a collection directory, `.ap-workbook` file or server URL given wit
 | Agents and research | |
 | --- | --- |
 | `autophys mcp` | Serve the investigation tools to Muse Code over MCP; `--project mypkg.module:project` runs your own Python simulator |
-| `autophys bench` | Run the synthetic benchmark offline (`--policy scripted\|fake-reasoner\|reason`) |
+| `autophys examples` | List the built-in templates, demos and backtests; `--check REF` validates an example folder |
+| `autophys bench` | Score a policy or model on backtests offline (`--example battery#short-only`, `--policy scripted\|fake-reasoner\|reason`) |
 | `autophys research` | Evaluate and improve playbook strategies (`--output-dir DIR`) |
 | `autophys autoloop` | Keep researching until a stop condition, with a journal and `--resume` |
 | `autophys export-trajectories SOURCE` | Export recorded reasoner decisions as JSONL |

@@ -49,7 +49,7 @@ stderr (remove it to get the built-in one back). To work on the workers themselv
 
 | command | what it does |
 |---|---|
-| `autophys train dataset [--out DIR] [--train-seeds 0,1,2] [--case NAME]...` | Builds train/validation/held-out rows. `--backend local` (default) is offline and free. `--backend modal --usd-per-hour X --max-usd Y` builds one case per CPU container and writes byte-identical files (`modal_app.py::dataset_main`). Returns per-split rows and sha256 plus the system-prompt hash. |
+| `autophys train dataset [--out DIR] [--train-seeds 0,1,2] [--example REF]...` | Builds train/validation/held-out rows. `--backend local` (default) is offline and free. `--backend modal --usd-per-hour X --max-usd Y` builds one case per CPU container and writes byte-identical files (`modal_app.py::dataset_main`). Returns per-split rows and sha256 plus the system-prompt hash. |
 | `autophys train run --name N --base-model HF_ID --data DIR --model-assets DIR` | Always plans first: an offline dry run (token counts, schedule) written to `runs/N/manifest.json`. Trains only with `--live`. Any Hugging Face chat model works: the end-of-turn marker is read from the model's own template (`render.end_of_turn`), not hardcoded. |
 | `autophys train eval ...` | Held-out closed-loop benchmark, reason vs scripted (`eval_heldout.py`). For a Modal-trained adapter, `modal_app.py::eval_main` serves it on 127.0.0.1 inside one GPU container and runs the benchmark there (see below). |
 | `autophys train runs` | Every run manifest, newest first: status, backend, model, rows, budget, held-out scores. |
@@ -135,7 +135,7 @@ GPU-minutes on an L40S for the 48 calls plus load (about $0.20 to $0.35 at $1.95
 
 ```sh
 autophys train loop --name LOOP --base-model HF_ID --gpu L40S --usd-per-hour 1.95 --max-usd TOTAL \
-  [--iterations 3] [--patience 2] [--candidates FILE] [--eval-seeds 3,4] [--case NAME]... [--live] [--resume]
+  [--iterations 3] [--patience 2] [--candidates FILE] [--eval-seeds 3,4] [--example REF]... [--live] [--resume]
 ```
 
 Without `--live` it only plans, for free. It validates the flags and
@@ -174,7 +174,7 @@ the worst-case cost. With `--live` it runs:
   "hparams": {"epochs": 4, "lr": 0.0002, "rank": 32, "batch_size": 8}}]
 ```
 
-- `val_seeds` defaults to 5,6. `case` defaults to the loop's `--case` (all
+- `val_seeds` defaults to 5,6. `case` defaults to the loop's `--example` cases (all
   cases if none).
 - Allowed `hparams`: `epochs`, `lr`, `rank`, `batch_size`, `max_seq_len`,
   `warmup`, `eval_every` and `seed`. Unknown keys are refused.

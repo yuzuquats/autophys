@@ -22,7 +22,7 @@ use sha2::{Digest, Sha256};
 
 pub const USAGE: &str =
     "usage: autophys train dataset [--out DIR] [--train-seeds 0,1,2] [--val-seeds 5,6]
-                               [--heldout-seeds 3,4] [--case NAME]... [--playbook NAME]
+                               [--heldout-seeds 3,4] [--example REF]... [--playbook NAME]
                                [--backend local|modal --usd-per-hour X --max-usd Y]
        autophys train run --name NAME --base-model HF_ID --data DIR [--backend loops|modal]
                           [--model-assets DIR] [--rank N] [--epochs N] [--batch-size N] [--lr X] [--max-seq-len N]
@@ -30,13 +30,13 @@ pub const USAGE: &str =
                           loops: [--usd-per-mtok X --max-usd Y --live]   (serverless, billed per token)
                           loops: [--usd-per-hour X --max-usd Y --live]   (dedicated trainer, billed by GPU time)
                           modal: [--gpu L40S|A100-80GB|H100 --usd-per-hour X --max-usd Y --live]
-       autophys train eval --out DIR [--model NAME] [--seeds 3,4] [--case NAME]...
+       autophys train eval --out DIR [--model NAME] [--seeds 3,4] [--example REF]...
                            [--policy reason|scripted]... [--route baseten|meta|lane] [--replay FILE]
        autophys train eval --backend modal --run NAME --gpu GPU --usd-per-hour X --max-usd Y
-                           [--out DIR] [--seeds 3,4] [--case NAME]...
+                           [--out DIR] [--seeds 3,4] [--example REF]...
        autophys train loop --name LOOP --base-model HF_ID --gpu GPU --usd-per-hour X --max-usd TOTAL
                            [--iterations 3] [--patience 2] [--candidates FILE] [--eval-seeds 3,4]
-                           [--model-assets DIR] [--case NAME]... [--live] [--resume]
+                           [--model-assets DIR] [--example REF]... [--live] [--resume]
        autophys train runs | train loops
        (all take --train-dir DIR (AUTOPHYS_TRAIN_DIR; default: the built-in workers,
         installed in ~/.local/share/tento/autophys/train/sft)

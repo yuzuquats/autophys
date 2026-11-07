@@ -761,7 +761,9 @@ pub fn check_cases_and_seeds(
 }
 
 pub fn known_case(c: &str) -> bool {
-    synthetic::CASES.contains(&c) || synthetic::PLANTED_CASES.contains(&c)
+    synthetic::CASES.contains(&c)
+        || synthetic::PLANTED_CASES.contains(&c)
+        || autophys::backtest::resolve_case(c).is_ok()
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1031,7 +1033,7 @@ pub fn researcher(args: &super::Args) -> Result<Box<dyn Researcher>, Failure> {
     ))
 }
 
-pub const USAGE: &str = "usage: autophys research --output-dir DIR [--playbook P] [--case NAME]... [--train-seeds 0,1,2] [--heldout-seeds 3,4] [--iterations N] [--policy reason|scripted|fake-reasoner] [--model M] [--route R] [--effort E] [--replay FILE] [--record FILE] [--researcher api|muse|scripted|heuristic] [--edit SKILL.md]... [--researcher-model M] [--researcher-route meta|baseten] [--researcher-effort E] [--researcher-replay FILE] [--researcher-record FILE] [--muse-binary B] [--timeout S] [--max-model-steps N] [--jobs N]";
+pub const USAGE: &str = "usage: autophys research --output-dir DIR [--playbook P] [--example REF[#CASE]]... [--train-seeds 0,1,2] [--heldout-seeds 3,4] [--iterations N] [--policy reason|scripted|fake-reasoner] [--model M] [--route R] [--effort E] [--replay FILE] [--record FILE] [--researcher api|muse|scripted|heuristic] [--edit SKILL.md]... [--researcher-model M] [--researcher-route meta|baseten] [--researcher-effort E] [--researcher-replay FILE] [--researcher-record FILE] [--muse-binary B] [--timeout S] [--max-model-steps N] [--jobs N]";
 
 /// `autophys research`.
 pub fn command(words: Vec<String>, out: &mut impl std::io::Write) -> Result<(), Failure> {

@@ -1,0 +1,9 @@
+# An example manifest: see autophys.project.docs/content/examples.md.
+kind = "template"
+title = "Empty project"
+summary = "A minimal project: one simulator, one fit and an identifiability report, to replace with your own model and data."
+languages = ["python", "rust"]
+
+[next]
+python = [".venv/bin/python main.py"]
+rust = ["cargo run --release"]

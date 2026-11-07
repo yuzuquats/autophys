@@ -59,7 +59,14 @@ fn lines(p: impl AsRef<Path>) -> Vec<Value> {
 #[test]
 fn bench_json_rows_and_table() {
     let (code, out, err) = run(&[
-        "bench", "--case", "thermal", "--seeds", "1", "--jobs", "2", "--json",
+        "bench",
+        "--example",
+        "thermal#full",
+        "--seeds",
+        "1",
+        "--jobs",
+        "2",
+        "--json",
     ]);
     assert_eq!(code, 0, "{err}");
     let rows: Value = serde_json::from_str(&out).unwrap();
@@ -71,7 +78,9 @@ fn bench_json_rows_and_table() {
         assert_eq!(row["diagnosis_correct"], true);
         let keys: Vec<&String> = row.as_object().unwrap().keys().collect();
         assert_eq!(keys.first().map(|k| k.as_str()), Some("case"));
-        assert_eq!(keys.last().map(|k| k.as_str()), Some("cost_usd"));
+        assert_eq!(keys.last().map(|k| k.as_str()), Some("example"));
+        assert_eq!(row["case"], "thermal");
+        assert_eq!(row["example"], "builtin:thermal#full");
     }
     // The fake reasoner's decisions are the scripted baseline's.
     assert_eq!(rows[0]["requested"], rows[1]["requested"]);
@@ -87,10 +96,14 @@ fn bench_json_rows_and_table() {
     ]);
     assert_eq!(code, 0);
     assert!(table.starts_with("| case "), "{table}");
+    // --case still works (deprecated) and an unknown --example is a usage error.
     assert!(
         table.contains("| thermal-short-only | scripted | 1     | inconclusivex1 |"),
         "{table}"
     );
+    let (code, _, err) = run(&["bench", "--example", "nope"]);
+    assert_eq!(code, 2);
+    assert!(err.contains("no built-in backtest"), "{err}");
     // The reason policy never calls a model without a cassette.
     let (code, _, err) = run(&[
         "bench", "--case", "thermal", "--seeds", "1", "--policy", "reason", "--model", "m",

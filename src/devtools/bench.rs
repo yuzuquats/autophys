@@ -23,7 +23,7 @@ use std::time::Instant;
 pub const DEFAULT_POLICIES: [&str; 2] = ["scripted", "fake-reasoner"];
 pub const POLICIES: [&str; 3] = ["reason", "scripted", "fake-reasoner"];
 
-pub const USAGE: &str = "usage: autophys bench [--jobs N] [--seeds N] [--case NAME]... [--policy scripted|fake-reasoner|reason]... [--model M] [--route meta|baseten|lane|muse] [--effort E] [--playbook P] [--replay FILE] [--record FILE] [--json]";
+pub const USAGE: &str = "usage: autophys bench [--jobs N] [--seeds N] [--example REF[#CASE]]... [--policy scripted|fake-reasoner|reason]... [--model M] [--route meta|baseten|lane|muse] [--effort E] [--playbook P] [--replay FILE] [--record FILE] [--json]";
 
 /// What the `reason` and `fake-reasoner` policies are built from.
 #[derive(Clone, Debug, Default)]
@@ -140,6 +140,7 @@ impl BenchRow {
             "diagnosis_correct": self.diagnosis_correct, "requested": self.requested,
             "test_hours": f(self.test_hours), "calls": self.calls, "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens, "cost_usd": self.cost_usd.map(f),
+            "example": autophys::backtest::reference_of(&self.case),
         })
     }
 }

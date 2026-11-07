@@ -392,6 +392,14 @@ class BenchRow:
     input_tokens: int = 0
     output_tokens: int = 0
     cost_usd: float | None = None
+    #: The case's canonical reference (``builtin:battery#full``).
+    example: str | None = None
+
+
+def _reference_of(case_id: str) -> str | None:
+    from .backtest import reference_of
+
+    return reference_of(case_id)
 
 
 def run_case(case: str, policy: str, seed: int, store=None, **reason_options) -> BenchRow:
@@ -440,4 +448,5 @@ def run_case(case: str, policy: str, seed: int, store=None, **reason_options) ->
         simulations=out.simulations, wall_s=wall, experiments=out.experiments, steps=out.steps,
         non_identified=non_ids, diagnosis_correct=evaluator.diagnosis_correct(set(non_ids)), requested=requested,
         **{**usage, "cost_usd": usage["cost_usd"] if usage["calls"] else None},
+        example=_reference_of(case),
     )

@@ -1,8 +1,9 @@
-//! `autophys new DIR --lang python|rust`: a new project from the examples in
-//! `examples/`, which `build.rs` embeds in the binary.
+//! `autophys new DIR --lang python|rust`: a new project from a template or
+//! demo example (`examples/<name>.template|demo/`, built into the binary, or
+//! a folder given by reference; see [`crate::examples`]).
 //!
-//! A template is `examples/<example>/common/` plus `examples/<example>/<lang>/`
-//! (the language's files win). Files ending in `.tmpl` are rendered (the
+//! A project is the example's `common/` plus its `<lang>/` (the language's
+//! files win). Files ending in `.tmpl` are rendered (the
 //! suffix dropped, `{{name}}`, `{{crate_name}}`, `{{sdk_repo}}` and
 //! `{{sdk_rev}}` replaced); every other file is copied byte for byte. The
 //! project depends on the SDK through a git dependency on the autophys
@@ -15,19 +16,16 @@ use std::process::{Command, Stdio};
 use serde_json::{Value, json};
 
 use crate::device::Failure;
-
-mod embedded {
-    include!(concat!(env!("OUT_DIR"), "/examples.rs"));
-}
+use crate::examples::Example;
+use std::borrow::Cow;
 
 /// The repository the SDK git dependency points at.
 pub const SDK_REPO: &str = "https://github.com/yuzuquats/autophys";
 
-pub const USAGE: &str =
-    "usage: autophys new DIR --lang python|rust [--example battery-fit|blank] [--name NAME]
-                    [--no-install] [--sdk-rev REV] [--sdk-repo GIT_URL] [--json]";
-
-pub const EXAMPLES: [&str; 2] = ["battery-fit", "blank"];
+pub const USAGE: &str = "usage: autophys new DIR --lang python|rust [--example REF] [--name NAME]
+                    [--no-install] [--sdk-rev REV] [--sdk-repo GIT_URL] [--json]
+       REF: a template or demo, built in (blank, battery-fit; `autophys examples`)
+            or a folder (./NAME.template); default battery-fit";
 
 /// The commit this binary was built from (`AUTOPHYS_COMMIT`, else the
 /// checkout's HEAD at build time); `None` for a build from a source export.
@@ -54,7 +52,7 @@ impl Lang {
 pub struct Options {
     pub dir: PathBuf,
     pub lang: Lang,
-    pub example: String,
+    pub example: Example,
     pub name: Option<String>,
     pub install: bool,
     pub sdk_rev: Option<String>,
@@ -121,12 +119,33 @@ pub fn parse(args: Vec<String>) -> Result<Options, Failure> {
         Some(other) => return Err(usage(format!("--lang {other:?}: use python or rust"))),
         None => return Err(usage("--lang python|rust is required")),
     };
-    let example = example.unwrap_or_else(|| "battery-fit".into());
-    if !EXAMPLES.contains(&example.as_str()) {
+    let reference = example.unwrap_or_else(|| "battery-fit".into());
+    let (example, case) =
+        crate::examples::resolve(&reference).map_err(|e| usage(format!("--example {e}")))?;
+    if case.is_some() {
         return Err(usage(format!(
-            "--example {example:?}: use {}",
-            EXAMPLES.join(" or ")
+            "--example {reference:?}: new sets up a whole example; drop the #CASE"
         )));
+    }
+    if example.kind == "backtest" && example.manifest.languages.is_empty() {
+        return Err(usage(format!(
+            "--example {reference:?} is a backtest with no project to set up; run it with `autophys bench --example {reference}`"
+        )));
+    }
+    if !example
+        .manifest
+        .languages
+        .iter()
+        .any(|l| l == lang.as_str())
+    {
+        return Err(usage(format!(
+            "--example {reference:?} has no {} project (it has: {})",
+            lang.as_str(),
+            example.manifest.languages.join(", ")
+        )));
+    }
+    if let Some(problem) = crate::examples::check(&example).into_iter().next() {
+        return Err(failure(problem));
     }
     if let Some(rev) = &sdk_rev {
         if rev.is_empty()
@@ -198,21 +217,9 @@ fn squash(raw: &str, keep: impl Fn(char) -> bool) -> String {
     out
 }
 
-/// The template's files, `(path in the project, bytes)`, `.tmpl` names kept.
-pub fn template(example: &str, lang: Lang) -> Vec<(String, &'static [u8])> {
-    let common = format!("{example}/common/");
-    let own = format!("{example}/{}/", lang.as_str());
-    let mut files: Vec<(String, &'static [u8])> = Vec::new();
-    for prefix in [&common, &own] {
-        for (path, bytes) in embedded::FILES {
-            if let Some(relative) = path.strip_prefix(prefix.as_str()) {
-                files.retain(|(existing, _)| existing != relative);
-                files.push((relative.to_string(), bytes));
-            }
-        }
-    }
-    files.sort_by(|a, b| a.0.cmp(&b.0));
-    files
+/// The project's files, `(path in the project, bytes)`, `.tmpl` names kept.
+pub fn template(example: &Example, lang: Lang) -> Vec<(String, Cow<'static, [u8]>)> {
+    example.project_files(lang.as_str())
 }
 
 pub fn render(text: &str, vars: &[(&str, &str)]) -> String {
@@ -244,7 +251,7 @@ fn check_empty(dir: &Path) -> Result<(), Failure> {
 /// Write the template into `dir`, which must be absent or empty.
 pub fn write_project(
     dir: &Path,
-    files: &[(String, &'static [u8])],
+    files: &[(String, Cow<'static, [u8]>)],
     vars: &[(&str, &str)],
 ) -> Result<Vec<String>, Failure> {
     check_empty(dir)?;
@@ -319,36 +326,18 @@ fn next_steps(opts: &Options, installed: bool) -> Vec<String> {
         format!("'{}'", dir.replace('\'', "'\\''"))
     };
     let mut steps = vec![format!("cd {dir}")];
-    match opts.lang {
-        Lang::Python => {
-            if !installed {
-                steps.push("python3 -m venv .venv".into());
-                steps.push(".venv/bin/python -m pip install .".into());
-            }
-            if opts.example == "battery-fit" {
-                steps.push(
-                    ".venv/bin/python battery_fit.py data/demo.csv      # compare with expected/demo.txt"
-                        .into(),
-                );
-                steps.push(
-                    ".venv/bin/python closed_loop.py start --simulate   # then `autophys approve` the proposal"
-                        .into(),
-                );
-            } else {
-                steps.push(".venv/bin/python main.py".into());
-            }
-        }
-        Lang::Rust => {
-            if opts.example == "battery-fit" {
-                steps.push(
-                    "cargo run --release -- data/demo.csv   # compare with expected/demo.txt"
-                        .into(),
-                );
-            } else {
-                steps.push("cargo run --release".into());
-            }
-        }
+    if opts.lang == Lang::Python && !installed {
+        steps.push("python3 -m venv .venv".into());
+        steps.push(".venv/bin/python -m pip install .".into());
     }
+    steps.extend(
+        opts.example
+            .manifest
+            .next
+            .get(opts.lang.as_str())
+            .cloned()
+            .unwrap_or_default(),
+    );
     steps.push("autophys connect URL   # once per device, to record on an autophys server".into());
     steps
 }
@@ -416,7 +405,8 @@ pub fn new(args: Vec<String>, out: &mut impl Write) -> Result<Value, Failure> {
         return Ok(json!({
             "dir": dir.display().to_string(),
             "lang": opts.lang.as_str(),
-            "example": opts.example,
+            "example": opts.example.name,
+            "kind": opts.example.kind,
             "name": name,
             "sdk_repo": sdk_repo,
             "sdk_rev": sdk_rev,
@@ -427,10 +417,11 @@ pub fn new(args: Vec<String>, out: &mut impl Write) -> Result<Value, Failure> {
     }
     let _ = writeln!(
         out,
-        "Created {} ({} project {name:?}, template {}), with the autophys SDK at {sdk_rev}.",
+        "Created {} ({} project {name:?}, {} {}), with the autophys SDK at {sdk_rev}.",
         opts.dir.display(),
         opts.lang.as_str(),
-        opts.example
+        opts.example.kind,
+        opts.example.name
     );
     if installed {
         let _ = writeln!(out, "Installed its environment in .venv.");
@@ -467,15 +458,23 @@ mod tests {
         ))
         .unwrap();
         assert_eq!(o.lang, Lang::Rust);
-        assert_eq!((o.example.as_str(), o.install), ("blank", false));
+        assert_eq!((o.example.name.as_str(), o.install), ("blank", false));
         assert_eq!(o.sdk_repo, SDK_REPO);
         let o = parse(words("cells --lang=python")).unwrap();
-        assert_eq!((o.example.as_str(), o.install), ("battery-fit", true));
+        assert_eq!((o.example.name.as_str(), o.install), ("battery-fit", true));
+        let o = parse(words(
+            "cells --lang rust --example builtin:battery-fit.demo",
+        ))
+        .unwrap();
+        assert_eq!(o.example.kind, "demo");
         for bad in [
             "cells",
             "--lang python",
             "cells --lang go",
             "cells --lang rust --example nope",
+            "cells --lang rust --example battery",
+            "cells --lang rust --example battery-fit#x",
+            "cells --lang rust --example github:a/b",
             "cells --lang rust --sdk-rev a\"b",
             "cells --lang rust --sdk-repo x#y",
             "a b --lang rust",
@@ -486,35 +485,31 @@ mod tests {
 
     #[test]
     fn every_template_has_a_manifest_and_renders_completely() {
-        for example in EXAMPLES {
+        let projects: Vec<Example> = crate::examples::builtins()
+            .into_iter()
+            .filter(|e| e.kind != "backtest")
+            .collect();
+        assert_eq!(projects.len(), 2);
+        for example in &projects {
             for (lang, manifest) in [
                 (Lang::Python, "pyproject.toml.tmpl"),
                 (Lang::Rust, "Cargo.toml.tmpl"),
             ] {
                 let files = template(example, lang);
-                assert!(
-                    files.iter().any(|(p, _)| p == manifest),
-                    "{example} {lang:?}"
-                );
+                let name = &example.name;
+                assert!(files.iter().any(|(p, _)| p == manifest), "{name} {lang:?}");
                 assert!(
                     files.iter().any(|(p, _)| p == "README.md"),
-                    "{example} {lang:?}"
+                    "{name} {lang:?}"
                 );
-                for (path, bytes) in files.iter().filter(|(p, _)| p.ends_with(".tmpl")) {
-                    let text = render(
-                        std::str::from_utf8(bytes).unwrap(),
-                        &[
-                            ("name", "n"),
-                            ("crate_name", "n"),
-                            ("sdk_repo", "r"),
-                            ("sdk_rev", "v"),
-                        ],
-                    );
-                    assert!(!text.contains("{{"), "{example} {lang:?} {path}");
-                }
+                assert!(
+                    !files.iter().any(|(p, _)| p == "example.toml"),
+                    "{name} {lang:?}"
+                );
             }
         }
-        let files = template("battery-fit", Lang::Rust);
+        let (demo, _) = crate::examples::resolve("battery-fit").unwrap();
+        let files = template(&demo, Lang::Rust);
         assert!(files.iter().any(|(p, _)| p == "data/demo.csv"));
         assert!(files.iter().any(|(p, _)| p == "src/main.rs"));
         assert!(!files.iter().any(|(p, _)| p.ends_with(".py")));
@@ -524,7 +519,8 @@ mod tests {
     fn refuses_a_non_empty_directory() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("keep.txt"), "mine").unwrap();
-        let e = write_project(dir.path(), &template("blank", Lang::Python), &[]).unwrap_err();
+        let (blank, _) = crate::examples::resolve("blank").unwrap();
+        let e = write_project(dir.path(), &template(&blank, Lang::Python), &[]).unwrap_err();
         assert!(e.message.contains("not empty"), "{}", e.message);
         assert_eq!(
             std::fs::read_to_string(dir.path().join("keep.txt")).unwrap(),

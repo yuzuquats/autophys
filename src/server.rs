@@ -26,8 +26,9 @@ pub const USAGE: &str =
                       [--login] [--public-url https://host]
        autophys build-web [--out DIR] [--bundle FILE]
        autophys pack --web-root DIR --out FILE [--no-maps]
-       autophys new DIR --lang python|rust [--example battery-fit|blank] [--name NAME]
+       autophys new DIR --lang python|rust [--example REF] [--name NAME]
                     [--no-install] [--sdk-rev REV]
+       autophys examples [--json] | examples --check [REF]...
        autophys connect [URL] [--name NAME] | whoami [--json]
        autophys bench | research | autoloop | export-trajectories | mcp   (developer tools; autophys <command> --help)
        autophys pair list | pair approve <CODE> | pair deny <CODE>

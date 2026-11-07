@@ -22,7 +22,7 @@ python -m pytest -q sdks/python/tests
 ```
 
 NumPy and SciPy are required; plotting is optional, and a project made with
-`autophys new` (from [examples/](examples/battery-fit/python/README.md))
+`autophys new` (from [examples/](examples/battery-fit.demo/python/README.md))
 installs its own plotting environment. The SDK installs no console script:
 `autophys` is the Rust binary, which also runs the developer commands (`bench`,
 `research`, `autoloop`, `export-trajectories` and the Muse plugin's `mcp`

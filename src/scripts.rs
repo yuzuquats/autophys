@@ -15,6 +15,7 @@ pub fn scripts() -> Scripts<()> {
         .add_command(pack)
         .add_command(workspace)
         .add_command(new)
+        .add_command(examples)
         .add_command(connect)
         .add_command(whoami)
         .add_command(bench)
@@ -87,10 +88,10 @@ fn train_result(result: Result<Value, crate::train::Failure>) -> tento_sh::Resul
 
 #[command(
     name = "dataset",
-    description = "Build train/validation/held-out chat rows offline: [--out DIR] [--train-seeds 0,1,2] [--case NAME]..."
+    description = "Build train/validation/held-out chat rows offline: [--out DIR] [--train-seeds 0,1,2] [--example REF[#CASE]]..."
 )]
 async fn train_dataset(_: (), args: Option<Vec<String>>) -> tento_sh::Result<Value> {
-    train_result(crate::train::dataset(args.unwrap_or_default()))
+    train_result(crate::train::dataset(with_cases(args.unwrap_or_default())))
 }
 
 #[command(
@@ -106,7 +107,7 @@ async fn train_run(_: (), args: Option<Vec<String>>) -> tento_sh::Result<Value> 
     description = "Held-out benchmark vs scripted: --out DIR [--model NAME] [--replay FILE], or --backend modal --run NAME --gpu G --usd-per-hour X --max-usd Y"
 )]
 async fn train_eval(_: (), args: Option<Vec<String>>) -> tento_sh::Result<Value> {
-    train_result(crate::train::eval(args.unwrap_or_default()))
+    train_result(crate::train::eval(with_cases(args.unwrap_or_default())))
 }
 
 #[command(
@@ -122,7 +123,7 @@ async fn train_runs(_: (), args: Option<Vec<String>>) -> tento_sh::Result<Value>
     description = "Plan (free) or run the keep-if-better SFT loop: --name L --base-model HF_ID --gpu G --usd-per-hour X --max-usd TOTAL [--iterations N] [--candidates FILE] [--live] [--resume]"
 )]
 async fn train_loop(_: (), args: Option<Vec<String>>) -> tento_sh::Result<Value> {
-    train_result(crate::train::run_loop(args.unwrap_or_default()))
+    train_result(crate::train::run_loop(with_cases(args.unwrap_or_default())))
 }
 
 #[command(
@@ -162,13 +163,37 @@ fn user_result(result: Result<Value, crate::device::Failure>) -> tento_sh::Resul
 
 #[command(
     name = "new",
-    description = "Create a project from a template: DIR --lang python|rust [--example battery-fit|blank] [--name NAME] [--no-install] [--sdk-rev REV] [--sdk-repo GIT_URL]; Python projects get a .venv (python3, or AUTOPHYS_PYTHON)"
+    description = "Create a project from a template or demo: DIR --lang python|rust [--example REF (default battery-fit; see autophys examples)] [--name NAME] [--no-install] [--sdk-rev REV] [--sdk-repo GIT_URL]; Python projects get a .venv (python3, or AUTOPHYS_PYTHON)"
 )]
 async fn new(_: (), args: Option<Vec<String>>) -> tento_sh::Result<Value> {
     user_result(crate::scaffold::new(
         user_args(args),
         &mut std::io::stdout(),
     ))
+}
+
+#[command(
+    name = "examples",
+    description = "List the built-in templates, demos and backtests: [--json]; or check examples: --check [REF]... (REF: NAME, builtin:NAME, ./NAME.KIND or path:DIR)"
+)]
+async fn examples(_: (), args: Option<Vec<String>>) -> tento_sh::Result<Value> {
+    user_result(crate::examples::command(
+        user_args(args),
+        &mut std::io::stdout(),
+    ))
+}
+
+/// `--example REF` (and the deprecated `--case`) as the `--case ID` words
+/// the developer and train commands parse; a bad reference ends the
+/// process with a usage error.
+fn with_cases(args: Vec<String>) -> Vec<String> {
+    match crate::examples::examples_to_cases(args) {
+        Ok(words) => words,
+        Err(message) => {
+            eprintln!("autophys: {message}");
+            std::process::exit(2);
+        }
+    }
 }
 
 #[command(
@@ -208,18 +233,18 @@ fn devtool(result: Result<(), crate::devtools::Failure>) -> tento_sh::Result<Val
 
 #[command(
     name = "bench",
-    description = "Run the synthetic benchmark (offline): [--jobs N] [--seeds 3] [--case NAME]... [--policy scripted|fake-reasoner|reason]... [--model M --route meta|baseten|lane|muse --effort E --playbook P --replay FILE --record FILE] [--json]"
+    description = "Run the backtest benchmark (offline): [--jobs N] [--seeds 3] [--example REF[#CASE]]... (default: every built-in backtest; see autophys examples) [--policy scripted|fake-reasoner|reason]... [--model M --route meta|baseten|lane|muse --effort E --playbook P --replay FILE --record FILE] [--json]"
 )]
 async fn bench(_: (), args: Option<Vec<String>>) -> tento_sh::Result<Value> {
-    devtool(crate::devtools::bench::command(user_args(args), &mut std::io::stdout()))
+    devtool(crate::devtools::bench::command(with_cases(user_args(args)), &mut std::io::stdout()))
 }
 
 #[command(
     name = "research",
-    description = "Evaluate and improve playbook strategies (offline by default): --output-dir DIR [--playbook P] [--case NAME]... [--train-seeds 0,1,2] [--heldout-seeds 3,4] [--iterations 1] [--policy reason|scripted|fake-reasoner] [--researcher api|muse|scripted|heuristic] [--edit SKILL.md]... [--replay FILE] [--researcher-replay FILE] [--jobs N]"
+    description = "Evaluate and improve playbook strategies (offline by default): --output-dir DIR [--playbook P] [--example REF[#CASE]]... [--train-seeds 0,1,2] [--heldout-seeds 3,4] [--iterations 1] [--policy reason|scripted|fake-reasoner] [--researcher api|muse|scripted|heuristic] [--edit SKILL.md]... [--replay FILE] [--researcher-replay FILE] [--jobs N]"
 )]
 async fn research(_: (), args: Option<Vec<String>>) -> tento_sh::Result<Value> {
-    devtool(crate::devtools::research::command(user_args(args), &mut std::io::stdout()))
+    devtool(crate::devtools::research::command(with_cases(user_args(args)), &mut std::io::stdout()))
 }
 
 #[command(
@@ -227,7 +252,7 @@ async fn research(_: (), args: Option<Vec<String>>) -> tento_sh::Result<Value> {
     description = "Research until a stop condition, with a journal and resume: --output-dir DIR [research flags] [--resume] [--max-iterations 10] [--patience 3] [--max-usd X] [--max-wall-s S] [--acceptance auto|lexicographic|bootstrap] [--repeats 1] [--alpha 0.05]"
 )]
 async fn autoloop(_: (), args: Option<Vec<String>>) -> tento_sh::Result<Value> {
-    devtool(crate::devtools::autoloop::command(user_args(args), &mut std::io::stdout()))
+    devtool(crate::devtools::autoloop::command(with_cases(user_args(args)), &mut std::io::stdout()))
 }
 
 #[command(

@@ -677,6 +677,7 @@ dependencies = [
  "tento-web",
  "thiserror 1.0.69",
  "tokio",
+ "toml",
  "zip",
 ]
 

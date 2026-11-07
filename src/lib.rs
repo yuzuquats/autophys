@@ -22,6 +22,7 @@ pub mod error;
 pub mod http;
 pub mod keys;
 pub mod login;
+pub mod examples;
 pub mod scaffold;
 pub mod scripts;
 pub mod server;

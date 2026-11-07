@@ -1,9 +1,59 @@
 # Examples: templates, demos and backtests
 
-Status: draft spec, rev 2 (2026-11-07). Not implemented. Every choice
-EX-1..EX-10 is an operator decision (2026-11-07; EX-4..EX-8 answered in the
-/open-questions walkthrough that day). EX-7 and EX-8 differ from the agent's
-recommendation; see the table.
+Status: rev 3 (2026-11-07). Plan steps 1 and 2 are implemented
+(I91c47241e650e419b25036afffb9d6ed, the SDK cases; I124d47e38ec757fbc1b16e66fa4cec3c, the CLI); step 3 is not. Every choice EX-1..EX-10 is
+an operator decision (2026-11-07; EX-4..EX-8 answered in the /open-questions
+walkthrough that day). EX-7 and EX-8 differ from the agent's recommendation;
+see the table. Where the draft format below differs from what was built,
+"Implemented" is current.
+
+## Implemented (steps 1 and 2)
+
+- `examples/blank.template/`, `battery-fit.demo/`, and
+  `oscillator.backtest/`, `thermal.backtest/`, `battery.backtest/` (the six
+  former code cases plus the planted `battery-biased`), each with an
+  `example.toml`. `autophys examples` lists them by kind; `autophys examples
+  --check [REF]...` runs the checks below on built-ins or a folder.
+- References `[SCHEME:]SOURCE[#CASE]` are parsed in both SDKs
+  (`autophys::backtest::parse_ref`, `autophys.backtest.parse_ref`):
+  `builtin:` (bare names; a kind suffix such as `blank.template` is
+  accepted) and `path:` (`./`, `../`, `/`, `~`). Unknown schemes are errors.
+- `new --example REF` takes templates and demos (built in or a folder),
+  refuses `#CASE`, refuses a backtest with no project, and reads its next
+  steps from the manifest's `[next]`. `bench`, `research`, `autoloop` and
+  `train dataset|eval|loop` take repeatable `--example REF[#CASE]`; `--case`
+  still works with a deprecation note.
+- Backtest format as built: `example.toml` has `[system] model` (a built-in
+  simulator, EX-6) and optional `experiment_cost = { setup_hours }` (each
+  catalog run costs setup plus its duration), and `[[case]]` tables with
+  `name`, `id` (built-ins only), `suite` (default true; false marks a
+  planted case), `budget = { max_experiments, max_test_hours }`, `train`
+  and `validation` (catalog names or settings tables). One
+  `hidden/cases.toml` per example holds `[truth]`, `[noise] sigma`,
+  `[[test]]` and a `[case.NAME]` table per case with `combos`,
+  `expected_non_identified`, `note`, and optional `bias` and `missing`.
+  This replaces the draft's `initial`, per-case `hidden = ...` and `[score]`.
+- Ids: built-in cases keep their stable ids (`battery`,
+  `battery-short-only`, ...) as investigation and project names, so
+  records, replay cassettes, training data and stored results are
+  unchanged; a case from a folder uses its canonical reference
+  (`path:/abs/x.backtest#case`) as its id. Result rows keep `case` (the id)
+  and gain a last field `example` (the canonical reference). This refines
+  EX-9: the local names are how cases are referenced, not a rename of
+  stored ids.
+- Each SDK ships a copy of the three built-in backtests
+  (`sdks/rust/src/backtests/`, `autophys/backtests/` package data), tested
+  byte-identical to `examples/`, because a pip install from the SDK's
+  subdirectory cannot reach the repository's `examples/`. The Python SDK
+  reads TOML with `tomllib`, or `tomli` on Python 3.10 (a new dependency
+  there). The SDK `*_case` helpers (`battery_case(seed, max_experiments,
+  bias)`, ...) now build from the manifests.
+- Parity gate: `autophys bench --seeds 3` (scripted and fake-reasoner, all
+  seven cases) and Python `run_case` over the same 42 runs give results
+  identical to the pre-change baseline in every field except wall time.
+- Not built yet: running each demo's `[[expected]]` commands in CI (they
+  need the SDK installed from git); the checks confirm the expected files
+  exist. `min_autophys` is optional and checked when present.
 
 ## Why
 
@@ -306,20 +356,12 @@ autophys bench --example ./my-cell.backtest#cell-a17 --policy reason --model …
 
 ## Plan
 
-1. **Kinds for what exists.** Rename to `blank.template/` and
-   `battery-fit.demo/`, add the manifests, `autophys examples` and the
-   aliases. `build.rs` embeds by manifest instead of the depth-3 skip rule,
-   and the template/demo checks go in CI. No behaviour change for v0.1.1
-   users.
-2. **The existing cases become backtests.** Move the six `CASES` and the
-   planted `battery-biased` case into `battery.backtest/`,
-   `oscillator.backtest/` and `thermal.backtest/`. Both SDKs load the cases
-   from the manifests, and the code tables are deleted. Gate: `bench --seeds 3`
-   and the recorded `reason` cassettes give the same decisions as before the
-   move (the CLI-12 rule), and `train eval` is unchanged.
-3. **New capability.** `[truth.prior]` per-seed truth, dataset cases,
-   `--example PATH` for a user's own backtest, `bench --summary`, then a
-   backtest's own simulator through the worker (EX-6).
+1. **Kinds for what exists.** Done (see Implemented).
+2. **The existing cases become backtests.** Done (see Implemented).
+3. **New capability**, not started: `[truth.prior]` per-seed truth with the
+   regime check (EX-4), dataset cases with downloaded data (EX-5, EX-7),
+   `bench --summary`, then a backtest's own simulator through the worker
+   (EX-6). `--example ./x.backtest` for generator cases already works.
 
 ## Open questions
 

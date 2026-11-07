@@ -1,0 +1,54 @@
+# An example manifest: see autophys.project.docs/content/examples.md.
+kind = "demo"
+title = "Fit a battery cell"
+summary = "Fit a 1RC battery model to a pulse test, see which parameters the data pins down, then run the closed loop against a simulated cell."
+languages = ["python", "rust"]
+
+[next]
+python = [
+    ".venv/bin/python battery_fit.py data/demo.csv      # compare with expected/demo.txt",
+    ".venv/bin/python closed_loop.py start --simulate   # then `autophys approve` the proposal",
+]
+rust = ["cargo run --release -- data/demo.csv   # compare with expected/demo.txt"]
+
+[[data]]
+path = "common/data/demo.csv"
+provenance = "synthetic"
+generator = "battery_fit.py --demo: battery_ecm with R0=0.025 ohm, R1=0.045 ohm, C1=1600 F, 2 mV voltage noise"
+sha256 = "ca1bb77d31ce6c3e8664ab759eac8cf92181679dd0b628a310c5f8f72863f356"
+
+[[data]]
+path = "common/data/short.csv"
+provenance = "synthetic"
+generator = "the first 64 s of demo.csv"
+sha256 = "8ced6e744fc9a0da8fb2c93bb485fb29be88ff760259966f5f1b695ed0dfbc5e"
+
+[[data]]
+path = "common/data/ocv_generic.csv"
+provenance = "synthetic"
+generator = "an illustrative open-circuit-voltage table, not a measured cell"
+sha256 = "495e1c5269de70f6cb82f384ba1595dd4fd9c50467e3083322683f7b6780e696"
+
+[[expected]]
+lang = "python"
+run = ".venv/bin/python battery_fit.py data/demo.csv"
+stdout = "python/expected/demo.txt"
+compare = "numbers within rel 1e-3, text exact"
+
+[[expected]]
+lang = "python"
+run = ".venv/bin/python battery_fit.py data/short.csv"
+stdout = "python/expected/short.txt"
+compare = "numbers within rel 1e-3, text exact"
+
+[[expected]]
+lang = "rust"
+run = "cargo run --release -- data/demo.csv"
+stdout = "rust/expected/demo.txt"
+compare = "numbers within rel 1e-3, text exact"
+
+[[expected]]
+lang = "rust"
+run = "cargo run --release -- data/short.csv"
+stdout = "rust/expected/short.txt"
+compare = "numbers within rel 1e-3, text exact"

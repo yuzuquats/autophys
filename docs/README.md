@@ -11,7 +11,7 @@ display metadata and asks people to approve experiments.
 | `html/routes/` | document routes and application composition |
 | `html/client/`, `html/ui/` | wire models, presentation derivation and browser views |
 | `tests/` | daemon contracts and shared workbook/numerical conformance inputs |
-| `examples/` | the example projects `autophys new --example` writes, embedded in the binary (`build.rs`), each with its own README |
+| `examples/` | `NAME.template/` and `NAME.demo/` projects that `autophys new --example` writes, and `NAME.backtest/` cases that `autophys bench --example` scores; each has an `example.toml` ([spec](../autophys.project.docs/content/examples.md)), and all are embedded in the binary (`build.rs`) |
 | `tests/e2e/` | optional daemon/browser flows; use a temporary collection and a spare port |
 | `plugins/` | optional agent integrations; Muse is not a daemon dependency |
 | `train/sft/` | optional policy dataset, provider and evaluation workers, embedded in the binary for `autophys train` |
