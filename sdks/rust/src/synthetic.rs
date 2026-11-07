@@ -458,6 +458,15 @@ pub fn thermal_case(
 pub const BATTERY_TRUTH: [(&str, f64); 3] = [("R0", 0.025), ("R1", 0.045), ("C1", 1600.)];
 /// MQ-5: a short pulse measures the ohmic drop and initial polarization slope.
 pub fn battery_case(seed: u64, max_experiments: usize) -> Result<(CaseView, Evaluator)> {
+    battery_case_with(seed, max_experiments, 0.)
+}
+/// [`battery_case`] with a constant voltage-sensor offset `bias` (V) added
+/// to every measurement; a nonzero bias names the case `battery-biased`.
+pub fn battery_case_with(
+    seed: u64,
+    max_experiments: usize,
+    bias: f64,
+) -> Result<(CaseView, Evaluator)> {
     let sim = models::battery_ecm();
     let truth = params(&BATTERY_TRUTH);
     let short = max_experiments == 0;
@@ -497,12 +506,17 @@ pub fn battery_case(seed: u64, max_experiments: usize) -> Result<(CaseView, Eval
     let (mut view, ev) = build(
         if short {
             "battery-short-only"
+        } else if bias != 0. {
+            "battery-biased"
         } else {
             "battery"
         },
         sim,
         truth,
-        NoiseModel::new(params(&[("v", 0.002)])),
+        NoiseModel {
+            bias: if bias != 0. { params(&[("v", bias)]) } else { Params::new() },
+            ..NoiseModel::new(params(&[("v", 0.002)]))
+        },
         seed,
         vec![pulse("pulse_short", 2., 6.)],
         vec![pulse("pulse_short_1A", 1., 6.)],
@@ -518,8 +532,34 @@ pub fn battery_case(seed: u64, max_experiments: usize) -> Result<(CaseView, Eval
     view.catalog = Some(catalog);
     Ok((view, ev))
 }
+/// The benchmark suite, in Python `CASES` order.
+pub const CASES: [&str; 6] = [
+    "oscillator-free-only",
+    "oscillator",
+    "thermal-short-only",
+    "thermal",
+    "battery-short-only",
+    "battery",
+];
+/// Cases with a known strategy fix, used to check that the research loop
+/// finds it; not in [`CASES`]. `battery-biased`: the voltage sensor reads
+/// 10 mV high, so comparing the sensor-bias variant on a poor fit
+/// validates the cell and never comparing ends inconclusive.
+pub const PLANTED_CASES: [&str; 1] = ["battery-biased"];
+/// The project a benchmark investigation of `view` runs under.
+pub fn case_project(view: &CaseView) -> crate::project::Project {
+    let mut p = crate::project::Project::new(view.name.clone(), view.simulator.clone());
+    if let Some(catalog) = &view.catalog {
+        p.catalog = catalog.clone();
+    }
+    p.budgets.max_experiments = view.max_experiments;
+    p.budgets.max_test_hours = view.max_test_hours;
+    p
+}
+/// A case by name, from [`CASES`] or [`PLANTED_CASES`].
 pub fn case(name: &str, seed: u64) -> Result<(CaseView, Evaluator)> {
     match name {
+        "battery-biased" => battery_case_with(seed, 2, 0.01),
         "oscillator" => oscillator_case(seed, 2, 0., 0.),
         "oscillator-free-only" => oscillator_case(seed, 0, 0., 0.),
         "thermal" => thermal_case(seed, 2, 0., 0.),

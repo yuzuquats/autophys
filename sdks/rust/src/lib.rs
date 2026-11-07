@@ -70,6 +70,14 @@ pub mod synthetic;
 pub mod playbook;
 pub mod usage;
 
+/// The ordered map the SDK's parameter and channel maps use.
+pub use indexmap;
+
+pub mod difflib;
+pub mod measurements;
+pub mod pyjson;
+pub mod pyrandom;
+
 pub mod display;
 mod trajectory;
 pub use display::Display;

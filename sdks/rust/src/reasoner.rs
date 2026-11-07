@@ -1,6 +1,7 @@
 //! HTTP reasoners and injectable deterministic test reasoners.
 mod cassette;
 mod chat;
+pub mod muse;
 use crate::simulator::{Result, invalid};
 pub use cassette::*;
 pub use chat::{ChatReasoner, ChatReasonerConfig, reasoner_from_env};

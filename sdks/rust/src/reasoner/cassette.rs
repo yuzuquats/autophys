@@ -13,6 +13,26 @@ pub struct ModelSpec {
     pub model: String,
     pub effort: Option<String>,
     pub max_tokens: Option<usize>,
+    /// Opt in to plot images (Python `ModelSpec.images`); omitted when false,
+    /// as the Python policy metadata omits it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub images: bool,
+}
+/// Models whose image support is known (`None`: unverified, an explicit
+/// opt-in asserts it). Python `IMAGE_CAPABILITIES`.
+pub fn image_capability(model: &str) -> Option<bool> {
+    match model {
+        "gpt-4o" | "gpt-4o-mini" => Some(true),
+        "deepseek-ai/DeepSeek-R1" | "meta-llama/Llama-3.3-70B-Instruct" => Some(false),
+        _ => None,
+    }
+}
+/// Python `images_enabled(spec)`: an opted-in spec on an image route whose
+/// model is not known to be text-only.
+pub fn images_enabled(spec: Option<&ModelSpec>) -> bool {
+    spec.is_some_and(|s| {
+        s.images && !["lane", "muse"].contains(&s.route.as_str()) && image_capability(&s.model) != Some(false)
+    })
 }
 impl ModelSpec {
     pub fn new(role: &str, route: &str, model: &str) -> Result<Self> {
@@ -22,6 +42,7 @@ impl ModelSpec {
             model: model.into(),
             effort: None,
             max_tokens: None,
+            images: false,
         };
         spec.validate()?;
         Ok(spec)
@@ -30,8 +51,8 @@ impl ModelSpec {
         if !["policy", "researcher"].contains(&self.role.as_str()) {
             return Err(invalid("role must be policy or researcher"));
         }
-        if !["meta", "baseten", "lane"].contains(&self.route.as_str()) {
-            return Err(invalid("reason route must be meta, baseten or lane"));
+        if !["meta", "baseten", "lane", "muse"].contains(&self.route.as_str()) {
+            return Err(invalid("reason route must be meta, baseten, lane or muse"));
         }
         if self.model.is_empty() {
             return Err(invalid("model must be a non-empty string"));
@@ -146,6 +167,14 @@ impl Reasoner for ReplayReasoner {
             .get(&key)
             .cloned()
             .ok_or_else(|| invalid(format!("replay miss: {key}")))?;
+        let recorded = reply.route.as_deref();
+        if (recorded == Some("muse") || self.route == "muse") && recorded != Some(self.route.as_str()) {
+            return Err(invalid(format!(
+                "replay route mismatch: recorded {}, requested {}",
+                recorded.map(|r| format!("{r}")).unwrap_or_else(|| "None".into()),
+                self.route
+            )));
+        }
         reply.replayed = true;
         Ok(reply)
     }
@@ -249,6 +278,8 @@ pub fn reasoner_for(spec: ModelSpec, config: ReasonerConfig) -> Result<Box<dyn R
     });
     let inner: Box<dyn Reasoner> = if let Some(path) = replay {
         Box::new(ReplayReasoner::with_model(path, &spec.route, &spec.model)?)
+    } else if spec.route == "muse" {
+        Box::new(super::muse::MuseExecReasoner::new(&spec.model))
     } else if spec.route == "lane" {
         Box::new(HttpReasoner::new(
             &base.ok_or_else(|| invalid("lane requires AUTOPHYS_REASON_URL"))?,
@@ -343,5 +374,13 @@ mod tests {
         );
         assert!(ModelSpec::new("other", "meta", MUSE_SPARK).is_err());
         assert!(ModelSpec::new("policy", "other", MUSE_SPARK).is_err());
+        let mut spec = ModelSpec::new("policy", "muse", MUSE_SPARK).unwrap();
+        assert_eq!(serde_json::to_value(&spec).unwrap().get("images"), None);
+        spec.images = true;
+        assert!(!images_enabled(Some(&spec)));
+        spec.route = "baseten".into();
+        assert!(images_enabled(Some(&spec)));
+        spec.model = "deepseek-ai/DeepSeek-R1".into();
+        assert!(!images_enabled(Some(&spec)));
     }
 }

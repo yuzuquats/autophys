@@ -148,7 +148,7 @@ pub fn py_float_repr(x: f64) -> String {
     out
 }
 
-fn write_str(out: &mut String, s: &str) {
+pub(crate) fn write_str(out: &mut String, s: &str) {
     out.push('"');
     for c in s.chars() {
         match c {

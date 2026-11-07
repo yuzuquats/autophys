@@ -1,4 +1,5 @@
 //! Investigation loop. All durable writes use the record API's `append`.
+pub mod heuristic;
 mod policy;
 use crate::{
     data::{Dataset, Observation},
@@ -1260,6 +1261,67 @@ impl Investigation {
             self.pending_experiment = None;
         }
         Ok(p)
+    }
+    /// The latest fit, current for the measurements: an external driver
+    /// must refit after new data before reading diagnostics or reporting.
+    pub fn require_current_fit(&self) -> NumResult<&FitResult> {
+        let fit = self.need_fit()?;
+        if fit.dataset_version != Some(self.dataset.version) {
+            return Err(invalid(
+                "measurements changed: call fit before using diagnostics or reporting",
+            ));
+        }
+        Ok(fit)
+    }
+    /// One step decided outside [`Investigation::run`] (an MCP client; no
+    /// model runs here), recorded as a `step` exactly as the loop records
+    /// it. `stop` checks identifiability and validation itself and returns
+    /// the outcome, `awaiting_data` while a proposal is pending: the caller
+    /// never supplies the identified list or the status.
+    pub fn external_step(&mut self, policy: &str, d: &Decision) -> crate::Result<Value> {
+        let t = Instant::now();
+        let before = self.simulations();
+        for v in self.variants.values() {
+            v.set_budget(Some(self.budget.clone()));
+        }
+        self.steps += 1;
+        let mut step = json!({"index": self.steps, "policy": policy, "fit_id": self.fit_id,
+            "valid": true, "decision": d});
+        let result = if d.action == "stop" {
+            self.tool_analyze_sensitivity()
+                .and_then(|_| self.tool_validate_predictions())
+        } else {
+            self.dispatch(d)
+        };
+        match &result {
+            Ok(v) => {
+                step["result"] = v.clone();
+                self.last_error.clear();
+            }
+            Err(e) => {
+                step["result"] = json!({"error": e.to_string()});
+                self.last_error = e.to_string();
+            }
+        }
+        step["simulations"] = json!(self.simulations() - before);
+        let written = self.write("step", step);
+        for v in self.variants.values() {
+            v.set_budget(None);
+        }
+        if d.action != "stop" {
+            self.wall += t.elapsed().as_secs_f64();
+        }
+        let result = result.map_err(err)?;
+        written?;
+        if d.action == "stop" {
+            let (status, reasons) = match &self.pending {
+                Some(_) => ("awaiting_data", vec!["proposal awaits browser approval and data".to_string()]),
+                None => ("validated", vec![]),
+            };
+            let out = self.finish(status, reasons, None, "", t)?;
+            return Ok(out.to_dict());
+        }
+        Ok(result)
     }
     fn require_pending(&self, pid: &str) -> crate::Result<()> {
         if self.pending.as_deref() != Some(pid) {

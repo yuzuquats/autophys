@@ -470,13 +470,20 @@ pub fn render_facts(f: &Value) -> String {
 pub fn actions() -> Value {
     serde_json::from_str(include_str!("actions.json")).unwrap()
 }
+const SYSTEM: &str = include_str!("system-prompt.txt");
+/// The fixed decision contract (Python `agent.CONTRACT`): the system
+/// prompt up to its action list. A playbook may not restate it.
+pub fn contract() -> &'static str {
+    let end = SYSTEM.find("\nActions:\n").expect("system prompt lists actions") + "\nActions:\n".len();
+    &SYSTEM[..end]
+}
 pub fn system_prompt() -> String {
     system_prompt_with(&load_playbook("default").expect("embedded default playbook"))
 }
 pub fn system_prompt_with(playbook: &Playbook) -> String {
     format!(
         "{}\n\nStrategy:\n{}",
-        include_str!("system-prompt.txt"),
+        SYSTEM,
         playbook.text
     )
 }
