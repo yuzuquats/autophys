@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from autophys.agent import Investigation, ScriptedPolicy, render_facts
-from autophys.bench import case_project, run_case
+from autophys.synthetic import case_project, run_case
 from autophys.curves import RUN_BYTES, run_payload
 from autophys.data import Observation
 from autophys.fit import FitResult, StartResult

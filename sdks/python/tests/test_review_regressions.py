@@ -12,15 +12,13 @@ from http.server import ThreadingHTTPServer
 import pytest
 
 from autophys.agent import Decision, Investigation, ProposalRunner, ReasonLanePolicy, ScriptedPolicy
-from autophys.bench import case_project
+from autophys.synthetic import case_project
 from autophys.data import Dataset
 from autophys.http import HttpError, HttpStore
 from autophys.playbook import load_playbook
 from autophys.reasoner import BudgetError, FakeReasoner, HttpReasoner, ModelSpec, ReasonerError, ReasonReply
-from autophys.research import MuseCLIResearcher, evaluate, proposal_prompt, research
 from autophys.store import JsonlStore, MemoryStore, StoreError, canonical, config_hash
 from autophys.synthetic import CASES
-from autophys.trajectories import trajectories
 from autophys.usage import normalize_usage
 from autophys.workbook import WorkbookError, WorkbookStore
 from fake_server import FakeAutophys
@@ -47,17 +45,6 @@ def pending(store=None, policy=None):
     return inv, view, project
 
 
-def test_A1_evaluate_prompt_identity(tmp_path, monkeypatch):
-    import autophys.bench as bench
-    # Failing transcripts carry investigation metadata, including reasoner repr.
-    monkeypatch.setattr(bench, "heuristic_responder", lambda messages: "invalid")
-    reports = [evaluate(load_playbook().path, ["thermal"], [0], "fake-reasoner", tmp_path / str(i))
-               for i in range(2)]
-    hashes = [hashlib.sha256(proposal_prompt("skill", r).encode()).hexdigest() for r in reports]
-    assert hashes[0] == hashes[1]
-    assert proposal_prompt("skill", {"reasoner": "volatile"}) == proposal_prompt("skill", {})
-
-
 def test_A1_wrapper_reprs(tmp_path):
     from autophys.reasoner import RecordingReasoner, ReplayReasoner, _ConfiguredReasoner
     path = tmp_path / "cassette"
@@ -69,29 +56,6 @@ def test_A1_wrapper_reprs(tmp_path):
                 HttpReasoner("http://secret:credential@127.0.0.1")]
     assert list(map(repr, wrappers())) == list(map(repr, wrappers()))
     assert all("0x" not in repr(r) and "credential" not in repr(r) for r in wrappers())
-
-
-@pytest.mark.parametrize("immediate", [False, True])
-def test_A2_first_402_stops_scheduling(monkeypatch, immediate):
-    import autophys.bench as bench
-    started, failed_at = [], []
-    release = threading.Event()
-    def run(unit):
-        index = unit[2]
-        started.append((index, time.monotonic()))
-        if index == 0:
-            if not immediate:
-                release.wait(2)
-            failed_at.append(time.monotonic())
-            raise BudgetError("402")
-        release.set()
-        time.sleep(.1)
-        return index
-    monkeypatch.setattr(bench, "_run_unit", run)
-    with pytest.raises(BudgetError):
-        bench.run_units([("thermal", "reason", i, {}) for i in range(20)], jobs=2)
-    assert len(started) <= 2
-    assert all(start <= failed_at[0] for _, start in started)
 
 
 @pytest.mark.parametrize("status", [429, 500, 502, 503, 504, "connection"])
@@ -223,33 +187,6 @@ def test_A6_resume_checks_playbook(tmp_path):
     Investigation.resume(project, store, inv.id, policy=ScriptedPolicy())
 
 
-def test_A7_cli_replay_configuration_identity(tmp_path):
-    text = load_playbook().data.decode()
-    spec = ModelSpec("researcher", "meta", "muse-wonder-1.0", "high")
-    body = {"model": spec.model, "effort": spec.effort, "max_model_steps": 3, "prompt": proposal_prompt(text, {})}
-    path = tmp_path / "cassette"
-    path.write_text(json.dumps({"key": hashlib.sha256(canonical(body).encode()).hexdigest(), "playbook": text + "\nBetter.\n"}) + "\n")
-    assert "Better." in MuseCLIResearcher(replay=path, spec=spec, max_model_steps=3).propose(text, {})
-    for options in ({"spec": spec}, {"max_model_steps": 3},
-                    {"spec": ModelSpec("researcher", "meta", "other", "high"), "max_model_steps": 3}):
-        with pytest.raises(ReasonerError, match="replay miss"):
-            MuseCLIResearcher(replay=path, **options).propose(text, {})
-
-
-@pytest.mark.parametrize("error", [ReasonerError("cannot start"), ReasonerError("timeout"),
-                                  ReasonerError("nonzero exit"), ReasonerError("terminal failed")])
-def test_A8_researcher_operational_failure_aborts(tmp_path, error):
-    calls = []
-    class Researcher:
-        def propose(self, *args):
-            calls.append(1)
-            raise error
-    with pytest.raises(ReasonerError):
-        research(researcher=Researcher(), output_dir=tmp_path / "out", policy="scripted", iterations=3,
-                 evaluate_fn=lambda *a, **kw: {"score": {"correct": 0}})
-    assert len(calls) == 1
-
-
 def test_A9_bare_name_always_bundled(tmp_path, monkeypatch):
     expected = load_playbook().sha256
     (tmp_path / "default").mkdir()
@@ -257,15 +194,6 @@ def test_A9_bare_name_always_bundled(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     assert load_playbook("default").sha256 == expected
     assert load_playbook("./default").sha256 != expected
-
-
-def test_A10_export_evidence_prompt(tmp_path):
-    path = tmp_path / "p.ap-workbook"
-    with WorkbookStore(path) as store:
-        inv = pinned(store)
-        store.append(inv, "step", {"index": 1, "evidence_text": "user evidence", "raw_output": "reply"})
-    [step] = trajectories(path)
-    assert step["prompt"] == "user evidence" and step["messages"] is None
 
 
 def test_B1_keepalives_do_not_extend_deadline():

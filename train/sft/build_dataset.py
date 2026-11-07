@@ -2,7 +2,10 @@
 """Distil the scripted policy into chat SFT rows. Offline: no network, no tokens.
 
 Each step's prompt is produced by the SDK's own ``ReasonLanePolicy`` (so it
-is byte-identical to what ``autophys bench --policy reason`` sends), and its
+is byte-identical to what the Python reason policy sends, e.g.
+``autophys.synthetic.run_case(case, "reason", ...)`` behind ``autophys train
+eval``; the Rust ``autophys bench --policy reason`` renders the same system
+prompt and facts format from its own solver's numbers), and its
 "model" is a ``FakeReasoner`` that answers with ``ScriptedPolicy``'s choice
 for the same facts. The investigation then parses that answer with the
 loop's own ``Decision.parse``, so every target is checked by the real
@@ -29,7 +32,7 @@ from collections import Counter
 from pathlib import Path
 
 from autophys.agent import Decision, Investigation, ReasonLanePolicy, ScriptedPolicy, system_prompt
-from autophys.bench import case_project
+from autophys.synthetic import case_project
 from autophys.reasoner import FakeReasoner, parse_json_content
 from autophys.store import MemoryStore
 from autophys.synthetic import CASES

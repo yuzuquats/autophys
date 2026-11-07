@@ -6,7 +6,7 @@ import pytest
 
 import autophys as ml
 from autophys.agent import DECISION_SCHEMA, Decision, DecisionError, Investigation, ProposalRunner, ReasonLanePolicy, ScriptedPolicy
-from autophys.bench import heuristic_responder, overclaiming_responder
+from autophys.heuristic import heuristic_responder, overclaiming_responder
 from autophys.project import Budgets, NoiseConfig, Project
 from autophys.reasoner import FakeReasoner
 from autophys.store import MemoryStore

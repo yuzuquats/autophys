@@ -315,6 +315,52 @@ class ChatReasoner:
         return _retry_delay(error, attempt, self._jitter)
 
 
+def parse_muse_events(stdout):
+    """Parse `muse exec --json` JSONL (Muse Code 1.4.14 event envelope, schema_version 1).
+
+    Verified against a zero-token `--provider echo` run (tests/data/muse-exec-echo-1.4.14.jsonl):
+    each line is {schema_version, payload_type, payload, ...}. The final text is
+    `run.terminal.*` payload.text (falling back to concatenated `run.output.delta`
+    text); `run.usage` payload.models[] carries per-model token counts. Real-model
+    usage values are not yet verified. Unknown events and non-JSON lines are ignored,
+    and no provider output is ever placed in exceptions (it might contain secrets).
+    """
+    deltas, message, terminal = [], None, None
+    usage = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "cached_input_tokens": 0,
+             "reasoning_tokens": 0, "models": []}
+    seen_usage = False
+    for line in stdout.splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(event, dict) or not isinstance(event.get("payload"), dict):
+            continue
+        kind, payload = str(event.get("payload_type", "")), event["payload"]
+        if kind == "run.output.delta" and isinstance(payload.get("text"), str):
+            deltas.append(payload["text"])
+        elif kind.startswith("run.terminal."):
+            terminal = payload.get("terminal") if isinstance(payload.get("terminal"), str) else kind.rsplit(".", 1)[1]
+            if isinstance(payload.get("text"), str):
+                message = payload["text"]
+        elif kind == "run.usage":
+            seen_usage = True
+            for entry in payload.get("models") or []:
+                if not isinstance(entry, dict):
+                    continue
+                for source, target in (("input_tokens", "input_tokens"), ("output_tokens", "output_tokens"),
+                                       ("cached_tokens", "cached_input_tokens"), ("reasoning_tokens", "reasoning_tokens"),
+                                       ("calls", "calls")):
+                    value = entry.get(source)
+                    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                        usage[target] += value
+                if isinstance(entry.get("model"), str):
+                    usage["models"].append(entry["model"])
+    if message is None and deltas:
+        message = "".join(deltas)
+    return {"message": message, "terminal": terminal, "usage": usage if seen_usage else None}
+
+
 # Terminal states that may be named in an error; anything else is provider text.
 _MUSE_TERMINALS = {"failed", "cancelled", "canceled", "interrupted", "timeout", "timed_out", "error", None}
 
@@ -353,8 +399,6 @@ class MuseExecReasoner:
         return "\n\n".join(parts)
 
     def complete(self, messages, *, response_schema=None, effort=None, max_tokens=None, images=None) -> ReasonReply:
-        from .research import parse_muse_events
-
         if images:
             raise ReasonerError("the muse route is text-only")
         if any(not isinstance(m.get("content"), str) for m in messages):

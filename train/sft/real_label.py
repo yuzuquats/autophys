@@ -11,8 +11,9 @@ starting window and seed. Budgets are the project's own (24 steps, 2
 experiments).
 
 Prompts come from the SDK's ``ReasonLanePolicy`` with a ``FakeReasoner``,
-exactly as ``build_dataset.py::DistilPolicy``: byte-identical to what
-``autophys bench --policy reason`` sends. The replies are labels.
+exactly as ``build_dataset.py::DistilPolicy``: byte-identical to what the
+Python reason policy sends (``autophys.synthetic.run_case(..., "reason")``).
+The replies are labels.
 
 Protocol (each command replays every trajectory from scratch; deterministic):
 
@@ -52,7 +53,7 @@ import autophys
 from autophys.agent import (Decision, DecisionError, Investigation, ReasonLanePolicy, ScriptedPolicy, ToolError,
                             system_prompt)
 from autophys.data import Dataset
-from autophys.mcp.measurements import read_csv
+from autophys.measurements import read_csv
 from autophys.reasoner import FakeReasoner, ReasonerError, parse_json_content
 from autophys.store import MemoryStore, canonical
 
@@ -96,7 +97,7 @@ def trajectories() -> list[dict]:
 def base_project():
     if str(EVIDENCE / "scripts") not in sys.path:
         sys.path.insert(0, str(EVIDENCE / "scripts"))  # trusted user module, outside the repo
-    from autophys.mcp.session import load_project
+    from autophys.project import load_project
     return load_project(PROJECT_REF)
 
 

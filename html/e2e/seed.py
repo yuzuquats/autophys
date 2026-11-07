@@ -22,7 +22,7 @@ subprocess.run([binary, "pair", "approve", start["user_code"], "--server-db", db
 key = post("/pair/poll", {"device_code": start["device_code"]})["api_key"]
 
 from autophys.agent import Investigation, ProposalRunner
-from autophys.bench import CASES, POLICIES
+from autophys.synthetic import CASES, POLICIES
 from autophys.http import HttpStore
 from autophys.project import Budgets, Project
 

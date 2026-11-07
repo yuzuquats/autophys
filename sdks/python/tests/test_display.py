@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 from autophys import Display, Project, simulator
-from autophys.bench import case_project
+from autophys.synthetic import case_project
 from autophys.client import RemoteClient
 from autophys.http import HttpStore
 from autophys.models import battery_ecm, oscillator, thermal_rc

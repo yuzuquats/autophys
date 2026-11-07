@@ -5,7 +5,7 @@ import math
 import pytest
 
 from autophys.agent import Investigation, ProposalRunner, ToolError, render_facts
-from autophys.bench import case_project, run_case, rows_json, summarize, format_table
+from autophys.synthetic import case_project, run_case
 from autophys.models import oscillator
 from autophys.project import Budgets, Project
 from autophys.store import config_hash
@@ -107,14 +107,6 @@ def test_invalid_catalog_cost(cost):
 def test_invalid_test_hour_budget(limit):
     with pytest.raises(ValueError, match="max_test_hours"):
         Budgets(max_test_hours=limit)
-
-
-def test_bench_hours_are_exported():
-    row = run_case("battery", "scripted", 0)
-    assert '"test_hours"' in rows_json([row])
-    summary = summarize([row])
-    assert summary[0]["test_hours"] == row.test_hours
-    assert "test_hours" in format_table(summary)
 
 
 def test_rust_attached_hash_version_costs_after_python_resume():

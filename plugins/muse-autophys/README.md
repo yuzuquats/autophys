@@ -2,11 +2,11 @@
 
 autophys meets engineers inside the agent they already use.
 
-Install the SDK with its optional protocol dependency, then install this native
-Muse Code 1.4.14 bundle:
+Build the `autophys` binary, then install this native Muse Code 1.4.14
+bundle:
 
 ```sh
-python -m pip install -e 'sdks/python[mcp]'
+cargo build --release --bin autophys
 muse plugins install ./plugins/muse-autophys
 ```
 
@@ -14,28 +14,26 @@ Muse may request trust for the MCP capability; use the IDs returned by install
 or inspect with `muse plugins approve autophys`. This trusts tool definitions,
 not experiment proposals. Experiment approval stays in the autophys browser.
 
-The source manifest launches `python3 -m autophys.cli mcp` from PATH, with
+The source manifest launches `autophys mcp` from PATH, with
 `.autophys-mcp.json` in the lab working directory:
 
 ```json
 {"project":"battery_ecm","workbook":"/absolute/path/to/autophys-books","root":"/absolute/path/to/lab"}
 ```
 
-The SDK installs no console script (the `autophys` command is the Rust
-binary). Prefer an explicit venv Python in a generated bundle, so the server
-runs in the environment that has the SDK:
+A generated bundle can name the binary explicitly:
 
 ```sh
 python3 plugins/muse-autophys/build.py --output /tmp/my-autophys-plugin \
-  --python /absolute/path/to/venv/bin/python \
+  --autophys "$PWD/target/release/autophys" \
   --project battery_ecm --workbook /absolute/path/to/autophys-books \
   --root /absolute/path/to/lab
 muse plugins install /tmp/my-autophys-plugin
 ```
 
-For your own simulator use `--project mypkg.module:project` (a Project or an
-`@ap.simulator`). The local process imports trusted lab code. No simulator is
-loaded in the daemon.
+The server is the Rust binary and serves the built-in `battery_ecm` project;
+it cannot import a Python simulator (`--project mypkg.module:project` is
+refused). No simulator is loaded in the daemon.
 
 The builder copies `sdks/python/src/autophys/playbooks/default/SKILL.md`
 byte for byte and records its sha256 in playbook.json. Rebuild after a canonical
@@ -51,14 +49,14 @@ experiments must be declared accurately rather than guessed.
 See `autophys.project.docs/content/muse-plugin.md` for the demo, tool table
 and offline verification receipt.
 
-For a simulator on another machine, the builder accepts an optional SSH stdio
-bridge. Configure your own SSH host and remote paths; the SDK interpreter and
-simulator must already be installed there:
+For measurements on another machine, the builder accepts an optional SSH stdio
+bridge. Configure your own SSH host and remote paths; the `autophys` binary
+must already be installed there (`--autophys` names it; default `autophys` on
+the remote PATH):
 
 ```sh
 python3 plugins/muse-autophys/build.py --output /tmp/autophys-ssh-plugin \
-  --ssh-host my-lab --python /absolute/remote/venv/bin/python \
-  --source-root /absolute/remote/autophys/sdks/python/src \
+  --ssh-host my-lab --autophys /absolute/remote/bin/autophys \
   --root /absolute/remote/lab --workbook /absolute/remote/books --project battery_ecm
 ```
 
@@ -73,7 +71,7 @@ therefore still refer to the lab. Rebuild and reinstall older generated bundles
 whose manifest used `sh mcp-stdio.sh` or relative resource arguments.
 
 Generated local and SSH launchers pass `--expected-playbook-sha256`, binding
-MCP to the exact strategy bytes copied into the package. The remote SDK must
+MCP to the exact strategy bytes copied into the package. The remote binary must
 support that option. Before importing a lab project or opening a workbook it
 refuses an ambient/default playbook with a different digest. A custom package
 does not silently upload or replace remote strategy files: install those exact

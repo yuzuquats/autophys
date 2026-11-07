@@ -1,4 +1,7 @@
-"""CSV import with explicit channel/noise mapping and declared input checks."""
+"""Lab CSV import with explicit channel/noise mapping and declared input checks.
+
+The Rust counterpart is ``autophys::measurements::read_csv`` (used by ``autophys mcp``).
+"""
 from __future__ import annotations
 
 import csv
@@ -8,10 +11,10 @@ from pathlib import Path
 
 import numpy as np
 
-from ..data import Observation
-from ..models.battery import battery_ecm, current
-from ..project import Project
-from ..simulator import time_grid
+from .data import Observation
+from .models.battery import battery_ecm, current
+from .project import Project
+from .simulator import time_grid
 
 
 def read_csv(project: Project, root: Path, path: str, experiment: str, *,

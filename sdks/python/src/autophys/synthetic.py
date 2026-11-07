@@ -353,3 +353,124 @@ def case(name: str):
     if name in PLANTED_CASES:
         return PLANTED_CASES[name]
     raise KeyError(f"unknown case {name!r}")
+
+
+# --------------------------------------------------------------------------
+# Running a case (formerly autophys.bench; the CLI's `autophys bench` is Rust)
+
+DEFAULT_POLICIES = ("scripted", "fake-reasoner")
+
+
+def reason_policy(*, model_spec=None, playbook=None, replay=None, record=None):
+    import os
+    from .agent import ReasonLanePolicy
+    from .reasoner import ReasonerError, reasoner_for
+    if not (replay or os.environ.get("AUTOPHYS_REASON_REPLAY")) and os.environ.get("AUTOPHYS_ALLOW_LIVE_REASON") != "1":
+        raise ReasonerError("reason benchmark requires --replay for offline use; live calls spend money and require AUTOPHYS_ALLOW_LIVE_REASON=1")
+    if model_spec is None:
+        raise ReasonerError("reason benchmark requires --model")
+    policy = ReasonLanePolicy(reasoner_for(model_spec, replay=replay, record=record),
+                              model_spec=model_spec, playbook=playbook)
+    policy.name = "reason"
+    return policy
+
+
+def _scripted():
+    from .agent import ScriptedPolicy
+    return ScriptedPolicy()
+
+
+def _fake_reasoner():
+    from .agent import ReasonLanePolicy
+    from .heuristic import heuristic_responder
+    from .reasoner import FakeReasoner
+    return ReasonLanePolicy(FakeReasoner(heuristic_responder))
+
+
+POLICIES: dict[str, Callable[..., object]] = {
+    "reason": reason_policy,
+    "scripted": _scripted,
+    "fake-reasoner": _fake_reasoner,
+}
+
+
+def case_project(view):
+    """The project a benchmark investigation of ``view`` runs under."""
+    from .project import Budgets, Project
+    return Project(name=view.name, simulator=view.simulator, catalog=view.catalog,
+                   budgets=Budgets(max_experiments=view.max_experiments, max_test_hours=view.max_test_hours))
+
+
+@dataclass
+class BenchRow:
+    case: str
+    policy: str
+    seed: int
+    status: str
+    max_rel_error: float
+    rel_errors: dict
+    test_rmse: float
+    simulations: int
+    wall_s: float
+    experiments: int
+    steps: int
+    non_identified: list
+    diagnosis_correct: bool
+    requested: list
+    test_hours: float = 0.0
+    calls: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cost_usd: float | None = None
+
+
+def run_case(case: str, policy: str, seed: int, store=None, **reason_options) -> BenchRow:
+    """One benchmark run: ``policy`` on synthetic ``case`` with ``seed``, scored by its evaluator.
+
+    The ``autophys bench`` command runs the same investigation in Rust; ``autophys
+    train eval`` (``train/sft/eval_heldout.py``) calls this function.
+    """
+    import time
+    from .agent import Investigation, ReasonLanePolicy
+    from .heuristic import heuristic_responder
+    from .reasoner import FakeReasoner
+    from .store import MemoryStore
+    from .usage import usage_total
+    workbook_path = reason_options.pop("workbook_path", None)
+    if workbook_path:
+        from .workbook import WorkbookStore
+        with WorkbookStore(workbook_path) as workbook:
+            return run_case(case, policy, seed, store=workbook, **reason_options)
+    render_images = reason_options.pop("render_images", False)
+    factory = CASES.get(case) or PLANTED_CASES.get(case)
+    if factory is None:
+        raise KeyError(f"unknown case {case!r}")
+    view, evaluator = factory(seed)
+    project = case_project(view)
+    if policy == "reason":
+        selected_policy = POLICIES[policy](**reason_options)
+    elif policy == "fake-reasoner" and reason_options.get("playbook"):
+        selected_policy = ReasonLanePolicy(FakeReasoner(heuristic_responder), playbook=reason_options["playbook"])
+    else:
+        selected_policy = POLICIES[policy]()
+    selected_policy.render_images = render_images
+    inv = Investigation(project, view.dataset, view.runner, policy=selected_policy, store=store or MemoryStore(), seed=seed,
+                        title=f"bench {case} seed {seed}")
+    t0 = time.perf_counter()
+    out = inv.run()
+    wall = time.perf_counter() - t0
+    evaluator.reveal(inv)
+    est = out.estimate
+    rel = evaluator.relative_errors(est) if est else {}
+    physical = set(view.simulator.param_names)
+    non_ids = sorted(set(out.non_identified) & physical)
+    requested = [o.experiment for o in view.dataset if o.source == "synthetic" and o.split == "train"][1:]
+    usage = usage_total(r.payload for r in inv.store.records(inv.id, "step"))
+    return BenchRow(
+        case=case, policy=policy, seed=seed, status=out.status, test_hours=inv.test_hours_used,
+        max_rel_error=max(rel.values()) if rel else float("nan"), rel_errors=rel,
+        test_rmse=evaluator.test_rmse(view.simulator, est) if est else float("nan"),
+        simulations=out.simulations, wall_s=wall, experiments=out.experiments, steps=out.steps,
+        non_identified=non_ids, diagnosis_correct=evaluator.diagnosis_correct(set(non_ids)), requested=requested,
+        **{**usage, "cost_usd": usage["cost_usd"] if usage["calls"] else None},
+    )

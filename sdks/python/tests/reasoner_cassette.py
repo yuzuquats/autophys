@@ -8,7 +8,8 @@ import json
 from pathlib import Path
 
 from autophys.agent import Investigation, ReasonLanePolicy
-from autophys.bench import case_project, heuristic_responder
+from autophys.heuristic import heuristic_responder
+from autophys.synthetic import case_project
 from autophys.reasoner import FakeReasoner, ModelSpec, MUSE_SPARK, RecordingReasoner, request_body
 from autophys.synthetic import CASES
 

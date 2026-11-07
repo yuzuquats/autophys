@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Build a native Muse bundle, copying the SDK playbook without rewriting it."""
+"""Build a native Muse bundle, copying the SDK playbook without rewriting it.
+
+The MCP server is the Rust ``autophys mcp`` command (cli.md CLI-1, phase B).
+"""
 import argparse
 import hashlib
 import json
@@ -8,12 +11,10 @@ import shutil
 import shlex
 
 
-DEFAULT_PYTHON = "python3"  # the SDK installs no console script (cli.md CLI-1)
+DEFAULT_AUTOPHYS = "autophys"  # the autophys binary on PATH
 
 
-def build(output, *, python=DEFAULT_PYTHON, project=None, workbook=None, root=None, playbook=None, ssh_host=None, source_root=None):
-    if source_root and not ssh_host:
-        raise SystemExit("--source-root is only used with --ssh-host")
+def build(output, *, autophys=DEFAULT_AUTOPHYS, project=None, workbook=None, root=None, playbook=None, ssh_host=None):
     source = Path(__file__).resolve().parent
     canonical = Path(playbook) if playbook else source.parents[1] / "sdks/python/src/autophys/playbooks/default/SKILL.md"
     if not canonical.is_file() and not playbook:
@@ -32,38 +33,30 @@ def build(output, *, python=DEFAULT_PYTHON, project=None, workbook=None, root=No
     skill = output / "skills/autophys/SKILL.md"
     skill.parent.mkdir(parents=True, exist_ok=True)
     skill.write_bytes(canonical.read_bytes())
-    interpreter = python if python == DEFAULT_PYTHON else str(Path(python).expanduser().absolute())
-    command = [interpreter, "-m", "autophys.cli"]
-    command += ["mcp"]
+    digest = hashlib.sha256(skill.read_bytes()).hexdigest()
     config = {k: str(v) for k, v in (("project", project), ("workbook", workbook), ("root", root)) if v}
     if ssh_host:
-        if python == DEFAULT_PYTHON:
-            raise SystemExit("--ssh-host requires --python with the remote SDK interpreter path")
-        # The wrapper is a normal hashed plugin source. It carries no credentials.
-        remote = [python, "-m", "autophys.cli", "mcp", "--expected-playbook-sha256", hashlib.sha256(skill.read_bytes()).hexdigest()]
+        # The wrapper is a normal hashed plugin source. It carries no credentials;
+        # the autophys binary, workbook and lab are on the remote host.
+        remote = [autophys, "mcp", "--expected-playbook-sha256", digest]
         for key, value in config.items():
             remote += ["--" + key, value]
-        env = ["env", "PYTHONDONTWRITEBYTECODE=1"]
-        if source_root:
-            env += ["PYTHONPATH=" + source_root]
-        script = "#!/bin/sh\nexec ssh " + shlex.quote(ssh_host) + " " + shlex.quote(shlex.join(env + remote)) + "\n"
-        (output / "mcp-stdio.sh").write_text(script)
-        command = None
-    elif config:
-        # Muse validates path-like argv as package sources; put lab paths in JSON.
-        (output / "mcp-config.json").write_text(json.dumps(config, indent=2) + "\n")
-    if not ssh_host:
+        script = "#!/bin/sh\nexec ssh " + shlex.quote(ssh_host) + " " + shlex.quote(shlex.join(remote)) + "\n"
+    else:
+        executable = autophys if autophys == DEFAULT_AUTOPHYS else str(Path(autophys).expanduser().absolute())
+        if config:
+            # Muse validates path-like argv as package sources; put lab paths in JSON.
+            (output / "mcp-config.json").write_text(json.dumps(config, indent=2) + "\n")
         # Muse relocates a package-relative executable in argv[0], not arbitrary
         # argument strings. Resolve package resources inside that executable,
-        # without changing the lab cwd used by relative paths and simulators.
+        # without changing the lab cwd used by relative paths.
         script = '#!/bin/sh\nplugin_root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit\n'
-        script += "exec " + shlex.join(command)
+        script += "exec " + shlex.join([executable, "mcp"])
         if config:
             script += ' --config "$plugin_root/mcp-config.json"'
-        script += ' --playbook "$plugin_root/skills/autophys/SKILL.md" --expected-playbook-sha256 ' + hashlib.sha256(skill.read_bytes()).hexdigest() + '\n'
-        (output / "mcp-stdio.sh").write_text(script)
+        script += ' --playbook "$plugin_root/skills/autophys/SKILL.md" --expected-playbook-sha256 ' + digest + '\n'
+    (output / "mcp-stdio.sh").write_text(script)
     (output / "mcp-stdio.sh").chmod(0o755)
-    command = ["./mcp-stdio.sh"]
     manifest = {
         "schemaVersion": 1, "name": "autophys", "displayName": "autophys",
         "version": "0.1.0", "description": "Calibrate local simulators with honest identifiability and human-reviewed experiments.",
@@ -71,24 +64,24 @@ def build(output, *, python=DEFAULT_PYTHON, project=None, workbook=None, root=No
         "capabilities": {
             "skills": [{"id": "autophys", "path": "skills/autophys/SKILL.md", "enabledDefault": True}],
             "commands": [{"id": "calibrate", "path": "commands/calibrate.md", "enabledDefault": True}],
-            "mcpServers": [{"id": "autophys", "transport": "stdio", "command": command}],
+            "mcpServers": [{"id": "autophys", "transport": "stdio", "command": ["./mcp-stdio.sh"]}],
             "hooks": [], "reminders": []}}
     (output / ".muse-plugin/plugin.json").write_text(json.dumps(manifest, indent=2) + "\n")
     (output / "playbook.json").write_text(json.dumps({
         "source": "sdks/python/src/autophys/playbooks/default/SKILL.md",
-        "sha256": hashlib.sha256(skill.read_bytes()).hexdigest()}, indent=2) + "\n")
+        "sha256": digest}, indent=2) + "\n")
     return output
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", required=True, help="new output directory, or this source bundle to refresh")
-    parser.add_argument("--python", default=DEFAULT_PYTHON, help="absolute SDK venv Python (default python3 on PATH)")
-    parser.add_argument("--project")
+    parser.add_argument("--autophys", default=DEFAULT_AUTOPHYS,
+                        help="the autophys binary (default autophys on PATH; with --ssh-host, its path on the remote host)")
+    parser.add_argument("--project", help="built-in project (battery_ecm)")
     parser.add_argument("--workbook")
     parser.add_argument("--root")
     parser.add_argument("--playbook", help="override canonical SKILL.md location")
-    parser.add_argument("--ssh-host", help="optional SSH stdio bridge: SDK/simulator run on this host")
-    parser.add_argument("--source-root", help="remote Python import root for an uninstalled SDK (SSH only)")
+    parser.add_argument("--ssh-host", help="optional SSH stdio bridge: autophys runs on this host")
     args = vars(parser.parse_args())
     print(build(**args))

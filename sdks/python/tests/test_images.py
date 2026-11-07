@@ -12,7 +12,7 @@ import zlib
 import pytest
 
 from autophys.agent import Investigation, ReasonLanePolicy, ScriptedPolicy, render_facts
-from autophys.bench import case_project
+from autophys.synthetic import case_project
 from autophys.http import HttpError, HttpStore
 from autophys.reasoner import (ChatReasoner, FakeReasoner, HttpReasoner, ModelSpec, ReasonerError,
                                RecordingReasoner, ReplayReasoner, MUSE_SPARK, MUSE_WONDER,
@@ -157,7 +157,7 @@ def test_adopted_fit_plots_blobs_before_step_and_no_numerical_effect(kind, tmp_p
 
 
 def test_policy_sends_stored_images_and_resume():
-    from autophys.bench import heuristic_responder
+    from autophys.heuristic import heuristic_responder
     fake = FakeReasoner(heuristic_responder)
     spec = ModelSpec("policy", "meta", MUSE_SPARK, images=True)
     policy = ReasonLanePolicy(fake, model_spec=spec)
@@ -193,42 +193,3 @@ def test_http_create_retry_reuses_explicit_key_and_conflicts():
         assert len(server.investigations) == 2
 
 
-def test_researcher_api_and_muse_workspace_plots(tmp_path, monkeypatch):
-    import autophys.research as module
-    from autophys.playbook import load_playbook
-    from types import SimpleNamespace
-    path = tmp_path/"plots.ap-workbook"
-    with WorkbookStore(path) as store:
-        inv = make_inv(store)
-        inv.run()
-        report = {"plot_artifacts":[{"workbook":str(path),"images":inv.plot_refs}], "score":{}}
-    text = load_playbook("default").data.decode()
-    proposed = text + "\nPrefer informative experiments.\n"
-    fake = FakeReasoner(lambda m:proposed)
-    spec = ModelSpec("researcher", "meta", MUSE_WONDER, images=True)
-    assert module.APIResearcher(spec, reasoner=fake).propose(text, report) == proposed
-    assert fake.calls[-1]["images"]
-    assert "plot_artifacts" not in fake.calls[-1]["messages"][0]["content"]
-    assert module.report_images(report, ModelSpec("researcher", "meta", MUSE_WONDER)) == []
-    monkeypatch.setattr(module, "require_replay", lambda *a,**kw:None)
-    def run(argv, **kw):
-        workspace = Path(argv[argv.index("--workspace")+1])
-        index = json.loads((workspace/"plot-images.json").read_text())
-        assert index
-        for item in index:
-            decode_png((workspace/item["file"]).read_bytes())
-        assert "plot-images.json" in (workspace/"prompt.txt").read_text()
-        (workspace/"SKILL.md").write_text(proposed)
-        return SimpleNamespace(returncode=0, stdout='{"type":"result","subtype":"success"}')
-    monkeypatch.setattr(module.subprocess, "run", run)
-    monkeypatch.setattr(module, "parse_muse_events", lambda s:{"terminal":"completed"})
-    assert module.MuseCLIResearcher(spec=spec).propose(text,report) == proposed
-
-
-def test_cli_image_flags():
-    from autophys.cli import build_parser
-    parser = build_parser()
-    assert not parser.parse_args(["bench"]).images
-    assert parser.parse_args(["bench","--images"]).images
-    args = parser.parse_args(["research","--output-dir","unused","--images","--researcher-images"])
-    assert args.images and args.researcher_images

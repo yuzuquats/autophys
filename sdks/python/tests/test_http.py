@@ -8,7 +8,6 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 
 from fake_server import FakeAutophys
-from autophys import cli
 from autophys.agent import Investigation, ProposalRunner, ScriptedPolicy
 from autophys.http import (AuthError, DEFAULT_SERVER, HttpError, HttpStore, iter_sse, load_credentials, pair_poll,
                            pair_start, request_json, save_credentials, whoami)
@@ -139,7 +138,14 @@ def test_sdk_ships_no_console_script():
     if not pyproject.exists():
         pytest.skip("pyproject.toml is not part of the installed package")
     assert "[project.scripts]" not in pyproject.read_text()
-    assert {"pair", "whoami"}.isdisjoint(cli.build_parser()._subparsers._group_actions[0].choices)
+    # Phase B: the developer commands are the Rust binary's too; no CLI module remains.
+    import importlib.util
+    for module in ("autophys.cli", "autophys.bench", "autophys.research", "autophys.autoloop",
+                   "autophys.trajectories", "autophys.mcp.cli"):
+        try:
+            assert importlib.util.find_spec(module) is None, module
+        except ModuleNotFoundError:
+            pass
 
 
 def test_credentials_with_open_mode_are_refused(config_dir):

@@ -220,3 +220,21 @@ def policy_from_config(cfg: PolicyConfig, reasoner=None):
         raise ValueError("a reason-lane policy needs a reasoner (HttpReasoner or FakeReasoner)")
     return ReasonLanePolicy(reasoner, effort=cfg.effort, max_tokens=cfg.max_tokens)
 
+
+def load_project(ref: str) -> Project:
+    """Load a trusted lab module's Project (or decorated Simulator)."""
+    import importlib
+    from .models.battery import battery_ecm
+    from .simulator import Simulator
+    if ref == "battery_ecm":
+        return Project("battery_ecm", battery_ecm, noise=NoiseConfig(bias="off"),
+                       initial={"R0": 0.03, "R1": 0.04, "C1": 1500.0})
+    module, sep, attr = ref.partition(":")
+    if not sep:
+        raise ValueError("project must be battery_ecm or mypkg.module:project")
+    obj = getattr(importlib.import_module(module), attr)
+    if isinstance(obj, Simulator):
+        return Project(obj.name, obj)
+    if not isinstance(obj, Project):
+        raise ValueError("project reference must name a Project or @ap.simulator")
+    return obj

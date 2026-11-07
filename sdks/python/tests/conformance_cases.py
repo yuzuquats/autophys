@@ -75,7 +75,7 @@ def _events_and_values(store: WorkbookStore) -> None:
 
 def _reason_replayed(store: WorkbookStore, *, replay) -> None:
     """An offline reason run pins playbook bytes, model, prices and usage."""
-    from autophys.bench import case_project
+    from autophys.synthetic import case_project
     from autophys.reasoner import ModelSpec, MUSE_SPARK, reasoner_for
     from autophys.agent import ReasonLanePolicy
     from autophys.synthetic import CASES as SYNTHETIC
@@ -94,7 +94,7 @@ def _reason_replayed(store: WorkbookStore, *, replay) -> None:
 
 
 def _thermal_curves_reveal(store: WorkbookStore) -> None:
-    from autophys.bench import run_case
+    from autophys.synthetic import run_case
     run_case("thermal", "scripted", 0, store=store)
 
 

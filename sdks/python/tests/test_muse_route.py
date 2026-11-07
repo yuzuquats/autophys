@@ -12,7 +12,6 @@ from pathlib import Path
 import pytest
 
 from autophys.agent import DECISION_SCHEMA, ReasonLanePolicy
-from autophys.autoloop import HeuristicResearcher, autoloop
 from autophys.playbook import load_playbook
 from autophys.reasoner import MUSE_SPARK, ModelSpec, MuseExecReasoner, ReasonerError, reasoner_for
 from autophys.usage import normalize_usage
@@ -101,30 +100,13 @@ def test_muse_route_is_text_only_for_images():
 
 
 BRAIN = '''
-from autophys.bench import heuristic_responder
+from autophys.heuristic import heuristic_responder
 system = re.search(r"<system>\\n(.*?)\\n</system>", prompt, re.S).group(1)
 user = re.search(r"<user>\\n(.*?)\\n</user>", prompt, re.S).group(1)
 answer = heuristic_responder([{"role": "developer", "content": system}, {"role": "user", "content": user}])
 usage()
 ev("run.terminal.completed", {"terminal": "completed", "text": answer if isinstance(answer, str) else json.dumps(answer)})
 '''
-
-
-def test_autoloop_end_to_end_through_the_muse_route(tmp_path, monkeypatch):
-    """The live code path with Spark as policy, offline: the heuristic researcher finds the planted fix."""
-    monkeypatch.setenv("AUTOPHYS_MUSE_BINARY", fake_muse(tmp_path, BRAIN))
-    monkeypatch.setenv("AUTOPHYS_ALLOW_LIVE_REASON", "1")
-    start = tmp_path / "start.md"
-    start.write_text(load_playbook().data.decode().rstrip("\n") + "\n\nSettings:\n- compare_variants: never\n")
-    summary = autoloop(researcher=HeuristicResearcher(), output_dir=tmp_path / "run", playbook=start, policy="reason",
-                       cases=["battery-biased"], train_seeds=(0, 1), heldout_seeds=(2,),
-                       model_spec=ModelSpec("policy", "muse", MUSE_SPARK, "low"))
-    assert summary["acceptance"] == "bootstrap"
-    assert (summary["train_initial"]["correct"], summary["train_final"]["correct"]) == (0, 2)
-    assert (summary["heldout_initial"]["correct"], summary["heldout_final"]["correct"]) == (0, 1)
-    assert summary["train_final"]["cost_usd"] is None
-    report = json.loads((tmp_path / "run/train/001/report.json").read_text())
-    assert all(r["row"]["policy"] for r in report["runs"])
 
 
 def test_muse_and_meta_cassettes_never_share_keys(tmp_path):

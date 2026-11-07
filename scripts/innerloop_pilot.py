@@ -66,7 +66,8 @@ def imports():
     import numpy as np
     from autophys.agent import Investigation, ProposalRunner, ReasonLanePolicy
     from autophys.reasoner import FakeReasoner
-    from autophys.bench import heuristic_responder, case_project
+    from autophys.heuristic import heuristic_responder
+    from autophys.synthetic import case_project
     from autophys.data import Dataset, Observation
     from autophys.workbook import WorkbookStore
     from autophys.project import Project, Budgets, NoiseConfig
@@ -261,10 +262,38 @@ def proposal(root,seed,name,phase):
                 dump(path.with_suffix(".result.json"),result)
 
 
+def audit_score(playbook, cases, seeds, directory):
+    """Read-only evaluator audit: the research loop's MQ-4 score of one playbook.
+
+    The research loop itself is the Rust ``autophys research``; this pilot keeps
+    only the scoring arithmetic, on the SDK's ``run_case`` and its evaluator.
+    """
+    from autophys.synthetic import run_case
+    directory.mkdir(parents=True, exist_ok=False)
+    runs = []
+    for name in cases:
+        for seed in seeds:
+            path = directory / f"{name}-{seed}.ap-workbook"
+            row = run_case(name, "fake-reasoner", seed, playbook=str(playbook), workbook_path=str(path))
+            evaluator = synthetic_case(name)(seed)[1]
+            with WorkbookStore(path, readonly=True) as store:
+                inv = store.investigations()[0]["id"]
+                outcome = next(r.payload for r in reversed(store.records(inv)) if r.kind == "outcome")
+            estimate = outcome.get("estimate")
+            errors = [abs(math.log(r)) if r > 0 and math.isfinite(r) else math.inf
+                      for r in (evaluator.combo_value(estimate, c) / evaluator.combo_value(evaluator.truth, c)
+                                for c in evaluator.combos)] if estimate else []
+            expected = "inconclusive" if evaluator.expected_non_identified else "validated"
+            runs.append({"correct": row.status == expected and row.diagnosis_correct,
+                         "mean_log_error": sum(errors) / len(errors) if errors else math.inf,
+                         "cost_usd": row.cost_usd})
+    return {"correct": sum(int(r["correct"]) for r in runs),
+            "mean_log_error": sum(r["mean_log_error"] for r in runs) / len(runs) if runs else math.inf,
+            "cost_usd": None if any(r["cost_usd"] is None for r in runs) else sum(r["cost_usd"] for r in runs)}
+
+
 def run_research(root):
-    from autophys.cli import main as cli
     from autophys.playbook import load_playbook
-    from autophys.research import evaluate
     base=load_playbook().data.decode().rstrip("\n")
     texts=[base+"\n\nSettings:\n- compare_variants: never\n",
            base+"\n\nSettings:\n- compare_variants: on_misfit\n"]
@@ -273,15 +302,17 @@ def run_research(root):
     for name,text in zip(("initial","useful","harmful"),texts):
         path=root/f"{name}.md";path.write_text(text);files.append(path)
     dump(root/"candidate-identities.json",[{"path":p.name,"sha256":hashlib.sha256(p.read_bytes()).hexdigest()} for p in files])
-    assert cli(["research","--policy","fake-reasoner","--researcher","scripted",
-                "--playbook",str(files[0]),"--edit",str(files[1]),"--edit",str(files[2]),
-                "--case","battery-biased","--case","battery","--train-seeds","11",
-                "--heldout-seeds","12","--iterations","2","--output-dir",str(root/"research")])==0
+    # The research loop is the autophys binary (cli.md phase B); AUTOPHYS_BIN selects a build.
+    subprocess.run([os.environ.get("AUTOPHYS_BIN","autophys"),"research","--policy","fake-reasoner","--researcher","scripted",
+                    "--playbook",str(files[0]),"--edit",str(files[1]),"--edit",str(files[2]),
+                    "--case","battery-biased","--case","battery","--train-seeds","11",
+                    "--heldout-seeds","12","--iterations","2","--output-dir",str(root/"research")],
+                   check=True,stdout=subprocess.DEVNULL)
     summary=json.loads((root/"research/summary.json").read_text())
     assert [x["accepted"] for x in summary["iterations"]]==[True,False]
     # Read-only evaluator audit of the rejected strategy, after selection is frozen.
-    rejected=evaluate(files[2],["battery-biased","battery"],(12,),"fake-reasoner",root/"harmful-audit")
-    dump(root/"research-pilot-result.json",{"summary":summary,"harmful_audit_score":rejected["score"],
+    rejected=audit_score(files[2],["battery-biased","battery"],(12,),root/"harmful-audit")
+    dump(root/"research-pilot-result.json",{"summary":summary,"harmful_audit_score":rejected,
          "scope":"scripted offline selection seed11 / audit seed12; no confirmation seeds"})
 
 

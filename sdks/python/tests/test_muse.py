@@ -8,8 +8,7 @@ from pathlib import Path
 import pytest
 
 from autophys.agent import Investigation, ReasonLanePolicy, system_prompt
-from autophys.bench import case_project, run_case
-from autophys.cli import main
+from autophys.synthetic import case_project, run_case
 from autophys.http import HttpError
 from autophys.playbook import load_playbook
 from autophys.reasoner import (BudgetError, ChatReasoner, ModelSpec, MUSE_SPARK, MUSE_WONDER,
@@ -123,17 +122,6 @@ def test_offline_reason_bench_is_deterministic(monkeypatch, current_reasoner_cas
     for field in ("simulations", "test_rmse", "requested", "rel_errors"):
         assert one[field] == baseline[field]
     assert one["calls"] > 0 and one["cost_usd"] > 0
-
-
-def test_cli_replay_and_live_guard(current_reasoner_cassette):
-    out = io.StringIO()
-    assert main(["bench", "--policy", "reason", "--model", MUSE_SPARK], out=out) == 2
-    assert "AUTOPHYS_ALLOW_LIVE_REASON=1" in out.getvalue()
-    out = io.StringIO()
-    assert main(["bench", "--policy", "reason", "--model", MUSE_SPARK, "--case", "oscillator",
-                 "--seeds", "1", "--replay", str(current_reasoner_cassette)], out=out) == 0
-    assert all(key in out.getvalue() for key in ("calls", "input_tokens", "output_tokens", "cost_usd"))
-    assert "validatedx1" in out.getvalue()
 
 
 def test_recording_key_exact_post_body_and_replay_miss(tmp_path):

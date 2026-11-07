@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Held-out benchmark: ``reason`` (a deployed model) vs ``scripted``, per case.
 
-Runs the SDK's own ``autophys.bench.run_case`` (the code behind ``autophys
-bench``) on the held-out seeds only; ``autophys bench --seeds N`` always runs
-seeds ``0..N-1``, so it cannot select seeds 3,4 by itself.
+Runs the Python SDK's ``autophys.synthetic.run_case`` (the Python counterpart
+of the Rust ``autophys bench``, and the code that built the training prompts)
+on the held-out seeds only; ``autophys bench --seeds N`` always runs seeds
+``0..N-1``, so it cannot select seeds 3,4 by itself.
 
 Per run it keeps a workbook, and for ``reason`` the request/reply cassette
 (``--record``), so every result can be replayed offline with ``--replay``.
@@ -29,7 +30,7 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
-from autophys.bench import run_case
+from autophys.synthetic import run_case
 from autophys.reasoner import ModelSpec
 from autophys.synthetic import CASES
 from autophys.workbook import WorkbookStore
