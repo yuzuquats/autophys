@@ -44,21 +44,129 @@ R1  NOT identified
 C1  NOT identified
 ```
 
-Then run the complete loop with a simulated cell and the default scripted policy:
-
-```sh
-.venv/bin/python closed_loop.py start --simulate
-autophys approve INVESTIGATION PROPOSAL     # the ids start prints; or approve in the browser
-.venv/bin/python closed_loop.py continue --simulate
-```
-
-It ranks the next test, waits for approval, attaches synthetic measurements,
-refits, and checks predictions against data kept out of the fit. The
+The [end-to-end walkthrough](#run-an-experiment-end-to-end) below continues
+from here: it lets the agent choose the test that separates R1 from C1. The
 project's README ([source](templates/battery-fit/python/README.md)) explains
 the results and how to use your own cell data, import measurements from a
 cycler, or choose a model-backed policy. `--lang rust` creates the same fit in
 Rust, and `--example blank` an empty project; `autophys connect URL` pairs the
 device with a server once.
+
+## Run an experiment end to end
+
+This walkthrough runs one complete investigation from the command line with a
+simulated battery cell. You create a project and fit a short test. The agent
+proposes the next test, you approve it, and its data is attached and refitted.
+The result is then checked against data the fit never saw. It all runs
+locally, with no account, server or model key.
+
+**1. Build the CLI and create a project.** If you already followed the
+battery example above, run only the `export PATH` line from its `autophys`
+checkout, `cd` back to `my-cell`, and go on to step 2.
+
+```sh
+git clone https://github.com/yuzuquats/autophys.git
+cd autophys
+cargo build --release --locked --bin autophys
+export PATH="$PWD/target/release:$PATH"
+autophys new ../my-cell --lang python
+cd ../my-cell
+```
+
+`autophys new` copies the battery-fit template and creates its Python
+environment in `.venv`, with the SDK pinned to the commit the binary was built
+from.
+
+**2. List the tests the agent may propose.**
+
+```sh
+.venv/bin/python closed_loop.py tests
+```
+
+```text
+quick_pulse     1 min  rest 10 s, +2 A 30 s, rest 4 s
+pulse_rest     11 min  rest 10 s, +2 A 30 s, rest 600 s
+pulse_ladder   17 min  rest 10 s, +1 A 30 s, rest 300 s, +2 A 30 s, rest 300 s, -1.5 A 30 s, rest 300 s
+cc_discharge   15 min  rest 10 s, +1 A 900 s
+check           6 min  rest 10 s, +1.5 A 60 s, rest 120 s, -1 A 60 s, rest 120 s  [held out: never fitted, only predicted]
+
+sampled at 2 Hz; capacity 2.5 Ah, starting SOC 0.9
+```
+
+**3. Start the investigation.** `--simulate` stands in for a cycler. It
+generates each test's voltage from a hidden cell (R0 = 0.025 Ω, R1 = 0.045 Ω,
+C1 = 1600 F) with 2 mV of noise.
+
+```sh
+.venv/bin/python closed_loop.py start --simulate
+```
+
+```text
+status: awaiting_data (proposal prop_81087db945c5 awaits approval and data)
+  R0  = 0.024856 ohm  identified
+  R1  = 0.050667 ohm  NOT identified
+  C1  = 1644.2 F    NOT identified
+  tied: R1^1 * C1^0.22
+  tests run: 2 (quick_pulse, check [held out]), 7 min of cycler time
+
+proposed next test: pulse_ladder (17 min): rest 10 s, +1 A 30 s, rest 300 s, +2 A 30 s, rest 300 s, -1.5 A 30 s, rest 300 s
+  why: pulse_ladder adds the most information on the weakest direction
+  proposal prop_81087db945c5 in investigation inv_7e2f4bcb369e2de9
+```
+
+The quick pulse pins R0 but only a combination of R1 and C1, so the agent
+proposes the test that best separates them and stops. It never approves its
+own proposal.
+
+**4. Inspect and approve the proposal.** The investigation is recorded in a
+local workbook in `~/autophys` (set `AUTOPHYS_HOME` to use another directory).
+These commands print JSON. Use the IDs your `start` printed.
+
+```sh
+autophys investigations                                    # each investigation, its status and steps
+autophys records inv_7e2f4bcb369e2de9 --kind proposal      # the proposal, its rationale and settings
+autophys approve inv_7e2f4bcb369e2de9 prop_81087db945c5
+```
+
+`approve --settings JSON` approves an edited version of the test, and
+`autophys reject INVESTIGATION PROPOSAL --reason TEXT` turns it down.
+
+**5. Run the approved test and refit.**
+
+```sh
+.venv/bin/python closed_loop.py continue --simulate
+```
+
+```text
+attached pulse_ladder (synthetic, 2001 samples)
+
+status: validated
+  R0  = 0.024944 ohm  identified
+  R1  = 0.045125 ohm  identified
+  C1  = 1609.9 F    identified
+  tests run: 3 (quick_pulse, check [held out], pulse_ladder), 24 min of cycler time
+  held-out check: chi2/N 1.04 (passed, threshold 2)
+
+plot: loop.png
+```
+
+All three parameters are now identified, and the fit predicts the held-out
+`check` test within its noise.
+
+**6. Verify the record.**
+
+```sh
+autophys verify
+```
+
+This checks the workbook's hash chain and its projections, and reports
+`"ok": true` with the number of records.
+
+To use a real cell, run the proposed programs on your cycler and pass each
+export with `--data` instead of `--simulate`. To record on a shared server and
+approve in the browser, pair once with `autophys connect URL` and set
+`AUTOPHYS_SERVER`. The [project README](templates/battery-fit/python/README.md#5-run-the-closed-loop)
+covers both, and `--policy model` hands the decisions to a language model.
 
 ## Use your own model
 
