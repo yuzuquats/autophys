@@ -19,7 +19,7 @@ Pages: [decisions.md](decisions.md) (operator rulings and pending agent
 choices), [repo.md](repo.md) and [architecture.md](architecture.md) (moved
 from tento's record, unchanged), [tento-plan.md](tento-plan.md) (tento's
 cover, moved and renamed), [sdk.md](sdk.md), [display-manifest.md](display-manifest.md) (the plan to make the UI generic),
-[improvements.md](improvements.md) (a running list of improvements not yet scheduled), [train.md](train.md) (the fine-tuning pipeline), [release.md](release.md) (the GitHub releases), and the batch-1
+[improvements.md](improvements.md) (a running list of improvements not yet scheduled), [train.md](train.md) (the fine-tuning pipeline), [release.md](release.md) (the GitHub releases), [examples.md](examples.md) (the draft spec for template, demo and backtest examples), and the batch-1
 verification pages.
 
 The approved [account-backed workspace spec](account-workspace.md) defines local/cloud profiles, read-only demo sign-in, workspace isolation and a walkthrough of the active account. [Operations and qualification](account-workspace-operations.md) records the implementation, migration commands, isolated evidence and production rollout boundary.
