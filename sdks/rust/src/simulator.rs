@@ -187,7 +187,7 @@ pub struct FunctionSimulator {
     pub outputs: Vec<String>,
     pub stochastic: bool,
     pub(crate) display: Option<crate::display::Display>,
-    source_hash: String,
+    pub(crate) source_hash: String,
     func: Arc<SimFn>,
     calls: Arc<AtomicUsize>,
     budget: Arc<Mutex<Option<Arc<Mutex<CallBudget>>>>>,

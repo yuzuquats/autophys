@@ -66,6 +66,7 @@ pub mod reasoner;
 pub mod sensitivity;
 pub mod simulator;
 pub mod synthetic;
+pub mod worker;
 
 pub mod playbook;
 pub mod usage;
