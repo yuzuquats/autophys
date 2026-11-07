@@ -19,7 +19,7 @@ Pages: [decisions.md](decisions.md) (operator rulings and pending agent
 choices), [repo.md](repo.md) and [architecture.md](architecture.md) (moved
 from tento's record, unchanged), [tento-plan.md](tento-plan.md) (tento's
 cover, moved and renamed), [sdk.md](sdk.md), [display-manifest.md](display-manifest.md) (the plan to make the UI generic),
-[improvements.md](improvements.md) (a running list of improvements not yet scheduled), [train.md](train.md) (the fine-tuning pipeline), and the batch-1
+[improvements.md](improvements.md) (a running list of improvements not yet scheduled), [train.md](train.md) (the fine-tuning pipeline), [release.md](release.md) (the GitHub releases), and the batch-1
 verification pages.
 
 The approved [account-backed workspace spec](account-workspace.md) defines local/cloud profiles, read-only demo sign-in, workspace isolation and a walkthrough of the active account. [Operations and qualification](account-workspace-operations.md) records the implementation, migration commands, isolated evidence and production rollout boundary.
@@ -32,12 +32,12 @@ The approved [account-backed workspace spec](account-workspace.md) defines local
 Cargo.toml  Cargo.lock    package and bin `autophys`; tento-web and tento-dirs from vendor/tento
 src/app.rs                DomainConfig: compiler deps (html, vendored cookbook and tento-ui), /api/healthz,
                           the /api/v1 hook, /app document routes
-src/server.rs             loopback refusal, serve (dev build + watch, or --web-root), build-web
+src/server.rs             loopback refusal, serve (embedded app, dev build + watch, or --web-root), build-web, pack
 html/routes/              index.anon.html + index.root.ts (the composition root) + content.ts
 html/ui/  html/client/    imported from tento-autophys-js (tento 645a1155c)
 html/tsconfig.json        esbuild aliases into vendor/tento; html/deno.json the same for deno test
 e2e/approve.ts            serve on 4795, deck -> app -> proposal -> Approve, headless
-ops/                      deploy.sh (build-web + release build, serve --web-root), unit template
+ops/                      deploy.sh (release build + build-web + pack), release.sh (archives), unit template
 vendor/                   hackathon/lib's vendored tento tree
 sdks/python/              the SDK (sdk.md)
 ```

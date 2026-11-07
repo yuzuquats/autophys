@@ -47,8 +47,9 @@ compiler bundles `html/routes/*.root.ts` and `*.anon.html` by file name. API
 handlers are registered on the same actix app. So the browser code lives in
 `html/` beside the routes that load it. In dev, `autophys serve` bundles on
 start and rebuilds when anything the build read changes, cookbook edits
-included. In deploy, `autophys build-web` writes a prebuilt tree that
-`autophys serve --web-root` serves.
+included. In deploy, `autophys build-web` writes a prebuilt tree and
+`autophys pack` embeds it in the executable, which `autophys serve` serves
+with no folder beside it (B-1).
 
 ```
 ~/workspace/autophys/                    one git repo, history from experiments/autophys
@@ -210,7 +211,7 @@ python -m pytest sdks/python                 # SDK, against the fake server
 e2e/run                                      # real daemon + SDK benchmark + headless approve
 autophys serve                               # dev: bundles html/routes, rebuilds on change
 autophys build-web                           # deploy: prebuilt route tree
-ops/deploy.sh                                # build-web + bin, install, restart unit (serve --web-root)
+ops/deploy.sh                                # build-web + pack into one bin, install, restart unit
 ```
 
 The e2e script is the payoff of one repo. A single commit can change the
