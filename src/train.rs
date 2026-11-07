@@ -117,14 +117,50 @@ impl WorkerEvents {
     }
 }
 
-// Open a separate nonblocking description: never change stderr's shared flags
-// (the parent/logger can share them). Full sinks discard the remaining chunk;
-// a closed/broken sink fails this worker attempt. There is no forwarding queue
-// or writer thread to retain or join. Non-reopenable sinks fail closed.
-struct Diagnostics(std::fs::File);
+// Prefer a separate nonblocking description: never change stderr's shared
+// flags (the parent/logger can share them). Full sinks discard the remaining
+// chunk; a closed/broken sink fails this worker attempt. There is no forwarding
+// queue or writer thread to retain or join.
+//
+// Where stderr cannot be reopened independently (macOS /dev/fd duplicates the
+// original description and ignores O_NONBLOCK; Linux cannot open a socket's
+// /dev/stderr), write the shared blocking descriptor only after poll() reports
+// it writable, in chunks no larger than the smallest PIPE_BUF (512, Darwin).
+// A pipe reports writable only with at least PIPE_BUF free, and such a write
+// is atomic, so it does not block unless another writer to the same sink fills
+// it between the poll and the write.
+enum Diagnostics {
+    Independent(std::fs::File),
+    Polled(std::fs::File),
+}
+
+const POLLED_CHUNK: usize = 512;
+
+#[repr(C)]
+struct PollFd {
+    fd: i32,
+    events: i16,
+    revents: i16,
+}
+
+unsafe extern "C" {
+    fn fcntl(fd: i32, command: i32, ...) -> i32;
+    #[cfg(target_os = "linux")]
+    fn poll(fds: *mut PollFd, nfds: std::ffi::c_ulong, timeout: i32) -> i32;
+    #[cfg(not(target_os = "linux"))]
+    fn poll(fds: *mut PollFd, nfds: std::ffi::c_uint, timeout: i32) -> i32;
+}
 
 impl Diagnostics {
     fn open() -> std::io::Result<Self> {
+        let stderr = unsafe { std::os::fd::BorrowedFd::borrow_raw(2) };
+        match Self::independent() {
+            Ok(Some(file)) => Ok(Self::Independent(file)),
+            Ok(None) | Err(_) => Self::polled(stderr),
+        }
+    }
+
+    fn independent() -> std::io::Result<Option<std::fs::File>> {
         use std::os::fd::AsRawFd;
         use std::os::unix::fs::OpenOptionsExt;
         #[cfg(target_os = "linux")]
@@ -135,33 +171,71 @@ impl Diagnostics {
             .append(true)
             .custom_flags(NONBLOCK)
             .open("/dev/stderr")?;
-        unsafe extern "C" {
-            fn fcntl(fd: i32, command: i32, ...) -> i32;
-        }
         if file.metadata()?.is_file() {
             // Preserve a redirected file's shared offset with stdout. A regular
             // filesystem write is byte-bounded, but kernel/storage stalls are
             // outside the pipe/terminal backpressure guarantee.
             let fd = unsafe { std::os::fd::BorrowedFd::borrow_raw(2) };
-            return Ok(Self(fd.try_clone_to_owned()?.into()));
+            return Ok(Some(fd.try_clone_to_owned()?.into()));
         }
         // F_GETFL is 3 on supported Unix targets. Some /dev/fd implementations
-        // duplicate the original description and ignore open flags: do not
-        // write if nonblocking mode was not honored.
+        // duplicate the original description and ignore open flags.
         if unsafe { fcntl(file.as_raw_fd(), 3) } & NONBLOCK == 0 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Unsupported,
-                "stderr does not support independent nonblocking diagnostics",
-            ));
+            return Ok(None);
         }
-        Ok(Self(file))
+        Ok(Some(file))
+    }
+
+    fn polled(fd: std::os::fd::BorrowedFd<'_>) -> std::io::Result<Self> {
+        Ok(Self::Polled(fd.try_clone_to_owned()?.into()))
+    }
+
+    /// Whether a polled sink can take one chunk now. Error/hangup states are
+    /// reported as writable so the write itself surfaces the failure.
+    fn writable(file: &std::fs::File) -> std::io::Result<bool> {
+        use std::os::fd::AsRawFd;
+        const POLLOUT: i16 = 0x4;
+        const POLLERR: i16 = 0x8;
+        const POLLHUP: i16 = 0x10;
+        const POLLNVAL: i16 = 0x20;
+        let mut fds = PollFd {
+            fd: file.as_raw_fd(),
+            events: POLLOUT,
+            revents: 0,
+        };
+        loop {
+            match unsafe { poll(&mut fds, 1, 0) } {
+                -1 => {
+                    let e = std::io::Error::last_os_error();
+                    if e.kind() == std::io::ErrorKind::Interrupted {
+                        continue;
+                    }
+                    return Err(e);
+                }
+                0 => return Ok(false),
+                _ => return Ok(fds.revents & (POLLOUT | POLLERR | POLLHUP | POLLNVAL) != 0),
+            }
+        }
     }
 
     fn forward(&mut self, mut bytes: &[u8]) -> std::io::Result<()> {
+        let polled = matches!(self, Self::Polled(_));
+        let file = match self {
+            Self::Independent(file) | Self::Polled(file) => file,
+        };
         while !bytes.is_empty() {
-            match self.0.write(bytes) {
+            let chunk = if polled {
+                if !Self::writable(file)? {
+                    break;
+                }
+                &bytes[..bytes.len().min(POLLED_CHUNK)]
+            } else {
+                bytes
+            };
+            match file.write(chunk) {
                 Ok(0) => break,
                 Ok(n) => bytes = &bytes[n..],
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted && polled => {}
                 Err(e)
                     if matches!(
                         e.kind(),
@@ -2764,6 +2838,66 @@ pub fn loops(args: Vec<String>) -> Result<Value, Failure> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn pipe_pair() -> (std::fs::File, std::fs::File) {
+        use std::os::fd::FromRawFd;
+        unsafe extern "C" {
+            fn pipe(fds: *mut i32) -> i32;
+        }
+        let mut fds = [0i32; 2];
+        assert_eq!(unsafe { pipe(fds.as_mut_ptr()) }, 0);
+        unsafe {
+            (
+                std::fs::File::from_raw_fd(fds[0]),
+                std::fs::File::from_raw_fd(fds[1]),
+            )
+        }
+    }
+
+    #[test]
+    fn polled_diagnostics_deliver_to_a_drained_pipe() {
+        use std::os::fd::AsFd;
+        let (mut reader, writer) = pipe_pair();
+        let mut sink = Diagnostics::polled(writer.as_fd()).unwrap();
+        drop(writer);
+        let message = vec![b'x'; 3 * POLLED_CHUNK + 7];
+        sink.forward(&message).unwrap();
+        drop(sink);
+        let mut got = Vec::new();
+        reader.read_to_end(&mut got).unwrap();
+        assert_eq!(got, message);
+    }
+
+    #[test]
+    fn polled_diagnostics_discard_instead_of_blocking_on_a_full_pipe() {
+        use std::os::fd::AsFd;
+        let (reader, writer) = pipe_pair();
+        let mut sink = Diagnostics::polled(writer.as_fd()).unwrap();
+        // Far beyond any pipe capacity: a blocking forward would never return,
+        // since nothing reads until it does.
+        let flood = vec![b'y'; 4 << 20];
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let result = sink.forward(&flood).map(|_| ());
+            let _ = tx.send(result);
+        });
+        let result = rx
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("polled forward blocked on a full pipe");
+        result.unwrap();
+        drop(reader);
+        drop(writer);
+    }
+
+    #[test]
+    fn polled_diagnostics_report_a_closed_pipe() {
+        use std::os::fd::AsFd;
+        let (reader, writer) = pipe_pair();
+        let mut sink = Diagnostics::polled(writer.as_fd()).unwrap();
+        drop(reader);
+        let err = sink.forward(b"after close\n").unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::BrokenPipe);
+    }
 
     fn words(s: &str) -> Vec<String> {
         s.split_whitespace().map(String::from).collect()

@@ -40,16 +40,34 @@ isolated HOME and only the release directory on PATH:
 ### Caveats
 
 - The Linux binary needs glibc 2.39 or later (Ubuntu 24.04, Debian 13).
-- **macOS arm64 is not attached yet.** The build on rwc-01 (from the v0.1.0 tag,
-  on the SSD) was running `cargo test` when someone else force-unmounted the
-  external SSD at 04:18 (`sudo diskutil unmountDisk force disk7`, still hung at
-  04:34). All 13 `train_lifecycle` tests then failed with missing files; every
-  earlier suite had passed. The operator chose to publish Linux first. To add
-  macOS once the SSD is back:
-  1. On rwc-01, run `ops/release.sh` from a v0.1.0 checkout with its output on the SSD.
-  2. Run the same end-to-end check plus the browser check (`tento-headless-js`).
-  3. Upload the archive and its `.sha256` with `gh release upload v0.1.0`, and
-     restore the macOS row and the quarantine note in the release notes.
+- **macOS arm64 is not attached to v0.1.0.** The first macOS build on rwc-01
+  failed in `train_lifecycle` while the external SSD was being force-unmounted,
+  and that was first taken as the cause. A rerun on a healthy disk failed the
+  same way, so the cause is a real bug: on macOS, `autophys train run` exits 1
+  with no output whenever stderr is a pipe. `Diagnostics::open()` in
+  `src/train.rs` reopens `/dev/stderr` for an independent nonblocking handle
+  (R2-D1); macOS returns the shared open file description, so the open is
+  refused, and `Failure::report` uses the same path, so the error is silent.
+  Every other suite passed on macOS (33 Rust suites, 129 Deno tests).
+
+  **REL-1 (operator, 2026-11-07): fix it and release v0.1.1 for Linux and
+  macOS; v0.1.0 stays as published.** The fix keeps R2-D1's intent: where an
+  independent nonblocking handle is unavailable, write to stderr only when
+  `poll()` reports it writable, in chunks no larger than `PIPE_BUF`, and never
+  drop the failure report silently; a piped-stderr regression test covers it.
+  The rejected options were attaching the v0.1.0 macOS build with a known-issue
+  note (training broken, silently) and leaving macOS out. Implementation:
+  pending.
+
+  **REL-2 (operator, 2026-11-07): v0.1.1 includes `2659159`** ("Keep a running
+  server's hydrated web tree out of pruning", Change-Id
+  `I17218ce8d36112b9e81890d204114ac5`, written by another session). The
+  operator authorized pushing it unchanged with the train fix and this record,
+  after the full end-to-end and browser checks pass on both platforms. Without
+  it, a packed `serve` running more than seven days loses its extracted web tree
+  when another autophys starts, and answers 404. The rejected options were
+  pushing only this session's commits (sunk below it) and waiting for its owner
+  to push. Implementation: pending.
 
   The macOS executable is ad-hoc signed, not notarized.
 - The vendor patch verifier was already failing before this release
