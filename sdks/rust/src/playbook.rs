@@ -95,10 +95,12 @@ impl Playbook {
 }
 pub fn load_playbook(path_or_name: impl AsRef<Path>) -> Result<Playbook> {
     let p = path_or_name.as_ref();
+    // The bare name is always the bundled playbook, even when ./default
+    // exists (Python: test_A9_bare_name_always_bundled); ./default is a path.
+    if p.as_os_str() == "default" {
+        return Playbook::parse(include_bytes!("playbooks/default/SKILL.md").to_vec(), None);
+    }
     if !p.exists() {
-        if p == Path::new("default") {
-            return Playbook::parse(include_bytes!("playbooks/default/SKILL.md").to_vec(), None);
-        }
         return Err(invalid("playbook path does not exist"));
     }
     let p = if p.is_dir() {
