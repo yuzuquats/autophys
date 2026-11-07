@@ -1,9 +1,9 @@
 # Examples: templates, demos and backtests
 
-Status: draft spec, rev 1 (2026-11-07). Not implemented. EX-1 and EX-2 are
-operator decisions (2026-11-07). EX-3 records the operator's definition of a
-backtest; the rest of the backtest design (EX-4..EX-7) is **agent-chosen,
-pending operator review**.
+Status: draft spec, rev 2 (2026-11-07). Not implemented. Every choice
+EX-1..EX-8 is an operator decision (2026-11-07; EX-4..EX-8 answered in the
+/open-questions walkthrough that day). EX-7 and EX-8 differ from the agent's
+recommendation; see the table.
 
 ## Why
 
@@ -208,10 +208,12 @@ hidden = "hidden/cell-a17.toml"       # held-out runs; truth only if it is known
 For a dataset case, the score is prediction error on the held-out runs.
 Parameter error is added only when the hidden file has a `[truth]`, for
 example a cell measured on a reference rig. Every dataset file carries
-`provenance`, `sha256` and, when measured, `license` and `source`. A file
-larger than 1 MB is listed with `url` and `sha256` instead of being
-embedded, and fetched on first use into
-`~/.local/share/tento/autophys/datasets/` (EX-7).
+`provenance`, `sha256` and, when measured, `license` and `source`. Backtest
+dataset files are never embedded in the binary, whatever their size: each is
+listed with `url` and `sha256` and fetched on first use into
+`~/.local/share/tento/autophys/datasets/`, then verified (EX-7). Generator
+cases have no dataset files and stay offline; demos keep their bundled data.
+CI runs dataset cases from a pre-populated cache of that directory.
 
 ## Running a backtest
 
@@ -264,10 +266,11 @@ autophys bench --example ./my-cell.backtest --policy reason --model … --replay
 | EX-1 | The folder suffix names the kind, `example.toml` describes it, and a check keeps them in agreement | operator, 2026-11-07 | manifest only, with plain folder names | rename the folders back; minutes |
 | EX-2 | `autophys new --example NAME` takes any kind; the v0.1.1 names are aliases; `autophys examples` lists examples by kind | operator, 2026-11-07 | one flag per kind (`--template`, `--demo`) | add the flags, keep `--example`; small |
 | EX-3 | A backtest is an example with datasets or a hidden simulation, and a model discovers the system through the investigation loop | operator, 2026-11-07 | — | — |
-| EX-4 | Generator cases may draw the truth per seed from a prior; a fixed truth is kept as the regression baseline | agent-chosen, pending operator review | fixed truth only, as today (simpler, but a model can recall published numbers) | drop `[truth.prior]`; small |
-| EX-5 | In a dataset case, `request_experiment` only returns recorded runs; with no truth, the score is held-out prediction error | agent-chosen, pending operator review | let the model propose any experiment and mark unrecorded ones as unavailable (more realistic, but it spends the budget on refusals) | change the runner's catalogue; small |
-| EX-6 | Phase 1 backtests use only the built-in simulators (`battery_ecm`, `oscillator`, `thermal`), so both SDKs can run every case | agent-chosen, pending operator review | a backtest's own simulator in Python, run through the `autophys.worker` that `mcp` already uses (any system, but Python only, with no Rust parity) | phase 3 below adds it |
-| EX-7 | Datasets over 1 MB are fetched by URL and sha256 into the data dir, not embedded in the binary | agent-chosen, pending operator review | embed everything (offline, but a larger binary) | change the size cutoff; trivial |
+| EX-4 | Generator cases draw the truth per seed from per-case ranges, and a check proves every seed in range keeps the case's expected identifiable set (for example the battery short-pulse case keeps R1*C1 well above its 6 s pulse). One fixed truth stays as the CI regression baseline | operator, 2026-11-07 (recommended option) | compute the expected answer per seed (wider ranges, more harness, relies on the analysis the model uses); fixed truth only (memorization undetected) | drop `[truth.prior]`; small until cross-model results accumulate |
+| EX-5 | In a dataset case the model's experiment menu is exactly the recorded runs; the score is held-out prediction error, plus parameter error only when truth is known | operator, 2026-11-07 (recommended option) | offer the full menu and refuse unrecorded requests (realistic, but mostly measures refusal handling) | change the runner's catalogue; small |
+| EX-6 | Phased: phase 1 backtests use only the built-in simulators (`battery_ecm`, `oscillator`, `thermal`), so both SDKs run every case; phase 3 adds a backtest's own Python simulator through the `autophys.worker` that `mcp` uses | operator, 2026-11-07 (recommended option) | built-in only; or own simulator first | resequence the plan; small |
+| EX-7 | Backtest datasets are always downloaded by URL and sha256 into the data dir, never embedded; demos keep bundled data; CI uses a cache | operator, 2026-11-07 (agent recommended embedding files under 1 MB) | embed small files; embed everything | allow embedding again; small |
+| EX-8 | The demo (`closed_loop.py` `HIDDEN_CELL`, `battery_fit.py` `TRUTH`) and `battery.backtest`'s baseline truth are separate copies with no required link or check | operator, 2026-11-07 ("separate copies is fine"; this replaced an interrupted "load from backtest" answer; agent recommended separate copies plus a CI equality check) | a CI check that the values match; or loading the demo's cell from the backtest | add the check; trivial |
 
 ## Plan
 
@@ -284,15 +287,12 @@ autophys bench --example ./my-cell.backtest --policy reason --model … --replay
    move (the CLI-12 rule), and `train eval` is unchanged.
 3. **New capability.** `[truth.prior]` per-seed truth, dataset cases,
    `--example PATH` for a user's own backtest, `bench --summary`, then a
-   backtest's own simulator through the worker (EX-6's alternative) if wanted.
+   backtest's own simulator through the worker (EX-6).
 
 ## Open questions
 
 - **Measured data:** is there a battery data set we can redistribute (and
   under which license) for the first dataset case? Without one, phase 3
   ships the dataset format with a synthetic recording only.
-- **Prior ranges:** EX-4's ranges for each model need a physics check, so
-  that every seed is still identifiable with the same experiments.
-- **`closed_loop.py`** stays in the demo as the guided walkthrough of the
-  loop. Should the demo's hidden cell come from `battery.backtest` so the
-  two can't drift?
+- **Prior ranges (work, not a choice):** each case's EX-4 ranges need the
+  regime check before they ship.
