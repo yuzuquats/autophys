@@ -11,10 +11,10 @@ display metadata and asks people to approve experiments.
 | `html/routes/` | document routes and application composition |
 | `html/client/`, `html/ui/` | wire models, presentation derivation and browser views |
 | `tests/` | daemon contracts and shared workbook/numerical conformance inputs |
-| `templates/` | the project templates `autophys new` embeds (`build.rs`), each with its own README |
+| `examples/` | the example projects `autophys new --example` writes, embedded in the binary (`build.rs`), each with its own README |
 | `e2e/`, `html/e2e/` | optional daemon/browser flows; use a temporary collection and a spare port |
 | `plugins/` | optional agent integrations; Muse is not a daemon dependency |
-| `train/sft/` | optional policy dataset, provider and evaluation workers |
+| `train/sft/` | optional policy dataset, provider and evaluation workers, embedded in the binary for `autophys train` |
 | `ops/package.sh` | Linux single-file packaging with an explicit destination |
 | `ops/deploy.sh`, `ops/systemd/` | opt-in Linux user-service installation; not a contributor build requirement |
 | `vendor/` | checked-in local dependencies; see provenance and licensing notes there |

@@ -8,7 +8,7 @@ description: Fit a 1RC battery model to a cell's time/current/voltage CSV with a
 The fit lives in a battery-fit project that the `autophys` command creates:
 the script, sample data and expected output. The project's README is the
 reference for inputs and output (its source is
-`templates/battery-fit/python/README.md` in the autophys repo). It runs
+`examples/battery-fit/python/README.md` in the autophys repo). It runs
 locally with no network, accounts or API keys after setup. Python 3.10 or
 newer and git are required.
 

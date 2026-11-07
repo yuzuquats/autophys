@@ -4,8 +4,14 @@
 //!   `AUTOPHYS_COMMIT` (stamped by `ops/deploy.sh` and `ops/package.sh`) wins;
 //!   otherwise `git rev-parse HEAD` of this checkout; otherwise empty (a
 //!   source export without Git), and `autophys new` then needs `--sdk-rev`.
-//! - `templates.rs` in `OUT_DIR`: every file under `templates/`, embedded with
-//!   `include_bytes!`, so the project templates have one source.
+//! - `examples.rs` in `OUT_DIR`: every file under `examples/`, embedded with
+//!   `include_bytes!`, so the projects `autophys new` writes have one source.
+//! - `train_workers.rs` in `OUT_DIR`: the Python workers under `train/sft/`
+//!   (without `tests/`), which `autophys train` writes to its own directory
+//!   when no `--train-dir` is given, so a release binary can train.
+//! - `python_sdk.rs` in `OUT_DIR`: the Python SDK under `sdks/python/`
+//!   (without `tests/`), installed beside those workers because their Modal
+//!   images build it from `../../sdks/python`.
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -54,10 +60,13 @@ fn source_commit(root: &Path) -> String {
     git(root, &["rev-parse", "--verify", "HEAD"]).unwrap_or_default()
 }
 
-/// The template files: Git's view (tracked plus untracked, minus ignored) so
-/// a `.venv` or plot left by running a template in place is never embedded;
-/// a plain directory walk where there is no Git.
-fn template_files(root: &Path, templates: &Path) -> Vec<PathBuf> {
+/// The files under `dir`: Git's view (tracked plus untracked, minus ignored)
+/// so a `.venv`, plot or training run left in place is never embedded; a
+/// plain directory walk where there is no Git. Either way [`local_state`]
+/// is left out, so a build without Git embeds no caches, runs or env files.
+fn tree_files(root: &Path, dir: &Path) -> Vec<PathBuf> {
+    let relative = dir.strip_prefix(root).unwrap().to_str().unwrap();
+    let mut files = Vec::new();
     if let Some(listing) = git(
         root,
         &[
@@ -67,24 +76,59 @@ fn template_files(root: &Path, templates: &Path) -> Vec<PathBuf> {
             "--others",
             "--exclude-standard",
             "--",
-            "templates",
+            relative,
         ],
     ) {
-        let mut files: Vec<PathBuf> = listing
+        files = listing
             .split('\0')
             .filter(|name| !name.is_empty())
             .map(|name| root.join(name))
             .filter(|path| path.is_file())
             .collect();
-        files.sort();
-        files.dedup();
-        if !files.is_empty() {
-            return files;
-        }
     }
-    let mut files = Vec::new();
-    walk(templates, &mut files);
+    if files.is_empty() {
+        walk(dir, &mut files);
+    }
+    files.retain(|path| {
+        !path
+            .strip_prefix(dir)
+            .unwrap()
+            .components()
+            .any(|c| local_state(c.as_os_str().to_str().unwrap_or("")))
+    });
+    files.sort();
+    files.dedup();
     files
+}
+
+/// Names of local state that must never be embedded, whether or not Git is
+/// there to apply `.gitignore`: caches, environments, training output, and
+/// env files that can hold keys. Mirrors the repository's `.gitignore`s.
+fn local_state(name: &str) -> bool {
+    matches!(
+        name,
+        "__pycache__"
+            | ".pytest_cache"
+            | ".mypy_cache"
+            | ".ruff_cache"
+            | ".DS_Store"
+            | "node_modules"
+            | "target"
+            | "runs"
+            | "loops"
+            | "results"
+            | "build"
+            | "dist"
+            | ".env"
+            | ".agent-state.json"
+    ) || name.starts_with(".venv")
+        || name.starts_with("data-")
+        || name.starts_with("label-work")
+        || name.ends_with(".pyc")
+        || name.ends_with(".pyo")
+        || name.ends_with(".pyd")
+        || name.ends_with(".egg-info")
+        || (name.ends_with(".env") && name != ".env")
 }
 
 fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -109,16 +153,35 @@ fn main() {
         source_commit(&root)
     );
 
-    let templates = root.join("templates");
-    println!("cargo:rerun-if-changed={}", templates.display());
-    let files = template_files(&root, &templates);
+    embed(&root, "examples", &[], "examples.rs");
+    embed(&root, "train/sft", &["tests"], "train_workers.rs");
+    embed(&root, "sdks/python", &["tests"], "python_sdk.rs");
+}
+
+/// Writes `OUT_DIR/out` with `FILES`: each file under `root/dir` as its
+/// `/`-separated path below `dir` and its bytes, skipping the top-level
+/// entries named in `skip`.
+fn embed(root: &Path, dir: &str, skip: &[&str], out: &str) {
+    let base = root.join(dir);
+    println!("cargo:rerun-if-changed={}", base.display());
     let mut code = String::from("pub static FILES: &[(&str, &[u8])] = &[\n");
-    for path in files {
-        let relative = path.strip_prefix(&templates).unwrap();
+    for path in tree_files(root, &base) {
+        let relative = path.strip_prefix(&base).unwrap();
         let name: Vec<_> = relative
             .components()
-            .map(|c| c.as_os_str().to_str().expect("template paths are UTF-8"))
+            .map(|c| c.as_os_str().to_str().expect("embedded paths are UTF-8"))
             .collect();
+        if skip.contains(&name[0]) {
+            continue;
+        }
+        // What running an example in place writes at its project root
+        // (`examples/<name>/<language>/`, the root its `.gitignore` anchors).
+        if dir == "examples"
+            && name.len() == 3
+            && (name[2] == "demo.csv" || name[2] == "fit.csv" || name[2].ends_with(".png"))
+        {
+            continue;
+        }
         code.push_str(&format!(
             "    ({:?}, include_bytes!({:?})),\n",
             name.join("/"),
@@ -126,6 +189,6 @@ fn main() {
         ));
     }
     code.push_str("];\n");
-    let out = PathBuf::from(std::env::var_os("OUT_DIR").unwrap()).join("templates.rs");
+    let out = PathBuf::from(std::env::var_os("OUT_DIR").unwrap()).join(out);
     std::fs::write(out, code).unwrap();
 }

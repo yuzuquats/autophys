@@ -63,5 +63,5 @@ the model's own chat template.
    values from those built on rwc-dev-01's arm64. Manifests record the data
    hashes, not the build platform.
 4. Real-lab data (Onori battery set) needs its license checked and a mapping
-   to the `battery-fit` template (`templates/battery-fit`, formerly
-   `examples/battery_fit`) before it can become training rows.
+   to the `battery-fit` template (`examples/battery-fit`, earlier
+   `templates/battery-fit` and `examples/battery_fit`) before it can become training rows.

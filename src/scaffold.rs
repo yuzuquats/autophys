@@ -1,7 +1,7 @@
-//! `autophys new DIR --lang python|rust`: a new project from the templates in
-//! `templates/`, which `build.rs` embeds in the binary.
+//! `autophys new DIR --lang python|rust`: a new project from the examples in
+//! `examples/`, which `build.rs` embeds in the binary.
 //!
-//! A template is `templates/<example>/common/` plus `templates/<example>/<lang>/`
+//! A template is `examples/<example>/common/` plus `examples/<example>/<lang>/`
 //! (the language's files win). Files ending in `.tmpl` are rendered (the
 //! suffix dropped, `{{name}}`, `{{crate_name}}`, `{{sdk_repo}}` and
 //! `{{sdk_rev}}` replaced); every other file is copied byte for byte. The
@@ -17,7 +17,7 @@ use serde_json::{Value, json};
 use crate::device::Failure;
 
 mod embedded {
-    include!(concat!(env!("OUT_DIR"), "/templates.rs"));
+    include!(concat!(env!("OUT_DIR"), "/examples.rs"));
 }
 
 /// The repository the SDK git dependency points at.

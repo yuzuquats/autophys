@@ -73,7 +73,7 @@ C1  NOT identified
 
 The [end-to-end walkthrough](#run-an-experiment-end-to-end) below continues
 from here: it lets the agent choose the test that separates R1 from C1. The
-project's README ([source](templates/battery-fit/python/README.md)) explains
+project's README ([source](examples/battery-fit/python/README.md)) explains
 the results and how to use your own cell data, import measurements from a
 cycler, or choose a model-backed policy. `--lang rust` creates the same fit in
 Rust, and `--example blank` an empty project; `autophys connect URL` pairs the
@@ -189,7 +189,7 @@ This checks the workbook's hash chain and its projections, and reports
 To use a real cell, run the proposed programs on your cycler and pass each
 export with `--data` instead of `--simulate`. To record on a shared server and
 approve in the browser, pair once with `autophys connect URL` and set
-`AUTOPHYS_SERVER`. The [project README](templates/battery-fit/python/README.md#5-run-the-closed-loop)
+`AUTOPHYS_SERVER`. The [project README](examples/battery-fit/python/README.md#5-run-the-closed-loop)
 covers both, and `--policy model` hands the decisions to a language model.
 
 ## Use your own model

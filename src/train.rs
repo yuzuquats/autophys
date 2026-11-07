@@ -1,8 +1,9 @@
 //! `autophys train`: post-training of a decision policy, driven from the CLI.
 //!
 //! Rust owns the workflow: building the dataset, the budget gate, run
-//! manifests, evaluation and the run history. A Python worker in `train/sft`
-//! does what has to live next to the model: chat templates, tokenization and
+//! manifests, evaluation and the run history. A Python worker from `train/sft`
+//! (built into the binary, see [`install_workers`]) does what has to live next
+//! to the model: chat templates, tokenization and
 //! the GPU step (today Baseten Loops). Training data is a view of synthetic
 //! investigations; this module adds no state to the record store.
 //!
@@ -37,7 +38,8 @@ pub const USAGE: &str =
                            [--iterations 3] [--patience 2] [--candidates FILE] [--eval-seeds 3,4]
                            [--model-assets DIR] [--case NAME]... [--live] [--resume]
        autophys train runs | train loops
-       (all take --train-dir DIR (AUTOPHYS_TRAIN_DIR, default <project>/train/sft)
+       (all take --train-dir DIR (AUTOPHYS_TRAIN_DIR; default: the built-in workers,
+        installed in ~/.local/share/tento/autophys/train/sft)
         and --python FILE (AUTOPHYS_TRAIN_PYTHON, default python3 on PATH))
        worker limits: AUTOPHYS_TRAIN_WORKER_TIMEOUT_SECONDS (default 86400;
                       budgeted workers use provider timeout +120s unless overridden),
@@ -533,13 +535,150 @@ fn find_python(python: &Path, search_path: Option<&std::ffi::OsStr>) -> Result<P
     )
 }
 
+mod embedded_workers {
+    include!(concat!(env!("OUT_DIR"), "/train_workers.rs"));
+}
+
+mod embedded_sdk {
+    include!(concat!(env!("OUT_DIR"), "/python_sdk.rs"));
+}
+
+/// What [`install_workers`] wrote: each file's path and the SHA-256 of the
+/// bytes it wrote there.
+const WORKER_MANIFEST: &str = ".autophys-workers.json";
+
+/// The default train directory: the app's data directory, with the workers
+/// built into this binary installed. It also holds the runs, loops and
+/// datasets, because the workers write those next to themselves. The Python
+/// SDK goes to `sdks/python` beside it, the `../../sdks/python` the workers'
+/// Modal images build from, as in a checkout.
+fn default_train_dir() -> Result<PathBuf> {
+    let data = tento_dirs::AppDirs::resolve(crate::app::APP_ID)?.data;
+    let dir = data.join("train").join("sft");
+    for (target, files) in [
+        (data.join("sdks").join("python"), embedded_sdk::FILES),
+        (dir.clone(), embedded_workers::FILES),
+    ] {
+        let kept = install_workers(&target, files)
+            .with_context(|| format!("installing the training workers in {}", target.display()))?;
+        if !kept.is_empty() {
+            let note = format!(
+                "autophys train: kept {} edited file(s) in {} instead of the built-in version: {} (remove a file to restore it)\n",
+                kept.len(),
+                target.display(),
+                kept.join(", ")
+            );
+            if let Ok(mut sink) = Diagnostics::open() {
+                let _ = sink.forward(note.as_bytes());
+            }
+        }
+    }
+    Ok(dir)
+}
+
+/// Writes `files` into `dir` and returns the ones it left alone because they
+/// were edited. A file is written when it is missing, or when it still holds
+/// the bytes an earlier install wrote, so an upgrade replaces it. A file with
+/// other bytes (edited, or the user's own, such as a built dataset) is kept,
+/// and so is one that was there before any install: it stays the user's even
+/// when its bytes happen to match. Nothing is deleted: runs, loops and
+/// datasets in `dir` are never touched.
+fn install_workers(dir: &Path, files: &[(&str, &[u8])]) -> Result<Vec<String>> {
+    std::fs::create_dir_all(dir)?;
+    let lock = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(dir.join(".autophys-workers.lock"))?;
+    lock.lock()?;
+    let manifest_path = dir.join(WORKER_MANIFEST);
+    let mut manifest: BTreeMap<String, String> = match std::fs::read(&manifest_path) {
+        Ok(bytes) => serde_json::from_slice(&bytes)
+            .with_context(|| format!("reading {}", manifest_path.display()))?,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => BTreeMap::new(),
+        Err(e) => return Err(e.into()),
+    };
+    let mut kept = Vec::new();
+    for (name, bytes) in files {
+        let path = dir.join(name);
+        let want = format!("{:x}", Sha256::digest(bytes));
+        match std::fs::read(&path) {
+            Ok(current) => {
+                let have = format!("{:x}", Sha256::digest(&current));
+                if have == want {
+                    // Already current. The manifest keeps the hash an install
+                    // last wrote: bytes that arrived some other way (the
+                    // user's own, or an edit that happens to match) stay the
+                    // user's, and a later version keeps them.
+                    continue;
+                }
+                if manifest.get(*name) != Some(&have) {
+                    kept.push(name.to_string());
+                    continue;
+                }
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(anyhow!("reading {}: {e}", path.display())),
+        }
+        replace_file(&path, bytes)?;
+        manifest.insert(name.to_string(), want);
+    }
+    replace_file(&manifest_path, &serde_json::to_vec_pretty(&manifest)?)?;
+    Ok(kept)
+}
+
+/// Writes `bytes` to `path` through a sibling temporary file and a rename,
+/// so a reader never sees a partial file.
+fn replace_file(path: &Path, bytes: &[u8]) -> Result<()> {
+    let parent = path.parent().expect("installed files have a parent");
+    std::fs::create_dir_all(parent)?;
+    let name = path.file_name().expect("installed files have a name");
+    // create_new never follows or reuses whatever is already at a name, so
+    // a leftover or planted file there is skipped, not written through.
+    let mut attempt = 0u32;
+    let (temp, mut file) = loop {
+        let temp = parent.join(format!(
+            ".{}.autophys-tmp-{}-{attempt}",
+            name.to_string_lossy(),
+            std::process::id()
+        ));
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp)
+        {
+            Ok(file) => break (temp, file),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists && attempt < 100 => {
+                attempt += 1
+            }
+            Err(e) => bail!("writing {}: {e}", temp.display()),
+        }
+    };
+    let written = (|| -> std::io::Result<()> {
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        std::fs::rename(&temp, path)
+    })();
+    if let Err(e) = written {
+        // Only this call's own file, which create_new made.
+        let _ = std::fs::remove_file(&temp);
+        bail!("writing {}: {e}", path.display());
+    }
+    Ok(())
+}
+
 impl Worker {
     fn new(flags: &Flags) -> Result<Self> {
-        let dir = flags
+        let dir = match flags
             .get("train-dir")
             .map(PathBuf::from)
             .or_else(|| env_path("AUTOPHYS_TRAIN_DIR"))
-            .unwrap_or_else(|| crate::project_root().join("train").join("sft"));
+        {
+            // Absolute, because the workers run with it as their directory.
+            Some(dir) if dir.is_relative() => std::env::current_dir()?.join(dir),
+            Some(dir) => dir,
+            None => default_train_dir()?,
+        };
         let python = flags
             .get("python")
             .map(PathBuf::from)
@@ -2838,6 +2977,93 @@ pub fn loops(args: Vec<String>) -> Result<Value, Failure> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn install_workers_writes_upgrades_and_keeps_edits() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = root.path().join("train/sft");
+        let v1: &[(&str, &[u8])] = &[
+            ("train_sft.py", b"v1"),
+            ("serving/model.jinja", b"tmpl"),
+            ("data/train.jsonl", b"shipped"),
+        ];
+        assert!(install_workers(&dir, v1).unwrap().is_empty());
+        assert_eq!(std::fs::read(dir.join("serving/model.jinja")).unwrap(), b"tmpl");
+        // Idempotent, and the user's state beside the workers is untouched.
+        std::fs::create_dir_all(dir.join("runs/a")).unwrap();
+        std::fs::write(dir.join("runs/a/run.json"), b"{}").unwrap();
+        assert!(install_workers(&dir, v1).unwrap().is_empty());
+        // The user rebuilds the dataset; an upgrade replaces only what an
+        // install wrote and still holds those bytes.
+        std::fs::write(dir.join("data/train.jsonl"), b"mine").unwrap();
+        let v2: &[(&str, &[u8])] = &[
+            ("train_sft.py", b"v2"),
+            ("serving/model.jinja", b"tmpl"),
+            ("data/train.jsonl", b"shipped v2"),
+            ("eval_heldout.py", b"new"),
+        ];
+        assert_eq!(install_workers(&dir, v2).unwrap(), vec!["data/train.jsonl".to_string()]);
+        assert_eq!(std::fs::read(dir.join("train_sft.py")).unwrap(), b"v2");
+        assert_eq!(std::fs::read(dir.join("eval_heldout.py")).unwrap(), b"new");
+        assert_eq!(std::fs::read(dir.join("data/train.jsonl")).unwrap(), b"mine");
+        assert_eq!(std::fs::read(dir.join("runs/a/run.json")).unwrap(), b"{}");
+        // A file that was there before any install is the user's.
+        let other = root.path().join("other");
+        std::fs::create_dir_all(&other).unwrap();
+        std::fs::write(other.join("train_sft.py"), b"theirs").unwrap();
+        assert_eq!(install_workers(&other, v1).unwrap(), vec!["train_sft.py".to_string()]);
+        assert_eq!(std::fs::read(other.join("train_sft.py")).unwrap(), b"theirs");
+        // A pre-existing file that matches is still the user's: an upgrade
+        // keeps it rather than claiming and replacing it.
+        let same = root.path().join("same");
+        std::fs::create_dir_all(&same).unwrap();
+        std::fs::write(same.join("train_sft.py"), b"v1").unwrap();
+        assert!(install_workers(&same, v1).unwrap().is_empty());
+        assert_eq!(install_workers(&same, v2).unwrap(), vec!["train_sft.py".to_string()]);
+        assert_eq!(std::fs::read(same.join("train_sft.py")).unwrap(), b"v1");
+        // An edit that happens to equal the next built-in version is still
+        // an edit: the version after that keeps it.
+        let edited = root.path().join("edited");
+        assert!(install_workers(&edited, v1).unwrap().is_empty());
+        std::fs::write(edited.join("train_sft.py"), b"v2").unwrap();
+        assert!(install_workers(&edited, v2).unwrap().is_empty());
+        let v3: &[(&str, &[u8])] = &[("train_sft.py", b"v3")];
+        assert_eq!(install_workers(&edited, v3).unwrap(), vec!["train_sft.py".to_string()]);
+        assert_eq!(std::fs::read(edited.join("train_sft.py")).unwrap(), b"v2");
+        // Removing an edited file restores the built-in version.
+        std::fs::remove_file(dir.join("data/train.jsonl")).unwrap();
+        assert!(install_workers(&dir, v2).unwrap().is_empty());
+        assert_eq!(std::fs::read(dir.join("data/train.jsonl")).unwrap(), b"shipped v2");
+    }
+
+    #[test]
+    fn built_in_workers_are_the_train_sft_tree_without_tests() {
+        let names: Vec<&str> = embedded_workers::FILES.iter().map(|(n, _)| *n).collect();
+        for required in ["train_sft.py", "build_dataset.py", "eval_heldout.py", "modal_app.py", "data/train.jsonl"] {
+            assert!(names.contains(&required), "{required} missing from {names:?}");
+        }
+        assert!(names.iter().all(|n| !n.starts_with("tests/")), "{names:?}");
+        assert!(names.iter().all(|n| !n.starts_with("runs/") && !n.starts_with("loops/")), "{names:?}");
+        let sdk: Vec<&str> = embedded_sdk::FILES.iter().map(|(n, _)| *n).collect();
+        for required in ["pyproject.toml", "src/autophys/__init__.py", "src/autophys/models/battery.py"] {
+            assert!(sdk.contains(&required), "{required} missing from {sdk:?}");
+        }
+        assert!(sdk.iter().all(|n| !n.starts_with("tests/") && !n.contains("__pycache__")), "{sdk:?}");
+    }
+
+    #[test]
+    fn replace_file_never_writes_through_a_name_already_taken() {
+        let root = tempfile::tempdir().unwrap();
+        let victim = root.path().join("victim");
+        std::fs::write(&victim, b"keep").unwrap();
+        let path = root.path().join("train_sft.py");
+        let taken = root.path().join(format!(".train_sft.py.autophys-tmp-{}-0", std::process::id()));
+        std::os::unix::fs::symlink(&victim, &taken).unwrap();
+        replace_file(&path, b"new").unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), b"new");
+        assert_eq!(std::fs::read(&victim).unwrap(), b"keep");
+        assert!(std::fs::symlink_metadata(&taken).unwrap().file_type().is_symlink());
+    }
 
     fn pipe_pair() -> (std::fs::File, std::fs::File) {
         use std::os::fd::FromRawFd;

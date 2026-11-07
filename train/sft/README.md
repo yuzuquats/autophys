@@ -37,8 +37,15 @@ Captured by the SDK's own code (`ReasonLanePolicy.decide`), not copied:
 
 The Rust CLI owns the workflow: dataset identity, budget gates, run manifests,
 evaluation and history. These scripts are its worker. All commands take
-`--train-dir DIR` (`AUTOPHYS_TRAIN_DIR`, default `<project>/train/sft`) and
+`--train-dir DIR` (`AUTOPHYS_TRAIN_DIR`) and
 `--python FILE` (`AUTOPHYS_TRAIN_PYTHON`, default `python3` on PATH, including an activated venv).
+Without `--train-dir`, `autophys` installs the copy of these workers built into it in
+`~/.local/share/tento/autophys/train/sft` and works there, with the Python SDK the Modal
+images build from in `~/.local/share/tento/autophys/sdks/python`, so a release binary needs no
+checkout. Runs, loops and datasets are written beside the workers. A later version replaces
+only the files an install wrote and nobody changed since; an edited file is kept and named on
+stderr (remove it to get the built-in one back). To work on the workers themselves, pass
+`--train-dir train/sft` from a checkout.
 
 | command | what it does |
 |---|---|

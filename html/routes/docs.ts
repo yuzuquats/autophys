@@ -133,7 +133,7 @@ The Fit view overlays the recorded initial and fitted model curves on the measur
 
 | Path | What it is |
 | --- | --- |
-| \`templates\` | The projects \`autophys new\` creates: battery-fit (fit a measured battery trace, check identifiability, plot the curve; the closed loop) and blank. |
+| \`examples\` | The projects \`autophys new --example\` creates: battery-fit (fit a measured battery trace, check identifiability, plot the curve; the closed loop) and blank. |
 | \`sdks/python\` | Python SDK: simulator, fit, identifiability, experiment ranking, agent loop, workbook, playbook research, and the MCP server. |
 | \`sdks/rust\` | Rust SDK: local and HTTP workbooks, simulators, numerics and the investigation loop. |
 | \`plugins/muse-autophys\` | Muse Code bundle: the calibration skill, the \`/calibrate\` command and the bundle builder. The MCP server itself is in \`sdks/python\`. |
@@ -415,7 +415,7 @@ Browser accounts and paired device keys are separate: an account's read-only fla
 
 **Policy training**
 
-The \`train\` commands drive the Python workers in \`train/sft\` (see its \`README.md\`). Each takes \`--train-dir DIR\` (default \`$AUTOPHYS_TRAIN_DIR\`, then \`train/sft\`) and \`--python FILE\` (default \`$AUTOPHYS_TRAIN_PYTHON\`, then \`python3\` on \`PATH\`); that Python needs the SDK and the workers' own dependencies.
+The \`train\` commands drive the Python workers in \`train/sft\` (see its \`README.md\`). Each takes \`--train-dir DIR\` (default \`$AUTOPHYS_TRAIN_DIR\`, then the workers built into \`autophys\`, installed in \`~/.local/share/tento/autophys/train/sft\` with the runs, loops and datasets) and \`--python FILE\` (default \`$AUTOPHYS_TRAIN_PYTHON\`, then \`python3\` on \`PATH\`); that Python needs the SDK and the workers' own dependencies.
 
 | Command | Options |
 | --- | --- |
