@@ -302,7 +302,7 @@ Operator-decided. A `proposed` payload may carry
 row-major, at most 3 axes. Each array's length must equal the product of the
 axis lengths, and every value must be finite; otherwise 422 with the field
 path (`payload.outlook.after.C`). The daemon never computes from it.
-Agent-chosen within E-1, pending review: zero axes is allowed (a scalar, one
+Agent-chosen within E-1, confirmed by the operator 2026-11-08: zero axes is allowed (a scalar, one
 cell); an axis with no values is refused.
 ```
 
@@ -315,7 +315,7 @@ are keyless for the same-origin local browser. Every keyless state-changing
 route (approvals, pairing approve and deny) requires
 `Content-Type: application/json` (else 415) and an `Origin` equal to the
 daemon's own origin (else 403). Keyed SDK calls need neither.
-Agent-chosen within O-3, pending review: "own origin" is computed from the
+Agent-chosen within O-3, confirmed by the operator 2026-11-08 (deploy to pass the host's exact origin): "own origin" is computed from the
 port the server is bound to (`http://127.0.0.1:<port>`,
 `http://localhost:<port>`, `http://[::1]:<port>`), plus
 `Options::browser_origins`. Through tento.localhost the page's origin is
