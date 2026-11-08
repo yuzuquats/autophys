@@ -66,8 +66,8 @@ fn proposal_resume_and_config_pin() {
     let mut o = Observation::new(
         "step_long",
         settings,
-        y["t"].clone(),
-        [("T".into(), y["T"].clone())].into_iter().collect(),
+        y["t"].to_vec(),
+        [("T".into(), y["T"].to_vec())].into_iter().collect(),
         [("T".into(), 0.05)].into_iter().collect(),
     )
     .unwrap();
@@ -158,8 +158,8 @@ fn scripted_runs_through_refit_and_validation() {
             Observation::new(
                 name,
                 settings.clone(),
-                y["t"].clone(),
-                [("T".into(), y["T"].clone())].into_iter().collect(),
+                y["t"].to_vec(),
+                [("T".into(), y["T"].to_vec())].into_iter().collect(),
                 [("T".into(), 0.05)].into_iter().collect(),
             )
         };

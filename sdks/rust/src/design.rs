@@ -76,7 +76,7 @@ fn template(
     let pred = sim.simulate(p, settings, FIT_OPTIONS)?;
     let mut y = IndexMap::new();
     let mut sigma = Params::new();
-    for ch in pred.keys().filter(|k| k.as_str() != "t") {
+    for ch in pred.outputs().keys().filter(|k| k.as_str() != "t") {
         let s = noise
             .get(ch)
             .ok_or_else(|| invalid(format!("no declared sigma for {ch}")))?;

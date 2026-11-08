@@ -152,7 +152,7 @@ fn python_examples() {
         let noise = Dataset::new(obs.clone()).unwrap().noise();
         let mut simerr = 0_f64;
         for v in c["simulate"].as_array().unwrap() {
-            let a = json!(sim.simulate(&p, &v["settings"], FIT_OPTIONS).unwrap());
+            let a = json!(sim.simulate(&p, &v["settings"], FIT_OPTIONS).unwrap().outputs());
             numeric(&a, &v["trajectory"], 1e-6, 1e-9, name);
             simerr = simerr.max(rel(&a, &v["trajectory"]));
         }
@@ -325,10 +325,11 @@ fn case(c: &Value) -> Value {
                 settings["t"] = i["t"].clone();
             }
             let y = sim.simulate(&p, &settings, options).unwrap();
-            let mut v = json!(y);
-            v["trajectory"] = json!(y);
+            let mut v = json!(y.outputs());
+            v["trajectory"] = json!(y.outputs());
             v["y"] = json!(
-                y.iter()
+                y.outputs()
+                    .iter()
                     .filter(|(k, _)| k.as_str() != "t")
                     .collect::<IndexMap<_, _>>()
             );
@@ -453,9 +454,9 @@ fn run_case(sim: &FunctionSimulator, i: &Value, policy: Option<&str>) -> Value {
             return Observation::from_dict(o);
         }
         if let Some(theta) = &truth {
-            let mut y = sim.call(theta, settings, TRUTH_OPTIONS, false)?;
+            let (mut y, _) = sim.call(theta, settings, TRUTH_OPTIONS, false)?.into_parts();
             let t = y.shift_remove("t").unwrap();
-            return Observation::new(name, settings.clone(), t, y.into(), noise.clone());
+            return Observation::new(name, settings.clone(), t, y, noise.clone());
         }
         Err(SimulationError::Invalid(
             "deterministic runner exhausted".into(),
@@ -515,9 +516,9 @@ fn python_scripted_runs() {
         p.budgets.max_experiments = 1;
         p.n_starts = 1;
         let runner = move |name: &str, settings: &Value| {
-            let mut y = sim.call(&truth, settings, TRUTH_OPTIONS, false)?;
+            let (mut y, _) = sim.call(&truth, settings, TRUTH_OPTIONS, false)?.into_parts();
             let t = y.shift_remove("t").unwrap();
-            Observation::new(name, settings.clone(), t, y.into(), sigma.clone())
+            Observation::new(name, settings.clone(), t, y, sigma.clone())
         };
         let temp = tempfile::tempdir().unwrap();
         let client = autophys::connect(Some(temp.path().to_str().unwrap())).unwrap();

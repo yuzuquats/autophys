@@ -67,7 +67,8 @@ pub fn run_payload(
             let idx = indices(t.len(), limit);
             let sample = |pred: &Trajectory| -> Value {
                 Value::Object(
-                    pred.iter()
+                    pred.outputs()
+                        .iter()
                         .filter(|(ch, _)| ch.as_str() != "t")
                         .map(|(ch, y)| {
                             (

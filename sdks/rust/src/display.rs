@@ -146,9 +146,9 @@ impl Display {
         exp: &Settings,
         checked: &mut Trajectory,
     ) -> Result<()> {
-        let t = &raw["t"];
+        let t = &raw.outputs()["t"];
         for ch in self.input_names() {
-            let values = if let Some(v) = raw.get(&ch).or_else(|| raw.u.get(&ch)) {
+            let values = if let Some(v) = raw.outputs().get(&ch).or_else(|| raw.inputs().get(&ch)) {
                 v.clone()
             } else if let Some(f) = self.inputs.get(&ch) {
                 f(exp, t)?
@@ -158,7 +158,7 @@ impl Display {
             if values.len() != t.len() || values.iter().any(|v| !v.is_finite()) {
                 return Err(invalid(format!("invalid input channel {ch}")));
             }
-            checked.u.insert(ch, values);
+            checked.insert_input(ch, values);
         }
         Ok(())
     }
@@ -185,7 +185,7 @@ impl Display {
         for name in project.catalog.keys() {
             let exp = sim.experiment(&json!(name))?;
             let result = sim.call(&p, &exp, SimOptions::default(), false)?;
-            let source_t = &result["t"];
+            let source_t = &result.outputs()["t"];
             if source_t.is_empty()
                 || source_t.iter().any(|x| !x.is_finite())
                 || source_t.windows(2).any(|w| w[0] >= w[1])
@@ -207,7 +207,7 @@ impl Display {
                 })
                 .collect();
             let mut u = Map::new();
-            for (ch, values) in &result.u {
+            for (ch, values) in result.inputs() {
                 u.insert(
                     ch.clone(),
                     json!(

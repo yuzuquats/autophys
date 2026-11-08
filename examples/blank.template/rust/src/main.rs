@@ -41,7 +41,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         .collect();
     let sigma = 0.01;
     let mut rng = autophys::fit::rng::NumpyRng::new(0);
-    let y: Vec<f64> = decay.simulate(&truth, &settings, FIT_OPTIONS)?["y"]
+    let y: Vec<f64> = decay
+        .simulate(&truth, &settings, FIT_OPTIONS)?
+        .output("y")?
         .iter()
         .map(|y| y + sigma * rng.normal())
         .collect();

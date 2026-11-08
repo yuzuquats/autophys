@@ -885,6 +885,7 @@ impl Investigation {
                 let pred = self.sim().simulate(&p, &o.settings, FIT_OPTIONS)?;
                 for (ch, y) in &o.y {
                     let py = pred
+                        .outputs()
                         .get(ch)
                         .ok_or_else(|| invalid("missing validation channel"))?;
                     if py.len() != y.len() {

@@ -77,6 +77,7 @@ pub fn residuals(
         let pred = sim.simulate(p, &o.settings, options)?;
         for (ch, y) in &o.y {
             let py = pred
+                .outputs()
                 .get(ch)
                 .ok_or_else(|| SimulationError::Simulation(format!("missing channel {ch}")))?;
             if py.len() != y.len() {

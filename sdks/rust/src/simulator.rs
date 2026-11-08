@@ -8,7 +8,7 @@ use std::sync::{
 };
 pub type Params = IndexMap<String, f64>;
 pub type Settings = Value;
-pub use crate::trajectory::Trajectory;
+pub use crate::trajectory::{ChannelError, ChannelRole, Channels, TIME, Trajectory};
 pub type Result<T> = std::result::Result<T, SimulationError>;
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum SimulationError {
@@ -274,6 +274,7 @@ impl FunctionSimulator {
         }
         let out = (self.func)(p, &exp, options)?;
         let t = out
+            .outputs()
             .get("t")
             .ok_or_else(|| SimulationError::Simulation("missing time vector".into()))?;
         let inputs = self
@@ -282,7 +283,8 @@ impl FunctionSimulator {
             .map(|d| d.input_names())
             .unwrap_or_default();
         let channels: Vec<_> = if self.outputs.is_empty() {
-            out.keys()
+            out.outputs()
+                .keys()
                 .filter(|k| k.as_str() != "t" && !inputs.contains(k))
                 .cloned()
                 .collect()
@@ -290,9 +292,10 @@ impl FunctionSimulator {
             self.outputs.clone()
         };
         let mut checked = Trajectory::new();
-        checked.insert("t".into(), t.clone());
+        checked.insert_output("t", t.clone());
         for ch in channels {
             let v = out
+                .outputs()
                 .get(&ch)
                 .ok_or_else(|| SimulationError::Simulation(format!("missing channel {ch}")))?;
             if v.len() != t.len() || v.iter().any(|x| !x.is_finite()) {
@@ -300,7 +303,7 @@ impl FunctionSimulator {
                     "invalid output channel {ch}"
                 )));
             }
-            checked.insert(ch, v.clone());
+            checked.insert_output(ch, v.clone());
         }
         if let Some(display) = &self.display {
             display.check_inputs(&out, &exp, &mut checked)?;
@@ -362,6 +365,7 @@ impl FunctionSimulator {
             let bias = inner.shift_remove(&pname).unwrap();
             let mut y = (base.func)(&inner, e, o)?;
             for v in y
+                .outputs_mut()
                 .get_mut(&ch)
                 .ok_or_else(|| invalid("unknown bias channel"))?
             {

@@ -98,11 +98,11 @@ fn initial_interpolation_budget_and_identity() {
         )
         .unwrap();
     assert_eq!(
-        result.keys().map(String::as_str).collect::<Vec<_>>(),
+        result.outputs().keys().map(String::as_str).collect::<Vec<_>>(),
         ["t", "y"]
     );
     assert_eq!(result["y"], vec![4.; 3]);
-    assert_eq!(result.u["drive"], vec![0., 1., 0.]);
+    assert_eq!(result.input("drive").unwrap(), [0., 1., 0.]);
     assert_eq!(project.simulator.calls(), 0);
     assert_eq!(budget.lock().unwrap().used, 0);
 }
@@ -182,7 +182,7 @@ fn preview_uses_initial_and_duration_fallback() {
 }
 
 #[test]
-fn trajectory_mapping_wire_shape_and_implicit_outputs() {
+fn trajectory_wire_shape_and_implicit_outputs() {
     let sim = simulator(
         "implicit",
         vec![],
@@ -210,14 +210,20 @@ fn trajectory_mapping_wire_shape_and_implicit_outputs() {
         .call(&Params::new(), &json!("e"), FIT_OPTIONS, false)
         .unwrap();
     assert_eq!(
-        result.keys().map(String::as_str).collect::<Vec<_>>(),
+        result.outputs().keys().map(String::as_str).collect::<Vec<_>>(),
         ["t", "y"]
     );
-    assert_eq!(result.u["drive"], vec![3., 4.]);
+    assert_eq!(result.input("drive").unwrap(), [3., 4.]);
+    // DM-RS-1a: the worker protocol v1 shape, inputs included.
     let wire = serde_json::to_value(&result).unwrap();
-    assert_eq!(wire, json!({"t":[0.,1.],"y":[1.,2.]}));
+    assert_eq!(
+        wire,
+        json!({"y":{"t":[0.,1.],"y":[1.,2.]},"u":{"drive":[3.,4.]}})
+    );
     let restored: Trajectory = serde_json::from_value(wire).unwrap();
-    assert!(restored.u.is_empty());
     assert_eq!(restored, result);
-    assert_eq!(restored["y"], result["y"]);
+    assert_eq!(restored.output("y").unwrap(), result.output("y").unwrap());
+    // Equality compares inputs as well as outputs.
+    let (y, _) = result.clone().into_parts();
+    assert_ne!(Trajectory::from(y), result);
 }

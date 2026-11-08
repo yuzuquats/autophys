@@ -252,7 +252,10 @@ fn write_demo(
         })
         .collect();
     let truth: Params = TRUTH.iter().map(|(k, v)| (k.to_string(), *v)).collect();
-    let v = model.simulate(&truth, &settings(&t, &i, capacity_ah, soc0), FIT_OPTIONS)?["v"].clone();
+    let v = model
+        .simulate(&truth, &settings(&t, &i, capacity_ah, soc0), FIT_OPTIONS)?
+        .output("v")?
+        .to_vec();
     let mut rng = autophys::fit::rng::NumpyRng::new(0);
     let mut text = String::from("time,current,voltage\r\n");
     for k in 0..t.len() {
@@ -353,7 +356,10 @@ fn run() -> Result<()> {
         Default::default(),
         None,
     )?;
-    let v_fit = model.simulate(&fitted.params, &settings, FIT_OPTIONS)?["v"].clone();
+    let v_fit = model
+        .simulate(&fitted.params, &settings, FIT_OPTIONS)?
+        .output("v")?
+        .to_vec();
 
     println!(
         "\nfit: chi2/N = {:.2} ({}; ~1 means the residuals match sigma)",

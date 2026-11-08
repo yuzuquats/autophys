@@ -37,8 +37,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let truth = [("C".into(), 500.0), ("R".into(), 2.0)].into_iter().collect();
     let settings = sim.experiment(&json!("step_long"))?;
     let y = sim.simulate(&truth, &settings, FIT_OPTIONS)?;
-    let observation = Observation::new("step_long", settings, y["t"].clone(),
-        [("T".into(), y["T"].clone())].into_iter().collect(),
+    let observation = Observation::new("step_long", settings, y.t()?.to_vec(),
+        [("T".into(), y.output("T")?.to_vec())].into_iter().collect(),
         [("T".into(), 0.05)].into_iter().collect())?;
     let observations = vec![observation];
     let result = fit(&sim, &observations, &FitOptions::default())?;
@@ -51,6 +51,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
+A simulation returns a `simulator::Trajectory`: its outputs (`outputs()`,
+holding the time vector under `"t"`) and its stimulus inputs (`inputs()`).
+`t()`, `output(name)` and `input(name)` return a `Result` whose
+`ChannelError` names the missing channel; `?` converts it into a
+`SimulationError` or `autophys::Error`. `traj["T"]` indexes outputs only and
+panics with the channel name. A simulator returns `map.into()` or
+`collect()`s `(name, samples)` pairs as outputs; `Trajectory::from_parts`,
+`with_output` and `with_input` build both halves. A trajectory serialises as
+`{"y": {...}, "u": {...}}`, the worker protocol's result shape, and equality
+compares inputs as well as outputs.
 
 To record a human-approved investigation, use the same `observations` with
 `data::Dataset::new(observations)?`, and bind executable code to a workbook:

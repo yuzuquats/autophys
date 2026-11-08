@@ -38,7 +38,7 @@ pub fn observe(
     let settings = sim.experiment(experiment)?;
     let out = sim.call(truth, &settings, TRUTH_OPTIONS, false)?;
     let mut y = IndexMap::new();
-    for (ch, values) in out.iter().filter(|(k, _)| k.as_str() != "t") {
+    for (ch, values) in out.outputs().iter().filter(|(k, _)| k.as_str() != "t") {
         let sigma = *noise
             .sigma
             .get(ch)
@@ -61,7 +61,7 @@ pub fn observe(
         .map(String::from)
         .or_else(|| experiment.as_str().map(String::from))
         .unwrap_or_else(|| settings["kind"].as_str().unwrap_or("").into());
-    let mut o = Observation::new(name, settings, out["t"].clone(), y, noise.sigma.clone())?;
+    let mut o = Observation::new(name, settings, out["t"].to_vec(), y, noise.sigma.clone())?;
     o.split = split.into();
     o.source = "synthetic".into();
     o.validate()?;
