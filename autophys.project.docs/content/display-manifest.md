@@ -401,7 +401,7 @@ for external writers as well as sent on daemon wakeups. Record cursors do
 not change. New uploads replace the current row transactionally; reverting
 to an earlier body is a new upload.
 
-**DM-D1 — agent-chosen, pending operator review.** Store display as an optional
+**DM-D1 — changed by the operator, 2026-11-08: format 2 (see decisions.md; not implemented yet).** As built: store display as an optional
 format-1 table, created on the first PUT, rather than incrementing the core
 workbook version. Current Python readers refuse a version above 1; they
 preserve unknown tables, so this additive extension keeps both SDKs usable.
