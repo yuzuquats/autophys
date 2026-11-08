@@ -23,9 +23,10 @@ use std::borrow::Cow;
 pub const SDK_REPO: &str = "https://github.com/yuzuquats/autophys";
 
 pub const USAGE: &str = "usage: autophys new DIR --lang python|rust [--example REF] [--name NAME]
-                    [--no-install] [--sdk-rev REV] [--sdk-repo GIT_URL] [--json]
+                    [--existing] [--no-install] [--sdk-rev REV] [--sdk-repo GIT_URL] [--json]
        REF: a template or demo, built in (blank, battery-fit; `autophys examples`)
-            or a folder (./NAME.template); default battery-fit";
+            or a folder (./NAME.template); default battery-fit
+       --existing: write into a project of that name already in the collection";
 
 /// The commit this binary was built from (`AUTOPHYS_COMMIT`, else the
 /// checkout's HEAD at build time); `None` for a build from a source export.
@@ -54,6 +55,8 @@ pub struct Options {
     pub lang: Lang,
     pub example: Example,
     pub name: Option<String>,
+    /// Join a project of the same name already in the collection (G3-NAME).
+    pub existing: bool,
     pub install: bool,
     pub sdk_rev: Option<String>,
     pub sdk_repo: String,
@@ -80,6 +83,7 @@ pub fn parse(args: Vec<String>) -> Result<Options, Failure> {
     let mut example = None;
     let mut name = None;
     let mut install = true;
+    let mut existing = false;
     let mut sdk_rev = None;
     let mut sdk_repo = None;
     let mut json = false;
@@ -104,6 +108,7 @@ pub fn parse(args: Vec<String>) -> Result<Options, Failure> {
             "--sdk-rev" => sdk_rev = Some(value("--sdk-rev")?),
             "--sdk-repo" => sdk_repo = Some(value("--sdk-repo")?),
             "--no-install" => install = false,
+            "--existing" => existing = true,
             "--json" => json = true,
             other if other.starts_with('-') => {
                 return Err(usage(format!("unknown option {other:?}")));
@@ -172,6 +177,7 @@ pub fn parse(args: Vec<String>) -> Result<Options, Failure> {
         lang,
         example,
         name,
+        existing,
         install,
         sdk_rev,
         sdk_repo: sdk_repo.unwrap_or_else(|| SDK_REPO.into()),
@@ -226,6 +232,23 @@ pub fn render(text: &str, vars: &[(&str, &str)]) -> String {
     vars.iter().fold(text.to_string(), |text, (key, value)| {
         text.replace(&format!("{{{{{key}}}}}"), value)
     })
+}
+
+/// A collection holds one project per name, so a second scaffold with a name
+/// already in it would write into that project, mixing two projects' records
+/// (decision G3-NAME). Only the local collection (`$AUTOPHYS_HOME`, else
+/// `~/autophys`) is checked: it is where the scaffolded project writes unless
+/// `AUTOPHYS_SERVER` sends its records to a daemon.
+fn check_new_name(name: &str, collection: &Path) -> Result<(), Failure> {
+    let path = collection.join(format!("{}{}", autophys::slug(name), autophys::SUFFIX));
+    if !path.exists() {
+        return Ok(());
+    }
+    Err(failure(format!(
+        "project {name:?} already exists in {}; a new project would write into it. \
+         Pick another name (--name NAME), or pass --existing to add to that project",
+        collection.display()
+    )))
 }
 
 fn check_empty(dir: &Path) -> Result<(), Failure> {
@@ -372,6 +395,9 @@ pub fn new(args: Vec<String>, out: &mut impl Write) -> Result<Value, Failure> {
         Lang::Python => python_name(&raw_name),
         Lang::Rust => crate_name(&raw_name),
     };
+    if !opts.existing {
+        check_new_name(&name, &autophys::default_home())?;
+    }
     let files = template(&opts.example, opts.lang);
     let crate_name = crate_name(&raw_name);
     // PEP 508 refuses a URL without a host, so pip needs file://localhost/PATH
@@ -513,6 +539,24 @@ mod tests {
         assert!(files.iter().any(|(p, _)| p == "data/demo.csv"));
         assert!(files.iter().any(|(p, _)| p == "src/main.rs"));
         assert!(!files.iter().any(|(p, _)| p.ends_with(".py")));
+    }
+
+    #[test]
+    fn refuses_a_name_already_in_the_collection() {
+        let collection = tempfile::tempdir().unwrap();
+        assert!(check_new_name("my_cell", collection.path()).is_ok());
+        std::fs::write(
+            collection.path().join(format!("{}{}", autophys::slug("my_cell"), autophys::SUFFIX)),
+            b"",
+        )
+        .unwrap();
+        let e = check_new_name("my_cell", collection.path()).unwrap_err();
+        assert_eq!(e.code, 1);
+        assert!(e.message.contains("project \"my_cell\" already exists in"), "{}", e.message);
+        assert!(e.message.contains("--existing"), "{}", e.message);
+        assert!(check_new_name("other_cell", collection.path()).is_ok());
+        assert!(parse(words("cells --lang python --existing")).unwrap().existing);
+        assert!(!parse(words("cells --lang python")).unwrap().existing);
     }
 
     #[test]

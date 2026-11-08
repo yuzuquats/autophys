@@ -163,7 +163,7 @@ fn user_result(result: Result<Value, crate::device::Failure>) -> tento_sh::Resul
 
 #[command(
     name = "new",
-    description = "Create a project from a template or demo: DIR --lang python|rust [--example REF (default battery-fit; see autophys examples)] [--name NAME] [--no-install] [--sdk-rev REV] [--sdk-repo GIT_URL]; Python projects get a .venv (python3, or AUTOPHYS_PYTHON)"
+    description = "Create a project from a template or demo: DIR --lang python|rust [--example REF (default battery-fit; see autophys examples)] [--name NAME] [--existing (join a project of that name already in the collection)] [--no-install] [--sdk-rev REV] [--sdk-repo GIT_URL]; Python projects get a .venv (python3, or AUTOPHYS_PYTHON)"
 )]
 async fn new(_: (), args: Option<Vec<String>>) -> tento_sh::Result<Value> {
     user_result(crate::scaffold::new(
