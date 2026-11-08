@@ -8,14 +8,14 @@ page tracks what was verified against master and what has been fixed.
 
 | # | Gap | Verified on master | State |
 | --- | --- | --- | --- |
-| G1 | A collection outside the server DB's registered `local` root serves 403 JSON on `/app` after a "ready" start | yes, `src/workspaces.rs:191` | open; decided (G1-DB): the server DB default follows the collection; explicit mismatches fail at startup, HTML error on `/app` |
+| G1 | A collection outside the server DB's registered `local` root serves 403 JSON on `/app` after a "ready" start | yes, `src/workspaces.rs:191` | **fixed** (G1-DB; I3b8e5d1f0a7c4e29b6d2f8a1c5e0b7d4, hint I9c4a7e2b5d8f1036a2e9c7b4d1f8a5e3) |
 | G2 | Workbench says "uncertainty not recorded or unbounded" for parameters the record says are identified | yes, and wider than filed (below) | **fixed** (decision UNC-1) |
-| G3 | battery-fit template hard-codes project `battery_cycler_demo` | yes, `examples/battery-fit.demo/python/closed_loop.py:103` | open |
+| G3 | battery-fit template hard-codes project `battery_cycler_demo` | yes, `examples/battery-fit.demo/python/closed_loop.py:103` | **fixed**: the loop names its project from the scaffolded `pyproject.toml` (Id21fba38130f502ac39a); two scaffolds given the same name still merge silently |
 | G4 | CLI failures print the command schema before the error | the help block comes from vendored `tento-lisp-cmd` | open; the fix belongs in tento, with a `vendor/patches` patch here |
-| G5 | Missing input file gives a Python traceback in `battery_fit.py` | yes, `read_csv` | open |
-| G6 | Workbench timestamps are UTC only | yes, `html/client/wire.ts` `when()` | open; decided (G6-TZ): local time with zone, UTC on hover |
-| G7 | Python settings holding numpy arrays fail in the record digest at investigation start, unnamed (workbook 15) | yes, `sdks/python/src/autophys/data.py:86` | open; decided (G7-VAL): validate at construction with a named error |
-| G8 | A validation observation that reuses the train settings crashes `validate_predictions` (workbook 15) | not yet checked | open |
+| G5 | Missing input file gives a Python traceback in `battery_fit.py` | yes, `read_csv` | **fixed**: `PATH: cannot read: …`, exit 1, in `battery_fit.py` and `closed_loop.py` (I81a2a9ef78151d5f9eae) |
+| G6 | Workbench timestamps are UTC only | yes, `html/client/wire.ts` `when()` | **fixed** (G6-TZ; Ieca755c8db5f47bd0cf4); the summary caption, Markdown export and sidebar row show local time without the UTC tooltip |
+| G7 | Python settings holding numpy arrays fail in the record digest at investigation start, unnamed (workbook 15) | yes, `sdks/python/src/autophys/data.py:86` | **fixed** (G7-VAL; I88750988bbd92554128af9d8730f0bb3) |
+| G8 | A validation observation that reuses the train settings crashes `validate_predictions` (workbook 15) | yes, `agent.py` `tool_validate_predictions` | **fixed** (G8-ALIGN; Ie8f4d0d56bb77ae8e4e0c53e9549ee4f) |
 
 ## G2: what was wrong
 
@@ -63,7 +63,7 @@ different free set, or a hand-written record) reads "identification not
 recorded" in the Report and gets a grey "not recorded" tag in the card; the
 note about missing singular values is a muted line, not a missing-data block.
 
-Remaining: G1, G3–G8 above (decisions below). The Identifiability card still has no singular
+Remaining: G4 (its fix belongs in tento's command library). G1, G3 and G5–G8 were fixed on 2026-11-08. The Identifiability card still has no singular
 values or directions for daemon fits; recording them is a separate choice.
 A fit's ± no longer depends on the policy running a separate
 `analyze_sensitivity` step: `analysis.identify_every_fit` (default on) checks
@@ -79,8 +79,9 @@ the reason on the Identifiability card and in Details.
 | ID | Decision | Implementation |
 | --- | --- | --- |
 | UNC-1 | Confirmed: keep recording the per-parameter summary (± and verdicts), not the full singular values and direction vectors, which would add a matrix to every fit now that ANA-1 checks every fit (also recorded in [decisions.md](decisions.md)) | built |
-| G1-DB | `autophys serve`'s server database default follows the collection the way the collection does (`--collection`, else `$AUTOPHYS_HOME`, else `~/autophys`). `~/autophys` keeps today's app-data `server.db`; any other collection gets its own server DB under the app data directory, keyed by the collection path, so `AUTOPHYS_HOME=<dir> autophys serve` works as the template's hint says. An explicit `--server-db`/`$AUTOPHYS_SERVER_DB` whose pinned local root differs fails at startup with a message naming the fix, and `/app` errors render as an HTML page. The per-DB root pin in `src/workspaces.rs` is unchanged. Alternative: one global DB with a fail-fast message only (smaller; the documented flow would still need a flag). Reversal: restore the single default path; becomes expensive once released, since users then hold keys in per-collection DBs | not started |
-| G7-VAL | Python experiment settings must be JSON values: `Simulator` (catalog) and `Observation` construction validate them and raise an error naming the experiment and setting, with the `.tolist()` fix. No automatic numpy conversion, because a converted setting would be an ndarray live but a list on replay, and float32 grids would hash differently. Loosening later to exact-type conversion stays backward compatible | not started |
-| G6-TZ | Workbench timestamps show local time with the zone (`Nov 7 16:30 PST`) and the UTC value on hover; tests pin a time zone | not started |
+| G1-DB | `autophys serve`'s server database default follows the collection the way the collection does (`--collection`, else `$AUTOPHYS_HOME`, else `~/autophys`). `~/autophys` keeps today's app-data `server.db`; any other collection gets its own server DB under the app data directory, keyed by the collection path, so `AUTOPHYS_HOME=<dir> autophys serve` works as the template's hint says. An explicit `--server-db`/`$AUTOPHYS_SERVER_DB` whose pinned local root differs fails at startup with a message naming the fix, and `/app` errors render as an HTML page. The per-DB root pin in `src/workspaces.rs` is unchanged. Alternative: one global DB with a fail-fast message only (smaller; the documented flow would still need a flag). Reversal: restore the single default path; becomes expensive once released, since users then hold keys in per-collection DBs | implemented |
+| G7-VAL | Python experiment settings must be JSON values: `Simulator` (catalog) and `Observation` construction validate them and raise an error naming the experiment and setting, with the `.tolist()` fix. No automatic numpy conversion, because a converted setting would be an ndarray live but a list on replay, and float32 grids would hash differently. Loosening later to exact-type conversion stays backward compatible | implemented |
+| G6-TZ | Workbench timestamps show local time with the zone (`Nov 7 16:30 PST`) and the UTC value on hover; tests pin a time zone | implemented |
 | BUILD-1x | The workspace rule that repo `target/` dirs are symlinks into `~/ssd-mount/cargo-target/` should apply only to rwc-01 (yuzuquats has no external scratch volume), and repo `target/` caches should be tracked in the tento-scratch ledger. Handed off to the fleet/tento-scratch thread; nothing changes in autophys | handed off |
 | CLEAN | Approved and done: deleted `~/target.web.modules`, `~/tento-lona-js` and `~/.cache/autophys/target.web.modules` on yuzuquats (no callers, no open files at deletion) | done |
+| G8-ALIGN | Settings are model-specific, so the SDK cannot know which setting is a sample grid. Every place a prediction is lined up with an observation's samples (`validate_predictions`, fit residuals, synthetic test RMSE) checks the lengths first and raises `GridMismatchError` naming the observation, both lengths and the fix ("give this observation settings whose grid matches its own samples"), instead of an `IndexError`. Nothing is re-predicted on the observation's own `t`, which would hide the mismatch. Rust already returned a (less specific) error. Open consequence: `fit()` treats any `SimulationError`, including this one, as a failed trial point, so a *training* observation with a mismatched grid still yields a failed fit rather than the named error; re-raising it needs the same change in both SDKs. Reversal: drop the check; the old `IndexError` returns | **agent-chosen, pending operator review** | implemented |
