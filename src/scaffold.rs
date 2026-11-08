@@ -246,6 +246,14 @@ fn check_new_name(name: &str, collection: &Path) -> Result<(), Failure> {
         if !collection.exists() {
             return Ok(());
         }
+        if collection.is_dir() {
+            return Err(failure(format!(
+                "$AUTOPHYS_HOME {} ends in {} but is a folder, which no SDK can open as a workbook. \
+                 Point AUTOPHYS_HOME at a collection folder or a workbook file",
+                collection.display(),
+                autophys::SUFFIX
+            )));
+        }
         return Err(failure(format!(
             "$AUTOPHYS_HOME is the workbook {}; project {name:?} would write into it. \
              Point AUTOPHYS_HOME at a collection folder, or pass --existing to add to that workbook",
@@ -558,16 +566,26 @@ mod tests {
         let collection = tempfile::tempdir().unwrap();
         assert!(check_new_name("my_cell", collection.path()).is_ok());
         std::fs::write(
-            collection.path().join(format!("{}{}", autophys::slug("my_cell"), autophys::SUFFIX)),
+            collection
+                .path()
+                .join(format!("{}{}", autophys::slug("my_cell"), autophys::SUFFIX)),
             b"",
         )
         .unwrap();
         let e = check_new_name("my_cell", collection.path()).unwrap_err();
         assert_eq!(e.code, 1);
-        assert!(e.message.contains("project \"my_cell\" already exists in"), "{}", e.message);
+        assert!(
+            e.message.contains("project \"my_cell\" already exists in"),
+            "{}",
+            e.message
+        );
         assert!(e.message.contains("--existing"), "{}", e.message);
         assert!(check_new_name("other_cell", collection.path()).is_ok());
-        assert!(parse(words("cells --lang python --existing")).unwrap().existing);
+        assert!(
+            parse(words("cells --lang python --existing"))
+                .unwrap()
+                .existing
+        );
         assert!(!parse(words("cells --lang python")).unwrap().existing);
     }
 
@@ -576,13 +594,30 @@ mod tests {
         // G3-FILE: every project would write into that one file.
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join(format!("battery{}", autophys::SUFFIX));
-        assert!(check_new_name("thermal", &file).is_ok(), "a missing file is created as before");
+        assert!(
+            check_new_name("thermal", &file).is_ok(),
+            "a missing file is created as before"
+        );
         std::fs::write(&file, b"").unwrap();
         let e = check_new_name("thermal", &file).unwrap_err();
         assert_eq!(e.code, 1);
-        assert!(e.message.contains("$AUTOPHYS_HOME is the workbook"), "{}", e.message);
-        assert!(e.message.contains("project \"thermal\" would write into it"), "{}", e.message);
+        assert!(
+            e.message.contains("$AUTOPHYS_HOME is the workbook"),
+            "{}",
+            e.message
+        );
+        assert!(
+            e.message
+                .contains("project \"thermal\" would write into it"),
+            "{}",
+            e.message
+        );
         assert!(e.message.contains("--existing"), "{}", e.message);
+        let folder = dir.path().join(format!("odd{}", autophys::SUFFIX));
+        std::fs::create_dir(&folder).unwrap();
+        let e = check_new_name("thermal", &folder).unwrap_err();
+        assert!(e.message.contains("but is a folder"), "{}", e.message);
+        assert!(!e.message.contains("--existing"), "{}", e.message);
     }
 
     #[test]
