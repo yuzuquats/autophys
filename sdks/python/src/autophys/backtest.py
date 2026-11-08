@@ -564,7 +564,7 @@ def case_truth(case_id: str, drawn: bool = False) -> str:
     try:
         b, name = resolve_case(case_id)
         recorded = b.case(name).source == "datasets"
-    except (KeyError, ValueError, OSError):
+    except Exception:  # like the Rust SDK: a case that does not resolve is not recorded
         recorded = False
     return "recorded" if recorded else "drawn" if drawn else "fixed"
 

@@ -37,7 +37,8 @@ I124d47e38ec757fbc1b16e66fa4cec3c, the CLI):
   and `validation` (catalog names or settings tables). One
   `hidden/cases.toml` per example holds `[truth]`, `[noise] sigma`,
   `[[test]]` and a `[case.NAME]` table per case with `combos`,
-  `expected_non_identified`, `note`, and optional `bias` and `missing`.
+  `expected_non_identified`, `note`, and, for a generator case only,
+  optional `bias` and `missing` (a dataset case refuses them, EX-12).
   This replaces the draft's `initial`, per-case `hidden = ...` and `[score]`.
 - Ids: built-in cases keep their stable ids (`battery`,
   `battery-short-only`, ...) as investigation and project names, so

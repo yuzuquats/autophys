@@ -21,8 +21,8 @@ follow-up fix.
 | `57e68a9` | Split the training workers code cache from their outputs (CLI-16) | `Iefadf53750e7f250dd0b271bea961111` |
 | `6bdab8f` | Add a backtest of synthesized recorded battery runs | `Idf714b108e003ed71e0028554533d250` |
 | `4b0d205` | Say why live bench runs fail, and record the live backtests | `Icbb9bbcae7a1e9a069c8506b212db436` |
-| `de7aa0a` | Version autophys 0.1.2 | see commit |
-| `7b963a3` | Let training workers take any backtest case, and fix stale example paths | see commit |
+| `de7aa0a` | Version autophys 0.1.2 | `Ib376c04887b632e76308c0fe6bab86af` |
+| `7b963a3` | Let training workers take any backtest case, and fix stale example paths | `I1e88b81ef023c5060c30e87922889e6a` |
 
 | Asset | sha256 |
 | --- | --- |
