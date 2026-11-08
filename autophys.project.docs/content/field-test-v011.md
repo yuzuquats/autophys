@@ -10,10 +10,10 @@ page tracks what was verified against master and what has been fixed.
 | --- | --- | --- | --- |
 | G1 | A collection outside the server DB's registered `local` root serves 403 JSON on `/app` after a "ready" start | yes, `src/workspaces.rs:191` | **fixed** (G1-DB; I3b8e5d1f0a7c4e29b6d2f8a1c5e0b7d4, hint I9c4a7e2b5d8f1036a2e9c7b4d1f8a5e3) |
 | G2 | Workbench says "uncertainty not recorded or unbounded" for parameters the record says are identified | yes, and wider than filed (below) | **fixed** (decision UNC-1) |
-| G3 | battery-fit template hard-codes project `battery_cycler_demo` | yes, `examples/battery-fit.demo/python/closed_loop.py:103` | **fixed**: the loop names its project from the scaffolded `pyproject.toml` (Id21fba38130f502ac39a); two scaffolds given the same name still merge silently |
+| G3 | battery-fit template hard-codes project `battery_cycler_demo` | yes, `examples/battery-fit.demo/python/closed_loop.py:103` | **fixed**: the loop names its project from the scaffolded `pyproject.toml` (Id21fba38130f502ac39a); a second scaffold with a name already in the collection is refused (G3-NAME) |
 | G4 | CLI failures print the command schema before the error | the help block comes from vendored `tento-lisp-cmd` | open; the fix belongs in tento, with a `vendor/patches` patch here |
 | G5 | Missing input file gives a Python traceback in `battery_fit.py` | yes, `read_csv` | **fixed**: `PATH: cannot read: …`, exit 1, in `battery_fit.py` and `closed_loop.py` (I81a2a9ef78151d5f9eae) |
-| G6 | Workbench timestamps are UTC only | yes, `html/client/wire.ts` `when()` | **fixed** (G6-TZ; Ieca755c8db5f47bd0cf4); the summary caption, Markdown export and sidebar row show local time without the UTC tooltip |
+| G6 | Workbench timestamps are UTC only | yes, `html/client/wire.ts` `when()` | **fixed** (G6-TZ; Ieca755c8db5f47bd0cf4); the summary caption, meta line and sidebar row hover UTC too, and the Markdown export dates in full (G6-EXPORT) |
 | G7 | Python settings holding numpy arrays fail in the record digest at investigation start, unnamed (workbook 15) | yes, `sdks/python/src/autophys/data.py:86` | **fixed** (G7-VAL; I88750988bbd92554128af9d8730f0bb3) |
 | G8 | A validation observation that reuses the train settings crashes `validate_predictions` (workbook 15) | yes, `agent.py` `tool_validate_predictions` | **fixed** (G8-ALIGN; Ie8f4d0d56bb77ae8e4e0c53e9549ee4f) |
 
@@ -90,6 +90,6 @@ the reason on the Identifiability card and in Details.
 
 | ID | Decision | Implementation |
 | --- | --- | --- |
-| G8-TRAIN | **Operator: stop the fit on a grid mismatch.** `fit()` re-raises `GridMismatchError` instead of scoring the trial point with the failed-residual penalty, in both SDKs (Rust gains a matching error variant). A grid mismatch depends on the data, not the parameters, so no other trial point can fix it; real solver failures keep the penalty | not started |
-| G3-NAME | **Operator: `autophys new` refuses a project name the collection already has**, naming the collection and offering an explicit flag to join the existing project. Deliberate sharing (one project fed from two machines) stays possible; a hand-copied scaffold folder is not caught | not started |
-| G6-EXPORT | **Operator: the Markdown export writes the full local time and UTC**, e.g. "2026-11-08 03:12 PST (11:12 UTC)". On screen, the summary caption/meta and the sidebar rows gain the UTC hover the other labels have | not started |
+| G8-TRAIN | **Operator: stop the fit on a grid mismatch.** `fit()` re-raises `GridMismatchError` instead of scoring the trial point with the failed-residual penalty, in both SDKs (Rust gains a matching error variant). A grid mismatch depends on the data, not the parameters, so no other trial point can fix it; real solver failures keep the penalty | implemented (I6b2e9d4a8c1f7053e2b9d6a4c8f1e7b5) |
+| G3-NAME | **Operator: `autophys new` refuses a project name the collection already has**, naming the collection and offering an explicit flag to join the existing project. Deliberate sharing (one project fed from two machines) stays possible; a hand-copied scaffold folder is not caught | implemented (I9e4c1a7f3d8b2065c4a1e9f7d3b8c2a6) |
+| G6-EXPORT | **Operator: the Markdown export writes the full local time and UTC**, e.g. "2026-11-08 03:12 PST (11:12 UTC)". On screen, the summary caption/meta and the sidebar rows gain the UTC hover the other labels have | implemented (I3c8a5e1d9f2b7046c8e5a1d3f9b2c7e4) |
