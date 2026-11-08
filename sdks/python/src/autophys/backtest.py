@@ -573,6 +573,6 @@ def reference_of(case_id: str) -> str | None:
     """The canonical reference of a case id, for result rows."""
     try:
         b, name = resolve_case(case_id)
-    except (KeyError, ValueError, OSError):
+        return b.reference(b.case(name))
+    except Exception:  # like the Rust SDK: a case that does not resolve has no reference
         return None
-    return b.reference(b.case(name))

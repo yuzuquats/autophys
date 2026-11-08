@@ -196,3 +196,14 @@ def test_the_recorded_battery_backtest_builds_from_a_filled_cache(tmp_path, monk
     assert list(view.catalog) == ["discharge_1A", "pulse_2A", "pulse_train"]
     assert len(list(view.dataset)) == 2 and len(ev.test) == 1
     assert "battery-recorded" not in CASES and "battery-recorded" not in PLANTED_CASES
+
+
+def test_reference_of_unresolvable_case_is_none(monkeypatch):
+    assert bt.reference_of("no-such-case") is None
+    assert bt.reference_of("battery#no-such-case") is None
+
+    def fail(_case_id):
+        raise RuntimeError("unreadable backtest")
+
+    monkeypatch.setattr(bt, "resolve_case", fail)
+    assert bt.reference_of("battery-short-only") is None
