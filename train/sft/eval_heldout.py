@@ -31,6 +31,7 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
+from autophys.backtest import case_truth
 from autophys.synthetic import run_case
 from autophys.reasoner import ModelSpec
 from autophys.synthetic import CASES
@@ -95,7 +96,7 @@ def main(argv=None) -> int:
         for policy in policies:
             sel = [(r, i) for r, i in rows if r.case == case and r.policy == policy]
             report.append({
-                "case": case, "policy": policy, "seeds": len(sel),
+                "case": case, "policy": policy, "truth": case_truth(case), "seeds": len(sel),
                 "pass": f"{sum(passed(r) for r, _ in sel)}/{len(sel)}",
                 "statuses": [r.status for r, _ in sel],
                 "max_rel_error": [round(r.max_rel_error, 5) for r, _ in sel],
@@ -110,11 +111,13 @@ def main(argv=None) -> int:
                 "output_tokens": sum(r.output_tokens for r, _ in sel),
             })
     (a.out / "report.json").write_text(json.dumps(report, indent=1) + "\n")
-    head = ["case", "policy", "seeds", "pass", "statuses", "max_rel_error", "diagnosis_correct", "parse_failures",
+    head = ["case", "policy", "truth", "seeds", "pass", "statuses", "max_rel_error", "diagnosis_correct", "parse_failures",
             "guardrail_overrides", "same_actions_as_scripted", "calls"]
     print("| " + " | ".join(head) + " |\n|" + "---|" * len(head))
     for r in report:
         print("| " + " | ".join(str(r[h]) for h in head) + " |")
+    if any(r["truth"] == "recorded" for r in report):
+        print("\ntruth recorded: the case replays the same recorded runs on every seed, so its seeds are repeats, not independent trials.")
     print(f"wrote {a.out}/report.json, scores.json" + ("" if a.replay or "reason" not in policies else f", {cassette.name}"))
     return 0
 

@@ -160,6 +160,29 @@ def test_a_backtest_can_bring_its_own_python_simulator(tmp_path):
     assert view.simulator.name == "thermal_rc" and ev.truth == b.truth
 
 
+def test_recorded_cases_refuse_bias_and_missing(tmp_path):
+    b, name = bt.resolve_case("battery-recorded#two-tests")
+    for kw in ({"bias": {}}, {"missing": 0.1}):
+        with pytest.raises(ValueError, match="bias and missing"):
+            b.build(b.case(name), 0, **kw)
+    src = Path(bt.__file__).parent / "backtests" / "battery-recorded.backtest"
+    d = tmp_path / "rec.backtest"
+    (d / "hidden").mkdir(parents=True)
+    (d / "example.toml").write_bytes((src / "example.toml").read_bytes())
+    hidden = (src / "hidden" / "cases.toml").read_text()
+    changed = hidden.replace("[case.two-tests]\n", "[case.two-tests]\nmissing = 0.1\n", 1)
+    assert changed != hidden
+    (d / "hidden" / "cases.toml").write_text(changed)
+    with pytest.raises(ValueError, match="bias and missing"):
+        bt.resolve_case(f"{d}#two-tests")
+
+
+def test_case_truth_tells_recorded_from_generated():
+    assert bt.case_truth("battery-recorded#two-tests", drawn=True) == "recorded"
+    assert bt.case_truth("battery") == "fixed"
+    assert bt.case_truth("battery", drawn=True) == "drawn"
+
+
 @pytest.mark.skipif(not (REPO_EXAMPLES / "battery-recorded.backtest" / "data").is_dir(), reason="needs the repository data/")
 def test_the_recorded_battery_backtest_builds_from_a_filled_cache(tmp_path, monkeypatch):
     import hashlib

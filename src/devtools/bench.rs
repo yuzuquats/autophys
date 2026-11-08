@@ -113,6 +113,8 @@ pub struct BenchRow {
     pub case: String,
     pub policy: String,
     pub seed: u64,
+    /// `recorded`, `drawn` or `fixed` ([`autophys::backtest::case_truth`]).
+    pub truth: String,
     pub status: String,
     pub max_rel_error: f64,
     pub rel_errors: IndexMap<String, f64>,
@@ -143,6 +145,7 @@ impl BenchRow {
             "diagnosis_correct": self.diagnosis_correct, "requested": self.requested,
             "test_hours": f(self.test_hours), "calls": self.calls, "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens, "cost_usd": self.cost_usd.map(f),
+            "truth": self.truth,
             "example": autophys::backtest::reference_of(&self.case),
         })
     }
@@ -267,6 +270,7 @@ pub fn run_case(
         case: case.into(),
         policy: policy.into(),
         seed,
+        truth: autophys::backtest::case_truth(case, o.drawn_truth).into(),
         status: out.status.clone(),
         max_rel_error: if rel.is_empty() {
             f64::NAN
@@ -436,7 +440,7 @@ pub fn summarize(rows: &[BenchRow]) -> Vec<Value> {
             })
             .collect();
         out.push(json!({
-            "case": case, "policy": policy, "seeds": rs.len(), "status": status,
+            "case": case, "policy": policy, "truth": rs[0].truth, "seeds": rs.len(), "status": status,
             "median_max_rel_error": pyjson::float(med(&|r| r.max_rel_error)),
             "median_test_rmse": pyjson::float(med(&|r| r.test_rmse)),
             "median_simulations": med(&|r| r.simulations as f64),
@@ -507,6 +511,7 @@ pub fn format_table(summary: &[Value]) -> String {
     let head = [
         "case",
         "policy",
+        "truth",
         "seeds",
         "status",
         "max rel err",
@@ -528,6 +533,7 @@ pub fn format_table(summary: &[Value]) -> String {
             vec![
                 s["case"].as_str().unwrap_or("").into(),
                 s["policy"].as_str().unwrap_or("").into(),
+                s["truth"].as_str().unwrap_or("").into(),
                 s["seeds"].to_string(),
                 s["status"].as_str().unwrap_or("").into(),
                 format!("{}%", fmt_f(num(&s["median_max_rel_error"]) * 100., 2)),
@@ -585,8 +591,14 @@ pub fn format_table(summary: &[Value]) -> String {
             .join("|")
     ));
     lines.extend(rows.iter().map(|r| fmt(r)));
+    if summary.iter().any(|s| s["truth"] == "recorded") {
+        lines.extend([String::new(), RECORDED_NOTE.into()]);
+    }
     lines.join("\n")
 }
+
+/// Printed under a table that has a recorded-run case.
+pub const RECORDED_NOTE: &str = "truth recorded: the case replays the same recorded runs on every seed, so its seeds are repeats, not independent trials.";
 
 /// `json.dumps([asdict(r) for r in rows], indent=1, default=str)`.
 pub fn rows_json(rows: &[BenchRow]) -> String {
@@ -601,12 +613,7 @@ pub fn rows_json(rows: &[BenchRow]) -> String {
 /// made them: the model (`route:model`, or null for offline policies), the
 /// truth (`fixed`, `drawn`, or `recorded` for a recorded-run case), and this
 /// binary's version and commit.
-pub fn append_results(
-    path: &Path,
-    rows: &[BenchRow],
-    model: Option<&str>,
-    drawn_truth: bool,
-) -> std::io::Result<()> {
+pub fn append_results(path: &Path, rows: &[BenchRow], model: Option<&str>) -> std::io::Result<()> {
     use std::io::Write as _;
     let mut file = std::fs::OpenOptions::new()
         .create(true)
@@ -616,17 +623,6 @@ pub fn append_results(
         let mut v = row.to_value();
         let o = v.as_object_mut().unwrap();
         o.insert("model".into(), json!(model));
-        // A recorded-run case has no truth to draw: its data is the recording.
-        let recorded = autophys::backtest::resolve_case(&row.case).is_ok_and(|(b, name)| {
-            b.case(&name)
-                .is_ok_and(|c| c.source == autophys::backtest::CaseSource::Datasets)
-        });
-        let truth = match (recorded, drawn_truth) {
-            (true, _) => "recorded",
-            (false, true) => "drawn",
-            (false, false) => "fixed",
-        };
-        o.insert("truth".into(), json!(truth));
         o.insert("autophys".into(), json!(env!("CARGO_PKG_VERSION")));
         o.insert("commit".into(), json!(crate::scaffold::source_commit()));
         writeln!(file, "{}", pyjson::dumps(&v))?;
@@ -719,6 +715,10 @@ pub fn format_results(summary: &[Value]) -> String {
                 .map(|c| format!("{c:.4}"))
                 .unwrap_or_else(|| "-".into()),
         ));
+    }
+    if summary.iter().any(|s| s["truth"] == "recorded") {
+        out.push('\n');
+        out.push_str(RECORDED_NOTE);
     }
     out.trim_end().to_string()
 }
@@ -828,7 +828,7 @@ pub fn command(words: Vec<String>, out: &mut impl Write) -> Result<(), Failure> 
             .model_spec
             .as_ref()
             .map(|m| format!("{}:{}", m.route, m.model));
-        append_results(Path::new(file), &rows, model.as_deref(), drawn_truth)
+        append_results(Path::new(file), &rows, model.as_deref())
             .map_err(|e| Failure::error(format!("{file}: {e}")))?;
     }
     let text = if args.flag("json") {
@@ -842,6 +842,23 @@ pub fn command(words: Vec<String>, out: &mut impl Write) -> Result<(), Failure> 
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn tables_mark_recorded_cases() {
+        let row = |truth: &str| serde_json::json!({"case": "c", "policy": "scripted", "truth": truth, "seeds": 3, "runs": 3, "passed": 3});
+        let table = super::format_table(&[row("fixed")]);
+        assert!(
+            table.starts_with("| case | policy   | truth | seeds |"),
+            "{table}"
+        );
+        assert!(!table.contains(super::RECORDED_NOTE));
+        for table in [
+            super::format_table(&[row("fixed"), row("recorded")]),
+            super::format_results(&[row("recorded")]),
+        ] {
+            assert!(table.ends_with(super::RECORDED_NOTE), "{table}");
+        }
+    }
+
     use super::*;
 
     #[test]

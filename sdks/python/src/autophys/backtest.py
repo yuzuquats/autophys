@@ -305,6 +305,8 @@ class Backtest:
                 if not combos:
                     raise ValueError(f"{cw}: a generator case scores combos")
             elif source_kind == "datasets":
+                if "bias" in h or "missing" in h:
+                    raise ValueError(f"{cw}: bias and missing corrupt generated data; a dataset case replays its recordings as they are")
                 by_name = {d.name: d for d in datasets}
                 for n in train + validation:
                     if not isinstance(n, str) or n not in by_name:
@@ -480,6 +482,8 @@ class Backtest:
 
         budget = case.max_experiments if max_experiments is None else max_experiments
         if case.source == "datasets":
+            if bias is not None or missing is not None:
+                raise ValueError(f"case {case.id}: bias and missing corrupt generated data; a recorded case replays its runs as they are")
             import copy
 
             from .data import Dataset
@@ -551,6 +555,18 @@ def expand(references: list[str]) -> list[str]:
             if c.id not in ids:
                 ids.append(c.id)
     return ids
+
+
+def case_truth(case_id: str, drawn: bool = False) -> str:
+    """What a case's data is, for result rows: ``recorded`` for a recorded-run
+    case (the same measurements on every seed, so its seeds are repeats, not
+    independent trials), else ``drawn`` or ``fixed``."""
+    try:
+        b, name = resolve_case(case_id)
+        recorded = b.case(name).source == "datasets"
+    except (KeyError, ValueError, OSError):
+        recorded = False
+    return "recorded" if recorded else "drawn" if drawn else "fixed"
 
 
 def reference_of(case_id: str) -> str | None:

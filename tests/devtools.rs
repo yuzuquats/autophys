@@ -98,7 +98,7 @@ fn bench_json_rows_and_table() {
     assert!(table.starts_with("| case "), "{table}");
     // --case still works (deprecated) and an unknown --example is a usage error.
     assert!(
-        table.contains("| thermal-short-only | scripted | 1     | inconclusivex1 |"),
+        table.contains("| thermal-short-only | scripted | fixed | 1     | inconclusivex1 |"),
         "{table}"
     );
     let (code, _, err) = run(&["bench", "--example", "nope"]);

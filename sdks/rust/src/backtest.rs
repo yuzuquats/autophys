@@ -700,6 +700,11 @@ impl Backtest {
                     }
                 }
                 CaseSource::Datasets => {
+                    if h.get("bias").is_some() || h.get("missing").is_some() {
+                        return Err(invalid(format!(
+                            "{cw}: bias and missing corrupt generated data; a dataset case replays its recordings as they are"
+                        )));
+                    }
                     for n in train.iter().chain(&validation) {
                         let n = n.as_str().ok_or_else(|| {
                             invalid(format!("{cw}: a dataset case lists dataset names"))
@@ -1030,6 +1035,12 @@ impl Backtest {
                 .transpose()
         };
         if case.source == CaseSource::Datasets {
+            if o.bias.is_some() || o.missing.is_some() {
+                return Err(invalid(format!(
+                    "case {}: bias and missing corrupt generated data; a recorded case replays its runs as they are",
+                    case.id
+                )));
+            }
             let used: BTreeSet<&str> = case
                 .train
                 .iter()
@@ -1295,6 +1306,21 @@ pub fn reference_of(id: &str) -> Option<String> {
     let (backtest, name) = resolve_case(id).ok()?;
     let case = backtest.case(&name).ok()?;
     Some(backtest.reference(case))
+}
+
+/// What a case's data is, for result rows: `recorded` for a recorded-run
+/// case (the same measurements on every seed, so its seeds are repeats, not
+/// independent trials), else `drawn` or `fixed` as `drawn_truth` says.
+pub fn case_truth(id: &str, drawn_truth: bool) -> &'static str {
+    let recorded = resolve_case(id).is_ok_and(|(b, name)| {
+        b.case(&name)
+            .is_ok_and(|c| c.source == CaseSource::Datasets)
+    });
+    match (recorded, drawn_truth) {
+        (true, _) => "recorded",
+        (false, true) => "drawn",
+        (false, false) => "fixed",
+    }
 }
 
 /// The view and evaluator of a case by id or reference.
@@ -1637,6 +1663,47 @@ mod tests {
     }
 
     static ENV: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// A recorded case has no generator to corrupt, so bias and missing are
+    /// refused (in hidden/cases.toml and as overrides) rather than ignored.
+    #[test]
+    fn recorded_cases_refuse_bias_and_missing() {
+        let (b, name) = resolve_case("battery-recorded#two-tests").unwrap();
+        let case = b.case(&name).unwrap();
+        for o in [
+            Overrides {
+                bias: Some(Params::new()),
+                ..Default::default()
+            },
+            Overrides {
+                missing: Some(0.1),
+                ..Default::default()
+            },
+        ] {
+            let e = b.build(case, 0, &o).err().unwrap().to_string();
+            assert!(e.contains("bias and missing"), "{e}");
+        }
+        let hidden = include_str!("backtests/battery-recorded.backtest/hidden/cases.toml");
+        let changed = hidden.replacen("[case.two-tests]\n", "[case.two-tests]\nmissing = 0.1\n", 1);
+        assert_ne!(changed, hidden);
+        let e = Backtest::parse(
+            "battery-recorded",
+            Source::Builtin("battery-recorded".into()),
+            include_str!("backtests/battery-recorded.backtest/example.toml"),
+            &changed,
+        )
+        .err()
+        .unwrap()
+        .to_string();
+        assert!(e.contains("bias and missing"), "{e}");
+    }
+
+    #[test]
+    fn case_truth_tells_recorded_from_generated() {
+        assert_eq!(case_truth("battery-recorded#two-tests", true), "recorded");
+        assert_eq!(case_truth("battery", false), "fixed");
+        assert_eq!(case_truth("battery", true), "drawn");
+    }
 
     /// The built-in recorded backtest runs offline once its files are in
     /// the datasets directory (here copied from the repository's data/).
