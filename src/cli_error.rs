@@ -27,9 +27,10 @@ pub fn hint(command: &str) -> String {
     }
 }
 
-/// The stderr text for a failure, newline-terminated. A message in the
-/// usage convention (`REASON\nusage: ...`) keeps only its reason and counts
-/// as a usage error; `usage_error` marks the others (argument problems). Only
+/// The stderr text for a failure, newline-terminated. A message in
+/// autophys's usage convention (`REASON\nusage: autophys ...`) keeps only its
+/// reason and counts as a usage error (another program's `usage:` text quoted
+/// in a runtime error is left alone); `usage_error` marks the others (argument problems). Only
 /// usage errors get the hint; a runtime error is its line alone.
 pub fn render(message: &str, usage_error: bool) -> String {
     render_for(&command(), message, usage_error)
@@ -59,10 +60,10 @@ pub fn report(message: &str, usage_error: bool) {
 }
 
 fn split_usage(message: &str) -> (&str, bool) {
-    if message.trim_start().starts_with("usage:") {
+    if message.trim_start().starts_with("usage: autophys") {
         return ("", true);
     }
-    match message.split_once("\nusage:") {
+    match message.split_once("\nusage: autophys") {
         Some((reason, _)) => (reason, true),
         None => (message, false),
     }
@@ -82,6 +83,14 @@ mod tests {
             ),
             "autophys: unknown option \"--bogus\"\n\
              Try `autophys train dataset --help` for the options.\n"
+        );
+    }
+
+    #[test]
+    fn another_programs_usage_text_in_a_runtime_error_is_kept() {
+        assert_eq!(
+            render_for("bench", "worker failed:\nusage: worker.py [-h]", false),
+            "autophys: worker failed:\nusage: worker.py [-h]\n"
         );
     }
 

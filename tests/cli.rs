@@ -269,6 +269,11 @@ fn failures_are_one_stderr_line_with_a_help_hint_and_no_stdout() {
             format!("autophys: unknown option \"--bogus\"\n{}", hint("new")),
         ),
         (
+            vec!["--json", "records", "--bogus"],
+            2,
+            format!("autophys: unknown option \"--bogus\"\n{}", hint("records")),
+        ),
+        (
             vec!["fit"],
             2,
             "autophys: unknown command \"fit\"\nTry `autophys --help` for the commands.\n".into(),

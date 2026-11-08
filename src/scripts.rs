@@ -685,8 +685,14 @@ pub async fn run(mut argv: Vec<String>, out: &mut impl Write) -> u8 {
         Some("pair" | "keys" | "users" | "db" | "train")
     );
     // The command the `--help` hint names: `records`, or `train dataset`.
-    crate::cli_error::set_command(match (argv.get(1), argv.get(2)) {
-        (Some(name), Some(sub)) if group && !sub.starts_with('-') => format!("{name} {sub}"),
+    // Flags are skipped, so `--json records --bogus` still names `records`.
+    let mut words = argv.iter().skip(1).filter(|word| !word.starts_with('-'));
+    crate::cli_error::set_command(match (words.next(), words.next()) {
+        (Some(name), Some(sub))
+            if matches!(name.as_str(), "pair" | "keys" | "users" | "db" | "train") =>
+        {
+            format!("{name} {sub}")
+        }
         (Some(name), _) => name.clone(),
         (None, _) => String::new(),
     });
