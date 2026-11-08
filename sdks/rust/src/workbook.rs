@@ -205,8 +205,11 @@ pub(crate) fn attach_record_id(investigation: &str, pid: &str, kind: &str) -> St
 /// them. A measurement is named by its record hash (through `hash_of`, as
 /// Rust's `attach_data` sends, or literally) or by its payload `version`
 /// (the dataset version Python's `attach_data` sends). `earlier` are the
-/// kinds and results of records `0..i`. Events whose batch holds no
-/// measurement and whose link names no batch record are not affected.
+/// kinds and results of records `0..i`. Events preceded by no measurement
+/// and whose link names no earlier batch record are not affected. Two
+/// events may name the same measurement (the removed route paired one
+/// measurement with one event). Only records the batch writes are checked;
+/// a record that replays is not.
 fn check_attachment_link(
     i: usize,
     r: &BatchRecord,
@@ -990,9 +993,11 @@ impl Investigation {
     /// refusal writes nothing. A record's [`BatchRecord::hash_of`] fills
     /// top-level payload fields with the hash of an earlier record of the
     /// batch before it is checked. One check spans records: a `data_attached`
-    /// event linking into the batch must name a measurement, and with
-    /// measurements in the batch it must name one of them (by hash, or by
-    /// payload `version` as Python sends). Returns one [`Appended`] per record.
+    /// event the batch writes that links into the batch must name a
+    /// measurement, and when measurements precede it in the batch it must
+    /// name one of them (by hash, or by payload `version` as Python sends).
+    /// A stored record retried unchanged replays without this check.
+    /// Returns one [`Appended`] per record.
     pub fn append_batch(&self, records: &[BatchRecord]) -> Result<Vec<Appended>> {
         if let Some(r) = &self.wb.remote {
             return r.append_batch(&self.id, records);
@@ -1014,7 +1019,6 @@ impl Investigation {
                 }
             }
             validate::payload_shape(kind, &payload).map_err(at)?;
-            check_attachment_link(i, r, &payload, &batch_kinds[..i], &out)?;
             let text = canonical(&payload);
             if text.len() > validate::MAX_PAYLOAD_BYTES {
                 return Err(Error::TooLarge(validate::MAX_PAYLOAD_BYTES));
@@ -1023,6 +1027,10 @@ impl Investigation {
                 out.push(replayed);
                 continue;
             }
+            // Only records this batch writes are link-checked: a stored
+            // record retried byte for byte replays above, whatever the rest
+            // of its batch holds now.
+            check_attachment_link(i, r, &payload, &batch_kinds[..i], &out)?;
             let env = Envelope { id: r.id.clone(), kind, payload };
             projections::check(&tx, &self.id, &env).map_err(at)?;
             let logged = insert_record(&tx, &self.id, &env.id, kind, &text)?;

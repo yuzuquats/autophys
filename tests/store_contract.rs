@@ -1258,8 +1258,9 @@ async fn batch_appends_all_or_none_and_replays_by_record_id() {
 
 /// The removed attachment route refused a `data_attached` event that did not
 /// name its measurement; the batch keeps that. A link into the batch must
-/// be a measurement, and with measurements in the batch the event must name
-/// one: by hash (`hash_of`, Rust) or by payload `version` (Python).
+/// be a measurement, and with measurements before it in the batch the event
+/// must name one: by hash (`hash_of`, Rust) or by payload `version`
+/// (Python). A stored event retried unchanged replays without the check.
 #[actix_web::test]
 async fn batch_data_attached_must_name_its_measurement() {
     let f = fixture();
@@ -1330,6 +1331,27 @@ async fn batch_data_attached_must_name_its_measurement() {
     let (s, out) = call(&app, post(&batch, k, &alone).to_request()).await;
     assert_eq!(s, 201, "{out}");
     assert_eq!(all!(&app), before + 5);
+
+    // Only records the batch writes are link-checked: the stored `e-py`,
+    // retried byte for byte after a measurement it does not name, replays.
+    let later = |id: &str, version: u64| {
+        env(id, "measurement", json!({"version": version, "digest": "d", "observation": observation}))
+    };
+    let retry = json!({"records": [later("m-later", 9), attached("e-py", "p2", json!(3))]});
+    let (s, out) = call(&app, post(&batch, k, &retry).to_request()).await;
+    assert_eq!(s, 201, "{out}");
+    let created: Vec<_> = out["records"].as_array().unwrap().iter().map(|r| r["created"].as_bool()).collect();
+    assert_eq!(created, [Some(true), Some(false)], "{out}");
+    assert_eq!(all!(&app), before + 6);
+    // A new event in the same place is still refused.
+    let fresh = json!({"records": [later("m-later-2", 10), attached("e-new", "p2", json!(3))]});
+    let (s, e) = call(&app, post(&batch, k, &fresh).to_request()).await;
+    assert_eq!(
+        (s, e["path"].as_str()),
+        (422, Some("records[1].payload.measurement_version")),
+        "{e}"
+    );
+    assert_eq!(all!(&app), before + 6);
 }
 
 #[actix_web::test]
