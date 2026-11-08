@@ -23,6 +23,7 @@ import argparse
 import csv
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -99,8 +100,18 @@ def cell(params, experiment, options=ap.FIT_OPTIONS):
     return {"t": t, "v": np.interp(soc, OCV_SOC, OCV_V) - v1 - i * r0}
 
 
+def project_name(folder: Path = HERE) -> str:
+    """The name `autophys new` wrote into pyproject.toml; run from the repo, the demo keeps its own."""
+    try:
+        text = (folder / "pyproject.toml").read_text()
+    except OSError:
+        return "battery_cycler_demo"
+    found = re.search(r'^name\s*=\s*"([^"]+)"', text.split("[project]", 1)[-1], re.M)
+    return found.group(1) if found else "battery_cycler_demo"
+
+
 project = ap.Project(
-    "battery_cycler_demo", cell,
+    project_name(), cell,
     noise=ap.NoiseConfig(bias="off"),
     initial={"R0": 0.03, "R1": 0.04, "C1": 1500.0},
     budgets=ap.Budgets(max_experiments=2),
