@@ -302,4 +302,30 @@ mod tests {
             other => panic!("expected a grid mismatch, got {other:?}"),
         }
     }
+
+    #[test]
+    fn a_solver_failure_at_every_point_is_penalized_not_raised() {
+        // G8-TRAIN keeps the penalty for real solver failures: only a grid
+        // mismatch stops the fit.
+        let s = simulator(
+            "fails",
+            vec![ParamSpec::new("a", "", -1., 3.).unwrap()],
+            IndexMap::new(),
+            vec!["y".into()],
+            "fails",
+            |_, _, _| Err(SimulationError::Simulation("diverged".into())),
+        )
+        .unwrap();
+        let o = Observation::new(
+            "e",
+            json!({"kind":"custom","t":[0.,1.]}),
+            vec![0., 1.],
+            [("y".into(), vec![5.; 2])].into_iter().collect(),
+            [("y".into(), 1.)].into_iter().collect(),
+        )
+        .unwrap();
+        let opts = FitOptions { n_starts: 1, ..Default::default() };
+        let r = fit(&s, &[o], &opts).expect("a penalized fit, not an error");
+        assert!(r.loss >= 1e12, "{}", r.loss);
+    }
 }

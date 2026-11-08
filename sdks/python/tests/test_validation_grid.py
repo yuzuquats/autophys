@@ -83,6 +83,17 @@ def test_a_fit_stops_on_a_training_grid_mismatch():
         ap.fit(kinetics, [good, bad], n_starts=1)
 
 
+def test_a_solver_failure_at_every_point_is_penalized_not_raised():
+    # G8-TRAIN keeps the penalty for real solver failures: only a grid mismatch stops the fit.
+    @ap.simulator(params={"v": ("rate", 10.0, 500.0)},
+                  experiments={"treated": {"kind": "measured", "t": GRID}}, outputs=("rate",))
+    def fails(params, experiment):
+        raise SimulationError("diverged")
+
+    result = ap.fit(fails, [_obs(fails.experiment("treated"), GRID, "train")], n_starts=1)
+    assert result.loss >= 1e12
+
+
 def test_a_same_size_wrong_shape_prediction_names_both_shapes():
     from autophys.simulator import aligned_prediction
     obs = ap.Observation(experiment="treated", settings={"kind": "m"}, t=[0.1, 0.2],
