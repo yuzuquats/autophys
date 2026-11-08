@@ -2,12 +2,14 @@
 """Run deploy only against disposable command/service stand-ins, never systemd."""
 import json
 import os
+import socket
 from pathlib import Path
 import subprocess
 import tempfile
 import unittest
 
 REPO = Path(__file__).resolve().parents[1]
+ORIGIN_ARGS = " --browser-origin http://autophys." + socket.gethostname().split(".")[0].lower() + ".tento.localhost"
 
 
 class DeployRoots(unittest.TestCase):
@@ -55,7 +57,7 @@ if args[0]=='pack':
                 self.assertEqual(result.returncode, 0, result.stderr)
                 release = (chosen / "current").resolve()
                 unit = home / ".config/systemd/user/autophys.service"
-                expected = (REPO / "ops/systemd/autophys.service.in").read_text().replace("@RELEASE@", str(release)).replace("@ADDR@", "127.0.0.1:4794").replace("@COMMIT@", "0123456789ab")
+                expected = (REPO / "ops/systemd/autophys.service.in").read_text().replace("@RELEASE@", str(release)).replace("@ADDR@", "127.0.0.1:4794").replace("@COMMIT@", "0123456789ab").replace("@ORIGIN_ARGS@", ORIGIN_ARGS)
                 self.assertEqual(unit.read_text(), expected)
                 self.assertTrue((release / "bin/autophys").is_file())
                 self.assertIn(["systemctl", "--user", "restart", "autophys.service"], [json.loads(line) for line in log.read_text().splitlines()])
@@ -73,6 +75,28 @@ if args[0]=='pack':
                 self.assertEqual(unit.read_bytes(), previous_unit)
                 self.assertEqual(os.readlink(chosen / "current"), previous_current)
                 self.assertTrue(all(json.loads(line)[0] == "git" for line in log.read_text().splitlines()))
+
+
+    def test_browser_origin(self):
+        """O-3a: the tento.localhost origin is allowed by default; overrides are validated."""
+        unit = (REPO / "ops/systemd/autophys.service.in").read_text()
+        self.assertIn("serve --addr @ADDR@@ORIGIN_ARGS@\n", unit)
+        script = (REPO / "ops/deploy.sh").read_text()
+        start = script.index("# The tento.localhost proxy")
+        block = script[start:script.index("export PATH=", start)]
+        def run(value):
+            env = {k: v for k, v in os.environ.items() if k != "AUTOPHYS_BROWSER_ORIGIN"}
+            if value is not None:
+                env["AUTOPHYS_BROWSER_ORIGIN"] = value
+            return subprocess.run(["bash", "-c", "set -euo pipefail\n" + block + 'printf "%s" "$origin_args"'],
+                                  env=env, capture_output=True, text=True)
+        self.assertEqual(run(None).stdout, ORIGIN_ARGS)
+        self.assertEqual(run("").stdout, "")
+        self.assertEqual(run("https://lab.example:8443").stdout, " --browser-origin https://lab.example:8443")
+        for bad in ["http://Host", "http://h/path", "ftp://h", "http://h|x", "http://h x", "http://h&x", "http://h\nx"]:
+            result = run(bad)
+            self.assertEqual(result.returncode, 2, bad)
+            self.assertIn("refusing browser origin", result.stderr)
 
 
 if __name__ == "__main__":

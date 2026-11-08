@@ -3,7 +3,8 @@
 # The native Linux executable carries its deflated web ZIP; strip BEFORE pack.
 # Releases contain bin/autophys and COMMIT, with no accompanying web folder.
 # The service never runs from the checkout or a build directory.
-# Usage: ops/deploy.sh   (AUTOPHYS_ADDR overrides 127.0.0.1:4794)
+# Usage: ops/deploy.sh   (AUTOPHYS_ADDR overrides 127.0.0.1:4794;
+#        AUTOPHYS_BROWSER_ORIGIN overrides http://autophys.<host>.tento.localhost)
 set -euo pipefail
 # The validation patterns below mean ASCII; in a UTF-8 locale bash's [A-Za-z]
 # also matches letters such as é, which would reach sed and systemd.
@@ -16,6 +17,19 @@ addr=${AUTOPHYS_ADDR:-127.0.0.1:4794}
 if ! [[ "$addr" =~ ^(127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|\[::1\]):[0-9]{1,5}$ ]]; then
   echo "deploy: refusing non-loopback address $addr" >&2; exit 2
 fi
+# The tento.localhost proxy serves the workbench from its own origin, so that
+# origin must be allowed to make keyless browser approvals (O-3a). It also
+# lands in the unit file through sed: accept only a plain http(s) origin.
+# AUTOPHYS_BROWSER_ORIGIN overrides it; set it empty to allow only loopback.
+if [ "${AUTOPHYS_BROWSER_ORIGIN+set}" = set ]; then
+  origin=$AUTOPHYS_BROWSER_ORIGIN
+else
+  origin="http://autophys.$(hostname -s | tr '[:upper:]' '[:lower:]').tento.localhost"
+fi
+if [ -n "$origin" ] && ! [[ "$origin" =~ ^https?://[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:[0-9]{1,5})?$ ]]; then
+  echo "deploy: refusing browser origin $origin (expected http(s)://host[:port], lowercase, no path)" >&2; exit 2
+fi
+origin_args=${origin:+ --browser-origin $origin}
 export PATH="$HOME/.deno/bin:$HOME/.cargo/bin:$PATH"
 # One build cache: the checkout's own (gitignored) target/, unless overridden.
 export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$repo/target}
@@ -67,6 +81,7 @@ mv -T "$release_root/.current.tmp" "$release_root/current"
 mkdir -p "$HOME/.local/state/autophys/logs" "$HOME/.config/systemd/user"
 unit=$HOME/.config/systemd/user/autophys.service
 sed -e "s|@RELEASE@|$release|g" -e "s|@ADDR@|$addr|g" -e "s|@COMMIT@|${commit:0:12}|g" \
+  -e "s|@ORIGIN_ARGS@|$origin_args|g" \
   "$repo/ops/systemd/autophys.service.in" > "$unit.tmp"
 mv "$unit.tmp" "$unit"
 systemctl --user daemon-reload
