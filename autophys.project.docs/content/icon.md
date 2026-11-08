@@ -3,10 +3,11 @@
 Current selection: R2 Response with the lower dot (operator, 2026-11-04).
 The plain mark is served as /brand.svg in the header. The first slide starts
 with its title: brand.ts removes its icon container before first paint.
-The favicon uses /favicon.svg, including the Lona family's white 32-unit tile,
-6-unit corner radius, fine border and soft shadow, inside a 44-unit canvas.
-Both are vector-only. The favicon has a local SVG filter; neither asset uses
-scripts, fonts, raster images or external references.
+The favicon uses /favicon.svg: the Lona family's white 32-unit tile with its
+6-unit corner radius and fine border, cropped to the tile (viewBox 0 0 32 32)
+with no shadow so it fills the browser tab (2026-11-08, matching the family
+favicon formula). Both are vector-only and use no filters, scripts, fonts,
+raster images or external references.
 
 Source: workspace lona-family-landings project, autophys/current/build.py.
 It retains response_lower/r2_lower_dot.svg and copies the existing Music icon's
@@ -15,7 +16,9 @@ copy current/mark.svg to html/routes/brand.svg and current/favicon.svg to
 html/routes/favicon.svg. These files are app-owned static resources.
 
 Mark SHA-256: e0e561f40ff80cf553b4418964aec2967ef8827af728f62d47cb95fdf7cef74c
-Favicon SHA-256: 93c26c889ee8d98b73e7f124ad35febb7513d01b32e21da9bce74fbf19496b45
+Favicon SHA-256: 849200011f8d484ce75b9dd26b6d9aacff92a315aa9d02deb9469f0d6c6ced6a
+(full tile, no shadow; design commit dc213d4fb on rwc-01 workspace; the earlier
+padded, shadowed favicon was 93c26c889ee8d98b73e7f124ad35febb7513d01b32e21da9bce74fbf19496b45)
 
 Validation: retained SVG hashes match the design source; all artwork is vector-only.
 The design build reproduces byte-identically and the favicon was inspected at
