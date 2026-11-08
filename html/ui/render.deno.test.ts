@@ -157,6 +157,14 @@ const proposal: DetailsModel = {
   decision: [{ name: "approve", label: "Approve", variant: "primary" }, { name: "reject", label: "Reject" }],
 };
 
+Deno.test("details: a local time's exact UTC value is the hover title on the status line and on a fact", () => {
+  const html = detailsMarkup({ icon: "proposal", title: "Sine force", status: { text: "Approved by ana · Nov 7 16:30 PST", tone: "ok", title: "2026-11-08 00:30 UTC" },
+    sections: [{ heading: "Data", blocks: [{ kind: "facts", rows: [{ label: "Uploaded", value: "Nov 7 16:30 PST", title: "2026-11-08 00:30 UTC" }] }] }] });
+  assertStringIncludes(html, `role="status" title="2026-11-08 00:30 UTC">Approved by ana · Nov 7 16:30 PST</p>`);
+  assertStringIncludes(html, `<span title="2026-11-08 00:30 UTC">Nov 7 16:30 PST</span>`);
+  assert(!detailsMarkup(proposal).includes(" title="), "no title attribute without one");
+});
+
 const classes = { name: "detail-name", status: "review-status", decision: "decision-actions", button: "workbench-button", primary: "primary" };
 
 Deno.test("details: header, sections and a decision row of exactly two direct buttons", () => {

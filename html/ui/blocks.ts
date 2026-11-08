@@ -5,6 +5,8 @@ import { buttonMarkup } from "./actions.ts";
 import type { Block, Tag } from "./view-model.ts";
 
 const tag = (t?: Tag) => (t ? ` <span class="ap-tag ap-t-${t.tone ?? "default"}">${esc(t.text)}</span>` : "");
+/** A ` title="…"` hover attribute, or nothing. */
+export const titleAttr = (t?: string) => (t ? ` title="${esc(t)}"` : "");
 const tone = (t?: string) => (t ? ` ap-t-${t}` : "");
 
 export function blockMarkup(b: Block): string {
@@ -12,7 +14,7 @@ export function blockMarkup(b: Block): string {
     case "pairing": return `<article class="ap-pairing" aria-label="Pair ${esc(b.device)}"><h5>${esc(b.device)}</h5><p class="ap-pair-client">${esc(b.client)}</p><code class="ap-pair-code">${esc(b.code)}</code><time class="ap-pair-expiry" datetime="${esc(b.expiry.at)}" title="${esc(b.expiry.at)}" data-ap-timeline="${esc(JSON.stringify(b.expiry.steps))}">${esc(b.expiry.steps[0]?.label ?? "")}</time><p class="ap-help">Compare this code with the SDK terminal before approving.</p><div class="ap-pair-actions">${b.decision.map((a) => `<span data-ap-action="${a.variant ?? "secondary"}">${buttonMarkup(a, {})}</span>`).join("")}</div></article>`;
     case "missing": return `<div class="ap-gap">${emptyMarkup(b.title, b.description)}</div>`;
     case "facts":
-      return `<dl class="ap-facts">${b.rows.map((r) => `<div><dt>${esc(r.label)}</dt><dd class="${tone(r.tone).trim()}">${r.value ? `<span>${esc(r.value)}</span>` : ""}${r.note ? ` <span class="ap-note">${esc(r.note)}</span>` : ""}${tag(r.tag)}</dd></div>`).join("")}</dl>`;
+      return `<dl class="ap-facts">${b.rows.map((r) => `<div><dt>${esc(r.label)}</dt><dd class="${tone(r.tone).trim()}">${r.value ? `<span${titleAttr(r.title)}>${esc(r.value)}</span>` : ""}${r.note ? ` <span class="ap-note">${esc(r.note)}</span>` : ""}${tag(r.tag)}</dd></div>`).join("")}</dl>`;
     case "table":
       return `<table class="ap-table"><tbody>${b.rows.map((r) => `<tr${r.dim ? ` class="ap-dim"` : r.strong ? ` class="ap-strong"` : ""}>${r.cells.map((c) =>
         `<td${c.end ? ` class="ap-end"` : ""}>${c.text ? esc(c.text) : ""}${c.unit ? ` <span class="ap-unit">${esc(c.unit)}</span>` : ""}${tag(c.tag)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;

@@ -141,8 +141,9 @@ export function devicesNode(waiting: number): TreeNode {
   return { id: "devices", label: "Devices", icon: "device", selectable: true, children: null, trail };
 }
 
-/** Fixture times mean today; daemon labels contain a month/day/time in UTC. */
-function recency(updated: string): number {
+/** Fixture times mean today; daemon records carry their exact UTC time beside the local label. */
+function recency({ updated, updatedUtc }: Investigation): number {
+  if (updatedUtc) return Date.parse(updatedUtc.replace(" UTC", "Z").replace(" ", "T")) || 0;
   if (updated === "now") return Infinity;
   const time = /^(\d{1,2}):(\d{2})$/.exec(updated);
   if (time) return Number.MAX_SAFE_INTEGER - 1440 + Number(time[1]) * 60 + Number(time[2]);
@@ -186,7 +187,7 @@ export function sidebarModel(s: State): SidebarModel {
       };
       const children = [
         config,
-        ...project.investigations.toSorted((a, b) => recency(b.updated) - recency(a.updated)).map((inv) => investigationNode(project, inv)),
+        ...project.investigations.toSorted((a, b) => recency(b) - recency(a)).map((inv) => investigationNode(project, inv)),
       ];
       if (!latest) {
         children.splice(1, 0, {

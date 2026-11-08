@@ -65,6 +65,8 @@ export type Measurement = {
   /** train is fitted; test is held out for validation. */
   split: "train" | "test";
   uploadedAt: string;
+  /** The exact UTC upload time behind the local `uploadedAt`, for its tooltip. */
+  uploadedAtUtc?: string;
   source: string;
   rate: number;
   t: number[];
@@ -168,6 +170,8 @@ export type Proposal = {
   status: "proposed" | "approved" | "rejected";
   decidedBy: string | null;
   decidedAt: string | null;
+  /** The exact UTC decision time behind the local `decidedAt`, for its tooltip. */
+  decidedAtUtc?: string | null;
   hypothesis: string;
   /** Ranking against the catalog's other candidates at `atFit`; the proposal's own row is recomputed on edit. */
   ranking: RankedCandidate[];
@@ -216,6 +220,8 @@ export type Investigation = {
   /** Agent steps while running. */
   progress: { done: number; total: number } | null;
   updated: string;
+  /** The exact UTC time behind the local `updated`, for its tooltip. */
+  updatedUtc?: string;
   budget: { steps: number; simulations: number; experiments: number };
   measurements: Measurement[];
   fits: Fit[];

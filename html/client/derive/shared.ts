@@ -164,14 +164,14 @@ export const proposalLabel = (p: Proposal) => {
 const trainCount = (inv: Investigation) => inv.measurements.filter((m) => m.split === "train").length;
 export const experimentsUsed = (inv: Investigation) => trainCount(inv) + awaiting(inv).length;
 
-export function statusText(inv: Investigation): { text: string; tone?: "ok" | "run" | "warn" } {
+export function statusText(inv: Investigation): { text: string; tone?: "ok" | "run" | "warn"; title?: string } {
   switch (stateOf(inv)) {
     case "awaiting-approval": return { text: `Awaiting approval · from ${inv.host}` };
     case "awaiting-data": return { text: `Waiting for data · ${inv.host}` };
     case "awaiting-agent": return { text: `Waiting for the agent's next step · ${inv.host}` };
     case "running": return { text: `Running · step ${inv.progress!.done} of ${inv.progress!.total} · ${inv.host}`, tone: "run" };
-    case "validated": return { text: `Validated${inv.validation.state === "passed" || inv.validation.state === "failed" ? ` ${pct(inv.validation.worst.relative)}` : ""} · ${inv.updated}`, tone: "ok" };
-    case "inconclusive": return { text: `Inconclusive · ${inv.updated}`, tone: "warn" };
+    case "validated": return { text: `Validated${inv.validation.state === "passed" || inv.validation.state === "failed" ? ` ${pct(inv.validation.worst.relative)}` : ""} · ${inv.updated}`, tone: "ok", title: inv.updatedUtc };
+    case "inconclusive": return { text: `Inconclusive · ${inv.updated}`, tone: "warn", title: inv.updatedUtc };
   }
 }
 

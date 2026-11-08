@@ -131,7 +131,7 @@ export type MainModel = {
 
 export type Tag = { text: string; tone?: Tone };
 
-export type Fact = { label: string; value: string; tone?: Tone; tag?: Tag; note?: string };
+export type Fact = { label: string; value: string; tone?: Tone; tag?: Tag; note?: string; /** Hover text for the value, e.g. its exact UTC time. */ title?: string };
 export type Cell = { text: string; unit?: string; tag?: Tag; end?: boolean };
 /** `strong` marks the row a table is about (the proposal among its candidates). */
 export type TableRow = { cells: Cell[]; dim?: boolean; strong?: boolean };
@@ -179,7 +179,8 @@ export type DetailsModel = {
   cardName?: boolean;
   /** Draw placeholder blocks instead of the header and sections (signed out, nothing to show). */
   placeholder?: boolean;
-  status: { text: string; tone?: Tone };
+  /** `title` is hover text, e.g. the exact UTC time behind a local one. */
+  status: { text: string; tone?: Tone; title?: string };
   sections: Section[];
   /** The decision row: exactly two buttons. */
   decision?: [Action, Action];

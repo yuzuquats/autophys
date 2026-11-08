@@ -36,7 +36,17 @@ import { ApiError, daemon, type Cursor, type DaemonOptions, type EventStream } f
 import { Controller } from "./controller.ts";
 import { fixtures } from "./fixtures/source.ts";
 import { Store } from "./store.ts";
-import type { WireRecord, WireWorkspace } from "./wire.ts";
+import { displayTime, when, whenUtc, type WireRecord, type WireWorkspace } from "./wire.ts";
+
+// Record times render in the viewer's zone; pin one so the expected strings hold on every host.
+displayTime.zone = "America/Los_Angeles";
+
+Deno.test("wire: record times read in local time with the zone, and keep the exact UTC value for a tooltip", () => {
+  const ts = Date.UTC(2026, 10, 8, 0, 30) / 1000;
+  assertEquals([when(ts), whenUtc(ts)], ["Nov 7 16:30 PST", "2026-11-08 00:30 UTC"]);
+  assertEquals(when(Date.UTC(2026, 6, 4, 19, 5) / 1000), "Jul 4 12:05 PDT");
+  assertEquals([when(NaN), whenUtc(NaN)], ["–", ""]);
+});
 
 const settle = () => new Promise((r) => setTimeout(r, 0));
 
@@ -131,7 +141,7 @@ Deno.test("daemon: load maps projects, config versions and every record kind ont
   assertEquals(c.catalog.map((e) => [e.id, e.label, e.maxRuns]), [["free_response", "Free response", 1], ["sine", "Sine", null]]);
   assertEquals(c.catalog[1].settings.find((s) => s.name === "frequency"), { name: "frequency", label: "frequency", unit: "", lo: 0.1, hi: 1, default: 0.4 });
   const inv = project.investigations[0];
-  assertEquals([inv.id, inv.name, inv.configVersion, inv.free, inv.seed, inv.updated], ["inv_1", "bench A", 1, ["m", "k"], 7, "Nov 4 10:07 UTC"]);
+  assertEquals([inv.id, inv.name, inv.configVersion, inv.free, inv.seed, inv.updated, inv.updatedUtc], ["inv_1", "bench A", 1, ["m", "k"], 7, "Nov 4 02:07 PST", "2026-11-04 10:07 UTC"]);
   assertEquals(inv.measurements.map((m) => [m.id, m.split, m.output.length]), [["free_response@1", "train", 5], ["free_response@2", "test", 3]]);
   assert(Number.isNaN(inv.measurements[0].output[2]), "a null sample is NaN");
   assertEquals(inv.measurements[0].rate, 2);

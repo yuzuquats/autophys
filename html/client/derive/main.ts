@@ -31,7 +31,7 @@ function acquisitionPanel(c: ProjectConfig, inv: Investigation, m: Measurement):
   return { title: "Acquisition", charts: [], blocks: [
     { kind: "facts", rows: [
       { label: "Experiment", value: spec.label + " · " + m.experiment }, ...settings,
-      { label: "Source", value: m.source || "not recorded" }, { label: "Uploaded", value: m.uploadedAt || "not recorded" },
+      { label: "Source", value: m.source || "not recorded" }, { label: "Uploaded", value: m.uploadedAt || "not recorded", title: m.uploadedAtUtc },
       { label: "Missing samples", value: String(missing), tone: missing ? "warn" : undefined },
       { label: m.sigmaSource === "declared" ? "Noise σ (declared)" : "Noise σ (est.)",
         value: Number.isFinite(m.sigmaEstimate) ? (sig(m.sigmaEstimate, 3) + " " + spec.output.unit).trim() : "not recorded" },

@@ -7,7 +7,7 @@ import { MarkupDiff } from "./render-diff.ts";
  */
 import { experimentDetailsMarkup, type ExperimentRows, isExperimentDetails } from "./details-experiment.ts";
 import { skeletonMarkup } from "./state-markup.ts";
-import { blockMarkup } from "./blocks.ts";
+import { blockMarkup, titleAttr } from "./blocks.ts";
 import { ICONS } from "./icons.ts";
 import { ATTR, escapeHtml as esc, intentOf, type IntentHandler } from "./intent.ts";
 import { buttonMarkup } from "./actions.ts";
@@ -22,7 +22,7 @@ export function detailsMarkup(model: DetailsModel, classes: DetailsClasses = {},
   const name = [classes.name ?? "", "ap-dname"].filter(Boolean).join(" ");
   const status = [classes.status ?? "", "ap-status", model.status.tone ? `ap-t-${model.status.tone}` : ""].filter(Boolean).join(" ");
   const card = model.cardName ? ` ${classes.cardNameAttribute ?? "data-card-name"}` : "";
-  let out = `<h3 class="${esc(name)}"${card}>${ICONS[model.icon]}<span>${esc(model.title)}</span></h3><p class="${esc(status)}" id="ap-status" role="status">${esc(model.status.text)}</p>`;
+  let out = `<h3 class="${esc(name)}"${card}>${ICONS[model.icon]}<span>${esc(model.title)}</span></h3><p class="${esc(status)}" id="ap-status" role="status"${titleAttr(model.status.title)}>${esc(model.status.text)}</p>`;
   for (const s of model.sections) out += `${s.heading ? `<h4 class="ap-sub">${esc(s.heading)}</h4>` : ""}${s.blocks.map(blockMarkup).join("")}`;
   if (model.decision) {
     const row = [classes.decision ?? "", "ap-decision"].filter(Boolean).join(" ");

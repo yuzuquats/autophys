@@ -31,13 +31,23 @@ const nums = (v: unknown): number[] => (Array.isArray(v) ? v.map(num) : []);
 const strs = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
 const numeric = (v: unknown): Record<string, number> => Object.fromEntries(Object.entries(obj(v)).filter(([, x]) => typeof x === "number")) as Record<string, number>;
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const two = (n: number) => String(n).padStart(2, "0");
-/** A record's epoch-seconds `ts` as "Nov 4 10:05 UTC". */
+/** The zone record times display in; undefined is the viewer's own. Tests pin it. */
+export const displayTime: { zone: string | undefined } = { zone: undefined };
+/** A record's epoch-seconds `ts` in local time, e.g. "Nov 7 16:30 PST". */
 export function when(ts: number): string {
   const d = new Date(ts * 1000);
   if (!Number.isFinite(d.getTime())) return "–";
-  return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()} ${two(d.getUTCHours())}:${two(d.getUTCMinutes())} UTC`;
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+    timeZone: displayTime.zone, month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZoneName: "short",
+  }).formatToParts(d).map((p) => [p.type, p.value]));
+  return `${parts.month} ${parts.day} ${parts.hour}:${parts.minute} ${parts.timeZoneName}`;
+}
+/** The exact UTC value behind `when`, for its tooltip: "2026-11-08 00:30 UTC". */
+export function whenUtc(ts: number): string {
+  const d = new Date(ts * 1000);
+  if (!Number.isFinite(d.getTime())) return "";
+  return `${d.getUTCFullYear()}-${two(d.getUTCMonth() + 1)}-${two(d.getUTCDate())} ${two(d.getUTCHours())}:${two(d.getUTCMinutes())} UTC`;
 }
 
 /** "free_response" → "Free response". */
@@ -188,7 +198,7 @@ export function mapInvestigation(records: WireRecord[], configs: { version: stri
       measurementIds.set(r.id, { id: `${experiment}@${n}`, channel });
       measurements.push({
         id: `${experiment}@${n}`, experiment: experiment as ExperimentKind, settings: numeric(o.settings),
-        split: o.split === "train" ? "train" : "test", uploadedAt: when(r.ts), source: str(o.source) || host,
+        split: o.split === "train" ? "train" : "test", uploadedAt: when(r.ts), uploadedAtUtc: whenUtc(r.ts), source: str(o.source) || host,
         inputRecorded: false, sigmaSource: "declared",
         rate: t.length > 1 ? (t.length - 1) / (t[t.length - 1] - t[0]) : NaN, t, input: null, output: nums(ys[channel]),
         sigmaEstimate: num(obj(o.sigma)[channel]),
@@ -278,7 +288,7 @@ export function mapInvestigation(records: WireRecord[], configs: { version: stri
     experiments,
     inv: {
       id: head.investigation, name: str(meta.title) || head.investigation, projectId: str(meta.project_id), configVersion: at + 1, free, host,
-      seed: Number.isFinite(num(meta.seed)) ? num(meta.seed) : NaN, state, progress: null, updated: when(last.ts),
+      seed: Number.isFinite(num(meta.seed)) ? num(meta.seed) : NaN, state, progress: null, updated: when(last.ts), updatedUtc: whenUtc(last.ts),
       budget: { steps, simulations, experiments: measurements.length },
       measurements, fits, proposals: [...proposals.values()].map((x) => x.proposal), validation, ...(reveal ? { reveal } : {}),
     },
@@ -320,6 +330,7 @@ function decided(raw: Raw, event: string, p: Obj, ts: number): void {
     prop.status = event === "rejected" || event === "withdrawn" ? "rejected" : "approved";
     prop.decidedBy = event === "withdrawn" ? "the SDK (withdrawn)" : str(p.by) || "someone";
     prop.decidedAt = when(ts);
+    prop.decidedAtUtc = whenUtc(ts);
   }
   if (event === "edited") {
     raw.settings = obj(p.settings);

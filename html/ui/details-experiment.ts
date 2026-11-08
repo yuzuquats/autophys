@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 /** Shared investigation and experiment card presentation; domain state stays in derivation. */
-import { blockMarkup } from "./blocks.ts";
+import { blockMarkup, titleAttr } from "./blocks.ts";
 import { buttonMarkup } from "./actions.ts";
 import { ICONS } from "./icons.ts";
 import { escapeHtml as esc } from "./intent.ts";
@@ -34,7 +34,7 @@ function reviewIcon(state: ExperimentHeader["state"]): string {
 function headerMarkup(model: ExperimentDetailsModel, name: string, status: string, classes: DetailsClasses): string {
   const h = model.experiment.header;
   const title = `<h3 id="ap-experiment-name" class="${esc(name)}" ${classes.cardNameAttribute ?? "data-card-name"}>${!h ? ICONS[model.icon] : ""}<span>${esc(model.title)}</span></h3>`;
-  if (!h) return `${title}<p class="ap-experiment-source" id="ap-experiment-source">${esc(model.experiment.caption)}</p><p class="${esc(status)}" id="ap-status" role="status">${esc(model.status.text)}</p>`;
+  if (!h) return `${title}<p class="ap-experiment-source" id="ap-experiment-source">${esc(model.experiment.caption)}</p><p class="${esc(status)}" id="ap-status" role="status"${titleAttr(model.status.title)}>${esc(model.status.text)}</p>`;
   const location = h.proposal
     ? `<li>${recordLink(h.investigation)}</li><li><span class="ap-experiment-separator" aria-hidden="true">›</span><span aria-current="page">${esc(h.proposal)}</span></li>`
     : `<li>${esc(h.project ?? h.investigation.label)}</li><li><span class="ap-experiment-separator" aria-hidden="true">›</span><span aria-current="page">Investigation</span></li>`;
@@ -80,7 +80,7 @@ export function experimentDetailsMarkup(model: ExperimentDetailsModel, classes: 
   }).join("");
   const provenance = model.footnote ? disclosure("provenance", "Provenance", `<p class="ap-footnote">${esc(model.footnote)}</p>`, rows) : "";
   const decision = model.decision ? `<div class="${esc([classes.decision ?? "", "ap-decision"].filter(Boolean).join(" "))}">${model.decision.map(a => buttonMarkup(a, classes)).join("")}</div>` : "";
-  const receipt = model.experiment.header && model.experiment.header.state !== "pending" ? `<p class="ap-experiment-receipt" id="ap-status" role="status">${esc(model.status.text)}</p>` : "";
+  const receipt = model.experiment.header && model.experiment.header.state !== "pending" ? `<p class="ap-experiment-receipt" id="ap-status" role="status"${titleAttr(model.status.title)}>${esc(model.status.text)}</p>` : "";
   const actions = model.actions?.length ? `<div class="ap-actions${model.actions.length === 1 ? " ap-one" : ""}">${model.actions.map(a => buttonMarkup(a, classes)).join("")}</div>` : "";
   return `<section class="ap-experiment-card" data-ap-experiment-key="${esc(model.experiment.key)}" aria-labelledby="ap-experiment-name">
     <std-round floating bg="var(--bg,#fff)" border="var(--ap-line)" radius="12"></std-round>

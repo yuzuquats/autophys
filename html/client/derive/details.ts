@@ -237,8 +237,8 @@ function proposalDetails(s: State, project: Project, inv: Investigation, p: Prop
   }
   const sourceFit = inv.fits.find(f => f.n === p.atFit);
   const status = p.status === "proposed" ? { text: invalid ? "Awaiting approval · invalid settings" : unedited ? "Awaiting approval" : "Awaiting approval · edited" }
-    : p.status === "approved" ? { text: `Approved by ${p.decidedBy} · ${p.decidedAt}${changed.length ? ` · edited (was ${changed.map((f) => sig(f.original, 3)).join(", ")})` : ""}`, tone: "ok" as const }
-    : { text: `Rejected by ${p.decidedBy} · ${p.decidedAt}`, tone: "muted" as const };
+    : p.status === "approved" ? { text: `Approved by ${p.decidedBy} · ${p.decidedAt}${changed.length ? ` · edited (was ${changed.map((f) => sig(f.original, 3)).join(", ")})` : ""}`, tone: "ok" as const, title: p.decidedAtUtc ?? undefined }
+    : { text: `Rejected by ${p.decidedBy} · ${p.decidedAt}`, tone: "muted" as const, title: p.decidedAtUtc ?? undefined };
   return {
     icon: "proposal", title: spec.label, cardName: true, status, sections,
     experiment: {
