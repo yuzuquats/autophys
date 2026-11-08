@@ -179,7 +179,7 @@ Intermediate uploads may coalesce; the latest committed upload wins.
 | `proposal` | `proposal_id` a valid id; `event` one of `proposed approved edited rejected withdrawn data_attached` |
 | `proposed` | `experiment` non-empty string; `settings` absent, null or an object; `outlook`, when present: `axes` an array of at most 3 `{name, values}` with non-empty finite number arrays, `score` and every `after[param]` finite arrays with the product of the axis lengths |
 | `edited` | `settings` an object |
-| `data_attached` | `measurement_version` present and not null |
+| `data_attached` | `measurement_version` present and not null. Both SDKs write the measurement record's hash (a string, filled through `hash_of`; RR1-b); Python before RR1-b wrote the dataset version integer, and readers accept both |
 
 Booleans are not numbers.
 

@@ -136,8 +136,14 @@ again.
 event in one batch whose record ids derive from the investigation, the
 proposal and the kind only, as Rust's do: a retry after a lost response
 replays the pair, and different data for the same proposal is
-`idempotency_conflict`. `append_batch` items are `(kind, payload)` or
-`(kind, payload, record_id)`; only records given ids are safe to retry.
+`idempotency_conflict`. The event's `measurement_version` is the
+measurement record's hash, as Rust writes it (RR1-b); events written by
+earlier Python releases hold the dataset version integer instead, and
+readers accept both. `append_batch` items are `(kind, payload)`,
+`(kind, payload, record_id)` or `(kind, payload, record_id, hash_of)`, where
+`hash_of` (`{field: index}`) fills a payload field with the hash of an
+earlier record of the batch, in every store; only records given ids are
+safe to retry.
 
 | Call | What it does |
 | --- | --- |

@@ -478,9 +478,9 @@ class Investigation:
         if not any("cost_hours" in lim for lim in self.project.catalog.values()):
             return 0.0
         # Attached observations may have a lab-specific name. Resolve those
-        # from the proposal/measurement-version linkage. Python records the
-        # dataset position as measurement_version; Rust records the
-        # measurement record's hash, so look both up.
+        # from the proposal/measurement-version linkage. Both SDKs record the
+        # measurement record's hash as measurement_version (RR1-b); Python
+        # before RR1-b recorded the dataset position, so look both up.
         proposals, attached = {}, {}
         for record in self.records("proposal"):
             p = record.payload
@@ -855,9 +855,10 @@ class Investigation:
         pending_dataset = Dataset([*self.dataset, observation])
         measurement = {"version": pending_dataset.version, "digest": pending_dataset.digest(),
                        "observation": observation.to_dict()}
-        attached = {"proposal_id": proposal_id, "event": "data_attached", "measurement_version": pending_dataset.version,
-                    "digest": observation.digest()}
-        items = [("measurement", measurement), ("proposal", attached)]
+        # measurement_version is the measurement record's hash, filled by the
+        # store from the batch's first record (RR1-b, as Rust's attach_data).
+        attached = {"proposal_id": proposal_id, "event": "data_attached", "digest": observation.digest()}
+        items = [("measurement", measurement), ("proposal", attached, None, {"measurement_version": 0})]
         from .http import HttpStore
         if isinstance(self.store, HttpStore):
             self.store.attach_data(self.id, proposal_id, measurement, attached)

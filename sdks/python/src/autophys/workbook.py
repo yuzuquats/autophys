@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from ._text import rust_trim
-from .store import _clean, GENESIS, Record, Store, StoreError, batch_items, canonical, chain_hash
+from .store import _clean, GENESIS, Record, Store, StoreError, batch_items, canonical, chain_hash, with_batch_hashes
 
 #: ``PRAGMA application_id`` of a workbook: ASCII ``APWB``.
 APPLICATION_ID = 0x41505742
@@ -757,12 +757,19 @@ class WorkbookStore(Store):
     def append_batch(self, investigation: str, items: list[tuple]) -> list[Record]:
         """Append the records in one ``BEGIN IMMEDIATE`` transaction: all or none.
 
-        Items are ``(kind, payload)`` or ``(kind, payload, record_id)``, as
-        for :meth:`Store.append_batch`.
+        Items are ``(kind, payload)``, ``(kind, payload, record_id)`` or
+        ``(kind, payload, record_id, hash_of)``, as for
+        :meth:`Store.append_batch`. A ``hash_of`` field is filled inside the
+        transaction, from the earlier record's stored hash, before the
+        record is checked.
         """
-        prepared = [(kind, *append_payload(kind, payload, rid)) for kind, payload, rid in batch_items(items)]
+        items = batch_items(items)
         with self._tx() as c:
-            return [self._append_tx(c, investigation, kind, rid, payload, text) for kind, rid, payload, text in prepared]
+            out: list[Record] = []
+            for kind, payload, rid, hash_of in items:
+                item = append_payload(kind, with_batch_hashes(payload, hash_of, out), rid)
+                out.append(self._append_tx(c, investigation, kind, *item))
+            return out
 
     def _append_tx(self, c: sqlite3.Connection, investigation: str, kind: str, rid: str, payload: Any, text: str) -> Record:
         row = c.execute(f"SELECT {_COLUMNS} FROM records WHERE id = ?", (rid,)).fetchone()

@@ -508,8 +508,10 @@ class HttpStore(Store):
         return _to_record(j["record"])
 
     def append_batch(self, investigation: str, items: list[tuple]) -> list[Record]:
-        """Append ``(kind, payload)`` or ``(kind, payload, record_id)`` records
-        all or none (``POST …/records``).
+        """Append ``(kind, payload)``, ``(kind, payload, record_id)`` or
+        ``(kind, payload, record_id, hash_of)`` records all or none
+        (``POST …/records``); ``hash_of`` is sent as the envelope's
+        ``hash_of`` and the daemon fills those fields.
 
         The daemon replays a record whose id it already holds with the same
         content, so a batch retried with the same ids after a lost response
@@ -519,8 +521,8 @@ class HttpStore(Store):
         route raises :class:`HttpError` and nothing is written one record at
         a time.
         """
-        return self._batch(investigation, [(uuid.uuid4().hex if rid is None else rid, kind, payload)
-                                           for kind, payload, rid in batch_items(items)])
+        return self._batch(investigation, [(uuid.uuid4().hex if rid is None else rid, kind, payload, hash_of)
+                                           for kind, payload, rid, hash_of in batch_items(items)])
 
     def attach_data(self, investigation: str, proposal_id: str, measurement: dict, attached: dict) -> Record:
         """Commit the measurement and its ``data_attached`` event in one batch.
@@ -532,15 +534,23 @@ class HttpStore(Store):
         ``idempotency_conflict``, whichever SDK attached first. A daemon
         without the batch route (before CORE-01) raises :class:`HttpError`;
         there is no fallback to two separate appends.
+
+        The event's ``measurement_version`` is the measurement record's
+        hash, filled by the daemon through ``hash_of`` as Rust's
+        ``attach_data`` sends it (RR1-b); a ``measurement_version`` in
+        ``attached`` is replaced.
         """
+        attached = {k: v for k, v in attached.items() if k != "measurement_version"}
         records = self.append_batch(investigation, [
             ("measurement", measurement, attach_record_id(investigation, proposal_id, "measurement")),
-            ("proposal", attached, attach_record_id(investigation, proposal_id, "proposal"))])
+            ("proposal", attached, attach_record_id(investigation, proposal_id, "proposal"),
+             {"measurement_version": 0})])
         return records[-1]
 
-    def _batch(self, investigation: str, items: list[tuple[str, str, dict]]) -> list[Record]:
+    def _batch(self, investigation: str, items: list[tuple[str, str, dict, dict]]) -> list[Record]:
         from .workbook import canonical_payload
-        body = {"records": [{"id": rid, "kind": kind, "payload": canonical_payload(payload)[0]} for rid, kind, payload in items]}
+        body = {"records": [{"id": rid, "kind": kind, "payload": canonical_payload(payload)[0],
+                             **({"hash_of": hash_of} if hash_of else {})} for rid, kind, payload, hash_of in items]}
         try:
             out = self._req("POST", f"/investigations/{urllib.parse.quote(investigation, safe='')}/records", body)
         except HttpError as error:

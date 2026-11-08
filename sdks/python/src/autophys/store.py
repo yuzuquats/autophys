@@ -105,17 +105,43 @@ class StoreError(RuntimeError):
     pass
 
 
-def batch_items(items) -> list[tuple[str, Any, str | None]]:
-    """Normalise ``append_batch`` items to ``(kind, payload, record_id or None)``."""
+def batch_items(items) -> list[tuple[str, Any, str | None, dict]]:
+    """Normalise ``append_batch`` items to ``(kind, payload, record_id or None, hash_of)``.
+
+    An item is ``(kind, payload)``, ``(kind, payload, record_id)`` or
+    ``(kind, payload, record_id, hash_of)``. ``hash_of`` maps a top-level
+    payload field to the index of an earlier record of the same batch; the
+    store fills the field with that record's hash before checking the
+    record (:func:`with_batch_hashes`), as the daemon's batch route and Rust's
+    ``BatchRecord::hash_of`` do. Its index must name an earlier record and
+    its field must not also be in the payload.
+    """
     out = []
-    for item in items:
-        if len(item) == 2:
-            out.append((item[0], item[1], None))
-        elif len(item) == 3:
-            out.append(tuple(item))
-        else:
-            raise StoreError("append_batch items are (kind, payload) or (kind, payload, record_id)")
+    for i, item in enumerate(items):
+        if len(item) not in (2, 3, 4):
+            raise StoreError("append_batch items are (kind, payload), (kind, payload, record_id)"
+                             " or (kind, payload, record_id, hash_of)")
+        kind, payload, rid, hash_of = (*item, None, None)[:4]
+        hash_of = {} if hash_of is None else hash_of
+        if not isinstance(hash_of, dict):
+            raise StoreError(f"records[{i}].hash_of must be an object")
+        for field, j in hash_of.items():
+            if type(j) is not int or not 0 <= j < i:
+                raise StoreError(f"records[{i}].hash_of.{field} must name an earlier record of the batch")
+            if not isinstance(payload, dict):
+                raise StoreError(f"records[{i}].payload must be an object")
+            if field in payload:
+                raise StoreError(f"records[{i}].hash_of.{field}: the field is also in the payload")
+        out.append((kind, payload, rid, hash_of))
     return out
+
+
+def with_batch_hashes(payload: Any, hash_of: dict, done: list["Record"]) -> Any:
+    """``payload`` with each ``hash_of`` field set to the hash of batch record
+    ``done[index]`` (the record written or replayed for that item)."""
+    if not hash_of:
+        return payload
+    return {**payload, **{field: done[j].hash for field, j in hash_of.items()}}
 
 
 def config_hash(config: dict) -> str:
@@ -154,18 +180,24 @@ class Store(ABC):
     def append(self, investigation: str, kind: str, payload: dict, *, record_id: str | None = None) -> Record: ...
 
     def append_batch(self, investigation: str, items: list[tuple]) -> list[Record]:
-        """Append ``(kind, payload)`` or ``(kind, payload, record_id)`` records in order,
-        all or none where the store can.
+        """Append ``(kind, payload)``, ``(kind, payload, record_id)`` or
+        ``(kind, payload, record_id, hash_of)`` records in order, all or none
+        where the store can.
 
         ``record_id`` is the record's idempotency key, as for :meth:`append`;
         ``None`` or a missing id gets a new random id. A caller that may
         retry a batch (over HTTP, after a lost response) must pass ids, or
-        the retry appends the records again. Local stores commit the batch
+        the retry appends the records again. ``hash_of`` (``{field: index}``)
+        fills payload fields with the hash of an earlier record of the batch
+        (:func:`batch_items`); ``attach_data`` links its ``data_attached``
+        event to its measurement this way. Local stores commit the batch
         together (WorkbookStore in one transaction) and HttpStore posts it to
         the daemon's batch route; this default appends one at a time.
         """
-        return [self.append(investigation, kind, payload, record_id=rid)
-                for kind, payload, rid in batch_items(items)]
+        out: list[Record] = []
+        for kind, payload, rid, hash_of in batch_items(items):
+            out.append(self.append(investigation, kind, with_batch_hashes(payload, hash_of, out), record_id=rid))
+        return out
 
     @abstractmethod
     def records(self, investigation: str, kind: str | None = None) -> list[Record]: ...
@@ -307,7 +339,10 @@ class MemoryStore(Store):
         with self._lock:
             n = len(self._logs.get(investigation, ()))
             try:
-                return [self._append_locked(investigation, kind, payload, rid) for kind, payload, rid in batch_items(items)]
+                out: list[Record] = []
+                for kind, payload, rid, hash_of in batch_items(items):
+                    out.append(self._append_locked(investigation, kind, with_batch_hashes(payload, hash_of, out), rid))
+                return out
             except BaseException:
                 if investigation in self._logs:
                     del self._logs[investigation][n:]
@@ -454,7 +489,7 @@ class JsonlStore(Store):
             return inv
 
     def append(self, investigation, kind, payload, *, record_id=None) -> Record:
-        return self._append_many(investigation, [(kind, payload, record_id)])[0]
+        return self._append_many(investigation, [(kind, payload, record_id, {})])[0]
 
     def append_batch(self, investigation, items):
         return self._append_many(investigation, batch_items(items))
@@ -467,7 +502,8 @@ class JsonlStore(Store):
             existing = self.records(investigation)
             out: list[Record] = []
             new: list[Record] = []
-            for kind, payload, record_id in items:
+            for kind, payload, record_id, hash_of in items:
+                payload = with_batch_hashes(payload, hash_of, out)
                 rid, payload, replay = self._prepare_append(investigation, kind, payload, record_id, new)
                 if replay is not None:
                     out.append(replay)
