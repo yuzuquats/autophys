@@ -122,3 +122,26 @@ two new tests are the trajectory unit tests). `autophys new --lang rust`
 for `blank` and `battery-fit`, pinned to `b4dfc6e` through a `file://`
 SDK repo, builds in release; both run, and `battery-fit --demo` writes a
 `demo.csv` byte-identical to the shipped one.
+
+### UI-27: done
+
+`517d8a2` (`Ie4f804d3ea81ab924611f3d5cefc1bc9`) and `88959b3`
+(`I3babbef47e5b61f8fedbdc0df2ea9a62`). New project is the operator-chosen
+SDK stepper: create with `autophys new my-project --lang python|rust`,
+connect with `autophys connect <page origin> --name my-device` and approve
+the device from its pending card in the step (approval advances), then run
+the program; the first investigation opens when it appears. The Thermal RC
+wizard, its model, styles, client `projects` calls and tests are gone; the
+empty workspace, walkthrough and Docs point at the SDK flow;
+`src/http/workbench.rs` is untouched. Agent-chosen details UI-27-a..e
+(runnable placeholder names, removing the thermal "Start simulated
+investigation" action, completion rule, workspace re-read while open, native
+toggle buttons) are in `ui.md`, pending operator review. `decisions.md`
+still marks UI-27 "not implemented".
+
+Tests: `deno test --allow-read --config html/deno.json html/` 138 passed,
+0 failed; `deno check` clean; `autophys build-web` ok.
+`tests/e2e/sidebar-flow.ts` 46 checks, no browser errors, against scratch
+daemons 47971/47972 with real `autophys connect` devices (one denied, one
+approved per run) and `seed.py --connected`; screenshots in
+`yuzuquats:~/.cache/autophys/ui27-20261108T104915Z/shots/`.
