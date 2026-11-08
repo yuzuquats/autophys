@@ -167,6 +167,15 @@ store.md's AX-8 to AX-17 callouts still read "pending operator review"; they wer
 The per-page "agent-chosen, pending operator review" wording for every id
 above is stale; this register is authoritative.
 
+### Sub-questions settled (operator, 2026-11-08, third `/open-questions` pass)
+
+| Id | Decision | Facts it rests on |
+| --- | --- | --- |
+| DM-D1a | **A workbook becomes format 2 when its first display is written**, not on open; v2 means the display table exists, and display-less workbooks stay format 1 and readable by SDK 0.1.x (agent recommended) | Rust and the daemon migrate on every writable open (`sdks/rust/src/schema.rs`), so upgrade-on-open would convert a whole collection as soon as a new `autophys serve` touched it; Python has no migration step yet and needs one either way |
+| DM-RS-1a | **A serialised Rust `Trajectory` is `{"y": {...}, "u": {...}}`**, the worker protocol v1 shape (agent recommended) | no record or hash serialises a `Trajectory`: fit curves (`curves.rs`) and the worker protocol (`worker.rs`) build their JSON explicitly; the serde shape is public API only |
+| RS-REMOTE-1a | **One async transport plus a thin blocking facade** (`autophys::blocking`, like `reqwest::blocking`); the CLI, the investigation loop and scripts use the facade (agent recommended) | every current caller (CLI commands, investigation loop, simulator and fit traits) is synchronous |
+| CORE-01a | **Remove the old attachment route**; only the batch endpoint remains. Agent recommended keeping a deprecated alias | v0.1.0 to v0.1.2 call `POST /investigations/{inv}/proposals/{pid}/attachment` with no fallback, so they cannot attach data against a daemon without it and must upgrade |
+
 ### Implementation follow-ups from this review (not started)
 
 DM-D1 (format 2; settle DM-D1a first), CORE-01 (generic batch API; CORE-01a),
