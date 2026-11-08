@@ -43,7 +43,7 @@ from .playbook import Playbook, load_playbook
 from .usage import normalize_usage, price_for, usage_total
 from .sensitivity import SensitivityReport, identification, jacobian, report_from_jacobian
 from .project import Project, policy_from_config
-from .simulator import CallBudget, SimulationBudgetExceeded, SimulationError, Simulator
+from .simulator import CallBudget, SimulationBudgetExceeded, SimulationError, Simulator, aligned_prediction, describe_observation
 from .store import MemoryStore, Store, StoreError
 
 LOSSES = ("linear", "soft_l1", "huber", "cauchy", "arctan")
@@ -786,13 +786,13 @@ class Investigation:
             self.validation = {"available": False, "passed": False}
         else:
             chi2, sq, cnt = 0.0, 0.0, 0
-            for o in val:
+            for i, o in enumerate(val):
                 if o.n_samples == 0:
                     continue
                 pred = self.sim(r.params, o.settings)
                 for ch, y in o.y.items():
                     m = np.isfinite(y)
-                    d = y[m] - pred[ch][m]
+                    d = y[m] - aligned_prediction(pred, o, ch, describe_observation(o, i, len(val)))[m]
                     chi2 += float(np.sum((d / o.sigma[ch]) ** 2))
                     sq += float(np.sum(d**2))
                     cnt += int(m.sum())

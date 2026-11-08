@@ -19,7 +19,7 @@ from scipy.optimize import least_squares
 from scipy.stats import qmc
 
 from .data import Observation
-from .simulator import FIT_OPTIONS, SimOptions, SimulationError, Simulator
+from .simulator import FIT_OPTIONS, SimOptions, SimulationError, Simulator, aligned_prediction, describe_observation
 
 #: Residual assigned to every sample when the simulator fails at a trial point.
 FAILED_RESIDUAL = 1e6
@@ -35,13 +35,12 @@ def residuals(
     for obs in observations:
         obs.validate()
     parts = []
-    for obs in observations:
+    for i, obs in enumerate(observations):
         pred = sim(params, obs.settings, options=options)
         for ch, y in obs.y.items():
             m = np.isfinite(y)
-            if pred[ch].shape != y.shape:
-                raise SimulationError(f"prediction for {obs.experiment}/{ch} does not match its time grid")
-            parts.append((y[m] - pred[ch][m]) / obs.sigma[ch])
+            f = aligned_prediction(pred, obs, ch, describe_observation(obs, i, len(observations)))
+            parts.append((y[m] - f[m]) / obs.sigma[ch])
     return np.concatenate(parts) if parts else np.zeros(0)
 
 

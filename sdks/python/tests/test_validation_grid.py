@@ -1,0 +1,76 @@
+"""G8: a held-out observation reusing the train settings grid gets a named error.
+
+The simulator predicts on the settings' grid; the observation carries its own
+``t``. validate_predictions used to combine the two with boolean masks and die
+with an IndexError after fitting and recording had succeeded. The SDK cannot
+know which setting is a model's grid, so it never re-predicts on ``t``.
+"""
+import numpy as np
+import pytest
+
+import autophys as ap
+from autophys.agent import Investigation, ProposalRunner, ScriptedPolicy
+from autophys.fit import residuals
+from autophys.project import Budgets, Project
+from autophys.simulator import GridMismatchError, SimulationError
+from autophys.store import MemoryStore
+
+GRID = [0.02, 0.06, 0.11, 0.22, 0.56, 1.1]
+TRUTH = {"v": 200.0, "k": 0.06}
+
+
+@ap.simulator(params={"v": ("rate", 10.0, 500.0), "k": ("conc", 0.005, 1.0)},
+              experiments={"treated": {"kind": "measured", "t": GRID}}, outputs=("rate",))
+def kinetics(params, experiment):
+    t = np.asarray(experiment["t"], dtype=float)
+    return {"t": t, "rate": params["v"] * t / (params["k"] + t)}
+
+
+def _obs(settings, t, split):
+    t = np.asarray(t, dtype=float)
+    return ap.Observation("treated", settings, t, {"rate": TRUTH["v"] * t / (TRUTH["k"] + t)},
+                          {"rate": 1.0}, split=split)
+
+
+def _investigation(validation):
+    train = _obs(kinetics.experiment("treated"), GRID, "train")
+    project = Project(name="kinetics", simulator=kinetics, budgets=Budgets(max_experiments=0))
+    return Investigation(project, ap.Dataset([train, validation]), ProposalRunner(),
+                         policy=ScriptedPolicy(), store=MemoryStore())
+
+
+MESSAGE = ("validation observation 1 of 1 (experiment 'treated'): the prediction for 'rate' has 6 samples "
+           "but the observation has 2; give this observation settings whose grid matches its own samples "
+           "(e.g. its own 't')")
+
+
+def test_validation_reusing_train_settings_names_the_observation():
+    inv = _investigation(_obs(kinetics.experiment("treated"), [1.1, 1.1], "validation"))
+    inv.tool_optimize_parameters()
+    with pytest.raises(GridMismatchError) as e:
+        inv.tool_validate_predictions()
+    assert str(e.value) == MESSAGE
+
+
+def test_scripted_run_stops_with_the_named_error_not_an_index_error():
+    inv = _investigation(_obs(kinetics.experiment("treated"), [1.1, 1.1], "validation"))
+    with pytest.raises(GridMismatchError, match=r"validation observation 1 of 1 \(experiment 'treated'\)"):
+        inv.run()
+
+
+def test_validation_with_its_own_grid_is_scored():
+    own = {"kind": "measured", "t": [1.1, 1.1]}
+    inv = _investigation(_obs(own, [1.1, 1.1], "validation"))
+    inv.tool_optimize_parameters()
+    out = inv.tool_validate_predictions()
+    assert out["available"] and out["n"] == 2 and out["passed"]
+
+
+def test_training_residuals_name_the_misaligned_observation():
+    good = _obs(kinetics.experiment("treated"), GRID, "train")
+    bad = _obs(kinetics.experiment("treated"), [0.5, 1.0, 2.0], "train")
+    with pytest.raises(GridMismatchError, match=r"^train observation 2 of 2 \(experiment 'treated'\): "
+                                                r"the prediction for 'rate' has 6 samples but the observation has 3"):
+        residuals(kinetics, TRUTH, [good, bad])
+    # Still a SimulationError: a fit treats it as a failed trial point, as before.
+    assert issubclass(GridMismatchError, SimulationError)

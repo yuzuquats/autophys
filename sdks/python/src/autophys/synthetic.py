@@ -26,7 +26,7 @@ from typing import Any, Callable, Mapping
 import numpy as np
 
 from .data import Dataset, Observation
-from .simulator import TRUTH_OPTIONS, Simulator
+from .simulator import TRUTH_OPTIONS, Simulator, aligned_prediction, describe_observation
 
 
 @dataclass(frozen=True)
@@ -136,11 +136,12 @@ class Evaluator:
     def test_rmse(self, sim: Simulator, estimate: Mapping[str, float]) -> float:
         """RMSE against the noisy held-out test observations (≈ sigma for a perfect model)."""
         sq, n = 0.0, 0
-        for obs in self.test:
+        for i, obs in enumerate(self.test):
             pred = sim({k: estimate[k] for k in sim.params}, obs.settings, count=False)
             for ch, y in obs.y.items():
                 m = np.isfinite(y)
-                sq += float(np.sum((y[m] - pred[ch][m]) ** 2))
+                f = aligned_prediction(pred, obs, ch, describe_observation(obs, i, len(self.test)))
+                sq += float(np.sum((y[m] - f[m]) ** 2))
                 n += int(m.sum())
         return float(np.sqrt(sq / max(n, 1)))
 

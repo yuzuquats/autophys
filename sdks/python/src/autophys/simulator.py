@@ -41,6 +41,29 @@ class SimulationError(RuntimeError):
     """The simulator failed or returned an unusable result."""
 
 
+class GridMismatchError(SimulationError):
+    """A prediction is not on an observation's own samples: the settings it
+    was simulated from describe a different grid than the observation's ``t``.
+    The SDK cannot tell which setting is the grid, so it never re-predicts."""
+
+
+def describe_observation(obs, index: int, count: int) -> str:
+    """``validation observation 2 of 3 (experiment 'treated')``; ``index`` is 0-based."""
+    return f"{obs.split} observation {index + 1} of {count} (experiment {obs.experiment!r})"
+
+
+def aligned_prediction(pred: Mapping[str, Any], obs, channel: str, where: str) -> np.ndarray:
+    """``pred[channel]``, checked to have one value per sample of ``obs`` before
+    any sample mask is applied; ``where`` names the observation."""
+    p = np.asarray(pred[channel])
+    if p.shape != obs.y[channel].shape:
+        raise GridMismatchError(
+            f"{where}: the prediction for {channel!r} has {p.size} samples but the observation has "
+            f"{obs.y[channel].size}; give this observation settings whose grid matches its own "
+            f"samples (e.g. its own 't')")
+    return p
+
+
 class BoundsError(ValueError):
     """A parameter is missing, unknown, or outside its declared bounds."""
 
