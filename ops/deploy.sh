@@ -5,6 +5,9 @@
 # The service never runs from the checkout or a build directory.
 # Usage: ops/deploy.sh   (AUTOPHYS_ADDR overrides 127.0.0.1:4794)
 set -euo pipefail
+# The validation patterns below mean ASCII; in a UTF-8 locale bash's [A-Za-z]
+# also matches letters such as é, which would reach sed and systemd.
+export LC_ALL=C
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
 addr=${AUTOPHYS_ADDR:-127.0.0.1:4794}
