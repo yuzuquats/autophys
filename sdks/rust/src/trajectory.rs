@@ -129,20 +129,6 @@ fn lookup<'a>(map: &'a Channels, role: ChannelRole, name: &str) -> Result<&'a [f
         })
 }
 
-/// `traj["voltage"]`: an output channel, panicking with the channel's name
-/// when it is missing. Use [`Trajectory::output`] for a `Result`. Kept so
-/// the source-hashed built-in models (whose tests index their results) stay
-/// byte-identical; there is deliberately no input or mutable indexing.
-impl std::ops::Index<&str> for Trajectory {
-    type Output = [f64];
-    fn index(&self, name: &str) -> &[f64] {
-        match self.output(name) {
-            Ok(v) => v,
-            Err(e) => panic!("{e}"),
-        }
-    }
-}
-
 /// Outputs only (the time vector under `"t"`); a simulator that builds its
 /// own map returns `map.into()`.
 impl From<Channels> for Trajectory {

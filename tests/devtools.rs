@@ -628,7 +628,7 @@ fn write_csv(path: &Path, experiment: &str) {
         .simulate(&truth, &settings, autophys::simulator::FIT_OPTIONS)
         .unwrap();
     let mut text = String::from("time,current,voltage\n");
-    for (t, v) in y["t"].iter().zip(&y["v"]) {
+    for (t, v) in y.t().unwrap().iter().zip(y.output("v").unwrap()) {
         let i = autophys::models::battery::current(&settings, *t).unwrap();
         text.push_str(&format!(
             "{},{},{}\n",

@@ -56,9 +56,9 @@ A simulation returns a `simulator::Trajectory`: its outputs (`outputs()`,
 holding the time vector under `"t"`) and its stimulus inputs (`inputs()`).
 `t()`, `output(name)` and `input(name)` return a `Result` whose
 `ChannelError` names the missing channel; `?` converts it into a
-`SimulationError` or `autophys::Error`. `traj["T"]` indexes outputs only and
-panics with the channel name. A simulator returns `map.into()` or
-`collect()`s `(name, samples)` pairs as outputs; `Trajectory::from_parts`,
+`SimulationError` or `autophys::Error`; there is no `traj["T"]` indexing.
+A simulator returns `map.into()` or `collect()`s `(name, samples)` pairs as
+outputs; `Trajectory::from_parts`,
 `with_output` and `with_input` build both halves. A trajectory serialises as
 `{"y": {...}, "u": {...}}`, the worker protocol's result shape, and equality
 compares inputs as well as outputs.

@@ -31,8 +31,9 @@ daemon half of DM-D1.
 Each change carries its own tests. Before the work is called done: `cargo
 test` for the workspace, `python3 -m pytest -q sdks/python/tests`, the
 `html/` Deno tests, and an independent Opus review of the whole range.
-Breaking changes (CORE-01's removed route, CORE-04, DM-RS-1, format 2) are
-listed in the next release's notes; no version bump or release is part of
+Breaking changes (CORE-01's removed route, CORE-04, DM-RS-1, DM-RS-1b's
+removed `traj["name"]` indexing and the new oscillator and thermal source
+hashes, format 2) are listed in the next release's notes; no version bump or release is part of
 this plan.
 
 ## Remaining work
@@ -106,7 +107,8 @@ serialise `outputs()`, the bytes they compared before. Goldens under
 `tests/conformance/`, `tests/vectors/` and `sdks/rust/src/models/` are
 unchanged.
 
-DM-RS-1b — **agent-chosen, pending operator review**: `traj["name"]`
+DM-RS-1b (since changed by the operator and built; see "DM-RS-1b: done"
+below) — **agent-chosen, pending operator review**: `traj["name"]`
 (`Index<&str>`, outputs only, panics naming the channel) stays. Before: map
 indexing through `Deref`. After: indexing of outputs only; no input or
 mutable indexing. Reason: the built-in models hash their own file, test
@@ -448,3 +450,32 @@ fails against the previous fake). Every cited SHA in this page and
 `decisions.md` now resolves on master: pre-restack SHAs were mapped to their
 published twins by Change-Id. `display-manifest.md`'s 2026-11-04 SHAs predate
 this project and were left alone.
+
+### DM-RS-1b: done
+
+`I557040dea5ba1c992c8773410e81a509`. The operator changed DM-RS-1b
+(2026-11-08, `decisions.md`): `impl Index<&str> for Trajectory` is removed,
+so `traj["name"]` no longer compiles; use `output(name)?`, `t()?` or
+`outputs()`. Callers converted with the same assertions: the oscillator and
+thermal model tests, `synthetic.rs` (`observe` and `test_rmse` now return
+the `ChannelError` as `autophys::Error::BadRequest` where they panicked), the
+worker test, `tests/devtools.rs` and three `sdks/rust/tests` files. The
+examples' Rust templates already used `output(name)?`.
+
+Built-in source hashes (each model hashes its own file, test module
+included): oscillator
+`sha256:162eb4454d2a19f1934eefc6a8bba30e974e7f73c5d5eaf5c0a7b91093ccf60a` →
+`sha256:8902b7058425bba67969b16ad5a98c91c41f108bf90f3bdf60636252d20667af`
+(`bench` config version `sha256:b6d96378…` → `sha256:16061af7…`); thermal
+`sha256:88eb6dc5cd8227b7e6c89ef6327e7d41526463317e9ead2435764a31e0cb40ba` →
+`sha256:5afeae8315ea5ba360735a7ba12e0d046488cbf173dd5b8e663b332e2de43d66`
+(`sha256:2eaa83c1…` → `sha256:633b1f25…`); battery unchanged. No golden,
+conformance vector, fixture, test or doc pinned the old values (searched by
+8-hex prefix outside `target/`), so none changed. Existing bench projects
+show config drift on their next run, as accepted.
+
+Breaking for release notes: `traj["name"]` is gone; the oscillator and
+thermal source hashes, and so the config versions of projects built on
+them, change once.
+
+Tests: `cargo test --workspace --locked` 345 passed, 0 failed, 2 ignored.

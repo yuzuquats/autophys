@@ -61,7 +61,7 @@ pub fn observe(
         .map(String::from)
         .or_else(|| experiment.as_str().map(String::from))
         .unwrap_or_else(|| settings["kind"].as_str().unwrap_or("").into());
-    let mut o = Observation::new(name, settings, out["t"].to_vec(), y, noise.sigma.clone())?;
+    let mut o = Observation::new(name, settings, out.t()?.to_vec(), y, noise.sigma.clone())?;
     o.split = split.into();
     o.source = "synthetic".into();
     o.validate()?;
@@ -177,10 +177,11 @@ impl Evaluator {
         for o in &self.test {
             let pred = sim.call(&params, &o.settings, FIT_OPTIONS, false)?;
             for (ch, y) in &o.y {
-                if pred[ch].len() != y.len() {
+                let f = pred.output(ch)?;
+                if f.len() != y.len() {
                     return Err(invalid("test prediction shape mismatch"));
                 }
-                for (y, f) in y.iter().zip(&pred[ch]) {
+                for (y, f) in y.iter().zip(f) {
                     if y.is_finite() {
                         sq += (y - f).powi(2);
                         n += 1;

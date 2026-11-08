@@ -83,6 +83,7 @@ mod tests {
         let sim = thermal_rc();
         let p = [("C".into(), 500.), ("R".into(), 2.)].into_iter().collect();
         let y = sim.simulate(&p, &json!("step_short"), FIT_OPTIONS).unwrap();
-        assert!((y["T"][120] - (20. + 20. * (1. - (-0.12_f64).exp()))).abs() < 1e-7);
+        let temp = y.output("T").unwrap();
+        assert!((temp[120] - (20. + 20. * (1. - (-0.12_f64).exp()))).abs() < 1e-7);
     }
 }

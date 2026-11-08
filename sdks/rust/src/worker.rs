@@ -485,7 +485,8 @@ read c; echo 'worker fell over' >&2; exit 3"#
         let p: Params = [("k".to_string(), 1.0)].into_iter().collect();
         let e = json!({"kind": "step"});
         let y = w.simulate(&p, &e, FIT_OPTIONS).unwrap();
-        assert!(y["y"][0].is_nan() && y["y"][1] == 2.5 && y.input("i").unwrap() == [1.0, 1.0]);
+        let out = y.output("y").unwrap();
+        assert!(out[0].is_nan() && out[1] == 2.5 && y.input("i").unwrap() == [1.0, 1.0]);
         assert!(
             matches!(w.simulate(&p, &e, FIT_OPTIONS), Err(SimulationError::Bounds(m)) if m == "k=9 outside")
         );

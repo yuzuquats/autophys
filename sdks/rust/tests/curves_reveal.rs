@@ -107,7 +107,7 @@ fn python_numerical_curve_cases() {
         let pred = sim.call(&params, &settings, TRUTH_OPTIONS, false).unwrap();
         let expected = &case["expect"]["y"];
         for (ch, arr) in expected["value"].as_object().unwrap() {
-            for (a, b) in pred[ch].iter().zip(arr.as_array().unwrap()) {
+            for (a, b) in pred.output(ch).unwrap().iter().zip(arr.as_array().unwrap()) {
                 near(
                     *a,
                     b.as_f64().unwrap(),

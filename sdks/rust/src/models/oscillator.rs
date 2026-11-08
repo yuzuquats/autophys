@@ -88,7 +88,8 @@ mod tests {
             .into_iter()
             .collect();
         let y = s.simulate(&p, &json!("free"), FIT_OPTIONS).unwrap();
-        assert_eq!(y["x"][0], 0.1);
-        assert_eq!(y["x"].len(), 1001);
+        let x = y.output("x").unwrap();
+        assert_eq!(x[0], 0.1);
+        assert_eq!(x.len(), 1001);
     }
 }

@@ -101,7 +101,7 @@ fn initial_interpolation_budget_and_identity() {
         result.outputs().keys().map(String::as_str).collect::<Vec<_>>(),
         ["t", "y"]
     );
-    assert_eq!(result["y"], vec![4.; 3]);
+    assert_eq!(result.output("y").unwrap(), vec![4.; 3]);
     assert_eq!(result.input("drive").unwrap(), [0., 1., 0.]);
     assert_eq!(project.simulator.calls(), 0);
     assert_eq!(budget.lock().unwrap().used, 0);
