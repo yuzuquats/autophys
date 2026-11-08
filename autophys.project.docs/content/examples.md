@@ -308,13 +308,22 @@ Step 3:
   plain CSV and interpolated onto its settings' time grid (as
   `numpy.interp`). With no `[truth]`, there is no parameter error and no
   reveal record; the score is held-out prediction error and the diagnosis.
+- **`battery-recorded.backtest`** (built in, not in the default suite):
+  six recorded runs of one cell (R0 0.031, R1 0.052, C1 2100: a 109 s
+  polarization time constant), synthesized by its `generate.py` with 2 mV
+  noise until measured data that may be redistributed exists. The model
+  starts from a 6 s pulse and a 1 A check and may request the three catalog
+  programs (`two-tests`: two, `one-test`: one); `unseen_train` is held out.
+  The CSVs live in the repository's `examples/battery-recorded.backtest/data/`,
+  which hosts them: the manifest fetches them from
+  `raw.githubusercontent.com/yuzuquats/autophys/master/...` and checks each
+  by sha256, and `build.rs` leaves every backtest's `data/` out of the
+  binary. The urls answer only once the files are on origin master.
 - **Downloads (EX-7).** A `url` (`https://`, `http://`, `file://`) is
   fetched once into `AUTOPHYS_DATASETS_DIR`, else
   `$XDG_DATA_HOME/tento/autophys/datasets`, else
   `~/.local/share/tento/autophys/datasets`, named by its sha256 and
-  verified on every read. A built-in backtest may only use `url`. No
-  built-in dataset backtest ships yet: it needs measured data we may
-  redistribute and a place to host it (open question below).
+  verified on every read. A built-in backtest may only use `url`.
 - **A backtest's own simulator (EX-6, phase 3).** `[system] project =
   "module:attr"` in a folder on disk imports the module from the example
   folder: the Rust SDK through `python -m autophys.worker --root DIR`
@@ -332,6 +341,42 @@ Step 3:
 - Validation: with fixed truth, `bench --seeds 3` and Python `run_case` over
   the 42 baseline runs are still identical to the pre-change baseline; Rust
   workspace tests pass; Python 620 passed / 13 skipped.
+
+## Live checks (2026-11-07, yuzuquats)
+
+Evidence (result rows and stderr): `yuzuquats:~/.local/state/tento/evidence/autophys/examples-live-20261107/`.
+
+- **Downloads over https:** a backtest folder whose dataset `url` is a
+  published file on `raw.githubusercontent.com` ran through `autophys bench`
+  (Rust, ureq) and the Python SDK (urllib): each fetched it once into an
+  empty datasets directory under its sha256, and a wrong sha256 was refused
+  with both digests named. `battery-recorded`'s own urls return 404 until
+  its data is on origin master, so its live runs read a datasets directory
+  filled from the repository files (same bytes, same sha256).
+- **Models** (route `baseten` pointed at the operator's OpenAI-compatible
+  proxy, subscription models only; 2 seeds each of `battery-recorded`
+  `two-tests` and `one-test`, and `battery#full` and `battery#short-only`
+  with `--truth drawn`):
+
+  | Model | Passed | Notes |
+  |---|---|---|
+  | scripted (offline) | 8/8 | requests `discharge_1A` on the recorded cell; 1.07% max error |
+  | muse-spark-1.3 | 8/8 | same choices and errors as scripted, about 10 calls and 100 s a run |
+  | muse-wonder-1.0 | 8/8 | same outcomes, about twice Spark's token cost |
+  | glm-5.3 | 3/8, then 2/4 on a rerun | failures are empty replies (reasoning used the completion budget) |
+  | gpt-6.1-sol, claude-sonnet-5-5 | not run | the proxy answered HTTP 429: usage limit reached (GPT, resets in about 55 h) and account rate limit (Claude) |
+
+  The Python SDK's live path (`run_case(..., policy="reason")`) validated
+  `battery-recorded#one-test` and ended `battery#short-only` (drawn truth)
+  rightly inconclusive.
+- **Route `muse`** (headless `muse exec`) could not run here: the `muse` on
+  this host is a different tool without `exec`. Modal is not installed or
+  configured on this host, so the CLI-16 Modal entrypoints were not run live.
+- **Fixes from the live runs:** a failed `bench` run now says why on stderr
+  (reasons and the last step error; before, every failure was a bare
+  "failed"); an empty model reply is reported as such in both SDKs instead
+  of "not JSON: EOF while parsing"; `--append` rows label recorded-run cases
+  `truth = "recorded"`.
 
 ## Running a backtest
 
@@ -428,16 +473,15 @@ autophys bench --example ./my-cell.backtest#cell-a17 --policy reason --model …
 1. **Kinds for what exists.** Done.
 2. **The existing cases become backtests.** Done.
 3. **New capability.** Done (per-seed truth, recorded runs, downloads, own
-   simulators, `--append`/`--summary`). Not done: a built-in dataset
-   backtest (blocked on data and hosting), and running each demo's
-   `[[expected]]` commands in CI.
+   simulators, `--append`/`--summary`), and `battery-recorded` with
+   synthesized runs. Not done, by operator direction for now: running each
+   demo's `[[expected]]` commands in CI.
 
 ## Open questions
 
-- **Measured data and hosting:** is there a battery data set we can
-  redistribute (and under which license), and where should built-in
-  datasets live (GitHub release assets of this repository are the obvious
-  place)? Until both are answered, no built-in dataset backtest ships; the
-  format, downloads and checks are implemented and tested with local files.
+- **Measured data:** a battery data set we may redistribute (and its
+  license) would replace or join `battery-recorded`'s synthesized runs.
+  Hosting is the repository itself for now (raw GitHub urls, pinned by
+  sha256); release assets remain an alternative.
 - **EX-11** (above): keep fixed truth as the default, or draw by default
   and re-record the cassettes and training data.

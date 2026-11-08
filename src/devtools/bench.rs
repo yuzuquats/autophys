@@ -237,6 +237,23 @@ pub fn run_case(
         .records(Some("step"))
         .map_err(|e| e.to_string())?;
     let usage = autophys::usage::usage_total(steps.iter().map(|r| &r.payload));
+    if out.status == "failed" {
+        // Say why on stderr: the row only says "failed".
+        let last_error = steps
+            .iter()
+            .rev()
+            .find_map(|r| r.payload["error"].as_str().map(String::from))
+            .unwrap_or_default();
+        eprintln!(
+            "autophys: {case} seed {seed} ({policy}) failed: {}{}",
+            out.reasons.join("; "),
+            if last_error.is_empty() {
+                String::new()
+            } else {
+                format!("; last error: {last_error}")
+            }
+        );
+    }
     let calls = usage["calls"].as_u64().unwrap_or(0);
     let test_rmse = if est.is_empty() {
         f64::NAN
@@ -582,7 +599,8 @@ pub fn rows_json(rows: &[BenchRow]) -> String {
 
 /// Append `rows` to a results file, one JSON object per line, with what
 /// made them: the model (`route:model`, or null for offline policies), the
-/// truth mode, and this binary's version and commit.
+/// truth (`fixed`, `drawn`, or `recorded` for a recorded-run case), and this
+/// binary's version and commit.
 pub fn append_results(
     path: &Path,
     rows: &[BenchRow],
@@ -598,10 +616,17 @@ pub fn append_results(
         let mut v = row.to_value();
         let o = v.as_object_mut().unwrap();
         o.insert("model".into(), json!(model));
-        o.insert(
-            "truth".into(),
-            json!(if drawn_truth { "drawn" } else { "fixed" }),
-        );
+        // A recorded-run case has no truth to draw: its data is the recording.
+        let recorded = autophys::backtest::resolve_case(&row.case).is_ok_and(|(b, name)| {
+            b.case(&name)
+                .is_ok_and(|c| c.source == autophys::backtest::CaseSource::Datasets)
+        });
+        let truth = match (recorded, drawn_truth) {
+            (true, _) => "recorded",
+            (false, true) => "drawn",
+            (false, false) => "fixed",
+        };
+        o.insert("truth".into(), json!(truth));
         o.insert("autophys".into(), json!(env!("CARGO_PKG_VERSION")));
         o.insert("commit".into(), json!(crate::scaffold::source_commit()));
         writeln!(file, "{}", pyjson::dumps(&v))?;

@@ -572,6 +572,8 @@ def parse_json_content(content: Any) -> dict:
     if not isinstance(content, str):
         raise ReasonerError(f"expected a JSON object, got {type(content).__name__}")
     s = content.strip()
+    if not s:
+        raise ReasonerError("the model returned an empty reply (a reasoning model may have spent its completion budget before answering)")
     if s.startswith("```"):
         s = s.split("\n", 1)[1] if "\n" in s else ""
         s = s.rsplit("```", 1)[0]

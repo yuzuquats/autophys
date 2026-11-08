@@ -189,6 +189,9 @@ pub fn parse_json_content(content: &Value) -> Result<Value> {
         .as_str()
         .ok_or_else(|| invalid("expected a JSON object"))?
         .trim();
+    if s.is_empty() {
+        return Err(invalid("the model returned an empty reply (a reasoning model may have spent its completion budget before answering)"));
+    }
     let s = if s.starts_with("```") {
         s.split_once('\n')
             .map(|(_, s)| s.rsplit_once("```").map(|(s, _)| s).unwrap_or(s))
