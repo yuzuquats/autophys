@@ -53,10 +53,25 @@ fn expand(text: &str) -> PathBuf {
     }
 }
 
+/// `path` rebuilt from its components, which drops a trailing slash and `.`
+/// segments the way Python's `pathlib` does, so `x.ap-workbook/` and
+/// `x.ap-workbook/.` name the workbook file in both SDKs (decision
+/// HOME-SLASH). Drive and UNC roots keep their meaning.
+fn normalized(path: PathBuf) -> PathBuf {
+    path.components().collect()
+}
+
+/// A workbook file name: the suffix after at least one character.
+fn is_workbook_name(path: &Path) -> bool {
+    path.file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .is_some_and(|n| n.ends_with(SUFFIX) && n.len() > SUFFIX.len())
+}
+
 /// `$AUTOPHYS_HOME`, else `~/autophys`.
 pub fn default_home() -> PathBuf {
     match std::env::var("AUTOPHYS_HOME") {
-        Ok(h) if !h.is_empty() => expand(&h),
+        Ok(h) if !h.is_empty() => normalized(expand(&h)),
         _ => expand("~/autophys"),
     }
 }
@@ -74,8 +89,8 @@ pub fn connect(target: Option<&str>) -> Result<Client> {
             Error::BadRequest(format!("no API key for {text}: pass api_key=, set AUTOPHYS_API_KEY or run `autophys connect`")))?;
         return Client::connect_remote(text, &creds.api_key);
     }
-    let path = expand(text);
-    if text.ends_with(SUFFIX) {
+    let path = normalized(expand(text));
+    if is_workbook_name(&path) {
         let root = path
             .parent()
             .map(Path::to_path_buf)
@@ -326,4 +341,31 @@ fn check_name(name: &str) -> Result<()> {
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_trailing_slash_does_not_turn_a_workbook_into_a_folder() {
+        let dir = std::env::temp_dir().join("autophys-home-slash");
+        let file = dir.join(format!("x{SUFFIX}"));
+        let shown = format!("Client({})", file.display());
+        for tail in ["/", "//", "/."] {
+            let text = format!("{}{tail}", file.display());
+            let client = connect(Some(&text)).unwrap();
+            assert_eq!(client.root(), dir.as_path(), "{text}");
+            assert_eq!(format!("{client:?}"), shown, "{text}");
+        }
+    }
+
+    #[test]
+    fn only_a_name_with_more_than_the_suffix_is_a_workbook() {
+        assert!(is_workbook_name(Path::new(&format!("a/x{SUFFIX}"))));
+        assert!(!is_workbook_name(Path::new(&format!("a/{SUFFIX}"))));
+        assert!(!is_workbook_name(Path::new("a/b")));
+        assert_eq!(normalized(PathBuf::from("/")), PathBuf::from("/"));
+        assert_eq!(normalized(PathBuf::from("a/b/")), PathBuf::from("a/b"));
+    }
 }

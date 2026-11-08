@@ -242,7 +242,14 @@ pub fn render(text: &str, vars: &[(&str, &str)]) -> String {
 fn check_new_name(name: &str, collection: &Path) -> Result<(), Failure> {
     // G3-FILE: a home naming one workbook file sends every project there
     // (both SDKs' `connect`), whatever the project's name.
-    if collection.to_string_lossy().ends_with(autophys::SUFFIX) {
+    // Rebuilding from components drops a trailing slash, so `x.ap-workbook/`
+    // is the file too, as in both SDKs' `connect` (HOME-SLASH); `exists`
+    // would report a file with a slash after it as missing.
+    let collection: &Path = &collection.components().collect::<std::path::PathBuf>();
+    if collection
+        .file_name()
+        .is_some_and(|n| n.to_string_lossy().ends_with(autophys::SUFFIX))
+    {
         if !collection.exists() {
             return Ok(());
         }
@@ -618,6 +625,27 @@ mod tests {
         let e = check_new_name("thermal", &folder).unwrap_err();
         assert!(e.message.contains("but is a folder"), "{}", e.message);
         assert!(!e.message.contains("--existing"), "{}", e.message);
+    }
+
+    #[test]
+    fn a_home_with_a_trailing_slash_is_still_the_workbook_file() {
+        // HOME-SLASH: `battery.ap-workbook/` names the file, not a folder.
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join(format!("battery{}", autophys::SUFFIX));
+        std::fs::write(&file, b"").unwrap();
+        let slashed = std::path::PathBuf::from(format!("{}/", file.display()));
+        let e = check_new_name("thermal", &slashed).unwrap_err();
+        assert!(
+            e.message.contains("$AUTOPHYS_HOME is the workbook"),
+            "{}",
+            e.message
+        );
+        assert!(e.message.contains("--existing"), "{}", e.message);
+        let folder = dir.path().join(format!("odd{}", autophys::SUFFIX));
+        std::fs::create_dir(&folder).unwrap();
+        let slashed = std::path::PathBuf::from(format!("{}/", folder.display()));
+        let e = check_new_name("thermal", &slashed).unwrap_err();
+        assert!(e.message.contains("but is a folder"), "{}", e.message);
     }
 
     #[test]
