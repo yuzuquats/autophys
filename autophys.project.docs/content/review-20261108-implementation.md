@@ -129,8 +129,8 @@ SDK repo, builds in release; both run, and `battery-fit --demo` writes a
 
 ### UI-27: done
 
-`a2394e3` (`Ie4f804d3ea81ab924611f3d5cefc1bc9`) and `ddd1bb7`
-(`I3babbef47e5b61f8fedbdc0df2ea9a62`). New project is the operator-chosen
+`Ie4f804d3ea81ab924611f3d5cefc1bc9` and `I3babbef47e5b61f8fedbdc0df2ea9a62`
+(`fc4283b`, `d05d850` as of `b916788`). New project is the operator-chosen
 SDK stepper: create with `autophys new my-project --lang python|rust`,
 connect with `autophys connect <page origin> --name my-device` and approve
 the device from its pending card in the step (approval advances), then run
@@ -143,7 +143,7 @@ so UI-27's removal now covers the backend too. Agent-chosen details UI-27-a..e
 (runnable placeholder names, removing the thermal "Start simulated
 investigation" action, completion rule, workspace re-read while open, native
 toggle buttons) are in `ui.md`, pending operator review. `decisions.md`
-still marks UI-27 "not implemented".
+marks UI-27 implemented, with the backend removal.
 
 Tests: `deno test --allow-read --config html/deno.json html/` 138 passed,
 0 failed; `deno check` clean; `autophys build-web` ok.
@@ -202,8 +202,10 @@ advancing the cursor); workspace 326/0/2.
   records are refused. (Corrected in review round 1: the single routes' own
   rules, their per-route kind and event allowlists, the path proposal id and
   the server stamping `by` on decisions, do not apply; the route takes keys
-  only. A `data_attached` event must name a measurement of the batch when it
-  links into the batch or the batch holds measurements.)
+  only. A `data_attached` event the batch writes must name a measurement
+  that precedes it in the batch when it links into the batch or a
+  measurement precedes it; two events may name the same one. Corrected in
+  review round 2: an earlier wording said any measurement of the batch.)
 - Idempotent by record id: the same id and content replays
   (`created: false`), the same id with other content is 409
   `idempotency_conflict`; replays and new records may mix. An
@@ -290,8 +292,8 @@ no:cacheprovider sdks/python/tests` 669 passed, 13 skipped (baseline 665;
 atomic-remote, core-boundary, display and reveal suites pass with no skips
 (119 passed).
 
-Open: `decisions.md` still says UI-27 "not implemented" (not this wave).
-The `AUTOPHYS_CORE_PEER` binary the env-gated Python tests need is not a
+(`decisions.md` has since marked UI-27 implemented.) Open: the
+`AUTOPHYS_CORE_PEER` binary the env-gated Python tests need is not a
 build target (`sdks/rust/tests/support/core_peer.rs` is not wired into
 Cargo); this wave used an uncommitted scratch peer.
 
@@ -317,7 +319,7 @@ Change-Ids are the stable names). Nothing is pushed or deployed;
 | --- | --- | --- |
 | 1 (blocking). UI-27 removed the Thermal wizard's UI but the daemon still served `POST /workbench/projects` and `POST /workbench/projects/{pid}/investigations` to any allowed browser origin | **UI-27 backend removal done**: both routes, `src/http/workbench.rs`, the run registry only it used and `tests/browser_workbench.rs` are gone; a store_contract test pins both paths at 404 for a browser and a key. No UI or e2e caller used them. Built-in models elsewhere (bench, `sdks/rust/src/models`) are untouched | `b12c924` `I6d08b4d44d86063ab2714e7dbc4f4151` |
 | 2. A `--browser-origin` flag replaced `AUTOPHYS_BROWSER_ORIGINS`, so deploy's flag (O-3a) dropped a drop-in's origins | `parse_serve` joins them, environment first, duplicates dropped; test, help, Docs, rust-sdk.md and the deploy.sh comment updated | `8dfec15` `Ia37aa9c7b5cc814d166ae1a2b1eab65f` |
-| 3. Docs claimed batched records are checked as their single routes would check them; the batch also lost the attachment route's measurement link check | Docs corrected (store.md, the CORE-01 entry above, core-remediation.md, the http.rs and SDK doc comments): the batch applies `Investigation::append`'s store validation, key-only, without per-route allowlists, path proposal ids or server-stamped `by`. `Investigation::append_batch` now refuses a `data_attached` whose link into the batch is not a measurement, or that names none of the batch's measurements; a measurement is named by its hash (Rust, `hash_of`) or its payload `version` (Python) | `85f7016` `I0724c809353210fee30999fec88cf6f3` |
+| 3. Docs claimed batched records are checked as their single routes would check them; the batch also lost the attachment route's measurement link check | Docs corrected (store.md, the CORE-01 entry above, core-remediation.md, the http.rs and SDK doc comments): the batch applies `Investigation::append`'s store validation, key-only, without per-route allowlists, path proposal ids or server-stamped `by`. `Investigation::append_batch` now refuses a `data_attached` whose link into the batch is not a measurement, or that names none of the measurements that precede it in the batch; a measurement is named by its hash (Rust, `hash_of`) or its payload `version` (Python) | `85f7016` `I0724c809353210fee30999fec88cf6f3` |
 | 4. `attach_data` record ids differed between SDKs (Python hashed the payload in) | Python derives them from investigation, proposal and kind, as Rust (`attach_record_id` in both, the same two ids pinned in each SDK's tests); no test or golden relied on the payload hash. Rust's doc comment now also describes a second local call | `09d396a` `I591ab31cb17fd9fbb34b7c7c0015f10b` |
 | 5. Python `HttpStore.append_batch` gave each record a fresh uuid4, so a retry duplicated it | Every Python store's `append_batch` takes `(kind, payload)` or `(kind, payload, record_id)`; uuid4 stays the fallback; docs say only records with ids are retry-safe; `attach_data` passes its ids through it | `09d396a` (with 4) |
 | 6. The blocking facade's in-runtime cost was undocumented | Module and `run` docs plus rust-sdk.md: one new helper thread per call inside a runtime, the caller's runtime thread blocked, a current-thread runtime (actix worker) stalled. The TLS note says reqwest takes the process-default rustls provider, else ring, and nothing may rely on rustls's crate-feature default. RS-REMOTE-2: documented that the Python reveal error arrives after the outcome is written (behaviour unchanged) | `a1f060a` `I8da1463b1f558472b911750a25ac1f3a` |
@@ -327,14 +329,17 @@ Agent-chosen, pending operator review:
 - **RR1-a, the batch link rule.** Before: the batch accepted any
   `measurement_version`. After: an event linking into the batch must name a
   measurement, and an event preceded by measurements in its batch must name
-  one of them (hash or payload `version`). Reason: it is the removed route's
+  one of them (hash or payload `version`). Two events may name the same
+  batch measurement; the removed route allowed one measurement per event.
+  Reason: it is the removed route's
   pair guarantee, generalised, and both SDKs' attachments pass it. Strongest
   alternative: check only explicit links (`hash_of` or a batch record's
   hash), which leaves a Python-shaped pair with a wrong version accepted.
   Implemented in `sdks/rust/src/workbook.rs` (`check_attachment_link`), so
-  the Rust local store enforces it too. The Python local stores and the test
-  fake server do not (Python's only batch writer is its own consistent
-  pair); mirroring it there is small. Reversal: delete the one call.
+  the Rust local store enforces it too. The Python local stores do not
+  (Python's only batch writer is its own consistent pair); the test fake
+  server mirrors it since review round 2. Reversal: delete the one call
+  (and the fake's).
 - **RR1-b, SDKs disagree on `measurement_version`.** Python records the
   dataset version (an integer, also in the measurement payload), Rust the
   measurement record's hash; `agent.py`'s cost lookup already reads both.
@@ -358,3 +363,32 @@ Cargo target) the atomic-remote, cross-writer, core-boundary, display and
 reveal suites pass with no skips (119); `deno test --allow-read --config
 html/deno.json html/` 141 passed; `deno check` clean; `python3
 ops/test_deploy.py` 2 OK.
+
+### Review round 2 fixes
+
+A second review returned four non-blocking findings, fixed on yuzuquats
+`~/workspace/autophys` master (nothing pushed or deployed):
+
+- **Link rule wording.** `check_attachment_link` sees only the records
+  before the event, but store.md, core-remediation.md and the RR1-a text
+  said any measurement of the batch. They now say a measurement that
+  precedes it in the batch, and that two events may name the same batch
+  measurement (the removed route allowed one per event). The rule is
+  unchanged. (`I8578c332baf934b775610c6785b200e4`)
+- **Replay before the link check.** A byte-identical retry of a stored
+  `data_attached` could be refused 422 when the rest of its batch changed.
+  `Investigation::append_batch` now looks up replay first and link-checks
+  only records it will write; `batch_data_attached_must_name_its_measurement`
+  covers the retry and fails with the old order.
+  (`I08f7f6d7d368165a3420f45e5e1a548d`)
+- **Python fake parity.** `fake_server.py`'s batch applies the same rule
+  after the same replay lookup; a test shows a mis-linked Python-shaped pair
+  refused with nothing written. (`I5ec3496492578ab8173f5aaa86457c93`)
+- **Stale status text.** The UI-27 SHAs above, the "UI-27 not implemented"
+  notes, decisions.md's O-3a deploy step and core-remediation.md's CORE-04
+  row now show what is built, by Change-Id. (`I8578c332baf934b775610c6785b200e4`)
+
+Tests on yuzuquats, run one after the other: `cargo test --workspace
+--locked` 344 passed, 0 failed, 2 ignored (the replay case extends an
+existing test); `python3 -m pytest -q -p no:cacheprovider sdks/python/tests`
+678 passed, 13 skipped (676 plus 1 new plus 1 from a peer's G8-LOOP commit).
