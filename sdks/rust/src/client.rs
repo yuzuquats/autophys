@@ -225,9 +225,21 @@ impl Client {
             .collect())
     }
 
-    /// Open project `name`'s workbook, creating the file when missing.
+    /// Open project `name`'s existing workbook; 404 `not_found` when it is
+    /// missing (CORE-04). Creation is explicit: [`Client::ensure_project`],
+    /// or [`Client::project_with`] for a scientific project. A local file
+    /// whose slug matches but which holds another name is a 409 `conflict`.
     pub fn project(&self, name: &str) -> Result<Workbook> {
-        self.ensure_project(name).map(|(wb, _)| wb)
+        check_name(name)?;
+        if self.remote.is_some() {
+            return self.open_project(name);
+        }
+        let path = self.path_for(name);
+        let known = lock(&self.inner.open)?.contains_key(&path);
+        if !known && !path.exists() {
+            return Err(Error::NotFound("project"));
+        }
+        self.open_path(&path, Some(name)).map(|(wb, _)| wb)
     }
 
     /// Open an existing named workbook without creating it.
@@ -235,16 +247,12 @@ impl Client {
         self.workbooks()?.into_iter().find(|w| w.name() == name).ok_or(Error::NotFound("project"))
     }
 
-    /// [`Client::project`], also saying whether the project was created now
-    /// (the daemon's `POST /projects` answers 201 or 200 from it).
+    /// Open project `name`'s workbook, creating it when missing, and say
+    /// whether it was created now (the daemon's `POST /projects` answers
+    /// 201 or 200 from it).
     pub fn ensure_project(&self, name: &str) -> Result<(Workbook, bool)> {
         if let Some(r) = &self.remote { let (p,new) = r.ensure_project(name)?; return Ok((Workbook::from_remote(r.clone(),p),new)); }
-        if name.trim().is_empty() || name.chars().count() > 200 {
-            return Err(Error::invalid(
-                "name",
-                "required string of 1 to 200 characters",
-            ));
-        }
+        check_name(name)?;
         let path = self.path_for(name);
         self.open_path(&path, Some(name))
     }
@@ -307,4 +315,15 @@ impl Client {
         }
         Ok(out)
     }
+}
+
+/// A project name: 1 to 200 characters, not blank.
+fn check_name(name: &str) -> Result<()> {
+    if name.trim().is_empty() || name.chars().count() > 200 {
+        return Err(Error::invalid(
+            "name",
+            "required string of 1 to 200 characters",
+        ));
+    }
+    Ok(())
 }

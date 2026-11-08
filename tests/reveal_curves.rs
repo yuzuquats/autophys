@@ -13,7 +13,7 @@ macro_rules! app {
     }};
 }
 fn investigation(api: &autophys_cli::http::Api, name: &str) -> autophys::Investigation {
-    let wb = api.client.project(name).unwrap();
+    let wb = api.client.ensure_project(name).unwrap().0;
     let bytes = b"{}";
     let version = format!("sha256:{}", sha256_hex([&bytes[..]]));
     wb.put_config_version(&version, bytes).unwrap();

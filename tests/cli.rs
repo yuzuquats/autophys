@@ -67,7 +67,7 @@ fn help_json_needs_no_env_credentials_or_database() {
 fn sdk_verbs_read_and_decide_in_a_temp_collection() {
     let home = tempfile::tempdir().unwrap();
     let client = autophys::connect(Some(home.path().to_str().unwrap())).unwrap();
-    let wb = client.project("thermal").unwrap();
+    let wb = client.ensure_project("thermal").unwrap().0;
     let body: &[u8] = br#"{"model":"thermal"}"#;
     let version = format!("sha256:{}", autophys::sha256_hex([body]));
     wb.put_config_version(&version, body).unwrap();
@@ -198,7 +198,7 @@ fn admin_flags_and_json_still_work() {
 fn failed_verification_keeps_json_output_and_exits_one() {
     let home = tempfile::tempdir().unwrap();
     let client = autophys::connect(Some(home.path().to_str().unwrap())).unwrap();
-    let wb = client.project("drifted").unwrap();
+    let wb = client.ensure_project("drifted").unwrap().0;
     let body: &[u8] = br#"{"model":"thermal"}"#;
     let version = format!("sha256:{}", autophys::sha256_hex([body]));
     wb.put_config_version(&version, body).unwrap();

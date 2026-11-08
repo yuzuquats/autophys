@@ -18,7 +18,7 @@ fn version() -> String {
 fn seeded() -> (tempfile::TempDir, Workbook) {
     let dir = tempfile::tempdir().unwrap();
     let client = connect(Some(dir.path().to_str().unwrap())).unwrap();
-    let wb = client.project("thermal").unwrap();
+    let wb = client.ensure_project("thermal").unwrap().0;
     assert!(wb.put_config_version(&version(), CONFIG).unwrap());
     (dir, wb)
 }
@@ -40,7 +40,7 @@ fn connect_takes_local_paths_and_remote_urls() {
         client.projects().unwrap().is_empty(),
         "a missing collection is empty"
     );
-    let wb = client.project("Heated Block!").unwrap();
+    let wb = client.ensure_project("Heated Block!").unwrap().0;
     assert_eq!(wb.path(), dir.path().join("heated-block.ap-workbook"));
     assert_eq!(wb.name(), "Heated Block!");
     assert!(wb.id().starts_with("prj_") && wb.id().len() == 20);
@@ -123,6 +123,29 @@ fn a_workbook_file_is_format_1_with_one_project_and_no_server_tables() {
     assert_eq!(fresh.project("thermal").unwrap().id(), wb.id());
     let err = fresh.project("Thermal").unwrap_err();
     assert_eq!(code(&err), (409, "conflict"));
+}
+
+#[test]
+fn project_by_name_opens_and_only_ensure_project_creates() {
+    // CORE-04: a missing project is 404 and writes nothing, locally and in
+    // single-file mode; ensure_project creates once, then project opens it.
+    let dir = tempfile::tempdir().unwrap();
+    let client = connect(Some(dir.path().to_str().unwrap())).unwrap();
+    let err = client.project("thermal").unwrap_err();
+    assert_eq!(code(&err), (404, "not_found"));
+    assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
+    let file = dir.path().join("solo.ap-workbook");
+    let solo = connect(Some(file.to_str().unwrap())).unwrap();
+    assert_eq!(code(&solo.project("solo").unwrap_err()), (404, "not_found"));
+    assert!(!file.exists());
+    let (wb, created) = client.ensure_project("thermal").unwrap();
+    assert!(created);
+    assert!(!client.ensure_project("thermal").unwrap().1);
+    assert_eq!(client.project("thermal").unwrap().id(), wb.id());
+    let reopened = connect(Some(dir.path().to_str().unwrap())).unwrap();
+    assert_eq!(reopened.project("thermal").unwrap().id(), wb.id());
+    assert_eq!(code(&reopened.project("other").unwrap_err()), (404, "not_found"));
+    assert!(client.project(" ").is_err());
 }
 
 #[test]
@@ -489,7 +512,7 @@ fn rejects_multiple_project_rows_and_invalid_names_without_poisoning_the_collect
     let client = connect(Some(dir.path().to_str().unwrap())).unwrap();
     assert!(client.project(" ").is_err());
     assert!(client.projects().unwrap().is_empty());
-    let wb = client.project("thermal").unwrap();
+    let wb = client.ensure_project("thermal").unwrap().0;
     let path = wb.path().to_path_buf();
     let raw = Connection::open(&path).unwrap();
     raw.execute(

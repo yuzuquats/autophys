@@ -99,7 +99,7 @@ async fn snapshot(store: &Workbook) -> (Value, Value) {
 #[actix_web::test]
 async fn rebuild_reproduces_the_projections_exactly() {
     let f = fixture();
-    let wb = f.api.client.project("thermal").unwrap();
+    let wb = f.api.client.ensure_project("thermal").unwrap().0;
     let invs = populate(&wb).await;
     let before = snapshot(&wb).await;
     let row = |id: &str| {
@@ -132,7 +132,7 @@ async fn rebuild_reproduces_the_projections_exactly() {
 #[actix_web::test]
 async fn rebuild_repairs_drifted_projections() {
     let f = fixture();
-    let wb = f.api.client.project("thermal").unwrap();
+    let wb = f.api.client.ensure_project("thermal").unwrap().0;
     populate(&wb).await;
     let before = snapshot(&wb).await;
     let raw = Connection::open(wb.path()).unwrap();
@@ -152,7 +152,7 @@ async fn rebuild_repairs_drifted_projections() {
 #[actix_web::test]
 async fn the_log_is_append_only_and_tampering_breaks_the_chain() {
     let f = fixture();
-    let wb = f.api.client.project("thermal").unwrap();
+    let wb = f.api.client.ensure_project("thermal").unwrap().0;
     let invs = populate(&wb).await;
     let raw = Connection::open(wb.path()).unwrap();
     assert!(

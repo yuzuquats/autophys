@@ -1604,7 +1604,7 @@ async fn collection_cursors_resume_two_workbooks_and_detect_external_writes() {
         .unwrap()
         .workbook()
         .clone();
-    let wb_b = f.api.client.project("battery").unwrap();
+    let wb_b = f.api.client.ensure_project("battery").unwrap().0;
     wb_b.put_config_version(&version(), CONFIG).unwrap();
     let (b, _) = wb_b
         .create_investigation(json!({"config_version": version()}), None)

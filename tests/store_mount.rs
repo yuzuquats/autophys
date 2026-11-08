@@ -55,7 +55,7 @@ async fn the_store_is_mounted_in_the_daemon_app() {
         Options::default(),
     )
     .unwrap();
-    let wb = api.client.project("thermal").unwrap();
+    let wb = api.client.ensure_project("thermal").unwrap().0;
     let body = br#"{"name":"thermal"}"#;
     let version = format!("sha256:{}", autophys::sha256_hex([&body[..]]));
     wb.put_config_version(&version, body).unwrap();

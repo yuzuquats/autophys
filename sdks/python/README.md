@@ -134,7 +134,7 @@ workbook does not write its display (an `HttpStore` uploads it to the daemon). A
 | `ap.connect(target=None, api_key=None)` | a directory (local collection; files created on project creation), a `*.ap-workbook` path, an `http(s)://` daemon URL, or nothing (`$AUTOPHYS_HOME`, default `~/autophys`) |
 | `client.projects()` | `[{id, name}]` (plus `path` locally) |
 | `client.project(project)` | bind a scientific Project, creating its workbook if needed; a name alone opens an existing workbook for review. |
-| `client.open_project(name)`, `client.ensure_project(name)` | explicit open-only or create-if-absent record access; Rust has the same explicit names, but legacy Rust `project(name)` creates. |
+| `client.open_project(name)`, `client.ensure_project(name)` | explicit open-only or create-if-absent record access; Rust has the same explicit names, and Rust `project(name)` also opens only (CORE-04). |
 | `wb.investigate(dataset, runner, **kw)` | a new recorded `Investigation`; `.run()` runs the loop |
 | `wb.investigations()` | the projection rows: `id, status, budget_used, overrides, …` |
 | `wb.investigation(id, runner=None, policy=None)` | resume from the records (`Investigation.resume`) |

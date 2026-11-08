@@ -447,7 +447,7 @@ fn write_cases(out: &Path) -> Vec<PathBuf> {
         }
         let exp = {
             let client = connect(Some(path.to_str().unwrap())).unwrap();
-            let wb = client.project(case).unwrap();
+            let wb = client.ensure_project(case).unwrap().0;
             build(&wb);
             let report = wb.verify().unwrap();
             assert!(report.ok, "{case}: {report:?}");

@@ -46,7 +46,8 @@ Three rules make the layers line up:
 | `ap.connect(target=None)`              | `autophys::connect(target: Option<&str>) -> Result<Client>` | — (picks Local or Remote)                    |
 | `client.projects()`                    | `client.projects()`                                     | `GET /api/v1/projects`                           |
 | `client.project(Project)` (simulator + config; uploads the config version) | `client.project_with(Project) -> Result<Workbook>` (phase 2) | `POST /api/v1/projects` + `PUT …/config_versions/{v}` |
-| `client.project(name)` (review only)   | `client.project(name) -> Result<Workbook>` (review only) | `POST /api/v1/projects` (open or create)        |
+| `client.project(name)` (review only; opens, error if missing) | `client.project(name) -> Result<Workbook>` (review only; 404 if missing, CORE-04) | `GET /api/v1/projects` (open only) |
+| `client.ensure_project(name)` (explicit create) | `client.ensure_project(name) -> Result<(Workbook, bool)>` | `POST /api/v1/projects` (open or create) |
 | `wb.investigations()`                  | `wb.investigations()`                                   | `GET /api/v1/investigations?project=`            |
 | `wb.investigation(id, runner=None, policy=None)` (resumes from the records) | `wb.investigation(id)`; `wb.resume(id, runner, policy)` (phase 2) | `GET /api/v1/investigations/{inv}/records` |
 | `wb.investigate(dataset, runner, policy=…)` (creates and records) | `wb.investigate(dataset, runner, policy)` (phase 2) | `POST /api/v1/investigations`                    |

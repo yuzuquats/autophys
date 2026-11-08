@@ -78,7 +78,7 @@ impl Daemon {
         Client::connect_remote(&self.url, &self.key).unwrap()
     }
     fn workbook(&self, name: &str) -> (Workbook, String) {
-        let wb = self.client().project(name).unwrap();
+        let wb = self.client().ensure_project(name).unwrap().0;
         let config = canonical(&json!({"name":name,"x":1.5,"unicode":"é"}));
         let ver = format!("sha256:{}", autophys::sha256_hex([config.as_bytes()]));
         assert!(wb.put_config_version(&ver, config.as_bytes()).unwrap());

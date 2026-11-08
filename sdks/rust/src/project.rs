@@ -460,7 +460,7 @@ fn store_error(e: SimulationError) -> crate::Error {
 impl crate::Client {
     pub fn project_with(&self, project: Project) -> crate::Result<ProjectWorkbook> {
         project.validate().map_err(store_error)?;
-        let wb = self.project(&project.name)?;
+        let (wb, _) = self.ensure_project(&project.name)?;
         wb.with_project(project)
     }
 }

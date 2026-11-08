@@ -72,8 +72,9 @@ async fn pair_keys_and_db_commands() {
 
     let wb = autophys::connect(Some(db.to_str().unwrap()))
         .unwrap()
-        .project("thermal")
-        .unwrap();
+        .ensure_project("thermal")
+        .unwrap()
+        .0;
     let body = b"{}";
     let version = format!("sha256:{}", autophys::sha256_hex([&body[..]]));
     wb.put_config_version(&version, body).unwrap();

@@ -47,7 +47,7 @@ async fn golden_manifests_roundtrip_and_latest_upload_wins() {
     let f = fixture();
     let app = app!(f.api);
     let key = pair(&app, &f.api, "display").await;
-    let wb = f.api.client.project("display").unwrap();
+    let wb = f.api.client.ensure_project("display").unwrap().0;
     let pid = wb.id();
     let path = format!("/projects/{pid}/display");
     let (_, empty) = call(&app, get("/workspace", Some(&key)).to_request()).await;
@@ -102,7 +102,7 @@ async fn golden_manifests_roundtrip_and_latest_upload_wins() {
         reopened.project_by_id(pid).unwrap().display().unwrap(),
         wb.display().unwrap()
     );
-    let other = f.api.client.project("other").unwrap();
+    let other = f.api.client.ensure_project("other").unwrap().0;
     assert!(other.display().unwrap().is_none());
     assert!(wb.verify().unwrap().ok);
 }
@@ -112,7 +112,7 @@ async fn format_only_validation_auth_and_missing_project() {
     let f = fixture();
     let app = app!(f.api);
     let key = pair(&app, &f.api, "display").await;
-    let wb = f.api.client.project("display").unwrap();
+    let wb = f.api.client.ensure_project("display").unwrap().0;
     let path = format!("/projects/{}/display", wb.id());
     for body in [
         r#"{}"#,
@@ -157,7 +157,7 @@ async fn size_cap_checks_wire_and_canonical_bytes_inclusively() {
     let f = fixture();
     let app = app!(f.api);
     let key = pair(&app, &f.api, "display").await;
-    let wb = f.api.client.project("display").unwrap();
+    let wb = f.api.client.ensure_project("display").unwrap().0;
     let path = format!("/projects/{}/display", wb.id());
     let prefix = r#"{"format":1,"x":""#;
     let suffix = r#""}"#;
@@ -203,8 +203,8 @@ async fn display_stream_reconnect_live_poll_and_project_filter() {
     let f = fixture();
     let app = app!(f.api);
     let key = pair(&app, &f.api, "display").await;
-    let wb = f.api.client.project("display").unwrap();
-    let other = f.api.client.project("other").unwrap();
+    let wb = f.api.client.ensure_project("display").unwrap().0;
+    let other = f.api.client.ensure_project("other").unwrap().0;
     let path = format!("/projects/{}/display", wb.id());
     call(
         &app,
@@ -260,8 +260,8 @@ async fn unrelated_wakeups_do_not_postpone_external_display_polling() {
     let f = fixture();
     let app = app!(f.api);
     let key = pair(&app, &f.api, "display").await;
-    let a = f.api.client.project("quiet").unwrap();
-    let b = f.api.client.project("busy").unwrap();
+    let a = f.api.client.ensure_project("quiet").unwrap().0;
+    let b = f.api.client.ensure_project("busy").unwrap().0;
     a.put_display(br#"{"format":1,"label":"first"}"#).unwrap();
     let response = test::call_service(
         &app,

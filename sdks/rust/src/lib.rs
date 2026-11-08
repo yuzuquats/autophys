@@ -9,8 +9,10 @@
 //!
 //! [`connect`] selects a local `.ap-workbook` collection/file or an HTTP daemon.
 //! [`Client::open_project`] opens existing records; [`Client::ensure_project`]
-//! explicitly creates when absent. Legacy [`Client::project`] also creates.
-//! Python's name-only `project` opens existing records instead.
+//! explicitly creates when absent. [`Client::project`] opens an existing
+//! project and is 404 when it is missing, as Python's name-only `project`
+//! is (CORE-04); [`Client::project_with`] binds a scientific project,
+//! creating its workbook.
 //!
 //! ```no_run
 //! # fn main() -> autophys::Result<()> {
