@@ -6,7 +6,9 @@ with its title: brand.ts removes its icon container before first paint.
 The favicon uses /favicon.svg: the Lona family's white 32-unit tile with its
 6-unit corner radius and fine border, cropped to the tile (viewBox 0 0 32 32)
 with no shadow so it fills the browser tab (2026-11-08, matching the family
-favicon formula). Both are vector-only and use no filters, scripts, fonts,
+favicon formula). The favicon's mark is scaled 1.2x about the tile centre so
+it spans about 20 of the 32 units like the other family favicons (tsh,
+marketing, design, Spaces); the header mark keeps its size. Both are vector-only and use no filters, scripts, fonts,
 raster images or external references.
 
 Source: workspace lona-family-landings project, autophys/current/build.py.
@@ -16,8 +18,10 @@ copy current/mark.svg to html/routes/brand.svg and current/favicon.svg to
 html/routes/favicon.svg. These files are app-owned static resources.
 
 Mark SHA-256: e0e561f40ff80cf553b4418964aec2967ef8827af728f62d47cb95fdf7cef74c
-Favicon SHA-256: 849200011f8d484ce75b9dd26b6d9aacff92a315aa9d02deb9469f0d6c6ced6a
-(full tile, no shadow; design commit dc213d4fb on rwc-01 workspace; the earlier
+Favicon SHA-256: f3de1a726dc47d27be994a6d5f10a09a027769451072848d01805319ccbe22c3
+(full tile, no shadow, mark at the family's 20-unit size; design commit
+2e91fe392 on rwc-01 workspace; the full-tile favicon before the resize was
+849200011f8d484ce75b9dd26b6d9aacff92a315aa9d02deb9469f0d6c6ced6a; the earlier
 padded, shadowed favicon was 93c26c889ee8d98b73e7f124ad35febb7513d01b32e21da9bce74fbf19496b45)
 
 Validation: retained SVG hashes match the design source; all artwork is vector-only.
