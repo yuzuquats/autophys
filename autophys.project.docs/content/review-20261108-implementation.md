@@ -80,3 +80,45 @@ SDK 0.1.x refuses it; Python `SCHEMA_VERSION` is now 2 (use
 `reveal` or `display`, Python errors instead of skipping. Open:
 `workbook-format.md` still describes the format-1 optional extension and
 needs a format-2 section once the Rust half lands.
+
+### DM-RS-1: done
+
+`b4dfc6e` (`I4f63a8230efc2cf463a5d907805eb885`). Rust `Trajectory` has no
+map `Deref`/`DerefMut`. Accessors: `outputs()`/`outputs_mut()` (the `y`
+map, time under `"t"`), `inputs()`/`inputs_mut()`, and `t()`,
+`output(name)`, `input(name)` returning `Result<&[f64], ChannelError>`;
+the error names the channel ("missing output channel voltage") and converts
+into `SimulationError::Simulation` and `autophys::Error::BadRequest`.
+Builders: `from_parts`, `into_parts`, `insert_output`/`insert_input`,
+`with_output`/`with_input`; `From<Channels>` and `collect()` still build
+outputs. Serde is `{"y": {...}, "u": {...}}` (`u` optional on read) and
+equality compares `u` too. Removed: `.u` as a public field, `Deref` map
+methods (`get`, `keys`, `iter`, `insert`, `shift_remove`, …), `Extend`,
+`IntoIterator` and `From<Trajectory> for Channels`.
+
+Serialisation audit: with the serde derives removed, only tests failed to
+compile; no record, hash or golden serialises a `Trajectory`. Two numerics
+tests compared `json!(trajectory)` against Python fixtures and now
+serialise `outputs()`, the bytes they compared before. Goldens under
+`tests/conformance/`, `tests/vectors/` and `sdks/rust/src/models/` are
+unchanged.
+
+DM-RS-1b — **agent-chosen, pending operator review**: `traj["name"]`
+(`Index<&str>`, outputs only, panics naming the channel) stays. Before: map
+indexing through `Deref`. After: indexing of outputs only; no input or
+mutable indexing. Reason: the built-in models hash their own file, test
+module included, into their source identity, and those tests index results;
+dropping `Index` means editing `models/{oscillator,thermal}.rs`, which
+changes their source hashes and hence every bench project's config version
+(a record-visible change the brief excluded). Alternative: remove `Index`,
+edit the model tests and accept new built-in source hashes (new config
+versions for existing bench projects on next run). Reversal: delete the impl
+and convert the model tests and the remaining test call sites (about ten
+lines) in the same release that is allowed to move the model hashes.
+
+Tests: `cargo test --workspace --locked` on yuzuquats, 323 passed, 0
+failed, 2 ignored (baseline at `5d64e70`, before the change: 321/0/2; the
+two new tests are the trajectory unit tests). `autophys new --lang rust`
+for `blank` and `battery-fit`, pinned to `b4dfc6e` through a `file://`
+SDK repo, builds in release; both run, and `battery-fit --demo` writes a
+`demo.csv` byte-identical to the shipped one.
