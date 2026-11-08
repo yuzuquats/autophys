@@ -4,7 +4,10 @@
 
 use std::time::Duration;
 
-use autophys::{APPLICATION_ID, Error, FORMAT_VERSION, Workbook, connect, sha256_hex, slug};
+use autophys::{
+    APPLICATION_ID, Error, FORMAT_VERSION, INITIAL_FORMAT_VERSION, Workbook, connect, sha256_hex,
+    slug,
+};
 use rusqlite::Connection;
 use serde_json::{Value, json};
 
@@ -85,8 +88,8 @@ fn a_workbook_file_is_format_1_with_one_project_and_no_server_tables() {
     };
     assert_eq!(pragma("application_id"), APPLICATION_ID);
     assert_eq!(APPLICATION_ID, 0x41505742);
-    assert_eq!(pragma("user_version"), FORMAT_VERSION);
-    assert_eq!(FORMAT_VERSION, 1);
+    assert_eq!(pragma("user_version"), INITIAL_FORMAT_VERSION);
+    assert_eq!((INITIAL_FORMAT_VERSION, FORMAT_VERSION), (1, 2));
     let mode: String = raw
         .query_row("PRAGMA journal_mode", [], |r| r.get(0))
         .unwrap();
@@ -165,13 +168,13 @@ fn foreign_and_newer_files_are_refused() {
     let c = Connection::open(&path).unwrap();
     c.pragma_update(None, "application_id", APPLICATION_ID)
         .unwrap();
-    c.pragma_update(None, "user_version", 2).unwrap();
+    c.pragma_update(None, "user_version", 3).unwrap();
     drop(c);
     let err = connect(Some(path.to_str().unwrap()))
         .unwrap()
         .project("x")
         .unwrap_err();
-    assert!(err.to_string().contains("format 2"), "{err}");
+    assert!(err.to_string().contains("format 3"), "{err}");
 }
 
 #[test]

@@ -50,6 +50,26 @@ impl From<HttpError> for Error {
     }
 }
 
+/// RS-REMOTE-2: a daemon without a feature's endpoint is an error saying to
+/// upgrade the daemon, never a silent skip or fallback. The daemon answers an
+/// unknown route with 404 `unknown route` (older builds: an empty body) or
+/// 405; a 404 naming a resource, such as `unknown investigation`, is left as
+/// it is. Mirrors the Python SDK's `_route_missing`/`_daemon_too_old`.
+pub(crate) fn daemon_too_old(e: Error, feature: &str) -> Error {
+    match e {
+        Error::Http(mut h)
+            if h.status == 405
+                || (h.status == 404 && (h.message.is_empty() || h.message == "unknown route")) =>
+        {
+            h.message = format!(
+                "the daemon is too old for {feature} (no endpoint); upgrade the autophys daemon"
+            );
+            Error::Http(h)
+        }
+        e => e,
+    }
+}
+
 /// Cheap to clone; investigation cursors and diagnostic wait mode are shared.
 /// Methods are `async` and need a tokio runtime (I/O and time enabled).
 #[derive(Clone)]
@@ -342,7 +362,7 @@ impl Remote {
             Some(&json!({"id":id,"kind":kind,"payload":payload})),
             Some(&id),
             self.timeout,
-        ).await?;
+        ).await.map_err(|e| if kind == "reveal" { daemon_too_old(e, "reveal records") } else { e })?;
         let gseq = j["gseq"]
             .as_i64()
             .ok_or_else(|| Error::Io("invalid daemon gseq".into()))?;

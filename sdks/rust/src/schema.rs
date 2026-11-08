@@ -1,8 +1,14 @@
-//! The `.ap-workbook` schema (workbook-format.md, version 1) and its
+//! The `.ap-workbook` schema (workbook-format.md, formats 1 and 2) and its
 //! migrations, keyed by `PRAGMA user_version`. Append a step; never edit one
 //! that has shipped.
+//!
+//! A new workbook is created at [`INITIAL_VERSION`]. Later steps run only
+//! when a write needs them ([`upgrade`], inside that write's transaction),
+//! never on open (DM-D1a): format 2 adds the display table and is reached at
+//! a workbook's first display write, so a workbook without a display stays
+//! format 1 and readable by SDK 0.1.x.
 
-use rusqlite::{Connection, TransactionBehavior};
+use rusqlite::{Connection, Transaction, TransactionBehavior};
 
 use crate::error::{Error, Result};
 
@@ -47,17 +53,32 @@ const MIGRATIONS: &[&str] = &[
       sha256 TEXT PRIMARY KEY,                -- "sha256:<hex>" of bytes
       media_type TEXT NOT NULL, bytes BLOB NOT NULL, created REAL NOT NULL);
     "#,
+    // 1 -> 2: the display table (DM-D1).
+    DISPLAY_DDL,
 ];
 
-/// The schema version this build writes.
+/// The display table. These bytes are the statement SDKs before format 2 ran
+/// on a format-1 workbook as an optional extension, and the Python SDK's
+/// `_DISPLAY_DDL`, so every SDK leaves the same text in `sqlite_master`.
+/// `IF NOT EXISTS` because such a format-1 workbook may already hold it.
+const DISPLAY_DDL: &str = "CREATE TABLE IF NOT EXISTS display (\n              project TEXT PRIMARY KEY REFERENCES projects(id),\n              digest TEXT NOT NULL, body TEXT NOT NULL, created REAL NOT NULL\n            );";
+
+/// `PRAGMA user_version` of a newly created workbook.
+pub const INITIAL_VERSION: i64 = 1;
+
+/// The newest workbook format this build reads and writes.
 pub const VERSION: i64 = MIGRATIONS.len() as i64;
+
+const _: () = assert!(INITIAL_VERSION == 1 && VERSION == 2);
 
 fn pragma(conn: &Connection, name: &str) -> Result<i64> {
     Ok(conn.query_row(&format!("PRAGMA {name}"), [], |r| r.get(0))?)
 }
 
-/// Initialise an empty file, or bring a workbook to [`VERSION`]. Refuses a
-/// SQLite file that is not a workbook and a workbook from a newer format.
+/// Initialise an empty file at [`INITIAL_VERSION`], or accept a workbook of
+/// any format up to [`VERSION`] as it is. Refuses a SQLite file that is not a
+/// workbook and a workbook from a newer format. Never runs a step past
+/// [`INITIAL_VERSION`]; [`upgrade`] does, inside the write that needs it.
 pub(crate) fn migrate(conn: &mut Connection, path: &str) -> Result<()> {
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let (aid, ver) = (pragma(&tx, "application_id")?, pragma(&tx, "user_version")?);
@@ -79,10 +100,29 @@ pub(crate) fn migrate(conn: &mut Connection, path: &str) -> Result<()> {
             "{path} has workbook format {ver}; this library reads up to {VERSION}"
         )));
     }
-    for (i, sql) in MIGRATIONS.iter().enumerate().skip(ver as usize) {
-        tx.execute_batch(sql)?;
-        tx.pragma_update(None, "user_version", (i + 1) as i64)?;
-    }
+    run_steps(&tx, ver, INITIAL_VERSION)?;
     tx.commit()?;
+    Ok(())
+}
+
+/// Bring the workbook in the caller's write transaction to format `target`.
+/// The steps, the new `user_version` and the write that needed them commit
+/// or roll back together. Refuses a format newer than [`VERSION`], also when
+/// another process wrote it after this connection opened.
+pub(crate) fn upgrade(tx: &Transaction<'_>, path: &str, target: i64) -> Result<()> {
+    let ver = pragma(tx, "user_version")?;
+    if ver > VERSION {
+        return Err(Error::Format(format!(
+            "{path} has workbook format {ver}; this library reads up to {VERSION}"
+        )));
+    }
+    run_steps(tx, ver, target)
+}
+
+fn run_steps(tx: &Transaction<'_>, from: i64, to: i64) -> Result<()> {
+    for step in from.max(0)..to {
+        tx.execute_batch(MIGRATIONS[step as usize])?;
+        tx.pragma_update(None, "user_version", step + 1)?;
+    }
     Ok(())
 }

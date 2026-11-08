@@ -16,7 +16,8 @@ impl Remote {
                 None,
                 self.timeout,
             )
-            .await?;
+            .await
+            .map_err(|e| super::daemon_too_old(e, "batch record appends"))?;
         let bad = || Error::Io("invalid daemon batch response".into());
         let items = out["records"].as_array_mut().ok_or_else(bad)?;
         if items.len() != records.len() {
@@ -155,7 +156,7 @@ impl Remote {
             "application/json",
             None,
             self.timeout,
-        ).await?;
+        ).await.map_err(|e| super::daemon_too_old(e, "display manifests"))?;
         Ok((
             StoredDisplay {
                 digest: j["digest"]

@@ -199,3 +199,20 @@ def test_readonly_workbooks_refuse_display_writes(tmp_path):
         with pytest.raises(WorkbookError, match="read-only"):
             ro.put_display(pid, BODY)
     assert raw(path)[0] == 1
+
+
+# The display digest both SDKs compute for a non-ASCII manifest; pinned the
+# same in sdks/rust/tests/workbook_format2.rs (canonical JSON is ASCII-only in
+# both, keys sorted by code point).
+NON_ASCII_CANONICAL = r'{"channels":{"T":{"label":"\u03b8 (\u00b0C)","unit":"\u00b0C"}},"ctl":"tab\tnl\n\u0001 \u2028","e":2,"format":1,"nums":[0.1,1e-07,1e+21,-0.0],"title":"Temp\u00e9rature \u2014 \u71b1 \ud83d\udd25","\u00e9":1,"\uffff":3,"\ud83d\ude00":4}'
+NON_ASCII_DIGEST = "543ee13fd15bb36266fc0fe2ff74e76c62feae40e9e0fec1a54561349512c075"
+
+
+def test_non_ascii_manifest_digest_matches_rust(tmp_path):
+    upload = ('{"format":1,"title":"Température — 熱 🔥","channels":{"T":{"label":"θ (°C)","unit":"°C"}},'
+              '"é":1,"e":2,"￿":3,"😀":4,"ctl":"tab\\tnl\\n\\u0001  ","nums":[0.1,1e-7,1e21,-0.0]}')
+    wb, pid = workbook(tmp_path / "p.ap-workbook")
+    stored, _ = wb.put_display(pid, upload.encode())
+    assert stored["digest"] == NON_ASCII_DIGEST and canonical(stored["body"]) == NON_ASCII_CANONICAL
+    assert sqlite3.connect(tmp_path / "p.ap-workbook").execute("SELECT body FROM display").fetchone()[0] == NON_ASCII_CANONICAL
+    wb.close()

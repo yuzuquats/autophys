@@ -526,7 +526,12 @@ class HttpStore(Store):
     def _batch(self, investigation: str, items: list[tuple[str, str, dict]]) -> list[Record]:
         from .workbook import canonical_payload
         body = {"records": [{"id": rid, "kind": kind, "payload": canonical_payload(payload)[0]} for rid, kind, payload in items]}
-        out = self._req("POST", f"/investigations/{urllib.parse.quote(investigation, safe='')}/records", body)
+        try:
+            out = self._req("POST", f"/investigations/{urllib.parse.quote(investigation, safe='')}/records", body)
+        except HttpError as error:
+            if _route_missing(error):  # a daemon before CORE-01; there is no fallback
+                raise _daemon_too_old(error, "batch record appends") from None
+            raise
         self._see(investigation, out)
         return [_to_record(item["record"]) for item in out["records"]]
 

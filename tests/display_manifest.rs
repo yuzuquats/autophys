@@ -52,6 +52,15 @@ async fn golden_manifests_roundtrip_and_latest_upload_wins() {
     let path = format!("/projects/{pid}/display");
     let (_, empty) = call(&app, get("/workspace", Some(&key)).to_request()).await;
     assert_eq!(empty["projects"][0]["display"], Value::Null);
+    // DM-D1: reads leave format 1; the daemon's first display write moves
+    // that workbook (only) to format 2, through Workbook::put_display.
+    let format = |p: &std::path::Path| -> i64 {
+        rusqlite::Connection::open(p)
+            .unwrap()
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap()
+    };
+    assert_eq!(format(wb.path()), 1);
     let config = br#"{"physics":true}"#;
     let version = format!("sha256:{}", sha256_hex([&config[..]]));
     wb.put_config_version(&version, config).unwrap();
@@ -105,6 +114,7 @@ async fn golden_manifests_roundtrip_and_latest_upload_wins() {
     let other = f.api.client.ensure_project("other").unwrap().0;
     assert!(other.display().unwrap().is_none());
     assert!(wb.verify().unwrap().ok);
+    assert_eq!((format(wb.path()), format(other.path())), (2, 1));
 }
 
 #[actix_web::test]

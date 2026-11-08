@@ -55,7 +55,7 @@ pub use client::{Client, SUFFIX, connect, default_home, slug};
 pub use error::{Error, Result};
 pub use projections::{InvestigationInfo, Proposal};
 pub use records::{Logged, Record};
-pub use schema::{APPLICATION_ID, VERSION as FORMAT_VERSION};
+pub use schema::{APPLICATION_ID, INITIAL_VERSION as INITIAL_FORMAT_VERSION, VERSION as FORMAT_VERSION};
 pub use validate::{Envelope, Event, Kind, MAX_ID_LEN, MAX_PAYLOAD_BYTES};
 pub use workbook::{
     Appended, BatchRecord, ChainError, MAX_BATCH_RECORDS, ConfigVersion, Head, Investigation, MAX_DISPLAY_BYTES, Project, Snapshot,

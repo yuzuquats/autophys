@@ -15,7 +15,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use autophys::{APPLICATION_ID, Client, FORMAT_VERSION, Workbook, connect, sha256_hex};
+use autophys::{APPLICATION_ID, Client, INITIAL_FORMAT_VERSION, Workbook, connect, sha256_hex};
 use rusqlite::Connection;
 use serde_json::{Map, Value, json};
 
@@ -90,7 +90,7 @@ fn read_back(golden: &Path) {
     let (_dir, copy, _client, wb) = open_copy(golden);
     assert_eq!(
         exp["format"],
-        json!({"application_id": APPLICATION_ID, "user_version": FORMAT_VERSION}),
+        json!({"application_id": APPLICATION_ID, "user_version": INITIAL_FORMAT_VERSION}),
         "{case}: format"
     );
     let report = wb.verify().unwrap();

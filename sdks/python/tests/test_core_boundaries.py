@@ -220,7 +220,7 @@ def test_old_daemon_atomic_attachment_fails_without_record_fallback(monkeypatch)
                 attempted.append(path);raise HttpError(404,"not_found")
             return request(method,path,body,**kw)
         monkeypatch.setattr(inv.store,"_req",old_server)
-        with pytest.raises(HttpError): inv.attach_data(pid,obs)
+        with pytest.raises(HttpError, match="too old for batch record appends.*upgrade the autophys daemon"): inv.attach_data(pid,obs)
         assert len(attempted)==1 and len(inv.records())==before and inv.experiments_used==0
 
 

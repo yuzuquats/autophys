@@ -401,13 +401,14 @@ for external writers as well as sent on daemon wakeups. Record cursors do
 not change. New uploads replace the current row transactionally; reverting
 to an earlier body is a new upload.
 
-**DM-D1 — changed by the operator, 2026-11-08: format 2 (see decisions.md; not implemented yet).** As built: store display as an optional
-format-1 table, created on the first PUT, rather than incrementing the core
-workbook version. Current Python readers refuse a version above 1; they
-preserve unknown tables, so this additive extension keeps both SDKs usable.
-The alternative is a coordinated format-2 migration of both SDKs. Reversal:
-add that migration once both readers support it; existing table bodies can
-be retained. This choice does not alter the records or hash contract.
+**DM-D1 — changed by the operator, 2026-11-08: format 2 (decisions.md);
+built in both SDKs.** The display table is workbook format 2, reached at a
+workbook's first display write and never on open (DM-D1a); display-less
+workbooks stay format 1 and readable by SDK 0.1.x, which refuses format 2.
+Format-1 files that hold the table from the earlier optional extension read
+as is and move to format 2 on their next display write. The contract is in
+[workbook-format.md](workbook-format.md#format-2-the-display-table-dm-d1).
+This does not alter the records or hash contract.
 
 Task-board CLI was unavailable on rwc-dev-01; implementation, archived-tree
 gates and independent review are tracked in these two spec pages.
@@ -436,6 +437,11 @@ small SDK-only API refactor before external adoption. Identity and numerical
 conformance tests cover the boundary. Implementation: `3e9496b`
 (`Ia92f82fc2cb154edfbe3`), with compatibility fixes `53f8c69`
 (`Ia9e363767fc7c0a4ddda`) and `22136d3` (`I5b6d6a33bd26ee06758a`).
+
+DM-RS-1 superseded (operator, 2026-11-08): the paragraph above describes the
+earlier map-compatible struct. Rust `Trajectory` now has typed accessors
+(`outputs()`, `inputs()`, `output(name)`, `input(name)`) and serialises as
+`{"y": {...}, "u": {...}}` (DM-RS-1a); see decisions.md.
 
 Validation receipt: `cargo test --manifest-path sdks/rust/Cargo.toml` from a
 `git archive` export of the reviewed combined master `d2bada2` passed **92

@@ -135,6 +135,14 @@ ids when retrying after an ambiguous response. A second scientific
 `attach_data` call after successful completion can instead refuse because the
 proposal is no longer pending; it is not an unconditional no-op retry API.
 
+New workbooks are format 1 (`INITIAL_FORMAT_VERSION`); `FORMAT_VERSION` (2)
+is the newest this crate reads and writes. `Workbook::put_display` stores a
+display manifest and moves that workbook to format 2 in the same
+transaction; SDK 0.1.x cannot open a format-2 workbook, so a workbook only
+changes format when it first gets a display, never when it is opened. A
+daemon without the `reveal`, `display` or batch-record endpoint gives an
+`Error::Http` saying it is too old and should be upgraded.
+
 Investigations pin configuration versions. Resume and run/approve/attach check
 the pin, but public scientific tools can still bypass that check after exposed
 configuration mutation (A3). Keep the declaration stable; do not assume every

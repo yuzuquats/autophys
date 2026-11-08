@@ -387,6 +387,8 @@ fn old_daemon_atomic_attachment_does_not_fallback() {
         .attach_data("p_test", json!({"t":[0.],"y":{"x":[1.]}}))
         .unwrap_err();
     assert_eq!(e.status(), 404);
+    assert!(e.to_string().contains("too old for batch record appends"), "{e}");
+    assert!(e.to_string().contains("upgrade the autophys daemon"), "{e}");
     let requests = server.requests.lock().unwrap();
     assert_eq!(requests.len(), 1);
     assert!(requests[0].starts_with("POST /api/v1/investigations/inv_test/records "));
@@ -466,4 +468,34 @@ fn blocking_stream_iterates_records_and_advances_cursor() {
         .collect();
     assert_eq!(got, vec![3, 5]);
     assert_eq!(remote.cursor("inv_test"), 5);
+}
+
+#[test]
+fn missing_reveal_and_display_endpoints_say_upgrade_the_daemon() {
+    // RS-REMOTE-2: 405, or 404 without a resource message, is a missing route.
+    for (status, body) in [
+        (405, ""),
+        (404, ""),
+        (404, r#"{"error":"not_found","message":"unknown route"}"#),
+    ] {
+        let server = Mock::new(move |_, _| response(status, "application/json", body, ""));
+        let remote = Remote::new(&server.url, "key").unwrap();
+        let e = remote
+            .append("inv_test", "reveal", json!({"truth": {}}), Some("r1"))
+            .unwrap_err();
+        assert_eq!(e.status(), status);
+        assert!(e.to_string().contains("too old for reveal records"), "{e}");
+        let wb = crate::Workbook::from_remote(remote, Project { id: "prj_test".into(), name: "x".into() });
+        let e = wb.put_display(br#"{"format":1}"#).unwrap_err();
+        assert!(e.to_string().contains("too old for display manifests"), "{e}");
+        assert!(e.to_string().contains("upgrade the autophys daemon"), "{e}");
+    }
+    // A 404 naming a resource is an ordinary error.
+    let server = Mock::new(|_, _| {
+        response(404, "application/json", r#"{"error":"not_found","message":"unknown project"}"#, "")
+    });
+    let remote = Remote::new(&server.url, "key").unwrap();
+    let wb = crate::Workbook::from_remote(remote, Project { id: "prj_test".into(), name: "x".into() });
+    let e = wb.put_display(br#"{"format":1}"#).unwrap_err();
+    assert!(e.to_string().contains("unknown project") && !e.to_string().contains("upgrade"), "{e}");
 }

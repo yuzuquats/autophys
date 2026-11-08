@@ -16,8 +16,12 @@ must pass.
   collision is refused when the stored name differs.
 - `PRAGMA application_id = 1095784258` (`0x41505742`, ASCII `APWB`). A file
   without it is not a workbook; an empty new file is initialised.
-- `PRAGMA user_version = 1` for this schema. Migrations append steps and never
-  edit a shipped one.
+- `PRAGMA user_version` is the workbook format: 1 or 2 (format 2 adds the
+  display table, below). A new workbook is created at format 1. Migrations
+  append steps and never edit a shipped one. Readers accept formats 1 and 2
+  and refuse a newer one, on open and when another process wrote it after
+  open. A step past format 1 runs only inside the write that needs it,
+  never on open (DM-D1a).
 - `journal_mode = WAL`, `synchronous = NORMAL`, `foreign_keys = ON`, busy
   timeout 5 s. Several processes may open the file; writes are serialised by
   SQLite.
@@ -112,19 +116,38 @@ way. The payload is the client's meta with `project_id`, `config_version` and
 `overrides` (default `{}`) set; the pinned config version must be stored
 (`unknown_config_version`).
 
-## Optional display extension (DM-1)
+## Format 2: the display table (DM-D1)
 
-The core `user_version` stays 1. A daemon/store that accepts a display creates
-this optional table on its first upload; readers without display support
-preserve it. It is authoritative presentation data, outside the record log
-and projection rebuild, and does not affect config or source hashes.
+Format 2 is format 1 plus the `display` table (operator, 2026-11-08: DM-D1
+and DM-D1a). A workbook reaches format 2 at its first display write, never
+on open, so a workbook without a display stays format 1 and readable by SDK
+0.1.x, which refuses format 2. The display is authoritative presentation
+data, outside the record log and projection rebuild, and does not affect
+config or source hashes.
+
+Migration step 1 to 2 is exactly this statement (both SDKs run the same
+bytes, so `sqlite_master` holds the same text, without `IF NOT EXISTS` and
+the `;`):
 
 ```sql
-CREATE TABLE display (
-  project TEXT PRIMARY KEY REFERENCES projects(id),
-  digest TEXT NOT NULL, body TEXT NOT NULL, created REAL NOT NULL
-);
+CREATE TABLE IF NOT EXISTS display (
+              project TEXT PRIMARY KEY REFERENCES projects(id),
+              digest TEXT NOT NULL, body TEXT NOT NULL, created REAL NOT NULL
+            );
 ```
+
+A display write (Rust `Workbook::put_display`, which the daemon's
+`PUT /projects/{pid}/display` calls; Python `WorkbookStore.put_display`)
+runs in one `BEGIN IMMEDIATE` transaction: refuse a format above 2, run the
+steps up to 2 and set `user_version = 2`, then compare digests and upsert.
+It commits even when the digest is unchanged, and a failed write leaves the
+file at format 1. Reading a display never creates the table or changes the
+format.
+
+SDKs before format 2 created the same table, with the same statement, as an
+optional extension of format 1. Such a file reads as is (its display
+included) and becomes format 2 on its next display write, even an unchanged
+one.
 
 There is one latest row per project. `body` is canonical JSON; `digest` is
 the bare lowercase sha256 of those bytes. Both uploaded bytes and canonical
@@ -133,7 +156,7 @@ all other fields are opaque. An identical canonical digest is a no-op,
 including its creation timestamp. A different upload replaces the row in
 `BEGIN IMMEDIATE` order, including a return to an earlier digest.
 
-`Workbook::snapshot` reads the optional display in the same transaction as
+`Workbook::snapshot` reads the display (if any) in the same transaction as
 records/configs. `/workspace.projects[]` includes `display: <manifest|null>`.
 `/stream` sends `event: display` with
 `{project_id, digest, display}` and no event id: records keep their cursors.

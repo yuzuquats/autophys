@@ -1,4 +1,5 @@
-//! Optional project presentation data; independent of records and config hashes.
+//! Project presentation data (workbook format 2); independent of records and
+//! config hashes.
 use super::*;
 
 /// Maximum uploaded and canonical display size (256 KiB).
@@ -14,7 +15,9 @@ pub struct StoredDisplay {
 
 impl Workbook {
     /// Validate only format 1, canonicalise, then replace the project's display.
-    /// Returns (latest, changed); an identical canonical body is a no-op.
+    /// Returns (latest, changed); an identical canonical body keeps the stored
+    /// row. The first display write moves the workbook to format 2 in the
+    /// same transaction (DM-D1); SDK 0.1.x cannot open it afterwards.
     pub fn put_display(&self, body: &[u8]) -> Result<(StoredDisplay, bool)> {
         if let Some(r) = self.remote() { return r.put_display(self.id(),body); }
         if body.len() > MAX_DISPLAY_BYTES {
@@ -35,16 +38,13 @@ impl Workbook {
         let digest = canonical::sha256_hex([text.as_bytes()]);
         let mut conn = self.conn()?;
         let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        // An optional extension to format 1: old readers preserve unknown
-        // tables. Do not bump user_version and strand current Python readers.
-        tx.execute_batch(
-            "CREATE TABLE IF NOT EXISTS display (
-              project TEXT PRIMARY KEY REFERENCES projects(id),
-              digest TEXT NOT NULL, body TEXT NOT NULL, created REAL NOT NULL
-            );",
-        )?;
+        // The display table is workbook format 2 (DM-D1). The first display
+        // write moves the workbook there, in this transaction, so a failure
+        // leaves format 1; an unchanged body still commits the upgrade.
+        crate::schema::upgrade(&tx, &self.path().display().to_string(), crate::schema::VERSION)?;
         if let Some(old) = read(&tx, self.id())? {
             if old.digest == digest {
+                tx.commit()?;
                 return Ok((old, false));
             }
         }
@@ -66,7 +66,9 @@ impl Workbook {
         ))
     }
 
-    /// No manifest is represented by None; reading an old workbook adds no table.
+    /// No manifest is represented by None. Reads format 2, and format-1
+    /// workbooks holding the older optional table, alike; reading never
+    /// creates the table or changes the format.
     pub fn display(&self) -> Result<Option<StoredDisplay>> {
         if let Some(r) = self.remote() { return Ok(r.snapshot(self.id())?.display); }
         read(&*self.conn()?, self.id())
