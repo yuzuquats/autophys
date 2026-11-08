@@ -240,6 +240,18 @@ pub fn render(text: &str, vars: &[(&str, &str)]) -> String {
 /// `~/autophys`) is checked: it is where the scaffolded project writes unless
 /// `AUTOPHYS_SERVER` sends its records to a daemon.
 fn check_new_name(name: &str, collection: &Path) -> Result<(), Failure> {
+    // G3-FILE: a home naming one workbook file sends every project there
+    // (both SDKs' `connect`), whatever the project's name.
+    if collection.to_string_lossy().ends_with(autophys::SUFFIX) {
+        if !collection.exists() {
+            return Ok(());
+        }
+        return Err(failure(format!(
+            "$AUTOPHYS_HOME is the workbook {}; project {name:?} would write into it. \
+             Point AUTOPHYS_HOME at a collection folder, or pass --existing to add to that workbook",
+            collection.display()
+        )));
+    }
     let path = collection.join(format!("{}{}", autophys::slug(name), autophys::SUFFIX));
     if !path.exists() {
         return Ok(());
@@ -557,6 +569,20 @@ mod tests {
         assert!(check_new_name("other_cell", collection.path()).is_ok());
         assert!(parse(words("cells --lang python --existing")).unwrap().existing);
         assert!(!parse(words("cells --lang python")).unwrap().existing);
+    }
+
+    #[test]
+    fn refuses_a_home_that_is_an_existing_workbook_file() {
+        // G3-FILE: every project would write into that one file.
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join(format!("battery{}", autophys::SUFFIX));
+        assert!(check_new_name("thermal", &file).is_ok(), "a missing file is created as before");
+        std::fs::write(&file, b"").unwrap();
+        let e = check_new_name("thermal", &file).unwrap_err();
+        assert_eq!(e.code, 1);
+        assert!(e.message.contains("$AUTOPHYS_HOME is the workbook"), "{}", e.message);
+        assert!(e.message.contains("project \"thermal\" would write into it"), "{}", e.message);
+        assert!(e.message.contains("--existing"), "{}", e.message);
     }
 
     #[test]
