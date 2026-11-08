@@ -156,6 +156,17 @@ def simulated(name: str, settings: dict, seed: int) -> ap.Observation:
     return obs
 
 
+def numbers(path: str, rows: list[dict], column: str) -> np.ndarray:
+    """One column as floats; a cell that is not a number names its line."""
+    out = []
+    for line, row in enumerate(rows, start=2):
+        try:
+            out.append(float(row[column]))
+        except (TypeError, ValueError):
+            sys.exit(f"{path}: line {line}: {column} must be a number, got {row[column]!r}")
+    return np.array(out)
+
+
 def measured(path: str, name: str, settings: dict, sigma: float, columns: str, split: str = "train") -> ap.Observation:
     """Read time,current,voltage; resample voltage onto the program's grid and check the current matches it."""
     tc, ic, vc = columns.split(",")
@@ -164,9 +175,11 @@ def measured(path: str, name: str, settings: dict, sigma: float, columns: str, s
             rows = list(csv.DictReader(f))
     except OSError as e:
         sys.exit(f"{path}: cannot read: {e.strerror or e}")
+    except (UnicodeDecodeError, csv.Error) as e:
+        sys.exit(f"{path}: not a text CSV file: {e}")
     if not rows or any(c not in rows[0] for c in (tc, ic, vc)):
         sys.exit(f"{path}: need columns {tc},{ic},{vc}")
-    t, i, v = (np.array([float(r[c]) for r in rows]) for c in (tc, ic, vc))
+    t, i, v = (numbers(path, rows, c) for c in (tc, ic, vc))
     if np.any(np.diff(t) <= 0):
         sys.exit(f"{path}: time must strictly increase")
     grid = time_grid(settings)
@@ -203,7 +216,9 @@ def where() -> str:
     if not home:
         return "the local workbook in ~/autophys (view it with `autophys serve`)"
     # Name the collection so the hint works from a shell without AUTOPHYS_HOME.
-    return f"the local workbook in {home} (view it with `autophys serve --collection {shlex.quote(home)}`)"
+    # Expand ~ as the SDKs do; serve --collection takes the path literally.
+    return (f"the local workbook in {home} (view it with "
+            f"`autophys serve --collection {shlex.quote(os.path.expanduser(home))}`)")
 
 
 def print_outcome(inv, out) -> None:

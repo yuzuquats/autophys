@@ -48,3 +48,27 @@ def test_a_missing_input_file_is_a_clean_error(tmp_path, script, args):
     assert out.returncode == 1
     assert "Traceback" not in out.stderr
     assert out.stderr.strip() == f"{missing}: cannot read: No such file or directory"
+
+
+@pytest.mark.parametrize("content, message", [
+    ("time,current,voltage\n0,0,3.7\n1,x,3.6\n", "line 3: current must be a number, got 'x'"),
+    ("time,current,voltage\n0,0,3.7\n1,0\n", "line 3: voltage must be a number, got None"),
+])
+def test_a_bad_cell_is_a_clean_error(tmp_path, content, message):
+    data = tmp_path / "bad.csv"
+    data.write_text(content)
+    out = subprocess.run([sys.executable, str(TEMPLATE / "battery_fit.py"), str(data)],
+                         capture_output=True, text=True, cwd=tmp_path, timeout=120,
+                         env={**os.environ, "PYTHONPATH": os.pathsep.join(filter(None, [str(SDK_SRC), os.environ.get("PYTHONPATH")])),
+                              "AUTOPHYS_HOME": str(tmp_path / "home"), "AUTOPHYS_SERVER": ""})
+    assert out.returncode == 1 and "Traceback" not in out.stderr
+    assert out.stderr.strip() == f"{data}: {message}"
+
+
+def test_the_serve_hint_expands_a_tilde_home(monkeypatch):
+    module = load_closed_loop(TEMPLATE)
+    monkeypatch.setenv("AUTOPHYS_HOME", "~/lab")
+    monkeypatch.setenv("AUTOPHYS_SERVER", "")
+    hint = module.where()
+    assert f"--collection {os.path.expanduser('~/lab')}`" in hint
+    assert "'~/lab'" not in hint

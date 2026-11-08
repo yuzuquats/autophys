@@ -74,3 +74,11 @@ def test_training_residuals_name_the_misaligned_observation():
         residuals(kinetics, TRUTH, [good, bad])
     # Still a SimulationError: a fit treats it as a failed trial point, as before.
     assert issubclass(GridMismatchError, SimulationError)
+
+
+def test_a_same_size_wrong_shape_prediction_names_both_shapes():
+    from autophys.simulator import aligned_prediction
+    obs = ap.Observation(experiment="treated", settings={"kind": "m"}, t=[0.1, 0.2],
+                         y={"rate": [1.0, 2.0]}, sigma={"rate": 1.0})
+    with pytest.raises(GridMismatchError, match=r"has shape \(2, 1\) but the observation's samples have shape \(2,\)"):
+        aligned_prediction({"rate": np.zeros((2, 1))}, obs, "rate", "train observation 1 of 1")

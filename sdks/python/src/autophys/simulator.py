@@ -56,11 +56,13 @@ def aligned_prediction(pred: Mapping[str, Any], obs, channel: str, where: str) -
     """``pred[channel]``, checked to have one value per sample of ``obs`` before
     any sample mask is applied; ``where`` names the observation."""
     p = np.asarray(pred[channel])
-    if p.shape != obs.y[channel].shape:
+    want = obs.y[channel].shape
+    if p.shape != want:
+        got = (f"has {p.size} samples but the observation has {obs.y[channel].size}" if p.size != obs.y[channel].size
+               else f"has shape {p.shape} but the observation's samples have shape {want}")
         raise GridMismatchError(
-            f"{where}: the prediction for {channel!r} has {p.size} samples but the observation has "
-            f"{obs.y[channel].size}; give this observation settings whose grid matches its own "
-            f"samples (e.g. its own 't')")
+            f"{where}: the prediction for {channel!r} {got}; give this observation settings whose "
+            f"grid matches its own samples (e.g. its own 't')")
     return p
 
 
@@ -133,13 +135,14 @@ TRUTH_OPTIONS = SimOptions(rtol=1e-11, atol=1e-13)
 FIT_OPTIONS = SimOptions(rtol=1e-8, atol=1e-10)
 
 
-def _validate_experiment(name: str, settings: Mapping[str, Any]) -> dict:
+def _validate_experiment(name: str, settings: Mapping[str, Any], *, json_values: bool = True) -> dict:
     if not isinstance(settings, Mapping):
         raise ValueError(f"experiment {name}: settings must be a mapping")
     s = dict(settings)
     if "kind" not in s:
         raise ValueError(f"experiment {name}: missing 'kind'")
-    check_settings(name, s)
+    if json_values:
+        check_settings(name, s)
     for key in ("duration", "rate"):
         if key in s and not (isinstance(s[key], (int, float)) and s[key] > 0):
             raise ValueError(f"experiment {name}: {key} must be positive")
@@ -231,7 +234,10 @@ class Simulator:
             if ref not in self.experiments:
                 raise KeyError(f"{self.name}: unknown experiment {ref!r}")
             return copy.deepcopy(self.experiments[ref])
-        return _validate_experiment("<custom>", ref)
+        # Per simulation call: the JSON-value walk (G7-VAL) already ran when
+        # the catalog or the Observation carrying these settings was built,
+        # and runs again when they are recorded.
+        return _validate_experiment("<custom>", ref, json_values=False)
 
     # --- vectors ----------------------------------------------------------
     def to_x(self, params: Mapping[str, float]) -> np.ndarray:

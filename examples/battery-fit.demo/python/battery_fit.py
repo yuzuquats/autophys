@@ -61,16 +61,29 @@ def make_model(ocv_soc: np.ndarray, ocv_v: np.ndarray) -> ap.Simulator:
     return cell
 
 
+def numbers(path: str, rows: list[dict], column: str) -> np.ndarray:
+    """One column as floats; a cell that is not a number names its line."""
+    out = []
+    for line, row in enumerate(rows, start=2):
+        try:
+            out.append(float(row[column]))
+        except (TypeError, ValueError):
+            sys.exit(f"{path}: line {line}: {column} must be a number, got {row[column]!r}")
+    return np.array(out)
+
+
 def read_csv(path: str, columns: tuple[str, str, str]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     try:
         with open(path, newline="") as f:
             rows = list(csv.DictReader(f))
     except OSError as e:
         sys.exit(f"{path}: cannot read: {e.strerror or e}")
+    except (UnicodeDecodeError, csv.Error) as e:
+        sys.exit(f"{path}: not a text CSV file: {e}")
     missing = [c for c in columns if rows and c not in rows[0]]
     if not rows or missing:
         sys.exit(f"{path}: need columns {columns}; missing {missing or 'all rows'}")
-    t, i, v = (np.array([float(r[c]) for r in rows]) for c in columns)
+    t, i, v = (numbers(path, rows, c) for c in columns)
     if np.any(np.diff(t) <= 0):
         sys.exit(f"{path}: time must strictly increase")
     return t, i, v

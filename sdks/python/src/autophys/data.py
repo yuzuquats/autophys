@@ -86,12 +86,15 @@ class Observation:
             raise ValueError(f"split must be one of {SPLITS}")
         self.t = np.asarray(self.t, dtype=float)
         self.y = {k: np.asarray(v, dtype=float) for k, v in self.y.items()}
+        # Settings are checked when the observation is made and again when it
+        # is recorded (to_dict), not on every validate(): fits call that per
+        # trial point, and a long grid makes the walk cost real time.
+        check_settings(self.experiment, self.settings)
         self.validate()
 
     def validate(self) -> None:
         if self.split not in SPLITS:
             raise ValueError(f"split must be one of {SPLITS}")
-        check_settings(self.experiment, self.settings)
         for ch, v in self.y.items():
             if v.shape != self.t.shape:
                 raise ValueError(f"channel {ch}: shape {v.shape} != t {self.t.shape}")
@@ -103,6 +106,7 @@ class Observation:
         return int(sum(np.isfinite(v).sum() for v in self.y.values()))
 
     def to_dict(self) -> dict:
+        check_settings(self.experiment, self.settings)
         self.validate()
         def arr(a):
             return [None if not np.isfinite(x) else float(x) for x in a]

@@ -57,10 +57,18 @@ def test_nested_values_are_named_by_path(value, path, got):
     assert str(e.value).startswith(f"experiment 'e': setting {path!r} must be a JSON value ({got}")
 
 
-def test_custom_settings_passed_to_a_simulator_are_checked():
+def test_settings_are_checked_where_made_and_recorded_not_per_simulation():
+    # Each simulation call does not re-walk the settings (a fit makes many
+    # calls, and a long grid makes the walk cost real time); the settings an
+    # Observation carries are checked when it is made and when it is recorded.
     sim = ap.simulator(params=PARAMS, experiments={"e": {"kind": "m", "t": [0.1, 0.2]}})(_kinetics)
+    assert sim({"v": 100.0, "k": 0.1}, {"kind": "m", "t": np.array([0.1])})["rate"].shape == (1,)
+    obs = ap.Observation(experiment="e", settings={"kind": "m", "t": [0.1]}, t=[0.1],
+                         y={"rate": [50.0]}, sigma={"rate": 1.0})
+    obs.settings["t"] = np.array([0.1])
+    obs.validate()  # per trial point: structure only
     with pytest.raises(ValueError, match=r"setting 't' must be a JSON value \(got numpy.ndarray\)"):
-        sim({"v": 100.0, "k": 0.1}, {"kind": "m", "t": np.array([0.1])})
+        obs.to_dict()
 
 
 def test_accepted_settings_digest_and_record_unchanged():
