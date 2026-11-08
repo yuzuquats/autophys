@@ -163,6 +163,10 @@ Recorded in [decisions.md](decisions.md).
   after its next registry refresh.
 - Task board: unavailable on rwc-dev-01 (no `lona task` CLI and no
   `~/.tento-tasks` board); the steps live in these pages.
+- RR1-b: done. Python writes the measurement record's hash as
+  `measurement_version` in every store (local `append_batch` takes
+  `hash_of`); integer links already written still read
+  (`I637818e1325e675028c76cc9a17442d2`).
 
 ## Scope boundary
 
