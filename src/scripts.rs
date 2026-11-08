@@ -650,7 +650,11 @@ pub async fn run(mut argv: Vec<String>, out: &mut impl Write) -> u8 {
         .any(|word| matches!(word.as_str(), "--help" | "-h"))
         || argv.get(1).is_some_and(|word| word == "help");
     if argv.len() == 1 {
-        eprintln!("autophys: {}", crate::USAGE);
+        // G4-BARE: the same one-line shape as every other failure.
+        eprint!(
+            "{}",
+            crate::cli_error::render_for("", "a command is required", true)
+        );
         return 2;
     }
     if matches!(

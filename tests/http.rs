@@ -232,7 +232,11 @@ fn binary_lists_its_subcommands() {
     let bin = env!("CARGO_BIN_EXE_autophys");
     let none = Command::new(bin).output().unwrap();
     assert_eq!(none.status.code(), Some(2));
-    assert!(String::from_utf8_lossy(&none.stderr).contains("usage: autophys serve"));
+    assert!(none.stdout.is_empty());
+    assert_eq!(
+        String::from_utf8_lossy(&none.stderr),
+        "autophys: a command is required\nTry `autophys --help` for the commands.\n"
+    );
     let unknown = Command::new(bin).arg("ingest").output().unwrap();
     assert_eq!(unknown.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&unknown.stderr).contains("unknown command"));
