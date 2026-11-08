@@ -616,7 +616,11 @@ The order is policy-dependent. The diagram shows the actions and the
 scripted policy's typical order (`agent.py`, `ScriptedPolicy._choose`):
 fit first, compare the base and sensor-bias variants when the misfit is high (which refits and adopts
 the winner), then sensitivity, ranking and requests. `inspect_data` is
-available but optional; the scripted policy does not use it.
+available but optional; the scripted policy does not use it. With
+`analysis.identify_every_fit` (the default, decision ANA-1) every fit runs the
+sensitivity check itself and records it in its step's result, so the scripted
+policy goes from a fit straight to ranking or validation; `analyze_sensitivity`
+appears as a step only when that switch is off or a policy asks for it.
 
 ```review-flow
 flowchart LR

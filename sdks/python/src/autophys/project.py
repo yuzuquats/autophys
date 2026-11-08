@@ -16,7 +16,8 @@ server never edits it. Its configuration is:
   sensor-bias mode (``off``, ``fit`` always, or ``compare`` as a model variant),
 * budgets and stop rules (validation threshold, misfit threshold,
   identifiability rule),
-* the policy (``scripted`` or ``reason-lane`` with its effort).
+* the policy (``scripted`` or ``reason-lane`` with its effort),
+* the analyses run at every fit (``analysis``; see :class:`AnalysisConfig`).
 
 Every distinct configuration is an immutable *config version* keyed by the
 sha256 of its canonical JSON, which includes the simulator source hash.
@@ -86,6 +87,19 @@ class PolicyConfig:
             raise ValueError(f"policy kind must be one of {POLICY_KINDS}")
 
 
+@dataclass(frozen=True)
+class AnalysisConfig:
+    """Analyses the agent runs on every fit it adopts, recorded with that fit.
+
+    ``identify_every_fit``: check identifiability, with each parameter's
+    one-sigma uncertainty, right after every adopted fit; the simulations count
+    against the budget, and the result travels in the step that made the fit.
+    Off, identifiability is checked only when the policy asks for
+    ``analyze_sensitivity`` (and at the end of the run).
+    """
+    identify_every_fit: bool = True
+
+
 @dataclass
 class Project:
     name: str
@@ -98,6 +112,7 @@ class Project:
     stop: StopRules = field(default_factory=StopRules)
     policy: PolicyConfig = field(default_factory=PolicyConfig)
     n_starts: int = 4
+    analysis: AnalysisConfig = field(default_factory=AnalysisConfig)
 
     def __post_init__(self) -> None:
         sim = self.simulator
@@ -186,6 +201,8 @@ class Project:
             },
             "policy": asdict(self.policy),
             "n_starts": self.n_starts,
+            # only present when changed, so configs that keep the defaults keep their hash
+            **({"analysis": asdict(self.analysis)} if self.analysis != AnalysisConfig() else {}),
         }
 
     @property

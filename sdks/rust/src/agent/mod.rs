@@ -303,12 +303,17 @@ impl Investigation {
         .map_err(err)?;
         let mut proposals: IndexMap<String, (String, Option<String>)> = IndexMap::new();
         let mut unclaimed: Option<String> = None;
+        // The fit whose identifiability check was paid for on the data it saw: every adopted
+        // fit when the project checks at every fit (unless its step says it was skipped),
+        // else one an analyze_sensitivity step checked.
+        let mut paid: Option<usize> = None;
         for r in &recs[i..] {
             if r.kind == "reveal" {
                 continue;
             }
             let p = &r.payload;
             if r.kind == "measurement" {
+                paid = None;
                 if let Some(n) = unclaimed.take() {
                     s.count(&n);
                 }
@@ -365,6 +370,9 @@ impl Investigation {
                     s.fit_model = Some(model.into());
                     s.model = model.into();
                     s.fit = Some(FitResult::from_dict(p.clone()).map_err(err)?);
+                    if s.project.analysis.identify_every_fit {
+                        paid = Some(s.fit_id);
+                    }
                 }
                 "step" => {
                     s.outcome = None;
@@ -372,6 +380,16 @@ impl Investigation {
                     s.budget.lock().unwrap().used +=
                         p["simulations"].as_u64().unwrap_or(0) as usize;
                     if let Some(a) = p["decision"]["action"].as_str() {
+                        let ident = if a == "analyze_sensitivity" {
+                            &p["result"]
+                        } else {
+                            &p["result"]["identification"]
+                        };
+                        if ident.get("identified").is_some() {
+                            paid = Some(s.fit_id);
+                        } else if ident.get("skipped").is_some() {
+                            paid = None;
+                        }
                         if a == "compare_models" {
                             s.compared = true;
                             if p["result"]["adopted"] == true {
@@ -409,6 +427,15 @@ impl Investigation {
                 s.pending = Some(pid);
                 s.pending_experiment = n;
             }
+        }
+        // Recompute, off budget (no budget is attached while resuming), the
+        // current fit's sensitivity that the records already paid for.
+        if paid == Some(s.fit_id)
+            && s.fit.is_some()
+            && s.fit_model.as_ref() == Some(&s.model)
+            && s.sens_fit != Some(s.fit_id)
+        {
+            s.tool_analyze_sensitivity().map_err(err)?;
         }
         Ok(s)
     }
@@ -593,8 +620,11 @@ impl Investigation {
                 ..Default::default()
             },
         )?;
-        let out = json!({"params":r.params,"chi2_per_n":r.chi2_per_n,"converged":r.success,"nfev":r.nfev,"at_bounds":r.at_bounds});
+        let mut out = json!({"params":r.params,"chi2_per_n":r.chi2_per_n,"converged":r.success,"nfev":r.nfev,"at_bounds":r.at_bounds});
         self.adopt(r, self.model.clone())?;
+        if let Some(ident) = self.identify_fit() {
+            out["identification"] = ident;
+        }
         Ok(out)
     }
     pub fn tool_analyze_sensitivity(&mut self) -> NumResult<Value> {
@@ -612,13 +642,22 @@ impl Investigation {
             self.project.stop.rule,
             &r.params,
         )?;
-        let out = json!({"condition_number":s.condition_number,"identified":s.identified,"non_identified":s.non_identified,"non_identifiable":s.non_identifiable_directions().iter().map(|d|&d.combination).collect::<Vec<_>>(),
-            // One-sigma log uncertainty per parameter; null (the report's inf) when it is on a ridge.
-            "marginal_log_std":s.marginal_log_std.iter().map(|(n,v)|(n.clone(),if v.is_finite(){json!(v)}else{Value::Null})).collect::<serde_json::Map<_,_>>()});
+        let out = sensitivity::identification(&s);
         self.sens = Some(s);
         self.jac = Some(j);
         self.sens_fit = Some(self.fit_id);
         Ok(out)
+    }
+    /// The just-adopted fit's identification, when the project checks it at every fit.
+    fn identify_fit(&mut self) -> Option<Value> {
+        if !self.project.analysis.identify_every_fit {
+            return None;
+        }
+        Some(match self.tool_analyze_sensitivity() {
+            Ok(v) => v,
+            Err(SimulationError::BudgetExceeded(_)) => json!({"skipped":"simulation budget exhausted"}),
+            Err(e) => json!({"skipped":format!("identifiability check failed: {e}")}),
+        })
     }
     pub fn tool_rank_experiments(&mut self, criterion: &str) -> NumResult<Value> {
         self.need_fit()?;
@@ -823,11 +862,15 @@ impl Investigation {
             .unwrap()
             .to_string();
         self.compared = true;
+        let mut out = json!({"table":table,"best":best,"adopted":adopt});
         if adopt {
             self.model = best.clone();
             self.adopt(fits.shift_remove(&best).unwrap(), best.clone())?;
+            if let Some(ident) = self.identify_fit() {
+                out["identification"] = ident;
+            }
         }
-        Ok(json!({"table":table,"best":best,"adopted":adopt}))
+        Ok(out)
     }
     pub fn tool_validate_predictions(&mut self) -> NumResult<Value> {
         let p = self.need_fit()?.params.clone();

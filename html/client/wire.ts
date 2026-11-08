@@ -230,11 +230,14 @@ export function mapInvestigation(records: WireRecord[], configs: { version: stri
         untraced = null;
         trail = [];
       }
-      if (action === "analyze_sensitivity" && Array.isArray(result.identified)) {
-        nonIdentified = strs(result.non_identified);
-        const fit = fits.find((f) => f.n === num(p.fit_id)) ?? fits[fits.length - 1];
-        if (fit) fit.identification = { identified: strs(result.identified), nonIdentified, condition: Number.isFinite(num(result.condition_number)) ? num(result.condition_number) : null,
-          ...(result.marginal_log_std && typeof result.marginal_log_std === "object" ? { marginal: numeric(result.marginal_log_std) } : {}) };
+      // An identifiability check: an analyze_sensitivity result for the step's fit, or the
+      // identification a fitting step carries for the fit it just recorded (identify_every_fit).
+      const checked = action === "analyze_sensitivity" ? result : obj(result.identification);
+      if (Array.isArray(checked.identified)) {
+        nonIdentified = strs(checked.non_identified);
+        const fit = (action === "analyze_sensitivity" ? fits.find((f) => f.n === num(p.fit_id)) : undefined) ?? fits[fits.length - 1];
+        if (fit) fit.identification = { identified: strs(checked.identified), nonIdentified, condition: Number.isFinite(num(checked.condition_number)) ? num(checked.condition_number) : null,
+          ...(checked.marginal_log_std && typeof checked.marginal_log_std === "object" ? { marginal: numeric(checked.marginal_log_std) } : {}) };
       }
       if (action === "rank_experiments" && Array.isArray(result.ranking)) ranking = { criterion: str(result.criterion) || "min_eig", rows: result.ranking };
     } else if (r.kind === "proposal") {

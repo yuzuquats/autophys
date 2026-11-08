@@ -521,15 +521,6 @@
         "hypothesis": "the model can be calibrated to the current train data"
       },
       {
-        "action": "analyze_sensitivity",
-        "arguments": {},
-        "evidence": [
-          "fit chi2/N=0.9594"
-        ],
-        "expected_information": "identified parameters and non-identifiable directions",
-        "hypothesis": "some parameter combinations may be undetermined by this data"
-      },
-      {
         "action": "rank_experiments",
         "arguments": {
           "criterion": "min_eig"
@@ -560,15 +551,6 @@
         ],
         "expected_information": "best-fit parameters and chi2/N",
         "hypothesis": "the model can be calibrated to the current train data"
-      },
-      {
-        "action": "analyze_sensitivity",
-        "arguments": {},
-        "evidence": [
-          "fit chi2/N=0.4901"
-        ],
-        "expected_information": "identified parameters and non-identifiable directions",
-        "hypothesis": "some parameter combinations may be undetermined by this data"
       },
       {
         "action": "validate_predictions",
@@ -607,11 +589,9 @@
     "actions": {
       "value": [
         "optimize_parameters",
-        "analyze_sensitivity",
         "rank_experiments",
         "request_experiment",
         "optimize_parameters",
-        "analyze_sensitivity",
         "validate_predictions",
         "stop"
       ],
@@ -626,35 +606,35 @@
       "exact": true
     },
     "decisions.1.action": {
-      "value": "analyze_sensitivity",
-      "exact": true
-    },
-    "decisions.1.arguments": {
-      "value": {},
-      "exact": true
-    },
-    "decisions.2.action": {
       "value": "rank_experiments",
       "exact": true
     },
-    "decisions.2.arguments": {
+    "decisions.1.arguments": {
       "value": {
         "criterion": "min_eig"
       },
       "exact": true
     },
-    "decisions.3.action": {
+    "decisions.2.action": {
       "value": "request_experiment",
       "exact": true
     },
-    "decisions.3.arguments": {
+    "decisions.2.arguments": {
       "value": {
         "experiment": "strong"
       },
       "exact": true
     },
-    "decisions.4.action": {
+    "decisions.3.action": {
       "value": "optimize_parameters",
+      "exact": true
+    },
+    "decisions.3.arguments": {
+      "value": {},
+      "exact": true
+    },
+    "decisions.4.action": {
+      "value": "validate_predictions",
       "exact": true
     },
     "decisions.4.arguments": {
@@ -662,26 +642,10 @@
       "exact": true
     },
     "decisions.5.action": {
-      "value": "analyze_sensitivity",
-      "exact": true
-    },
-    "decisions.5.arguments": {
-      "value": {},
-      "exact": true
-    },
-    "decisions.6.action": {
-      "value": "validate_predictions",
-      "exact": true
-    },
-    "decisions.6.arguments": {
-      "value": {},
-      "exact": true
-    },
-    "decisions.7.action": {
       "value": "stop",
       "exact": true
     },
-    "decisions.7.arguments": {
+    "decisions.5.arguments": {
       "value": {
         "identified": [
           "m",

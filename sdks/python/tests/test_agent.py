@@ -7,8 +7,9 @@ import pytest
 import autophys as ml
 from autophys.agent import DECISION_SCHEMA, Decision, DecisionError, Investigation, ProposalRunner, ReasonLanePolicy, ScriptedPolicy
 from autophys.heuristic import heuristic_responder, overclaiming_responder
-from autophys.project import Budgets, NoiseConfig, Project
+from autophys.project import AnalysisConfig, Budgets, NoiseConfig, Project
 from autophys.reasoner import FakeReasoner
+from autophys.simulator import CallBudget
 from autophys.store import MemoryStore
 from autophys.synthetic import NoiseModel, observe, oscillator_case, thermal_case
 
@@ -23,8 +24,14 @@ def actions(store, inv):
 
 
 def sensitivity_results(store, inv):
-    """Recorded analyze_sensitivity results, checked to be strict JSON (no inf or NaN)."""
-    out = [r.payload["result"] for r in store.records(inv, "step") if r.payload["decision"]["action"] == "analyze_sensitivity"]
+    """Recorded identifiability checks, checked to be strict JSON (no inf or NaN): an
+    analyze_sensitivity result, or the identification a fit's step carries."""
+    out = []
+    for r in store.records(inv, "step"):
+        result = r.payload.get("result") or {}
+        ident = result if r.payload["decision"]["action"] == "analyze_sensitivity" else result.get("identification")
+        if isinstance(ident, dict) and "identified" in ident:
+            out.append(ident)
     json.dumps(out, allow_nan=False)
     return out
 
@@ -37,7 +44,7 @@ def test_scripted_free_only_is_inconclusive_with_named_combination():
     assert out.identified == [] and set(out.non_identified) == {"m", "c", "k"}
     assert out.non_identifiable_combinations == ["m^1 * c^1 * k^1"]
     assert any("not identified" in r for r in out.reasons)
-    assert actions(store, out.investigation) == ["optimize_parameters", "analyze_sensitivity", "validate_predictions", "stop"]
+    assert actions(store, out.investigation) == ["optimize_parameters", "validate_predictions", "stop"]
     assert sensitivity_results(store, out.investigation)[-1]["marginal_log_std"] == {"m": None, "c": None, "k": None}
     rel = ev.relative_errors(out.estimate)
     assert rel["c/m"] < 0.02 and rel["k/m"] < 0.02
@@ -49,14 +56,48 @@ def test_scripted_requests_resonance_and_validates():
     out = Investigation(project_for(view), view.dataset, view.runner, policy=ScriptedPolicy(), store=store).run()
     assert out.status == "validated" and out.identified == ["m", "c", "k"] and out.experiments == 1
     assert actions(store, out.investigation) == [
-        "optimize_parameters", "analyze_sensitivity", "rank_experiments", "request_experiment",
-        "optimize_parameters", "analyze_sensitivity", "validate_predictions", "stop"]
+        "optimize_parameters", "rank_experiments", "request_experiment",
+        "optimize_parameters", "validate_predictions", "stop"]
     marginal = sensitivity_results(store, out.investigation)[-1]["marginal_log_std"]
     assert set(marginal) == {"m", "c", "k"} and all(0 < v <= 0.1 for v in marginal.values())
     req = [r for r in store.records(out.investigation, "step") if r.payload["decision"]["action"] == "request_experiment"][0]
     assert req.payload["decision"]["arguments"] == {"experiment": "sine_0.44Hz"}
     assert max(ev.relative_errors(out.estimate).values()) < 0.01
     assert ev.test_rmse(view.simulator, out.estimate) < 0.012
+
+
+def test_identify_every_fit_is_a_hashed_switch_that_keeps_the_explicit_step_when_off():
+    on = project_for(oscillator_case(0, max_experiments=2)[0])
+    off = project_for(oscillator_case(0, max_experiments=2)[0], analysis=AnalysisConfig(identify_every_fit=False))
+    # the default stays out of the config, so configs written before the switch keep their version
+    assert "analysis" not in on.config() and off.config()["analysis"] == {"identify_every_fit": False}
+    assert on.config_version != off.config_version
+    view, _ = oscillator_case(0, max_experiments=2)
+    store = MemoryStore()
+    out = Investigation(off, view.dataset, view.runner, policy=ScriptedPolicy(), store=store).run()
+    assert out.status == "validated" and out.identified == ["m", "c", "k"]
+    assert actions(store, out.investigation) == [
+        "optimize_parameters", "analyze_sensitivity", "rank_experiments", "request_experiment",
+        "optimize_parameters", "analyze_sensitivity", "validate_predictions", "stop"]
+    assert not any("identification" in (r.payload.get("result") or {}) for r in store.records(out.investigation, "step"))
+
+
+def test_every_fit_records_its_identification_or_why_it_was_skipped():
+    view, _ = oscillator_case(0, max_experiments=2)
+    store = MemoryStore()
+    inv = Investigation(project_for(view), view.dataset, view.runner, policy=ScriptedPolicy(), store=store)
+    out = inv.run()
+    fits = [r for r in store.records(out.investigation, "step") if r.payload["decision"]["action"] == "optimize_parameters"]
+    assert len(fits) == 2 and all(set(r.payload["result"]["identification"]["identified"]) <= {"m", "c", "k"} for r in fits)
+    assert fits[-1].payload["result"]["identification"]["identified"] == out.identified
+    # out of simulations right after a fit: the fit is kept, the check says why it is missing
+    view, _ = oscillator_case(0, max_experiments=0)
+    inv = Investigation(project_for(view), view.dataset, view.runner, policy=ScriptedPolicy(), store=MemoryStore())
+    r = inv.tool_optimize_parameters()
+    for sim in inv.variants.values():
+        sim.budget = CallBudget(0)
+    assert inv._identify_fit() == {"skipped": "simulation budget exhausted"}
+    assert "identification" in r
 
 
 def test_guardrail_overrides_overclaiming_reasoner():

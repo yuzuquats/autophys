@@ -79,6 +79,7 @@ def describe(project) -> dict:
         "budgets": asdict(project.budgets),
         "stop": project.config()["stop"],
         "policy": asdict(project.policy),
+        "analysis": asdict(project.analysis),
         "n_starts": project.n_starts,
         "config": json.loads(canonical(project.config())),
         "config_version": project.config_version,

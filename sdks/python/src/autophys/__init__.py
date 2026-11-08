@@ -23,7 +23,7 @@ from .client import Client, LocalClient, RemoteClient, Workbook, connect
 from .data import Dataset, Observation
 from .design import rank_experiments
 from .fit import FitResult, fit
-from .project import Budgets, NoiseConfig, PolicyConfig, Project, StopRules
+from .project import AnalysisConfig, Budgets, NoiseConfig, PolicyConfig, Project, StopRules
 from .playbook import Playbook, load_playbook
 from .reasoner import (BudgetError, ChatReasoner, FakeReasoner, HttpReasoner, ModelSpec, MUSE_SPARK, MUSE_WONDER,
                        Reasoner, RecordingReasoner, ReplayReasoner, reasoner_for, reasoner_from_env)
@@ -37,7 +37,7 @@ __version__ = "0.1.0"
 __all__ = [
     "Display", "ModelSpec", "MUSE_SPARK", "MUSE_WONDER", "BudgetError", "ChatReasoner", "Playbook", "load_playbook",
     "RecordingReasoner", "ReplayReasoner", "reasoner_for", "reasoner_from_env",
-    "ACTIONS", "DECISION_SCHEMA", "DEFAULT_RULE", "Budgets", "Client", "Dataset", "Decision", "FIT_OPTIONS", "FakeReasoner",
+    "ACTIONS", "AnalysisConfig", "DECISION_SCHEMA", "DEFAULT_RULE", "Budgets", "Client", "Dataset", "Decision", "FIT_OPTIONS", "FakeReasoner",
     "FitResult", "HttpReasoner", "IdentifiabilityRule", "Investigation", "JsonlStore", "LocalClient", "MemoryStore", "NoiseConfig",
     "Observation", "Outcome", "ParamSpec", "PolicyConfig", "Project", "ProposalRunner", "ReasonLanePolicy", "Reasoner",
     "RemoteClient", "ScriptedPolicy", "SensitivityReport", "SimOptions", "Simulator", "StopRules", "Store", "StoreError",

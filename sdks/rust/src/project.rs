@@ -82,6 +82,25 @@ impl Default for StopRules {
         }
     }
 }
+/// Analyses the agent runs on every fit it adopts, recorded with that fit.
+///
+/// `identify_every_fit`: check identifiability, with each parameter's
+/// one-sigma uncertainty, right after every adopted fit; the simulations count
+/// against the budget, and the result travels in the step that made the fit.
+/// Off, identifiability is checked only when the policy asks for
+/// `analyze_sensitivity` (and at the end of the run).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalysisConfig {
+    pub identify_every_fit: bool,
+}
+impl Default for AnalysisConfig {
+    fn default() -> Self {
+        Self {
+            identify_every_fit: true,
+        }
+    }
+}
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct CatalogEntry {
     pub max_runs: Option<usize>,
@@ -115,6 +134,7 @@ pub struct Project {
     pub stop: StopRules,
     pub policy: PolicyConfig,
     pub n_starts: usize,
+    pub analysis: AnalysisConfig,
     /// The configuration another SDK computed for this same project (see
     /// [`Project::with_recorded_config`]); it is what records pin.
     recorded: Option<Arc<RecordedConfig>>,
@@ -143,6 +163,7 @@ impl Project {
             stop: Default::default(),
             policy: Default::default(),
             n_starts: 4,
+            analysis: AnalysisConfig::default(),
             recorded: None,
         }
     }
@@ -322,7 +343,12 @@ impl Project {
                 .unwrap()
                 .remove("max_outlook_simulations");
         }
-        json!({"name":self.name,"simulator":{"name":sim.name,"source_hash":sim.source_hash(),"outputs":sim.outputs},"params":params,"catalog":catalog,"noise":self.noise,"budgets":budgets,"stop":self.stop,"policy":self.policy,"n_starts":self.n_starts})
+        let mut config = json!({"name":self.name,"simulator":{"name":sim.name,"source_hash":sim.source_hash(),"outputs":sim.outputs},"params":params,"catalog":catalog,"noise":self.noise,"budgets":budgets,"stop":self.stop,"policy":self.policy,"n_starts":self.n_starts});
+        // Only present when changed, so configs that keep the defaults keep their hash.
+        if self.analysis != AnalysisConfig::default() {
+            config["analysis"] = json!(self.analysis);
+        }
+        config
     }
 }
 fn config_hash(config: &Value) -> String {
@@ -517,6 +543,17 @@ mod tests {
         let (f, v) = p.resolve_free(None).unwrap();
         assert_eq!(f, vec!["R"]);
         assert_eq!(v["C"], 500.);
+    }
+    #[test]
+    fn analysis_is_in_the_config_only_when_changed() {
+        let mut p = Project::new("x", crate::models::thermal_rc());
+        let default_version = p.config_version();
+        assert!(p.config().get("analysis").is_none());
+        p.analysis.identify_every_fit = false;
+        assert_eq!(p.config()["analysis"], json!({"identify_every_fit": false}));
+        assert_ne!(p.config_version(), default_version);
+        let read: AnalysisConfig = serde_json::from_value(json!({})).unwrap();
+        assert!(read.identify_every_fit);
     }
     #[test]
     fn numbers_compare_by_value_not_spelling() {

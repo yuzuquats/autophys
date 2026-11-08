@@ -70,6 +70,7 @@ def test_fake_capture_has_no_provider_or_socket_path(tmp_path, monkeypatch):
         monkeypatch.setattr(reasoner, name, denied)
     monkeypatch.setattr(socket, "socket", denied)
     path = generate(tmp_path / "local.jsonl")
-    assert len(path.read_text().splitlines()) == 8
+    from reasoner_cassette import ACTIONS
+    assert len(path.read_text().splitlines()) == len(ACTIONS)
     with pytest.raises(FileExistsError):
         generate(path)

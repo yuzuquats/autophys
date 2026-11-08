@@ -146,53 +146,82 @@ fn invalid_decisions_fail_and_guardrail_downgrades_claims() {
 }
 #[test]
 fn scripted_runs_through_refit_and_validation() {
-    let temp = tempfile::tempdir().unwrap();
-    let client = autophys::connect(Some(temp.path().to_str().unwrap())).unwrap();
-    let (mut p, ds, truth) = input();
-    p.budgets.max_experiments = 1;
-    let sim = p.simulator.clone();
-    let runner = move |name: &str, settings: &Value| {
-        let y = sim.simulate(&truth, settings, FIT_OPTIONS)?;
-        Observation::new(
-            name,
-            settings.clone(),
-            y["t"].clone(),
-            [("T".into(), y["T"].clone())].into_iter().collect(),
-            [("T".into(), 0.05)].into_iter().collect(),
-        )
-    };
-    let wb = client.project_with(p).unwrap();
-    let mut inv = wb
-        .investigate(ds, runner, ScriptedPolicy::default())
-        .unwrap();
-    let out = inv.run().unwrap();
-    assert_eq!(out.status, "validated");
-    assert_eq!(out.experiments, 1);
-    let actions: Vec<_> = inv
-        .records(Some("step"))
-        .unwrap()
-        .into_iter()
-        .map(|r| {
-            r.payload["decision"]["action"]
-                .as_str()
-                .unwrap()
-                .to_string()
-        })
-        .collect();
-    assert_eq!(
-        actions,
-        vec![
-            "optimize_parameters",
-            "analyze_sensitivity",
-            "rank_experiments",
-            "request_experiment",
-            "optimize_parameters",
-            "analyze_sensitivity",
-            "validate_predictions",
-            "stop"
-        ]
-    );
-    assert!(wb.verify().unwrap().ok);
+    for every_fit in [true, false] {
+        let temp = tempfile::tempdir().unwrap();
+        let client = autophys::connect(Some(temp.path().to_str().unwrap())).unwrap();
+        let (mut p, ds, truth) = input();
+        p.budgets.max_experiments = 1;
+        p.analysis.identify_every_fit = every_fit;
+        let sim = p.simulator.clone();
+        let runner = move |name: &str, settings: &Value| {
+            let y = sim.simulate(&truth, settings, FIT_OPTIONS)?;
+            Observation::new(
+                name,
+                settings.clone(),
+                y["t"].clone(),
+                [("T".into(), y["T"].clone())].into_iter().collect(),
+                [("T".into(), 0.05)].into_iter().collect(),
+            )
+        };
+        let wb = client.project_with(p).unwrap();
+        let mut inv = wb
+            .investigate(ds, runner, ScriptedPolicy::default())
+            .unwrap();
+        let out = inv.run().unwrap();
+        assert_eq!(out.status, "validated");
+        assert_eq!(out.experiments, 1);
+        let actions: Vec<_> = inv
+            .records(Some("step"))
+            .unwrap()
+            .into_iter()
+            .map(|r| {
+                r.payload["decision"]["action"]
+                    .as_str()
+                    .unwrap()
+                    .to_string()
+            })
+            .collect();
+        // Each fit carries its identifiability check unless the project turns
+        // that off; then the policy asks for it as a step of its own.
+        let expected: &[&str] = if every_fit {
+            &[
+                "optimize_parameters",
+                "rank_experiments",
+                "request_experiment",
+                "optimize_parameters",
+                "validate_predictions",
+                "stop",
+            ]
+        } else {
+            &[
+                "optimize_parameters",
+                "analyze_sensitivity",
+                "rank_experiments",
+                "request_experiment",
+                "optimize_parameters",
+                "analyze_sensitivity",
+                "validate_predictions",
+                "stop",
+            ]
+        };
+        assert_eq!(actions, expected, "identify_every_fit {every_fit}");
+        let fits: Vec<_> = inv
+            .records(Some("step"))
+            .unwrap()
+            .into_iter()
+            .filter(|r| r.payload["decision"]["action"] == "optimize_parameters")
+            .collect();
+        assert_eq!(fits.len(), 2);
+        for f in &fits {
+            let ident = &f.payload["result"]["identification"];
+            assert_eq!(ident.is_object(), every_fit, "{ident}");
+            if every_fit {
+                assert!(ident["identified"].is_array(), "{ident}");
+                assert!(ident["marginal_log_std"].is_object(), "{ident}");
+            }
+        }
+        assert!(wb.verify().unwrap().ok);
+    }
 }
 
 #[test]

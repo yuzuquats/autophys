@@ -14,9 +14,10 @@ from autophys.reasoner import FakeReasoner, ModelSpec, MUSE_SPARK, RecordingReas
 from autophys.synthetic import CASES
 
 SPEC = ModelSpec("policy", "meta", MUSE_SPARK)
-ACTIONS = ["optimize_parameters", "analyze_sensitivity", "rank_experiments",
-           "request_experiment", "optimize_parameters", "analyze_sensitivity",
-           "validate_predictions", "stop"]
+# Each fit carries its identifiability check (AnalysisConfig.identify_every_fit), so the
+# policy needs no separate analyze_sensitivity step.
+ACTIONS = ["optimize_parameters", "rank_experiments", "request_experiment",
+           "optimize_parameters", "validate_predictions", "stop"]
 
 
 def fake_response(body, fake):

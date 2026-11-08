@@ -103,6 +103,22 @@ function fakeDaemon(answer: (c: Call) => Response | undefined = () => undefined)
   return { calls, streams, opts, emit, drop, ws };
 }
 
+Deno.test("daemon: a fitting step's identification (identify_every_fit) lands on the fit it recorded", async () => {
+  const ws = workspace(), records = ws.records;
+  const ident = { condition_number: 2.98, identified: ["m", "k"], non_identified: [], non_identifiable: [], marginal_log_std: { m: 0.008, k: 0.004 } };
+  // the fit step replaces the separate analyze_sensitivity step; a later fit whose check was skipped stays unrecorded
+  records[4] = { ...records[4], payload: { index: 1, fit_id: 0, decision: { action: "optimize_parameters" }, result: { params: { m: 1.1, k: 9.5 }, identification: ident }, simulations: 40 } };
+  records.push(
+    rec("run", { ...records[3].payload, fit_id: 2 }),
+    rec("step", { index: 3, fit_id: 1, decision: { action: "optimize_parameters" }, result: { params: { m: 1.1, k: 9.5 }, identification: { skipped: "simulation budget exhausted" } }, simulations: 40 }));
+  ws.cursor = records.length;
+  const d = fakeDaemon((c) => c.url === "/api/v1/workspace" ? Response.json(ws) : undefined), snap = await daemon(d.opts).load();
+  const fits = snap.workspace.projects[0].investigations[0].fits;
+  assertEquals(fits.map((f) => f.n), [1, 2]);
+  assertEquals(fits[0].identification, { identified: ["m", "k"], nonIdentified: [], condition: 2.98, marginal: { m: 0.008, k: 0.004 } });
+  assertEquals(fits[1].identification ?? null, null);
+});
+
 Deno.test("daemon: load maps projects, config versions and every record kind onto the domain", async () => {
   const d = fakeDaemon(), snap = await daemon(d.opts).load();
   assertEquals([snap.source, snap.gseq, snap.events], ["daemon", 8, ["approved", "edited", "rejected"]]);

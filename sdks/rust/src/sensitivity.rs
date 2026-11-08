@@ -48,6 +48,21 @@ pub struct SensitivityReport {
     pub rule: String,
     pub at: Params,
 }
+/// The recorded summary of a report: the one shape every step that checks
+/// identifiability writes. `marginal_log_std` is each parameter's one-sigma
+/// log uncertainty, null (the report's `inf`) for a parameter on a ridge, so
+/// records stay strict JSON.
+pub fn identification(s: &SensitivityReport) -> serde_json::Value {
+    serde_json::json!({
+        "condition_number": s.condition_number,
+        "identified": s.identified,
+        "non_identified": s.non_identified,
+        "non_identifiable": s.non_identifiable_directions().iter().map(|d| &d.combination).collect::<Vec<_>>(),
+        "marginal_log_std": s.marginal_log_std.iter()
+            .map(|(n, v)| (n.clone(), if v.is_finite() { serde_json::json!(v) } else { serde_json::Value::Null }))
+            .collect::<serde_json::Map<_, _>>(),
+    })
+}
 impl SensitivityReport {
     pub fn non_identifiable_directions(&self) -> Vec<&Direction> {
         self.directions

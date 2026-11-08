@@ -127,7 +127,7 @@ def test_resume_in_a_new_process_matches_an_uninterrupted_run(tmp_path):
         with ap.connect({str(tmp_path)!r}) as client:
             inv = client.project(project).investigation({inv_id!r})
             assert inv.pending == {pid!r} and inv.pending_experiment == "sine_0.44Hz"
-            assert inv.steps == 4 and inv.simulations == {out.simulations} and inv.experiments_used == 0
+            assert inv.steps == 3 and inv.simulations == {out.simulations} and inv.experiments_used == 0
             assert inv.outcome.status == "awaiting_data"
             assert inv.fit is not None and inv.fit_model == inv.model == "base"
             try:

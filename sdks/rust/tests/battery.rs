@@ -99,13 +99,13 @@ fn battery_diagnosis_matches_python() {
                 assert_eq!(out.status, "validated", "{case} {seed}");
                 assert_eq!(requested, ["discharge_1A"], "{case} {seed}");
                 assert_eq!(inv.test_hours_used(), 1.1666666666666667, "{case} {seed}");
-                assert_eq!(out.steps, 8, "{case} {seed}");
+                assert_eq!(out.steps, 6, "{case} {seed}"); // each fit carries its identifiability check
             } else {
                 assert_eq!(out.status, "inconclusive", "{case} {seed}");
                 assert_eq!(out.non_identified, ["R1"], "{case} {seed}");
                 assert!(requested.is_empty());
                 assert_eq!(inv.test_hours_used(), 0.);
-                assert_eq!(out.steps, 4, "{case} {seed}");
+                assert_eq!(out.steps, 3, "{case} {seed}");
             }
             let est = &out.estimate;
             assert!(

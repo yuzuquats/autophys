@@ -41,7 +41,7 @@ from .fit import FitResult, fit
 from .reasoner import BudgetError, Reasoner, ReasonerError, parse_json_content
 from .playbook import Playbook, load_playbook
 from .usage import normalize_usage, price_for, usage_total
-from .sensitivity import SensitivityReport, jacobian, report_from_jacobian
+from .sensitivity import SensitivityReport, identification, jacobian, report_from_jacobian
 from .project import Project, policy_from_config
 from .simulator import CallBudget, SimulationBudgetExceeded, SimulationError, Simulator
 from .store import MemoryStore, Store, StoreError
@@ -357,12 +357,18 @@ class Investigation:
             while unclaimed:
                 count(unclaimed.pop().experiment)  # a runner's direct measurement
 
+        # The fit whose identifiability check was paid for on the data it saw: every adopted
+        # fit when the project checks at every fit (unless its step says it was skipped),
+        # else one an analyze_sensitivity step checked.
+        paid = None
+
         for r in recs:
             if r.kind == "reveal":
                 continue
             p = r.payload
             if r.kind == "measurement":
                 settle()
+                paid = None
                 obs = Observation.from_dict(p["observation"])
                 self.dataset.add(obs)
                 unclaimed.append(obs)
@@ -384,6 +390,8 @@ class Investigation:
                 self.fit_model = p["model"]
                 self.model = self.fit_model
                 self.fit = FitResult.from_dict({k: v for k, v in p.items() if k not in ("fit_id", "model", "simulator")})
+                if self.project.analysis.identify_every_fit:
+                    paid = self.fit_id
             elif r.kind == "step":
                 self.outcome = None  # a later run superseded the last outcome
                 self.steps += 1
@@ -394,26 +402,35 @@ class Investigation:
                     self.compared = True
                     if res.get("adopted") and res.get("best") in self.variants:
                         self.model = res["best"]
+                ident = res if d.get("action") == "analyze_sensitivity" else res.get("identification")
+                if isinstance(ident, dict):
+                    paid = self.fit_id if "identified" in ident else None if "skipped" in ident else paid
                 if d.get("action"):
                     self.history.append(f"{d['action']}: " + (f"error {res['error']}" if "error" in res else "ok"))
             elif r.kind == "outcome":
                 self.outcome = Outcome(**p)
                 # Outcomes include simulations spent by _finish outside a step.
                 self.call_budget.used = int(p["simulations"])
-                if (self.fit is not None and self.fit_model == self.model
-                        and not any("no simulations left to check" in reason for reason in p.get("reasons", []))):
-                    # Rebuild the sensitivity cache already paid for by _finish.
-                    budget = self.sim.budget
-                    try:
-                        self.sim.budget = None
-                        self.tool_analyze_sensitivity()
-                    finally:
-                        self.sim.budget = budget
+                if not any("no simulations left to check" in reason for reason in p.get("reasons", [])):
+                    self._rebuild_sensitivity()  # paid for by _finish
                 self.wall = float(p.get("wall_s", 0.0))
         settle()
+        if paid == self.fit_id:
+            self._rebuild_sensitivity()
         for pid, st in proposals.items():
             if st.get("status") in ("proposed", "approved", "edited"):
                 self.pending, self.pending_experiment = pid, st.get("experiment")
+
+    def _rebuild_sensitivity(self) -> None:
+        """Recompute, off budget, the current fit's sensitivity that the records already paid for."""
+        if self.fit is None or self.fit_model != self.model or self.sens_fit == self.fit_id:
+            return
+        budget = self.sim.budget
+        try:
+            self.sim.budget = None
+            self.tool_analyze_sensitivity()
+        finally:
+            self.sim.budget = budget
 
     def records(self, kind: str | None = None) -> list:
         """This investigation's records, in order (optionally one kind)."""
@@ -596,7 +613,10 @@ class Investigation:
         seed = self.seed * 1000 + self.fit_id
         r = fit(self.sim, train, initial=initial, n_starts=n_starts, loss=loss, seed=seed, dataset_version=self.dataset.version)
         self._adopt_fit(r, self.model)
-        return {"params": r.params, "chi2_per_n": r.chi2_per_n, "converged": r.success, "nfev": r.nfev, "at_bounds": r.at_bounds}
+        out = {"params": r.params, "chi2_per_n": r.chi2_per_n, "converged": r.success, "nfev": r.nfev, "at_bounds": r.at_bounds}
+        if (ident := self._identify_fit()) is not None:
+            out["identification"] = ident
+        return out
 
     def _adopt_fit(self, r: FitResult, model: str) -> None:
         self.fit, self.fit_model = r, model
@@ -630,14 +650,18 @@ class Investigation:
         self.jac = J
         self.sens = report_from_jacobian(self.sim.param_names, J, self.rule, r.params)
         self.sens_fit = self.fit_id
-        return {
-            "condition_number": self.sens.condition_number,
-            "identified": self.sens.identified,
-            "non_identified": self.sens.non_identified,
-            "non_identifiable": [d.combination for d in self.sens.non_identifiable_directions],
-            # One-sigma log uncertainty per parameter; null (the report's inf) when it is on a ridge.
-            "marginal_log_std": {n: float(v) if np.isfinite(v) else None for n, v in self.sens.marginal_log_std.items()},
-        }
+        return identification(self.sens)
+
+    def _identify_fit(self) -> dict | None:
+        """The just-adopted fit's identification, when the project checks it at every fit."""
+        if not self.project.analysis.identify_every_fit:
+            return None
+        try:
+            return self.tool_analyze_sensitivity()
+        except SimulationBudgetExceeded:
+            return {"skipped": "simulation budget exhausted"}
+        except SimulationError as e:
+            return {"skipped": f"identifiability check failed: {e}"}
 
     def tool_rank_experiments(self, criterion: str = "min_eig") -> dict:
         r = self._need_fit()
@@ -745,10 +769,13 @@ class Investigation:
                           "aic": r.loss + 2 * k, "bic": r.loss + k * np.log(max(n, 1)), "converged": r.success})
         best = min(table, key=lambda row: row["bic"])["variant"]
         self.compared = True
+        out = {"table": table, "best": best, "adopted": adopt}
         if adopt:
             self.model = best
             self._adopt_fit(fits[best], best)
-        return {"table": table, "best": best, "adopted": adopt}
+            if (ident := self._identify_fit()) is not None:
+                out["identification"] = ident
+        return out
 
     def tool_validate_predictions(self) -> dict:
         r = self._need_fit()

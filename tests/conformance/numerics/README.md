@@ -39,8 +39,9 @@ battery current). Run cases use Python ScriptedPolicy with seed 0 and a
 noise-free deterministic runner at the supplied truth. The `run-scripted` reader replays the saved decision transcript through SequencePolicy. Python independently
 reruns ScriptedPolicy and checks its semantic transcript against the saved
 script. Decision evidence prose contains formatted solver results and is
-excluded. Both runs finish validated after fit, analyze, rank, request, refit,
-analyze, validate, stop. These fixtures test orchestration and declared comparisons, not independent
+excluded. Both runs finish validated after fit, rank, request, refit, validate,
+stop: each fit carries its identifiability check (`analysis.identify_every_fit`,
+on by default), so no separate analyze step appears. These fixtures test orchestration and declared comparisons, not independent
 validation quality; some reuse the initial measurement as validation.
 All compact analyze cases identify every free parameter. `thermal/analyze-short`
 is the degenerate case: a 120 s step against a 1000 s time constant determines C

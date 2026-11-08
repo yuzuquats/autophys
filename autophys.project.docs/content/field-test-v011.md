@@ -63,5 +63,8 @@ note about missing singular values is a muted line, not a missing-data block.
 
 Remaining: G1, G3–G6 above. The Identifiability card still has no singular
 values or directions for daemon fits; recording them is a separate choice.
-Fits written outside the agent loop (a script that calls `fit` and appends the
-record itself) still have no ±: UNC-2, open.
+A fit's ± no longer depends on the policy running a separate
+`analyze_sensitivity` step: `analysis.identify_every_fit` (default on) checks
+every adopted fit and records it with that fit's step (decision ANA-1, which
+replaces the open UNC-2). Workbooks recorded before it, and fits whose check
+the simulation budget cut short, still read "uncertainty not recorded".

@@ -86,6 +86,21 @@ class SensitivityReport:
         return asdict(self)
 
 
+def identification(report: SensitivityReport) -> dict:
+    """The recorded summary of a report: the one shape every step that checks identifiability writes.
+
+    ``marginal_log_std`` is each parameter's one-sigma log uncertainty, null
+    (the report's ``inf``) for a parameter on a ridge, so records stay strict JSON.
+    """
+    return {
+        "condition_number": report.condition_number,
+        "identified": report.identified,
+        "non_identified": report.non_identified,
+        "non_identifiable": [d.combination for d in report.non_identifiable_directions],
+        "marginal_log_std": {n: float(v) if np.isfinite(v) else None for n, v in report.marginal_log_std.items()},
+    }
+
+
 def jacobian(
     sim: Simulator,
     params: Mapping[str, float],

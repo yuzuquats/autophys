@@ -1847,10 +1847,6 @@
           "arguments": {}
         },
         {
-          "action": "analyze_sensitivity",
-          "arguments": {}
-        },
-        {
           "action": "rank_experiments",
           "arguments": {
             "criterion": "min_eig"
@@ -1864,10 +1860,6 @@
         },
         {
           "action": "optimize_parameters",
-          "arguments": {}
-        },
-        {
-          "action": "analyze_sensitivity",
           "arguments": {}
         },
         {
@@ -3906,10 +3898,6 @@
           "arguments": {}
         },
         {
-          "action": "analyze_sensitivity",
-          "arguments": {}
-        },
-        {
           "action": "rank_experiments",
           "arguments": {
             "criterion": "min_eig"
@@ -3923,10 +3911,6 @@
         },
         {
           "action": "optimize_parameters",
-          "arguments": {}
-        },
-        {
-          "action": "analyze_sensitivity",
           "arguments": {}
         },
         {
@@ -5214,10 +5198,6 @@
           "arguments": {}
         },
         {
-          "action": "analyze_sensitivity",
-          "arguments": {}
-        },
-        {
           "action": "rank_experiments",
           "arguments": {
             "criterion": "min_eig"
@@ -5231,10 +5211,6 @@
         },
         {
           "action": "optimize_parameters",
-          "arguments": {}
-        },
-        {
-          "action": "analyze_sensitivity",
           "arguments": {}
         },
         {

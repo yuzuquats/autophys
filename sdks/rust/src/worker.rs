@@ -15,7 +15,9 @@
 //! policy: this module takes a prepared [`Command`].
 use crate::{
     display::Display,
-    project::{Budgets, CatalogEntry, NoiseConfig, PolicyConfig, Project, StopRules},
+    project::{
+        AnalysisConfig, Budgets, CatalogEntry, NoiseConfig, PolicyConfig, Project, StopRules,
+    },
     pyjson,
     simulator::*,
     trajectory::Channels,
@@ -417,6 +419,9 @@ pub fn from_description(worker: Arc<Worker>, desc: &Value) -> Result<Project> {
     project.stop = field::<StopRules>(desc, "stop", &label)?;
     project.policy = field::<PolicyConfig>(desc, "policy", &label)?;
     project.n_starts = field(desc, "n_starts", &label)?;
+    if desc.get("analysis").is_some() {
+        project.analysis = field::<AnalysisConfig>(desc, "analysis", &label)?;
+    }
     project.validate()?;
     let version: String = field(desc, "config_version", &label)?;
     let config = desc.get("config").cloned().ok_or_else(|| {
