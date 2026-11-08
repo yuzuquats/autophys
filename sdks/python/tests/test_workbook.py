@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from autophys.store import GENESIS, config_hash
-from autophys.workbook import APPLICATION_ID, SCHEMA_VERSION, WorkbookError, WorkbookStore, slug
+from autophys.workbook import APPLICATION_ID, INITIAL_VERSION, WorkbookError, WorkbookStore, slug
 
 CFG = {"name": "p", "params": {"a": {"lo": 0.1, "hi": 1.0}}}
 OUTLOOK = {"axes": [{"name": "freq", "values": [0.1, 0.5, 2.0]}], "score": [1.0, 2.0, 3.0], "after": {"a": [0.3, 0.2, 0.1]}}
@@ -46,7 +46,7 @@ def test_new_file_is_a_versioned_wal_workbook(tmp_path):
     WorkbookStore(path).close()
     conn = sqlite3.connect(path)
     assert conn.execute("PRAGMA application_id").fetchone()[0] == APPLICATION_ID
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 1
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == INITIAL_VERSION == 1
     assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert tables == {"records", "investigations", "proposals", "projects", "config_versions", "blobs"}

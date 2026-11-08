@@ -120,6 +120,15 @@ The operator's decisions are in
 format both Rust and Python implement is
 [`workbook-format.md`](../../autophys.project.docs/content/workbook-format.md).
 
+New workbooks are format 1. `WorkbookStore.put_display(project_id, body)`
+stores a display manifest and moves that workbook to format 2 in the same
+transaction; SDK 0.1.x cannot open a format-2 workbook, so a workbook only
+changes format when it first gets a display, never when it is opened.
+`WorkbookStore.display(project_id)` reads it. Binding a project to a local
+workbook does not write its display (an `HttpStore` uploads it to the daemon). An
+`HttpStore` whose daemon has no `reveal` or `display` endpoint raises
+`HttpError` saying the daemon is too old and should be upgraded.
+
 | Call | What it does |
 | --- | --- |
 | `ap.connect(target=None, api_key=None)` | a directory (local collection; files created on project creation), a `*.ap-workbook` path, an `http(s)://` daemon URL, or nothing (`$AUTOPHYS_HOME`, default `~/autophys`) |

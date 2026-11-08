@@ -213,7 +213,7 @@ def test_http_rejections(body, message):
 
 
 @pytest.mark.parametrize("kind", ["memory", "jsonl", "workbook"])
-def test_local_stores_noop(tmp_path, kind):
+def test_local_registration_is_a_noop(tmp_path, kind):
     store = {"memory": lambda: MemoryStore(), "jsonl": lambda: JsonlStore(tmp_path / "log"),
              "workbook": lambda: WorkbookStore(tmp_path / "p.autophys")}[kind]()
     try:
@@ -224,7 +224,10 @@ def test_local_stores_noop(tmp_path, kind):
             raise AssertionError("local registration must not generate previews")
         project.simulator.fn = forbidden
         store.register_display(pid, project)
-        store.put_display(pid, b'{"format":1}')
+        if kind == "workbook":  # registration writes nothing, so the format stays 1
+            assert store.display(pid) is None and store._pragma("user_version") == 1
+        else:  # memory and jsonl stores have nowhere to keep a display
+            store.put_display(pid, b'{"format":1}')
         assert store.config_versions(pid) == []
     finally:
         if hasattr(store, "close"):

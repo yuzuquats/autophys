@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from autophys.store import canonical, chain_hash
-from autophys.workbook import APPLICATION_ID, SCHEMA_VERSION, WorkbookStore, append_payload, investigation_payload, projection_rows
+from autophys.workbook import APPLICATION_ID, INITIAL_VERSION, WorkbookStore, append_payload, investigation_payload, projection_rows
 
 import conformance_cases
 
@@ -43,7 +43,7 @@ def test_python_goldens_read_back_exactly(path, tmp_path):
     copy = tmp_path / path.name  # never let a test write -wal/-shm into the repository
     shutil.copy(path, copy)
     with WorkbookStore(copy, readonly=True) as wb:
-        assert exp["format"] == {"application_id": APPLICATION_ID, "user_version": SCHEMA_VERSION}
+        assert exp["format"] == {"application_id": APPLICATION_ID, "user_version": INITIAL_VERSION}
         assert wb.project_name() == exp["project"]
         report = wb.check()
         assert report["ok"] and report["records"] == exp["records"]

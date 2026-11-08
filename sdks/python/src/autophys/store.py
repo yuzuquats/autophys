@@ -114,9 +114,10 @@ class Store(ABC):
         """Local stores do not generate or persist display previews yet."""
 
     def put_display(self, project_id: str, body: bytes) -> None:
-        """Local stores intentionally do not persist display manifests yet.
+        """Memory and Jsonl stores do not persist display manifests.
 
-        Memory, Jsonl and Workbook inherit this no-op; daemon storage is separate.
+        ``WorkbookStore`` stores them (workbook format 2); daemon storage is
+        separate. ``register_display`` stays a no-op for every local store.
         """
 
 

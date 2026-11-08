@@ -22,7 +22,7 @@ from autophys.agent import Investigation, ProposalRunner, ScriptedPolicy
 from autophys.project import Budgets, Project
 from autophys.store import config_hash
 from autophys.synthetic import NoiseModel, observe, oscillator_case, thermal_case
-from autophys.workbook import APPLICATION_ID, SCHEMA_VERSION, WorkbookStore, projection_rows
+from autophys.workbook import APPLICATION_ID, INITIAL_VERSION, WorkbookStore, projection_rows
 
 
 def _thermal_validated(store: WorkbookStore) -> None:
@@ -106,7 +106,7 @@ CASES = {"thermal-validated": _thermal_validated, "oscillator-edited": _oscillat
 def expected(store: WorkbookStore) -> dict:
     kinds = Counter(r[0] for r in store._q("SELECT kind FROM records"))
     return {
-        "format": {"application_id": APPLICATION_ID, "user_version": SCHEMA_VERSION},
+        "format": {"application_id": APPLICATION_ID, "user_version": INITIAL_VERSION},
         "project": store.project_name(),
         "records": sum(kinds.values()),
         "kinds": dict(sorted(kinds.items())),

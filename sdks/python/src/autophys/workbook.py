@@ -34,9 +34,15 @@ from .store import _clean, GENESIS, Record, Store, StoreError, canonical, chain_
 
 #: ``PRAGMA application_id`` of a workbook: ASCII ``APWB``.
 APPLICATION_ID = 0x41505742
-#: The schema version this module writes (``PRAGMA user_version``).
-SCHEMA_VERSION = 1
+#: ``PRAGMA user_version`` of a newly created workbook.
+INITIAL_VERSION = 1
+#: The newest workbook format this module reads and writes. Format 2 adds the
+#: ``display`` table. A workbook reaches it at its first display write, never
+#: on open (DM-D1a), so a workbook without a display stays format 1 and
+#: readable by SDK 0.1.x.
+SCHEMA_VERSION = 2
 SUFFIX = ".ap-workbook"
+MAX_DISPLAY_BYTES = 256 * 1024
 
 MAX_PAYLOAD_BYTES = 1 << 20
 MAX_ID_LEN = 128
@@ -103,6 +109,39 @@ CREATE TABLE proposals (
   PRIMARY KEY (investigation, id)
 );
 """
+
+# The display table, byte-for-byte the statement the Rust SDK runs, so both
+# SDKs leave the same text in sqlite_master. ``IF NOT EXISTS`` because a
+# format-1 workbook may already hold the table: SDKs before format 2 created
+# it there as an optional extension (DM-1).
+_DISPLAY_DDL = (
+    "CREATE TABLE IF NOT EXISTS display (\n"
+    "              project TEXT PRIMARY KEY REFERENCES projects(id),\n"
+    "              digest TEXT NOT NULL, body TEXT NOT NULL, created REAL NOT NULL\n"
+    "            );"
+)
+
+#: Upgrade steps, append-only: ``_MIGRATIONS[n - INITIAL_VERSION]`` takes a
+#: workbook from format ``n`` to ``n + 1``. Never edit a step that has shipped.
+#: Steps run only when a write needs the newer format, never on open.
+_MIGRATIONS: tuple[str, ...] = (
+    _DISPLAY_DDL,  # 1 -> 2: the display table (DM-D1)
+)
+assert INITIAL_VERSION + len(_MIGRATIONS) == SCHEMA_VERSION
+
+
+def _migrate(conn: sqlite3.Connection, target: int) -> None:
+    """Bring the workbook in the caller's write transaction to format ``target``.
+
+    The steps, the new ``user_version`` and the write that needed them commit
+    or roll back together.
+    """
+    ver = int(conn.execute("PRAGMA user_version").fetchone()[0])
+    if ver > SCHEMA_VERSION:  # another process wrote a newer format since open
+        raise WorkbookError("invalid", f"workbook format {ver}; this SDK reads up to {SCHEMA_VERSION}")
+    for step in range(ver, target):
+        conn.execute(_MIGRATIONS[step - INITIAL_VERSION])
+        conn.execute(f"PRAGMA user_version = {step + 1}")
 
 
 class WorkbookError(StoreError):
@@ -594,7 +633,7 @@ class WorkbookStore(Store):
                 for stmt in _split(_SCHEMA + _PROJECTIONS):
                     self._conn.execute(stmt)
                 self._conn.execute(f"PRAGMA application_id = {APPLICATION_ID}")
-                self._conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+                self._conn.execute(f"PRAGMA user_version = {INITIAL_VERSION}")
 
     @contextmanager
     def _tx(self) -> Iterator[sqlite3.Connection]:
@@ -788,6 +827,57 @@ class WorkbookStore(Store):
                 raise TimeoutError(f"proposal {proposal_id} still awaiting approval")
             sleep(min(interval, self.watch_interval))
 
+    # --- display manifest ---------------------------------------------------
+    def put_display(self, project_id: str, body: bytes) -> tuple[dict, bool]:
+        """Store ``body`` as the project's display manifest.
+
+        Validates only ``format: 1``, canonicalises, and replaces the
+        project's row. Returns ``({"digest", "body", "created"}, changed)``;
+        an identical canonical body keeps the stored row. The first display
+        write upgrades the workbook to format 2 in the same transaction; a
+        failed write leaves the file as it was.
+        """
+        if not isinstance(body, (bytes, bytearray)):
+            raise _invalid("$", "the manifest must be bytes")
+        if len(body) > MAX_DISPLAY_BYTES:
+            raise WorkbookError("too_large", f"display manifest exceeds {MAX_DISPLAY_BYTES} bytes")
+
+        def no_constant(name):
+            raise ValueError(f"{name} is not JSON")
+        try:
+            value = json.loads(bytes(body), parse_constant=no_constant)
+        except ValueError as exc:
+            raise _invalid("$", f"the manifest must be JSON: {exc}") from None
+        fmt = value.get("format") if isinstance(value, dict) else None
+        if type(fmt) is not int or fmt != 1:
+            raise _invalid("format", "expected display manifest format 1")
+        text = canonical(value)
+        if len(text.encode()) > MAX_DISPLAY_BYTES:
+            raise WorkbookError("too_large", f"display manifest exceeds {MAX_DISPLAY_BYTES} bytes")
+        digest = hashlib.sha256(text.encode()).hexdigest()
+        with self._tx() as c:
+            if not c.execute("SELECT 1 FROM projects WHERE id = ?", (project_id,)).fetchone():
+                raise WorkbookError("not_found", "unknown project")
+            _migrate(c, SCHEMA_VERSION)
+            old = _read_display(c, project_id)
+            if old is not None and old["digest"] == digest:
+                return old, False
+            created = now_ts()
+            c.execute("INSERT INTO display (project, digest, body, created) VALUES (?, ?, ?, ?)"
+                      " ON CONFLICT(project) DO UPDATE SET"
+                      " digest = excluded.digest, body = excluded.body, created = excluded.created",
+                      (project_id, digest, text, created))
+        return {"digest": digest, "body": value, "created": created}, True
+
+    def display(self, project_id: str) -> dict | None:
+        """The project's latest ``{"digest", "body", "created"}``, or None.
+
+        Reads format 2, and format-1 workbooks holding the older optional
+        table, alike; reading never creates the table or changes the format.
+        """
+        with self._lock:
+            return _read_display(self._conn, project_id)
+
     # --- integrity ----------------------------------------------------------
     def check(self) -> dict:
         """Verify every chain and that the projections equal a fresh rebuild.
@@ -824,6 +914,21 @@ class WorkbookStore(Store):
         rows = self._q("SELECT investigation, seq, hash FROM records r WHERE seq ="
                        " (SELECT MAX(seq) FROM records WHERE investigation = r.investigation) ORDER BY investigation")
         return {inv: {"seq": seq, "hash": h} for inv, seq, h in rows}
+
+
+def _read_display(conn: sqlite3.Connection, project: str) -> dict | None:
+    exists = conn.execute("SELECT EXISTS(SELECT 1 FROM sqlite_master"
+                          " WHERE type = 'table' AND name = 'display')").fetchone()[0]
+    if not exists:
+        return None
+    row = conn.execute("SELECT digest, body, created FROM display WHERE project = ?", (project,)).fetchone()
+    if row is None:
+        return None
+    try:
+        body = json.loads(row[1])
+    except ValueError as exc:
+        raise WorkbookError("invalid", f"stored display is not JSON: {exc}") from None
+    return {"digest": row[0], "body": body, "created": row[2]}
 
 
 def _split(script: str) -> list[str]:
