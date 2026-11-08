@@ -64,6 +64,7 @@ def test_a_scripted_run_records_the_named_validation_error_and_finishes():
     assert out.status == "budget_exhausted"
     errors = _step_errors(inv, out, "validate_predictions")
     assert errors and errors[0] == MESSAGE
+    assert inv.last_error == f"validate_predictions: {MESSAGE}"  # what the next turn's facts carry
     assert inv.store.records(out.investigation, "outcome")
 
 
