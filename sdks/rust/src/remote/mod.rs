@@ -11,7 +11,7 @@ use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, OnceLock},
     time::Duration,
 };
 pub use stream::{RecordStream, Sse, StreamEvent};
@@ -130,12 +130,35 @@ pub(crate) fn normalize_server(server: &str) -> Result<String> {
     let port = port.filter(|p| *p != if scheme == "http" {80} else {443});
     Ok(format!("{scheme}://{host}{}{}", port.map(|p|format!(":{p}")).unwrap_or_default(), uri.path().trim_end_matches('/')))
 }
+/// How long the facade's pooled client keeps an idle connection. A daemon
+/// that closes sooner (actix-web's default keep-alive is 5 s) is noticed as
+/// soon as the connection's task, on the facade runtime, reads the close.
+const POOL_IDLE: Duration = Duration::from_secs(30);
+
+/// The process-wide pooled client, used only by requests running on the
+/// blocking facade's runtime (RS-REMOTE-1-d). A hyper connection is driven
+/// by a task on the runtime that opened it, so a pooled connection is only
+/// safe on a runtime that outlives it; the facade's runtime is never shut
+/// down. `None` if it cannot be built (callers then use the unpooled client).
+fn facade_client() -> Option<&'static reqwest::Client> {
+    static CLIENT: OnceLock<Option<reqwest::Client>> = OnceLock::new();
+    CLIENT
+        .get_or_init(|| {
+            reqwest::Client::builder()
+                .pool_idle_timeout(POOL_IDLE)
+                .build()
+                .ok()
+        })
+        .as_ref()
+}
+
 impl Remote {
     pub fn new(server: &str, api_key: &str) -> Result<Self> {
         let server = normalize_server(server)?;
-        // No idle pool: each request gets its own connection, as the earlier
-        // per-request agent did, so a connection never outlives the runtime
-        // that opened it (the facade's runtime or a caller's own).
+        // For the async API on the caller's runtime: no idle pool, so a
+        // connection never outlives the runtime that opened it (a caller's
+        // `#[tokio::test]` or short-lived runtime). Blocking-facade calls use
+        // `facade_client()` instead, which reuses connections.
         // TLS: reqwest takes rustls's process-default CryptoProvider if one is
         // installed, else ring; the workspace enables both ring and aws-lc-rs,
         // so never rely on rustls's crate-feature default (ambiguous here).
@@ -175,6 +198,16 @@ impl Remote {
         let entry = map.entry(inv.into()).or_default();
         *entry = (*entry).max(gseq);
     }
+    /// The client for a request on the current runtime: the pooled facade
+    /// client on the facade's runtime, else this Remote's unpooled one.
+    fn http(&self) -> &reqwest::Client {
+        if crate::blocking::on_facade_runtime() {
+            if let Some(client) = facade_client() {
+                return client;
+            }
+        }
+        &self.client
+    }
     pub(crate) async fn response(
         &self,
         method: &str,
@@ -189,7 +222,7 @@ impl Remote {
             .map_err(|_| Error::BadRequest("invalid HTTP request".into()))?;
         // One absolute budget also bounds keep-alives and trickling SSE frames.
         let mut req = self
-            .client
+            .http()
             .request(method, format!("{}{}", self.base, path))
             .timeout(timeout)
             .header(

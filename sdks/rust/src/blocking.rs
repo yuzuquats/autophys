@@ -17,6 +17,14 @@
 //! `#[tokio::test]`, every other task on that runtime stalls meanwhile.
 //! Async code should use [`crate::remote::Remote`] directly instead, or move
 //! the call off the runtime (`spawn_blocking`, `actix_web::web::block`).
+//!
+//! Connections are reused (RS-REMOTE-1-d). Every facade call, on the
+//! caller's thread or the helper thread, polls its future inside
+//! `block_on` of this module's runtime, so the HTTP client's connection tasks
+//! are spawned on it and that runtime is never shut down. Those requests use
+//! one process-wide pooled client (idle connections kept 30 s); a request
+//! made through the async API on any other runtime uses a client without an
+//! idle pool, so no connection outlives the runtime that opened it.
 use crate::workbook::{ConfigVersion, Investigation, Snapshot, StoredDisplay, Workbook};
 use crate::{
     Appended, BatchRecord, Error, InvestigationInfo, Logged, Project, Proposal, Record, Result,
@@ -24,9 +32,9 @@ use crate::{
 use serde_json::Value;
 use std::{future::Future, sync::OnceLock, time::Duration};
 
+static RUNTIME: OnceLock<std::result::Result<tokio::runtime::Runtime, String>> = OnceLock::new();
+
 fn runtime() -> Result<&'static tokio::runtime::Runtime> {
-    static RUNTIME: OnceLock<std::result::Result<tokio::runtime::Runtime, String>> =
-        OnceLock::new();
     RUNTIME
         .get_or_init(|| {
             tokio::runtime::Builder::new_multi_thread()
@@ -38,6 +46,15 @@ fn runtime() -> Result<&'static tokio::runtime::Runtime> {
         })
         .as_ref()
         .map_err(|e| Error::Internal(e.clone()))
+}
+
+/// Whether the current task runs on the facade's runtime, the only place the
+/// pooled HTTP client may be used (see the module docs).
+pub(crate) fn on_facade_runtime() -> bool {
+    match (RUNTIME.get(), tokio::runtime::Handle::try_current()) {
+        (Some(Ok(rt)), Ok(current)) => rt.handle().id() == current.id(),
+        _ => false,
+    }
 }
 
 /// Wait for `future` on the facade's runtime. Outside any runtime the caller

@@ -234,7 +234,12 @@ autophys/
   returns (up to the request timeout, or a stream's idle limit), so on a
   current-thread runtime, such as an actix-web worker, every other task on it
   stalls; async callers use `autophys::remote::Remote`, or move the call to
-  `spawn_blocking`/`web::block`. TLS takes rustls's process-default crypto
+  `spawn_blocking`/`web::block`. Facade calls reuse connections
+  (RS-REMOTE-1-d, 2026-11-08): both paths poll the request inside the
+  facade runtime's `block_on`, so they share one process-wide pooled client
+  (idle connections kept 30 s) whose connection tasks live on that
+  never-shut-down runtime; the async API on any other runtime uses a client
+  without an idle pool. TLS takes rustls's process-default crypto
   provider if one is installed, else ring (reqwest's own fallback); the
   workspace also builds aws-lc-rs, so nothing may rely on rustls's
   crate-feature default.

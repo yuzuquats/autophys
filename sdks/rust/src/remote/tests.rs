@@ -499,3 +499,118 @@ fn missing_reveal_and_display_endpoints_say_upgrade_the_daemon() {
     let e = wb.put_display(br#"{"format":1}"#).unwrap_err();
     assert!(e.to_string().contains("unknown project") && !e.to_string().contains("upgrade"), "{e}");
 }
+
+/// A keep-alive HTTP/1.1 server that answers every GET on a connection with
+/// one project list and counts the TCP connections it accepted.
+struct KeepAlive {
+    url: String,
+    accepted: Arc<AtomicUsize>,
+    stop: Arc<AtomicBool>,
+    thread: Option<JoinHandle<()>>,
+}
+impl KeepAlive {
+    fn new() -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let accepted = Arc::new(AtomicUsize::new(0));
+        let stop = Arc::new(AtomicBool::new(false));
+        let (count, end) = (accepted.clone(), stop.clone());
+        let thread = thread::spawn(move || {
+            let mut workers = vec![];
+            while !end.load(Ordering::Relaxed) {
+                match listener.accept() {
+                    Ok((mut socket, _)) => {
+                        count.fetch_add(1, Ordering::SeqCst);
+                        socket.set_nonblocking(false).unwrap();
+                        socket
+                            .set_read_timeout(Some(Duration::from_millis(50)))
+                            .unwrap();
+                        let end = end.clone();
+                        workers.push(thread::spawn(move || {
+                            let body = r#"{"projects":[{"id":"prj_a","name":"a"}]}"#;
+                            let reply = format!(
+                                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+                                body.len()
+                            );
+                            let (mut bytes, mut buf) = (vec![], [0u8; 4096]);
+                            while !end.load(Ordering::Relaxed) {
+                                match socket.read(&mut buf) {
+                                    Ok(0) => return,
+                                    Ok(n) => bytes.extend_from_slice(&buf[..n]),
+                                    Err(e)
+                                        if matches!(
+                                            e.kind(),
+                                            std::io::ErrorKind::WouldBlock
+                                                | std::io::ErrorKind::TimedOut
+                                        ) =>
+                                    {
+                                        continue;
+                                    }
+                                    Err(_) => return,
+                                }
+                                // Requests here are bodiless GETs: one head each.
+                                while let Some(n) = bytes.windows(4).position(|v| v == b"\r\n\r\n") {
+                                    bytes.drain(..n + 4);
+                                    if socket.write_all(reply.as_bytes()).is_err() {
+                                        return;
+                                    }
+                                }
+                            }
+                        }));
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        thread::sleep(Duration::from_millis(2))
+                    }
+                    Err(_) => break,
+                }
+            }
+            for worker in workers {
+                worker.join().unwrap();
+            }
+        });
+        Self {
+            url,
+            accepted,
+            stop,
+            thread: Some(thread),
+        }
+    }
+    fn accepted(&self) -> usize {
+        self.accepted.load(Ordering::SeqCst)
+    }
+}
+impl Drop for KeepAlive {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+        self.thread.take().unwrap().join().unwrap();
+    }
+}
+
+#[test]
+fn blocking_facade_reuses_one_connection() {
+    // RS-REMOTE-1-d: facade requests share the process-wide pooled client on
+    // the facade's runtime, across calls and across Remote values.
+    let server = KeepAlive::new();
+    let remote = Remote::new(&server.url, "key").unwrap();
+    assert_eq!(remote.projects().unwrap()[0].id, "prj_a");
+    assert_eq!(remote.projects().unwrap()[0].id, "prj_a");
+    let other = Remote::new(&server.url, "other-key").unwrap();
+    assert_eq!(other.projects().unwrap()[0].id, "prj_a");
+    assert_eq!(server.accepted(), 1);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn blocking_facade_inside_a_runtime_reuses_and_async_client_does_not_pool() {
+    // The helper-thread path drives the same facade runtime, so it reuses the
+    // pooled connection too; the async API on this test's runtime gets a
+    // fresh connection per request, so none outlives this runtime.
+    let server = KeepAlive::new();
+    let remote = Remote::new(&server.url, "key").unwrap();
+    remote.projects().unwrap();
+    remote.projects().unwrap();
+    assert_eq!(server.accepted(), 1);
+    remote.as_async().projects().await.unwrap();
+    remote.as_async().projects().await.unwrap();
+    assert_eq!(server.accepted(), 3);
+}

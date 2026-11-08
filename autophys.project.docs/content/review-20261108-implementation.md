@@ -177,7 +177,8 @@ helper thread inside a runtime (alternative: refuse with an error inside a
 runtime, as `reqwest::blocking` panics); RS-REMOTE-1-d no idle connection
 pool (`pool_max_idle_per_host(0)`), so no connection outlives the runtime
 that opened it (cost: one TCP connect per request on loopback; reversal is
-one builder line once callers share a runtime).
+one builder line once callers share a runtime). RS-REMOTE-1-d was since
+changed by the operator and built; see "RS-REMOTE-1-d: done" below.
 
 Breaking: `Client::remote()`/`Workbook::remote()` return
 `&autophys::blocking::Remote`; `remote::Remote` methods and
@@ -479,3 +480,48 @@ thermal source hashes, and so the config versions of projects built on
 them, change once.
 
 Tests: `cargo test --workspace --locked` 345 passed, 0 failed, 2 ignored.
+
+### RS-REMOTE-1-d: done
+
+`I0a528c9c3083cb40cc8a246ba61cf108`. The operator changed RS-REMOTE-1-d (2026-11-08,
+`decisions.md`): blocking-facade requests reuse connections.
+
+Runtime check, done first. `blocking::run` is the only way a facade call
+waits: `Remote`'s requests, `RecordStream::next` (SSE reads and its
+reconnects) and `blocking::auth::{pair_start, pair_poll, whoami}` all go
+through it, and `Client`, `Workbook`, the investigation loop, the CLI and
+`devtools`' MCP server reach the daemon only through the facade. Outside a
+runtime `run` calls the facade runtime's `block_on` on the caller's thread;
+inside one it calls the same `block_on` on a helper thread. Either way the
+future is polled inside that runtime's context, so hyper's connection tasks
+are spawned on it, and the runtime lives in a `static` and is never shut
+down. The premise holds.
+
+The async API is the exception: `remote::Remote` (also reachable through
+`blocking::Remote::as_async`/`into_async`) can be awaited on a caller's own
+runtime, and a pooled connection opened there dies with that runtime
+("dispatch task is gone" on the next reuse from elsewhere). So the choice is
+made per request: `Remote::http()` uses one process-wide pooled client
+(`pool_idle_timeout` 30 s, default per-host limit) only when the current
+runtime is the facade's (`blocking::on_facade_runtime`, comparing
+`tokio::runtime::Handle::id`), and otherwise this `Remote`'s own client
+without an idle pool, as before. The pooled client is shared by every
+`Remote` (keys are per-request headers), so pairing, `whoami` and record
+calls to one daemon share connections. 30 s is below reqwest's 90 s default
+and common proxy keep-alives; a daemon that closes sooner (actix-web's 5 s
+default) is noticed when the connection task, polled on the facade
+runtime's worker, reads the close.
+
+Agent-chosen, pending operator review: the per-runtime split, one shared
+pooled client and the 30 s idle timeout. Alternative: a pool per caller
+runtime keyed by runtime id (reuse for async users too, but needs eviction
+when a runtime ends); reversal of the whole change is the `http()` selector
+(about 30 lines).
+
+Tests: `blocking_facade_reuses_one_connection` (two calls on one `Remote`
+plus one on a second `Remote`: one accepted TCP connection on a keep-alive
+test server) and `blocking_facade_inside_a_runtime_reuses_and_async_client_does_not_pool`
+(the helper-thread path reuses; two async calls on the test's runtime open
+two more). Both fail with the selector disabled (2 and 3 connections where
+1 is expected). `cargo test --workspace --locked` 347 passed, 0 failed, 2
+ignored.
