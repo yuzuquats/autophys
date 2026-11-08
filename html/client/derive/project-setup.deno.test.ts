@@ -1,29 +1,66 @@
 import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
-import { beginSetup, setupBody, setupRequest } from "./project-setup.ts";
+import { beginSetup, connectCommand, createCommand, setupArrival, setupBody } from "./project-setup.ts";
 import { fixtures } from "../fixtures/source.ts";
 import { Controller, initialSelection, reduce } from "../controller.ts";
 import { sidebarModel } from "./tree.ts";
 import type { Project } from "../domain.ts";
 
 const snap = await fixtures([]).load();
-const empty = { ...snap, workspace: { ...snap.workspace, projects: [] } };
 const env = { user: "operator", now: () => "12:34" };
 
-Deno.test("project setup: a browser draft validates without pairing and explains simulated execution", () => {
-  const session = beginSetup(empty);
-  const body = setupBody(session, empty, "origin");
-  assertEquals(body.steps.length, 3);
-  assertEquals(body.steps[0].current, true);
-  assertStringIncludes(body.description, "No SDK");
-  assertEquals(setupRequest(session).model, "thermal_rc");
-  session.draft.duration = "";
-  let message = "";
-  try { setupRequest(session); } catch (e) { message = String(e); }
-  assertStringIncludes(message, "duration");
-  session.draft.duration = "600";
-  session.draft.c = "1e999";
-  try { setupRequest(session); } catch (e) { message = String(e); }
-  assertStringIncludes(message, "C:");
+const pending = { code: "ABCD1234", device: "lab-pc", client: "autophys-cli", expires: "2030-01-01T00:00:00Z" };
+
+Deno.test("project setup: three SDK steps, the language picks both commands' project, and nothing points at a built-in simulator", () => {
+  const session = beginSetup(snap);
+  let body = setupBody(session, snap, "https://daemon.example");
+  assertEquals(body.title, "New project");
+  assertEquals(body.description, "Bring your own simulator. It runs on your machine through the SDK, and this workbench shows and approves its investigations.");
+  assertEquals(body.steps.map((s) => s.title), ["Create the project", "Connect it to this workbench", "Run your first investigation"]);
+  assertEquals(body.steps.map((s) => s.current), [true, false, false]);
+  assertEquals(body.steps[0].choice!.options.map((o) => [o.name, o.pressed]), [["setup-lang:python", true], ["setup-lang:rust", false]]);
+  assertEquals(body.steps[0].command!.text, "autophys new my-project --lang python\ncd my-project");
+  assertEquals(body.steps[0].actions, [{ name: "setup-next", label: "I've done this", variant: "primary" }]);
+  assert(!JSON.stringify(body).match(/thermal|No SDK/i));
+  session.language = "rust";
+  body = setupBody(session, snap, "https://daemon.example");
+  assertEquals(body.steps[0].command!.text, createCommand("rust"));
+  assertStringIncludes(body.steps[0].command!.text, "--lang rust");
+  assertEquals(body.steps[0].choice!.options.map((o) => o.pressed), [false, true]);
+  assertEquals(body.steps[1].command, undefined, "only the current step carries its command");
+});
+
+Deno.test("project setup: step 2 connects to the page's own origin, waits for a device, then shows its pairing card", () => {
+  const session = { ...beginSetup(snap), step: 2 as const };
+  let body = setupBody(session, { ...snap, pairings: [] }, "https://daemon.example:8443");
+  assertEquals(body.steps[0].done, true);
+  assertEquals(body.steps[1].command!.text, "autophys connect https://daemon.example:8443 --name my-device");
+  assertEquals(connectCommand(""), "autophys connect URL --name my-device");
+  assertEquals(body.steps[1].waiting, "Waiting for a device…");
+  assertEquals(body.steps[1].blocks, []);
+  assertEquals(body.steps[1].actions.map((a) => a.name), ["setup-back"]);
+  body = setupBody(session, { ...snap, pairings: [pending] }, "https://daemon.example:8443");
+  assertEquals(body.steps[1].waiting, undefined);
+  const card = body.steps[1].blocks[0];
+  assert(card.kind === "pairing");
+  assertEquals([card.device, card.code, card.decision.map((a) => a.name)], ["lab-pc", "ABCD1234", ["pair-approve:ABCD1234", "pair-deny:ABCD1234"]]);
+});
+
+Deno.test("project setup: step 3 waits for an investigation; a new project's first one completes it from any step", () => {
+  const session = beginSetup(snap);
+  const fresh: Project = { id: "fresh", name: "battery fit", configs: [], investigations: [] };
+  const registered = { ...snap, workspace: { ...snap.workspace, projects: [...snap.workspace.projects, fresh] } };
+  assertEquals(setupArrival(session, registered), null, "a registered project without an investigation is not yet the arrival");
+  session.step = 3;
+  assertEquals(setupBody(session, registered, "").steps[2].waiting, "battery fit is registered. Waiting for its first investigation…");
+  assertEquals(setupBody(session, snap, "").steps[2].waiting, "Waiting for the first investigation…");
+  const inv = { ...snap.workspace.projects[0].investigations[0], id: "fresh-inv" };
+  const arrived = { ...snap, workspace: { ...snap.workspace, projects: [...snap.workspace.projects, { ...fresh, investigations: [inv] }] } };
+  assertEquals(setupArrival({ ...session, step: 1 }, arrived), { projectId: "fresh", id: "fresh-inv" });
+  // A new investigation in a project that already existed counts only once a device is connected.
+  const [first, ...rest] = snap.workspace.projects;
+  const another = { ...snap, workspace: { ...snap.workspace, projects: [{ ...first, investigations: [inv, ...first.investigations] }, ...rest] } };
+  assertEquals(setupArrival({ ...session, step: 2 }, another), null);
+  assertEquals(setupArrival(session, another), { projectId: first.id, id: "fresh-inv" });
 });
 
 Deno.test("workspace tree: project roots, devices, short approval trails and missing configuration", () => {

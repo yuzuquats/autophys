@@ -92,11 +92,15 @@ export function hydrateComponents(host: HTMLElement, onIntent: IntentHandler): v
     marker.replaceChildren(LabelTimeline.makeWith(JSON.parse(marker.dataset.apTimeline!)));
   }
   for (const marker of freshMarkers(host, "[data-ap-copy]")) {
-    const button = Button.makeWith("Copy provenance", { type: "secondary" });
+    // The label, the focus id and the text to select without clipboard access are authored markup.
+    const button = Button.makeWith(marker.dataset.apCopyLabel ?? "Copy provenance", { type: "secondary" });
+    const id = marker.querySelector("button")?.id;
+    if (id) button.id = id;
     button.addEventListener("click", async () => {
       try { await navigator.clipboard.writeText(marker.dataset.apCopy!); button.textContent = "Copied"; }
       catch {
-        const text = marker.parentElement?.querySelector("p");
+        const target = marker.dataset.apCopyTarget;
+        const text = target ? host.querySelector(`[id="${CSS.escape(target)}"]`) : marker.parentElement?.querySelector("p");
         if (text) {
           const range = document.createRange(); range.selectNodeContents(text);
           const selection = getSelection(); selection?.removeAllRanges(); selection?.addRange(range);

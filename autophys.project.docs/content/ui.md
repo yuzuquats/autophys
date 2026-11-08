@@ -390,6 +390,10 @@ external web output; they are stopped after verification. No browser was left ru
 
 ### New project wizard adoption — UI-27, 2026-11-04
 
+**Superseded 2026-11-08:** the operator chose option C, the SDK stepper only
+([decisions.md](decisions.md)); the wizard below is removed. See "New project
+SDK stepper — UI-27, 2026-11-08".
+
 **Agent-chosen, pending operator review: wizard vs SDK stepper vs both.**
 The built-in Thermal experiment wizard is committed as-is: name/model,
 parameters/experiment, then create and start the daemon's simulated investigation.
@@ -426,6 +430,57 @@ The installed task-board CLI is unavailable on PATH; task state is retained in t
 workstream cache, with no direct task-database edits. Remaining work is the
 operator's wizard/SDK/both decision; this commit does not redesign that choice.
 
+
+### New project SDK stepper — UI-27, 2026-11-08
+
+**Operator-decided (2026-11-08, option C: SDK stepper only).** New project
+no longer creates a daemon-simulated Thermal project. It reads "Bring your own
+simulator. It runs on your machine through the SDK, and this workbench shows
+and approves its investigations." and has three steps in the same std-stepper:
+
+1. **Create the project** — a Python | Rust toggle and a copyable block,
+   `autophys new my-project --lang python` (or `rust`) then `cd my-project`;
+   the primary "I've done this" advances.
+2. **Connect it to this workbench** — a copyable
+   `autophys connect <page origin> --name my-device`, then "Waiting for a
+   device…" until a request is pending. Pending requests appear as the
+   existing UI-20 pairing cards with the existing approve/deny controller path
+   (UI-7/UI-14). Approving one from this step advances; denying stays.
+3. **Run your first investigation** — running the project's program starts an
+   investigation; when it appears in the snapshot the stepper closes and the
+   investigation opens.
+
+The Thermal wizard UI is removed with its draft/validation model, fields,
+styles, `Source.projects` client calls and tests. The daemon's `/workbench`
+routes (`src/http/workbench.rs`) are unchanged. The empty workspace, the
+walkthrough and Docs no longer mention a built-in starter. Unchanged: no
+Details panel on New project, New project → Devices → divider → PROJECTS →
+tree, aligned header bands, step focus on navigation, and the UI boundaries.
+The page origin reaches the Controller as `Env.daemonOrigin` from
+`routes/index.root.ts`; views and client code read no globals. Copy buttons
+are bound in `ui/components.ts`, which already owned clipboard access.
+
+Agent-chosen details, pending operator review:
+
+| Id | Choice | Alternative and tradeoff | State and reversal |
+| --- | --- | --- | --- |
+| UI-27-a | Commands use runnable placeholder names (`my-project`, `my-device`) instead of `<dir>`/`<device>`. | Angle-bracket placeholders match the mocks but are shell redirections when pasted, so the copied command fails. | Implemented in `client/derive/project-setup.ts`; changing the two constants is trivial. |
+| UI-27-b | The "Start simulated investigation" action on configurations whose simulator is `thermal_rc` is removed with the wizard. | Keep it for Thermal projects the wizard already created; it is the remaining demo entry point that option C excludes. | Implemented. Restoring it needs the `Source.projects.start` call and one controller branch back; existing projects remain ordinary persisted projects. |
+| UI-27-c | Completion: a new investigation in a project that did not exist when New project opened completes it from any step (a device paired earlier); at step 3 a new investigation in any project completes it. A project registered without an investigation is named in step 3's waiting line. | Only step 3 completes, which strands users whose device was already paired. | Implemented in `setupArrival`; a one-function change. |
+| UI-27-d | While New project is open the host's existing five-second poll also re-reads the workspace, because a project registers before it emits an investigation record. | Rely only on the record stream; it carries no project registration. | Implemented in `Controller.refresh`; no new timers. |
+| UI-27-e | The language toggle is two native `aria-pressed` buttons. | The kit `ToggleButtonGroup` is opaque to the markup reconciler, so a language change would replace it and drop keyboard focus. | Implemented; swapping in the kit component needs a hydration binding and focus restore. |
+
+Verification (yuzuquats, 2026-11-08): `deno test --allow-read --config
+html/deno.json html/` 138 passed, 0 failed; `deno check` of
+`routes/index.root.ts`, `ui/render-diff.browser.ts` and
+`tests/e2e/sidebar-flow.ts` passed; `autophys build-web` built the bundle.
+`tests/e2e/sidebar-flow.ts` (now taking the `autophys` binary) ran 46 checks
+with no browser errors against two scratch daemons (47971 seeded, 47972
+empty): each viewport walks steps 1→3 with a real `autophys connect` device
+(the phone run denies one first), checks the card's code against the
+terminal, then runs `tests/e2e/seed.py --connected` with the saved key and
+sees the investigation open. Screenshots:
+`yuzuquats:~/.cache/autophys/ui27-20261108T104915Z/shots/`.
 
 ## Sign-in opens without forced field focus (2026-11-05)
 

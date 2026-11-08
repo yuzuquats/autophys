@@ -34,7 +34,8 @@ let pendingSignInError = takeSignInError();
 let requestedLocation: { search: string; hash: string } | null = { search: location.search, hash: location.hash };
 let context = bootstrapContext();
 const identity = () => context?.principal?.email ?? context?.principal?.displayName ?? "browser";
-const environment = () => ({ user: identity(), now: clock, capabilities: context?.capabilities });
+// The page's own origin is the daemon URL a device passes to `autophys connect` (New project).
+const environment = () => ({ user: identity(), now: clock, daemonOrigin: location.origin, capabilities: context?.capabilities });
 let sourceEpoch = 0;
 const makeStore = () => {
   const epoch = ++sourceEpoch;

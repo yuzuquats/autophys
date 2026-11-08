@@ -11,7 +11,7 @@ export function tourSteps(ws: Workspace, selection: Selection | null, writable =
   const project = ws.projects.find(p => p.id === selection?.projectId) ?? ws.projects[0];
   const steps: TourPart[] = [{ title: "Your workspace", body: "These are the projects available to your account. Each holds configurations and investigations.",
     select: project ? ids.config(project) : undefined, details: false, surface: "sidebar", target: [".ck-sidebar"] }];
-  const setup: TourPart = { title: "Connect your next experiment", body: "New project configures a simulator. Devices connects an SDK or bench setup. Close this walkthrough to continue where you were.",
+  const setup: TourPart = { title: "Connect your next experiment", body: "New project sets up a project with the SDK and connects it here. Devices approves machines that connect. Close this walkthrough to continue where you were.",
     details: false, surface: "sidebar", target: [".ap-new-project button", ".ap-devices"] };
   if (!writable) {
     setup.title = "Read-only workspace";
@@ -19,8 +19,8 @@ export function tourSteps(ws: Workspace, selection: Selection | null, writable =
     setup.target = [".ck-sidebar"];
   }
   if (!project && !writable) return [steps[0], { ...setup, title: "No projects yet", body: "This account has no projects yet. Records will appear when its owner adds them; this walkthrough does not create sample data." }];
-  if (!project) return [steps[0], { ...setup, title: "Create your first project", body: "Choose New project to configure a simulator, or Devices to connect your SDK. Measurements and results appear here once recorded." }];
-  steps.push({ title: "A project's configuration", body: project.configs.length ? "This project's recorded model, parameters and experiment settings define what each investigation can explore." : "This project has no recorded configuration yet. Connect its SDK or create a configured project to begin.",
+  if (!project) return [steps[0], { ...setup, title: "Create your first project", body: "Choose New project to create a project with the SDK and connect it, or Devices to approve a machine already running one. Measurements and results appear here once recorded." }];
+  steps.push({ title: "A project's configuration", body: project.configs.length ? "This project's recorded model, parameters and experiment settings define what each investigation can explore." : "This project has no recorded configuration yet. Run its SDK program to record one.",
     select: ids.config(project), details: false, surface: "main", target: [".ap-viewer"] });
   if (!project.configs.length) return [...steps, setup];
   const selected = selection?.selected[project.id]?.split("/")[0];

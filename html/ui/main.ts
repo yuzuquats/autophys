@@ -179,7 +179,7 @@ export class AutophysMain {
       if (!setup || step === this.setupStep) return;
       const id = newProjectFocusTarget(setup);
       const target = id && this.host.querySelector<HTMLElement>(`[id="${CSS.escape(id)}"]`);
-      if (!target) return; // A save may render the next step before its action is enabled.
+      if (!target) return; // An unavailable control leaves focus pending until a later render.
       focusControl(target);
       this.host.querySelector<HTMLElement>(".ap-project-setup")!.scrollTop = 0;
       this.setupStep = step;

@@ -24,9 +24,11 @@ import {
 } from "./derive/index.ts";
 import {
   beginSetup,
-  setupRequest,
+  SETUP_LANGUAGES,
+  setupArrival,
   setupBody,
   setupDetails,
+  type SetupLanguage,
   type SetupSession,
 } from "./derive/project-setup.ts";
 import { projectRootId } from "./derive/tree.ts";
@@ -37,6 +39,7 @@ import type { Store } from "./store.ts";
 import type { Action } from "../ui/view-model.ts";
 import type { Intent } from "../ui/intent.ts";
 
+/** `daemonOrigin` is the page's own origin, which a device passes to `autophys connect`. */
 export type Env = { user: string; now: () => string; daemonOrigin?: string; capabilities?: Capabilities };
 
 export type Effect =
@@ -320,7 +323,6 @@ export class Controller {
   private sel: Selection | null = null;
   private setup: SetupSession | null = null;
   private devicesActive = false;
-  private startingRun = false;
   private setupDevices = false;
   private pairingCode = "";
   private subs = new Set<() => void>();
@@ -333,7 +335,7 @@ export class Controller {
 
   private unsubscribeStore: () => void;
   constructor(public store: Store, private env: Env) {
-    this.unsubscribeStore = store.subscribe(() => this.notify());
+    this.unsubscribeStore = store.subscribe(() => this.storeChanged());
   }
 
   updateAccess(user: string, capabilities: Capabilities): void {
@@ -351,8 +353,8 @@ export class Controller {
     this.unsubscribeStore(); this.store.close();
     this.store = store; this.env = env;
     this.sel = null; this.setup = null; this.devicesActive = false;
-    this.startingRun = false; this.setupDevices = false; this.pairingCode = ""; this.error = null;
-    this.unsubscribeStore = store.subscribe(() => this.notify());
+    this.setupDevices = false; this.pairingCode = ""; this.error = null;
+    this.unsubscribeStore = store.subscribe(() => this.storeChanged());
     this.notify();
   }
 
@@ -402,19 +404,11 @@ export class Controller {
     );
     const error = this.store.error;
     if (error) view = connectionFailure(view, error, !!snap);
-    const selectedProject = snap?.workspace.projects.find(p => p.id === sel?.projectId);
-    if (view.main.body.kind === "configuration" && selectedProject?.configs.at(-1)?.simulator.name === "thermal_rc" && this.store.source.projects) {
-      view.main = { ...view.main, actions: [...view.main.actions, {
-        name: "start-investigation", label: this.startingRun ? "Starting…" : "Start simulated investigation",
-        variant: "primary", disabled: this.startingRun || !!error,
-      }] };
-    }
     if (this.setup && snap) {
-      const origin = this.env.daemonOrigin ?? "";
       view = { ...view,
         main: { ...view.main, crumb: [{ label: "Workspace" }, { label: "New project" }], meta: "",
-          actions: [{ name: "cancel-project", label: "Cancel", disabled: this.setup.busy }], body: { ...setupBody(this.setup, snap, origin), notice: this.setup.notice ?? sel?.notice }, credit: "" },
-        details: setupDetails(this.setup, snap, origin, sel?.notice),
+          actions: [{ name: "cancel-project", label: "Cancel" }], body: { ...setupBody(this.setup, snap, this.env.daemonOrigin ?? ""), notice: sel?.notice }, credit: "" },
+        details: setupDetails(this.setup),
       };
     }
     if (this.devicesActive && snap) view = { ...view,
@@ -434,6 +428,8 @@ export class Controller {
       const pause = (a: Action): Action => /^(pair-(approve|deny):|approve$|reject$|withdraw$|restore$)/.test(a.name)
         ? { ...a, disabled: true, title: "Approvals are paused until the daemon reconnects" } : a;
       const pair = (a: [Action, Action]): [Action, Action] => [pause(a[0]), pause(a[1])];
+      if (view.main.body.kind === "project-setup") view.main = { ...view.main, body: { ...view.main.body, steps: view.main.body.steps.map((step) => ({
+        ...step, blocks: step.blocks.map((b) => b.kind === "pairing" ? { ...b, decision: pair(b.decision) } : b) })) } };
       view.details = { ...view.details, decision: view.details.decision && pair(view.details.decision), actions: view.details.actions?.map(pause),
         sections: view.details.sections.map((s) => ({ ...s, blocks: s.blocks.map((b) => b.kind === "pairing" ? { ...b, decision: pair(b.decision) } : b) })) };
 
@@ -442,9 +438,10 @@ export class Controller {
     return this.env.capabilities ? accessibleView(final, this.env.capabilities) : final;
   }
 
-  /** Host-owned polling retries a failed workspace read. Setup writes refresh explicitly. */
+  /** Host-owned polling retries a failed workspace read. While New project is open it also
+   * re-reads the workspace: a project registers before it records an investigation. */
   refresh(): Promise<void> {
-    return this.store.error ? this.store.refreshWorkspace() : Promise.resolve();
+    return this.store.error || this.setup ? this.store.refreshWorkspace() : Promise.resolve();
   }
 
   exportDocument(): unknown {
@@ -457,32 +454,12 @@ export class Controller {
   /** The ui's intent handler (an arrow, so it can be passed as is). */
   handle = (intent: Intent): void => {
     if (this.env.capabilities && !canHandle(intent, this.env.capabilities)) return;
-    const store = this.store, snap = store.snapshot(), sel = this.selection;
+    const snap = this.store.snapshot(), sel = this.selection;
     if (!snap || !sel) return;
     if (intent.kind === "field" && intent.name === "pairing-code") { this.pairingCode = intent.raw; return; }
     if (intent.kind === "action" && intent.name === "lookup-pairing") {
       const code = this.pairingCode.toUpperCase().replace(/[^A-Z0-9]/g, "");
       this.settle(this.store.lookupPairing(code), "Device not found"); return;
-    }
-    if (intent.kind === "action" && intent.name === "start-investigation") {
-      const project = snap.workspace.projects.find(p => p.id === sel.projectId);
-      const config = project?.configs.at(-1), projects = this.store.source.projects;
-      if (!project || !config || !projects || this.store.error || this.startingRun) return;
-      this.startingRun = true;
-      this.settle((async () => {
-        try {
-          const { id } = await projects.start(project.id, config.hash);
-          if (this.store !== store) return;
-          await store.refreshWorkspace();
-          if (this.store !== store) return;
-          if (this.sel) this.sel = { ...this.sel, projectId: project.id,
-            selected: { ...this.sel.selected, [project.id]: id },
-            expanded: { ...this.sel.expanded, [project.id]: [`project:${project.id}`, id] } };
-          this.shell.picked();
-        } finally { if (this.store === store) { this.startingRun = false; this.notify(); } }
-      })(), "Investigation not started");
-      this.notify();
-      return;
     }
     if (intent.kind === "action" && intent.name === "new-project") {
       if (!this.setup) {
@@ -494,55 +471,12 @@ export class Controller {
       this.notify();
       return;
     }
-    if (this.setup && intent.kind === "field" && intent.name.startsWith("setup:")) {
-      const key = intent.name.slice(6) as keyof SetupSession["draft"];
-      if (key in this.setup.draft && !this.setup.busy) this.setup.draft[key] = intent.raw;
-      return;
-    }
     if (this.setup && intent.kind === "action" && intent.name.startsWith("setup-")) {
-      const setup = this.setup;
-      if (setup.busy) return;
-      setup.notice = undefined;
-      if (intent.name === "setup-back" && !setup.created) setup.step = 1;
-      if (intent.name === "setup-next") {
-        if (!setup.draft.name.trim()) setup.notice = "Enter a project name.";
-        else setup.step = 2;
-      }
-      if (intent.name === "setup-create" || intent.name === "setup-start") {
-        const projects = this.store.source.projects;
-        if (this.store.error) setup.notice = "Reconnect to the daemon before saving or starting.";
-        else if (!projects) setup.notice = "This connection does not support creating projects.";
-        else {
-          try {
-            const request = setupRequest(setup);
-            setup.busy = true;
-            void (async () => {
-              try {
-                if (intent.name === "setup-create") {
-                  setup.created = await projects.create(request);
-                  if (this.store !== store) return;
-                  setup.step = 3;
-                  await store.refreshWorkspace();
-                } else if (setup.created) {
-                  const { project_id, config_version } = setup.created;
-                  const { id } = await projects.start(project_id, config_version);
-                  if (this.store !== store) return;
-                  await store.refreshWorkspace();
-                  if (this.store !== store) return;
-                  if (this.setup === setup && this.sel) {
-                    this.sel = { ...this.sel, projectId: project_id,
-                      selected: { ...this.sel.selected, [project_id]: id },
-                      expanded: { ...this.sel.expanded, [project_id]: [`project:${project_id}`, id] } };
-                    this.setup = null;
-                    this.shell.picked();
-                  }
-                }
-              } catch (error) { setup.notice = String((error as Error)?.message ?? error); }
-              finally { setup.busy = false; if (this.store === store) this.notify(); }
-            })();
-          } catch (error) { setup.notice = String((error as Error)?.message ?? error); }
-        }
-      }
+      const setup = this.setup, language = /^setup-lang:(.+)$/.exec(intent.name)?.[1];
+      if (language && SETUP_LANGUAGES.includes(language as SetupLanguage)) setup.language = language as SetupLanguage;
+      else if (intent.name === "setup-next" && setup.step === 1) setup.step = 2;
+      else if (intent.name === "setup-back" && setup.step > 1) setup.step = setup.step === 3 ? 2 : 1;
+      else return;
       this.notify();
       return;
     }
@@ -575,8 +509,14 @@ export class Controller {
       else if (e.kind === "download") {
         this.shell.download(e.filename, e.type, e.data);
       } else if (e.kind === "pairing") {
+        // Approving a device from New project's second step completes that step.
+        const setup = this.setup, device = snap.pairings?.find((p) => p.code === e.code)?.device;
         this.settle(
           this.store.decidePairing(e.code, e.approve).then(() => {
+            if (e.approve && setup && this.setup === setup && setup.step === 2) {
+              setup.step = 3;
+              setup.device = device;
+            }
             this.notify();
           }),
           `${e.approve ? "Approving" : "Denying"} ${e.code}`,
@@ -607,6 +547,20 @@ export class Controller {
       if (this.sel) this.sel = { ...this.sel, notice: this.error };
       this.notify();
     });
+  }
+
+  /** A snapshot change may carry the investigation New project is waiting for: open it. */
+  private storeChanged(): void {
+    const setup = this.setup, snap = this.store.snapshot();
+    const arrival = setup && snap && setupArrival(setup, snap);
+    const sel = arrival ? this.selection : null;
+    if (arrival && snap && sel) {
+      this.sel = reduce(sel, snap, { kind: "select", id: arrival.id }, this.env).selection;
+      this.setup = null;
+      this.devicesActive = false;
+      this.shell.picked();
+    }
+    this.notify();
   }
 
   private notify(): void {

@@ -7,7 +7,6 @@
 
 /** Colour roles. The renderer maps each to a CSS variable; it never picks one itself. */
 import type { SidebarExtras } from "./sidebar-model.ts";
-import type { ProjectSetupBody } from "./new-project.ts";
 
 export type Tone = "default" | "muted" | "ok" | "warn" | "run" | "danger";
 
@@ -102,6 +101,22 @@ export type ChartPanel = { title?: string; charts: Chart[]; blocks?: Block[] };
 
 /** A crumb segment; with an `id` it is a link that selects that node. */
 export type Crumb = { label: string; id?: string };
+
+/** New project (UI-27): an SDK stepper. Each step's content is already derived; only the
+ * current step carries its choice, command, status and actions. */
+export type SetupStep = {
+  title: string; done: boolean; current: boolean;
+  description: string;
+  /** One choice of several (Python | Rust), each option an action that is pressed or not. */
+  choice?: { label: string; options: (Action & { pressed: boolean })[] };
+  /** A shell command to copy and run, as one block. */
+  command?: { label: string; text: string };
+  /** What the step is waiting for, announced politely when it changes. */
+  waiting?: string;
+  blocks: Block[];
+  actions: Action[];
+};
+export type ProjectSetupBody = { kind: "project-setup"; title: string; description: string; notice?: string; steps: SetupStep[] };
 
 export type MainBody =
   | ProjectSetupBody

@@ -5,14 +5,13 @@ import type { Action, Block, Section } from "../ui/view-model.ts";
 import type { Intent } from "../ui/intent.ts";
 
 export function canAct(name: string, c: Capabilities): boolean {
-  if (name === "new-project" || name.startsWith("setup-") && name !== "setup-cancel") return c.createProject;
-  if (name === "start-investigation") return c.startInvestigation;
+  if (name === "new-project" || name.startsWith("setup-")) return c.createProject;
   if (/^pair-(approve|deny):/.test(name) || name === "lookup-pairing") return c.manageDevices;
   if (/^(approve|reject|withdraw|restore)$/.test(name)) return c.approveProposal;
   return true;
 }
 export function canHandle(intent: Intent, c: Capabilities): boolean {
-  return intent.kind === "action" ? canAct(intent.name, c) : intent.kind !== "field" || (intent.name.startsWith("setup:") ? c.createProject : intent.name === "pairing-code" ? c.manageDevices : c.approveProposal);
+  return intent.kind === "action" ? canAct(intent.name, c) : intent.kind !== "field" || (intent.name === "pairing-code" ? c.manageDevices : c.approveProposal);
 }
 export function accessibleView(view: View, c: Capabilities): View {
   const action = (a: Action): Action => canAct(a.name, c) ? a : { ...a, disabled: true, title: "Your account has read-only access." };
@@ -23,6 +22,8 @@ export function accessibleView(view: View, c: Capabilities): View {
     ? { ...b, text: "Connecting a device requires write access to this workspace." } : block(b)) });
   let body = view.main.body;
   if (body.kind === "decision") body = { ...body, cards: body.cards.map(section) };
+  if (body.kind === "project-setup") body = { ...body, steps: body.steps.map(step => ({ ...step, blocks: step.blocks.map(block), actions: step.actions.map(action),
+    choice: step.choice && { ...step.choice, options: step.choice.options.map(o => ({ ...action(o), pressed: o.pressed })) } })) };
   if (body.kind === "empty" && !c.createProject) body = { ...body, text: "This workspace has no projects yet. Your account has read-only access; projects will appear when its owner adds them." };
   return { ...view,
     sidebar: { ...view.sidebar, readOnly: !c.createProject, notice: view.sidebar.notice?.kind === "no-projects" && !c.createProject ? { ...view.sidebar.notice, description: "Projects will appear when the workspace owner adds them." } : view.sidebar.notice },

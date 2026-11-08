@@ -1,6 +1,6 @@
 /**
  * The client network boundary: daemon() reads /api/v1/workspace, follows the
- * resumable record stream, and posts decisions, project setup and pairing.
+ * resumable record stream, and posts decisions and device pairing.
  * wire.ts maps recorded results; tests may supply an in-memory Source.
  */
 import type { Pairing, Workspace } from "./domain.ts";
@@ -35,12 +35,8 @@ export type Snapshot = {
   pairings?: Pairing[];
 };
 
-export type ProjectSetup = { name: string; model: string; c: number; r: number; power: number; duration: number };
-export type CreatedProject = { project_id: string; config_version: string };
-
 export interface Source {
   readonly name: string;
-  readonly projects?: { create(setup: ProjectSetup): Promise<CreatedProject>; start(projectId: string, version: string): Promise<{ id: string }> };
   /** Source-wide failures, including a refused browser session. No host APIs here. */
   readonly onError?: (on: (error: Error) => void) => () => void;
   /** GET /api/v1/workspace. */
@@ -256,10 +252,6 @@ export function daemon(opts: DaemonOptions = {}): Source {
       const id = newId();
       const out = await call<{ record: WireRecord; gseq: number }>("POST", path, { id, kind: "proposal", payload }, { "idempotency-key": id });
       return recOf(out.gseq, out.record);
-    },
-    projects: {
-      create: (setup) => call("POST", "/workbench/projects", setup),
-      start: (pid, config_version) => call("POST", `/workbench/projects/${encodeURIComponent(pid)}/investigations`, { config_version }),
     },
     pairings: {
       async list(code) {

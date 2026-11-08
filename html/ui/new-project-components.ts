@@ -2,8 +2,8 @@
 import { Stepper } from "@tento-ui/components/stepper";
 
 const configurations = new WeakMap<HTMLElement, string>();
-/** Keep authored step sections in light DOM, so field updates can be patched
- * without replacing the stepper or its editable controls. */
+/** Keep authored step sections in light DOM, so content updates (a language choice, a
+ * pairing card arriving) are patched without replacing the stepper or its focused controls. */
 export function hydrateProjectSetup(host: HTMLElement): void {
   for (const marker of host.querySelectorAll<HTMLElement>("[data-ap-stepper]")) {
     const sections = [...marker.querySelectorAll<HTMLElement>("[data-ap-step]")];

@@ -127,7 +127,7 @@ Tools: \`describe_project\`, \`import_measurements\`, \`fit\`, \`identifiability
 
 Open the workbench from the top of this page. The sidebar lists projects and their investigations; the main pane draws measured data, parameter estimates and sensitivity; the details panel shows the selected record. The workbench reads the daemon's recorded investigation and updates live as records arrive.
 
-The Fit view overlays the recorded initial and fitted model curves on the measurements, with normalized residuals beneath; older records without curves say "fit curve not recorded". New project creates a thermal starter that the daemon runs itself: approving its proposal generates synthetic data from a simulated reference specimen and fits again.
+The Fit view overlays the recorded initial and fitted model curves on the measurements, with normalized residuals beneath; older records without curves say "fit curve not recorded". New project walks through bringing your own simulator: \`autophys new\` creates the project, \`autophys connect\` pairs its machine with this daemon (approve it in place), and the project's first investigation opens as soon as its program records it.
 
 ## Repository map
 
@@ -166,7 +166,6 @@ Inside each evaluation, an investigation is not a fixed cycle. At every step the
 | \`autophys autoloop\` | the outer loop until a stop condition, with a journal and resume | the same synthetic truth |
 | \`autophys bench\` | investigations across policies, cases and seeds, with no playbook search | the same synthetic truth |
 | SDK or Muse Code | one investigation at a time, on your simulator and measurements | an experiment you approve here and run on your hardware |
-| Workbench thermal starter | a scripted investigation that the daemon runs | a simulated reference specimen, when you approve |
 | Daemon \`train\` | dataset generation, adapter training and policy evaluation | scripted synthetic trajectories and held-out synthetic cases |
 
 Live model calls are off by default. The \`reason\` policy and the \`api\` and \`muse\` researchers each need a recorded replay, or \`AUTOPHYS_ALLOW_LIVE_REASON=1\`; the \`scripted\` and \`fake-reasoner\` policies and the \`scripted\` and \`heuristic\` researchers run offline. With the defaults (every built-in case, three train seeds and two held-out seeds), a research run evaluates three investigations per case for the baseline and for each valid edit, and four per case on the held-out seeds at the end (two seeds, for the starting and the final playbook).

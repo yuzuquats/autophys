@@ -14,9 +14,9 @@ export function empty(source: string, pairings?: Pairing[], notice?: string): Vi
   const base = loading(source), dev = devices({ pairings: pairings ?? [] });
   return {
     sidebar: { ...base.sidebar, switcher: { ...base.sidebar.switcher, kind: "none" },
-      notice: { kind: "no-projects", title: "No projects yet", description: pairings?.length ? "Choose New project to run a built-in simulator, or approve a waiting SDK device." : "Choose New project to configure a built-in simulator and run an investigation here." },
+      notice: { kind: "no-projects", title: "No projects yet", description: pairings?.length ? "Choose New project to set up an SDK project, or approve the device waiting in Devices." : "Choose New project to create a project with the SDK and connect it here." },
       section: { label: "", count: "" }, pinned: devicesNode(pairings?.length ?? 0) },
-    main: { crumb: [{ label: "Getting started" }], meta: "", actions: [{ name: "new-project", label: "New project", variant: "primary" }], body: { kind: "empty", text: "Create a thermal project and run a simulated investigation entirely in this workbench. Choose New project to begin." }, credit: "" },
+    main: { crumb: [{ label: "Getting started" }], meta: "", actions: [{ name: "new-project", label: "New project", variant: "primary" }], body: { kind: "empty", text: "Bring your own simulator: create a project with the SDK, connect it to this workbench, and its investigations appear here. Choose New project to begin." }, credit: "" },
     details: { icon: "device", title: "Devices", status: { text: pairings?.length ? "Connection approval needed" : "Connect your SDK" },
       sections: [...(notice ? [{ heading: "Not saved", blocks: [{ kind: "text" as const, text: notice, tone: "danger" as const }] }] : []), ...(dev ? [dev.section] : [])], actions: dev?.actions },
   };

@@ -83,23 +83,25 @@ export function run(): string[] {
     detailsView.destroy();
     const setupHost = document.createElement("section"); host.append(setupHost);
     const setup = new MarkupDiff(setupHost, hydrateProjectSetup);
-    const wizard: ProjectSetupBody = { kind: "project-setup", title: "New project", description: "Configure the model", steps: [
-      { title: "Name", current: true, done: false, description: "Project name", fields: [{ name: "setup:name", label: "Name", value: "original" }], actions: [{ name: "setup:next", label: "Continue" }] },
-      { title: "Parameters", current: false, done: false, description: "Model settings", fields: [{ name: "setup:gain", label: "Gain", value: "1" }], actions: [{ name: "setup:back", label: "Back" }] },
+    const choice = (lang: string) => ({ label: "Language", options: ["python", "rust"].map(l => ({ name: `setup-lang:${l}`, label: l, pressed: l === lang })) });
+    const sdk: ProjectSetupBody = { kind: "project-setup", title: "New project", description: "Bring your own simulator", steps: [
+      { title: "Create", current: true, done: false, description: "Run these", choice: choice("python"), command: { label: "Terminal", text: "autophys new my-project --lang python" }, blocks: [], actions: [{ name: "setup-next", label: "I've done this", variant: "primary" }] },
+      { title: "Connect", current: false, done: false, description: "Pair", blocks: [], actions: [] },
     ] };
-    setup.render(newProjectMarkup(wizard));
+    setup.render(newProjectMarkup(sdk));
     const stepper = setupHost.querySelector("std-stepper")!;
     const sections = [...stepper.querySelectorAll("[data-ap-step]")];
-    const name = setupHost.querySelector<HTMLInputElement>('input[type="text"]')!;
-    const continueButton = setupHost.querySelector("button")!;
-    name.value = "edited"; name.focus(); name.setSelectionRange(1, 4);
-    const advanced = { ...wizard, steps: wizard.steps.map((step, i) => ({ ...step, current: i === 1, done: i === 0 })) };
+    const rust = setupHost.querySelector<HTMLButtonElement>('[id="ap-action-setup-lang:rust"]')!;
+    rust.focus();
+    setup.render(newProjectMarkup({ ...sdk, steps: [{ ...sdk.steps[0], choice: choice("rust"), command: { label: "Terminal", text: "autophys new my-project --lang rust" } }, sdk.steps[1]] }));
+    check(setupHost.querySelector('[id="ap-action-setup-lang:rust"]') === rust && document.activeElement === rust && rust.getAttribute("aria-pressed") === "true", "language choice keeps its focused button while its command changes");
+    check(setupHost.querySelector(".ap-setup-command")!.textContent!.includes("--lang rust"), "language choice swaps the command block");
+    const advanced = { ...sdk, steps: sdk.steps.map((step, i) => ({ ...step, current: i === 1, done: i === 0 })) };
     setup.render(newProjectMarkup(advanced));
-    check(setupHost.querySelector("std-stepper") === stepper && sections.every(section => section.parentElement === stepper) && continueButton.isConnected, "real stepper retains setup sections and actions when advancing");
-    check(setupHost.querySelector('input[type="text"]') === name && name.value === "edited" && document.activeElement === name && name.selectionStart === 1 && name.selectionEnd === 4, "real stepper rebind preserves edited field identity, focus and caret");
+    check(setupHost.querySelector("std-stepper") === stepper && sections.every(section => section.parentElement === stepper), "real stepper retains setup sections when advancing");
     check(stepper.shadowRoot?.querySelectorAll('.step-item[aria-current="step"]').length === 1 && stepper.shadowRoot?.querySelector('.step-item[aria-current="step"] slot')?.getAttribute("name") === sections[1].getAttribute("slot"), "real stepper displays the newly current body");
-    setup.render(newProjectMarkup(wizard));
-    check(sections.every(section => section.parentElement === stepper) && stepper.querySelectorAll("input").length === 2, "real stepper keeps fields when returning to a previous step");
+    setup.render(newProjectMarkup(sdk));
+    check(sections.every(section => section.parentElement === stepper) && stepper.querySelectorAll(".ap-setup-option").length === 2, "real stepper keeps the choice when returning to a previous step");
     const railHost = document.createElement("section");
     railHost.className = "ck-app"; railHost.dataset.cookbook = "";
     railHost.style.cssText = "width:240px;height:400px;position:relative";

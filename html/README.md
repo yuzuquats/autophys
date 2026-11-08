@@ -12,8 +12,8 @@ or disconnected collection stays empty or shows recovery UI.
   `routes/guided-tour.ts` runs the cookbook walkthrough on that same Controller.
   Its lessons adapt to the selected project's recorded data and restore navigation
   on exit. The Walkthrough action reopens it; signed-out visitors sign in first.
-- `client/api.ts` owns authenticated network calls: workspace, SSE, decisions,
-  project creation and device pairing. The browser carries an HttpOnly session cookie.
+- `client/api.ts` owns authenticated network calls: workspace, SSE, decisions
+  and device pairing. The browser carries an HttpOnly session cookie.
 - `client/wire.ts` maps server records and configuration into plain domain objects.
 - `client/store.ts` holds the snapshot, folds records in sequence order, deduplicates
   POST responses and SSE echoes, and notifies subscribers.
@@ -42,9 +42,13 @@ Store retains this error until an explicit workspace refresh or the page's Retry
 reload; a successful EventSource open alone does not clear it.
 
 The sidebar's project roots replace the old select-input switcher. New project
-setup uses the shared Stepper and preserves SDK configuration guidance, including
-the thermal starter. These controls use the signed-in Controller and never swap
-in a fixture data source.
+(UI-27) is an SDK-only three-step Stepper: `autophys new <dir> --lang
+python|rust`, then `autophys connect <this page's origin> --name <device>` with
+the pending device approved in place, then the project's program records its
+first investigation, which opens automatically. The page origin reaches the
+Controller from the composition root; views never read it. The built-in Thermal
+wizard is gone from the UI; the daemon's `/workbench` API is unchanged. These
+controls use the signed-in Controller and never swap in a fixture data source.
 
 Each workbook holds configuration versions, investigations, measurements, fits,
 proposals, decisions and validation records. The Rust/Python SDK computes results
