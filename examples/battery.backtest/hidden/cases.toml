@@ -4,6 +4,15 @@ R0 = 0.025
 R1 = 0.045
 C1 = 1600.0
 
+# Per-seed truth (EX-4, autophys bench --truth drawn): each value is drawn
+# from its range; the regime check keeps every case answer unchanged. The
+# short-pulse answer (R1 not determined) is a noise-level threshold, so the
+# ranges are narrow: wider ones flip it (autophys examples --check).
+[prior]
+R0 = { log_uniform = [0.022, 0.028] }
+R1 = { log_uniform = [0.042, 0.05] }
+C1 = { log_uniform = [1500.0, 1750.0] }
+
 [noise]
 sigma = { v = 0.002 }
 

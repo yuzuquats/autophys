@@ -976,6 +976,7 @@ pub fn common(args: &super::Args, usage: &str) -> Result<Common, Failure> {
             playbook: None,
             replay: args.get("replay").map(String::from),
             record: args.get("record").map(String::from),
+            drawn_truth: false,
         },
         output_dir: PathBuf::from(output_dir),
         jobs: args.int("jobs", 1)?,

@@ -230,7 +230,7 @@ These act on a collection directory, `.ap-workbook` file or server URL given wit
 | --- | --- |
 | `autophys mcp` | Serve the investigation tools to Muse Code over MCP; `--project mypkg.module:project` runs your own Python simulator |
 | `autophys examples` | List the built-in templates, demos and backtests; `--check REF` validates an example folder |
-| `autophys bench` | Score a policy or model on backtests offline (`--example battery#short-only`, `--policy scripted\|fake-reasoner\|reason`) |
+| `autophys bench` | Score a policy or model on backtests offline (`--example battery#short-only`, `--policy scripted\|fake-reasoner\|reason`, `--truth drawn`); `--append FILE` collects runs and `--summary FILE` compares models |
 | `autophys research` | Evaluate and improve playbook strategies (`--output-dir DIR`) |
 | `autophys autoloop` | Keep researching until a stop condition, with a journal and `--resume` |
 | `autophys export-trajectories SOURCE` | Export recorded reasoner decisions as JSONL |

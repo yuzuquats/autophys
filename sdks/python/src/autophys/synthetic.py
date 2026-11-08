@@ -84,6 +84,21 @@ class SyntheticRunner:
         return self._run(experiment)
 
 
+class RecordedRunner:
+    """Replays recorded runs by experiment name; each run is returned once (a dataset backtest)."""
+
+    kind = "recorded"
+
+    def __init__(self, runs: Mapping[str, Observation]) -> None:
+        self._runs = dict(runs)
+
+    def run(self, experiment: str | Mapping[str, Any]) -> Observation:
+        name = experiment if isinstance(experiment, str) else experiment.get("name", "")
+        if name not in self._runs:
+            raise KeyError(f"no recorded run {name!r} is left; recorded: {', '.join(self._runs)}")
+        return self._runs.pop(name)
+
+
 @dataclass
 class CaseView:
     """What an agent may see."""
@@ -286,12 +301,12 @@ def battery_case(seed: int = 0, *, max_experiments: int = 2, bias: float = 0.0):
     return _declared("battery", case, seed, max_experiments=max_experiments, bias={"v": bias} if bias else None)
 
 
-def _factory(case_id: str):
+def _factory(case_id: str, drawn: bool = False):
     def make(seed: int):
         from .backtest import resolve_case
 
         b, name = resolve_case(case_id)
-        return b.build(b.case(name), seed)
+        return b.build(b.case(name), seed, drawn=drawn)
     return make
 
 
@@ -420,7 +435,12 @@ def run_case(case: str, policy: str, seed: int, store=None, **reason_options) ->
         with WorkbookStore(workbook_path) as workbook:
             return run_case(case, policy, seed, store=workbook, **reason_options)
     render_images = reason_options.pop("render_images", False)
-    view, evaluator = _case_factory(case)(seed)
+    truth = reason_options.pop("truth", "fixed")
+    if truth not in ("fixed", "drawn"):
+        raise ValueError("truth is fixed or drawn")
+    _case_factory(case)  # an unknown case raises KeyError here
+    view, evaluator = _factory(case, drawn=truth == "drawn")(seed)
+    initial_train = sum(1 for o in view.dataset if o.split == "train")
     project = case_project(view)
     if policy == "reason":
         selected_policy = POLICIES[policy](**reason_options)
@@ -434,12 +454,13 @@ def run_case(case: str, policy: str, seed: int, store=None, **reason_options) ->
     t0 = time.perf_counter()
     out = inv.run()
     wall = time.perf_counter() - t0
-    evaluator.reveal(inv)
+    if evaluator.truth:
+        evaluator.reveal(inv)
     est = out.estimate
     rel = evaluator.relative_errors(est) if est else {}
     physical = set(view.simulator.param_names)
     non_ids = sorted(set(out.non_identified) & physical)
-    requested = [o.experiment for o in view.dataset if o.source == "synthetic" and o.split == "train"][1:]
+    requested = [o.experiment for o in view.dataset if o.split == "train"][initial_train:]
     usage = usage_total(r.payload for r in inv.store.records(inv.id, "step"))
     return BenchRow(
         case=case, policy=policy, seed=seed, status=out.status, test_hours=inv.test_hours_used,

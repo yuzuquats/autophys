@@ -3,6 +3,12 @@
 C = 500.0
 R = 2.0
 
+# Per-seed truth (EX-4, autophys bench --truth drawn): each value is drawn
+# from its range; the regime check keeps every case answer unchanged.
+[prior]
+C = { log_uniform = [400.0, 650.0] }
+R = { log_uniform = [1.6, 2.5] }
+
 [noise]
 sigma = { T = 0.05 }
 

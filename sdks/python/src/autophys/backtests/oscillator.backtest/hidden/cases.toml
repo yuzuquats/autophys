@@ -4,6 +4,13 @@ m = 2.0
 c = 0.8
 k = 15.0
 
+# Per-seed truth (EX-4, autophys bench --truth drawn): each value is drawn
+# from its range; the regime check keeps every case answer unchanged.
+[prior]
+m = { log_uniform = [1.5, 2.5] }
+c = { log_uniform = [0.5, 1.2] }
+k = { log_uniform = [10.0, 20.0] }
+
 [noise]
 sigma = { x = 0.01 }
 

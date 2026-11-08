@@ -27,6 +27,9 @@ mod embedded {
 pub const USAGE: &str = "usage: autophys examples [--json]
        autophys examples --check [REF]... [--json]";
 
+/// Seeds the regime check draws for a backtest with `[prior]` (EX-4).
+pub const REGIME_DRAWS: u64 = 32;
+
 /// The languages an example may provide.
 pub const LANGUAGES: [&str; 2] = ["python", "rust"];
 
@@ -408,8 +411,21 @@ pub fn check(e: &Example) -> Vec<String> {
         problem("a demo lists its expected output in [[expected]]".into());
     }
     if e.kind == "backtest" {
-        if let Err(err) = e.backtest() {
-            problem(err);
+        match e.backtest() {
+            Err(err) => problem(err),
+            Ok(b) => {
+                // Local dataset files must match their sha256; a url is
+                // checked when a run fetches it.
+                for d in b.datasets.iter().filter(|d| d.file.is_some()) {
+                    if let Err(err) = b.dataset_bytes(d) {
+                        problem(err.to_string());
+                    }
+                }
+                // EX-4: every drawn truth keeps the answer each case declares.
+                for p in b.regime_problems(REGIME_DRAWS) {
+                    problem(p);
+                }
+            }
         }
     } else if e.file("hidden/cases.toml").is_some() {
         problem("only a backtest has hidden/".into());

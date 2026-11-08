@@ -23,7 +23,8 @@ use std::time::Instant;
 pub const DEFAULT_POLICIES: [&str; 2] = ["scripted", "fake-reasoner"];
 pub const POLICIES: [&str; 3] = ["reason", "scripted", "fake-reasoner"];
 
-pub const USAGE: &str = "usage: autophys bench [--jobs N] [--seeds N] [--example REF[#CASE]]... [--policy scripted|fake-reasoner|reason]... [--model M] [--route meta|baseten|lane|muse] [--effort E] [--playbook P] [--replay FILE] [--record FILE] [--json]";
+pub const USAGE: &str = "usage: autophys bench [--jobs N] [--seeds N] [--example REF[#CASE]]... [--truth fixed|drawn] [--policy scripted|fake-reasoner|reason]... [--model M] [--route meta|baseten|lane|muse] [--effort E] [--playbook P] [--replay FILE] [--record FILE] [--append RESULTS.jsonl] [--json]
+       autophys bench --summary RESULTS.jsonl [--json]";
 
 /// What the `reason` and `fake-reasoner` policies are built from.
 #[derive(Clone, Debug, Default)]
@@ -32,6 +33,8 @@ pub struct PolicyOptions {
     pub playbook: Option<String>,
     pub replay: Option<String>,
     pub record: Option<String>,
+    /// Draw each generator case's truth per seed from its `[prior]` (EX-4).
+    pub drawn_truth: bool,
 }
 
 /// A policy under another name (Python sets `policy.name = "reason"`).
@@ -170,7 +173,13 @@ pub fn run_case(
     o: &PolicyOptions,
     workbook: Option<&Path>,
 ) -> Result<BenchRow, String> {
-    let (view, evaluator) = synthetic::case(case, seed).map_err(|e| e.to_string())?;
+    let overrides = autophys::backtest::Overrides {
+        drawn_truth: o.drawn_truth,
+        ..Default::default()
+    };
+    let (view, evaluator) =
+        autophys::backtest::build_case(case, seed, &overrides).map_err(|e| e.to_string())?;
+    let initial_train = view.dataset.iter().filter(|o| o.split == "train").count();
     let project = case_project(&view);
     let selected = make_policy(policy, o)?;
     let temp;
@@ -198,7 +207,9 @@ pub fn run_case(
     let t0 = Instant::now();
     let out = inv.run().map_err(|e| e.to_string())?;
     let wall = t0.elapsed().as_secs_f64();
-    evaluator.reveal(&inv).map_err(|e| e.to_string())?;
+    if !evaluator.truth.is_empty() {
+        evaluator.reveal(&inv).map_err(|e| e.to_string())?;
+    }
     let est = &out.estimate;
     let rel = if est.is_empty() {
         IndexMap::new()
@@ -217,8 +228,8 @@ pub fn run_case(
     let requested: Vec<String> = inv
         .dataset
         .iter()
-        .filter(|o| o.source == "synthetic" && o.split == "train")
-        .skip(1)
+        .filter(|o| o.split == "train")
+        .skip(initial_train)
         .map(|o| o.experiment.clone())
         .collect();
     let steps = inv
@@ -569,7 +580,128 @@ pub fn rows_json(rows: &[BenchRow]) -> String {
     )
 }
 
-const FLAGS: [(&str, Kind); 12] = [
+/// Append `rows` to a results file, one JSON object per line, with what
+/// made them: the model (`route:model`, or null for offline policies), the
+/// truth mode, and this binary's version and commit.
+pub fn append_results(
+    path: &Path,
+    rows: &[BenchRow],
+    model: Option<&str>,
+    drawn_truth: bool,
+) -> std::io::Result<()> {
+    use std::io::Write as _;
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
+    for row in rows {
+        let mut v = row.to_value();
+        let o = v.as_object_mut().unwrap();
+        o.insert("model".into(), json!(model));
+        o.insert(
+            "truth".into(),
+            json!(if drawn_truth { "drawn" } else { "fixed" }),
+        );
+        o.insert("autophys".into(), json!(env!("CARGO_PKG_VERSION")));
+        o.insert("commit".into(), json!(crate::scaffold::source_commit()));
+        writeln!(file, "{}", pyjson::dumps(&v))?;
+    }
+    Ok(())
+}
+
+/// A run passes when its claim is validated or rightly inconclusive, its
+/// non-identified set matches the case, and (when the truth is known) every
+/// scored quantity is within 10%. The same rule as `train eval`.
+pub fn passed(row: &Value) -> bool {
+    let status_ok = matches!(row["status"].as_str(), Some("validated" | "inconclusive"));
+    let diagnosis = row["diagnosis_correct"] == true;
+    let scored = row["rel_errors"].as_object().is_some_and(|m| !m.is_empty());
+    let error = num(&row["max_rel_error"]);
+    status_ok && diagnosis && (!scored || (error.is_finite() && error <= 0.10))
+}
+
+/// One row per (case, policy, model, truth) of a results file, in
+/// first-seen order: runs, pass rate, medians and total cost.
+pub fn summarize_results(text: &str) -> Result<Vec<Value>, String> {
+    let mut groups: IndexMap<(String, String, String, String), Vec<Value>> = IndexMap::new();
+    for (i, line) in text
+        .lines()
+        .enumerate()
+        .filter(|(_, l)| !l.trim().is_empty())
+    {
+        let row = pyjson::loads(line).map_err(|e| format!("line {}: {e}", i + 1))?;
+        let key = |k: &str| row[k].as_str().unwrap_or("-").to_string();
+        let case = row["example"]
+            .as_str()
+            .map(String::from)
+            .unwrap_or_else(|| key("case"));
+        groups
+            .entry((case, key("policy"), key("model"), key("truth")))
+            .or_default()
+            .push(row);
+    }
+    Ok(groups
+        .into_iter()
+        .map(|((case, policy, model, truth), rows)| {
+            let med = |k: &str| pyjson::float(median(rows.iter().map(|r| num(&r[k])).filter(|x| x.is_finite()).collect()));
+            let costs: Vec<f64> = rows.iter().filter_map(|r| r["cost_usd"].as_f64()).collect();
+            json!({
+                "case": case, "policy": policy, "model": model, "truth": truth, "runs": rows.len(),
+                "passed": rows.iter().filter(|r| passed(r)).count(),
+                "median_max_rel_error": med("max_rel_error"), "median_test_rmse": med("test_rmse"),
+                "median_steps": med("steps"), "median_experiments": med("experiments"),
+                "cost_usd": if costs.is_empty() { Value::Null } else { json!(costs.iter().sum::<f64>()) },
+            })
+        })
+        .collect())
+}
+
+/// [`summarize_results`] as a Markdown table.
+pub fn format_results(summary: &[Value]) -> String {
+    let mut out = String::from(
+        "| case | policy | model | truth | pass | median max rel err | median test RMSE | median steps | cost_usd |\n|---|---|---|---|---|---|---|---|---|\n",
+    );
+    for s in summary {
+        let pct = |v: &Value| {
+            let x = num(v);
+            if x.is_finite() {
+                format!("{:.2}%", 100. * x)
+            } else {
+                "-".into()
+            }
+        };
+        let g = |v: &Value| {
+            let x = num(v);
+            if x.is_finite() {
+                fmt_g(x, 4)
+            } else {
+                "-".into()
+            }
+        };
+        out.push_str(&format!(
+            "| {} | {} | {} | {} | {}/{} | {} | {} | {} | {} |\n",
+            s["case"].as_str().unwrap_or("-"),
+            s["policy"].as_str().unwrap_or("-"),
+            s["model"].as_str().unwrap_or("-"),
+            s["truth"].as_str().unwrap_or("-"),
+            s["passed"],
+            s["runs"],
+            pct(&s["median_max_rel_error"]),
+            g(&s["median_test_rmse"]),
+            g(&s["median_steps"]),
+            s["cost_usd"]
+                .as_f64()
+                .map(|c| format!("{c:.4}"))
+                .unwrap_or_else(|| "-".into()),
+        ));
+    }
+    out.trim_end().to_string()
+}
+
+const FLAGS: [(&str, Kind); 15] = [
+    ("truth", Kind::Value),
+    ("append", Kind::Value),
+    ("summary", Kind::Value),
     ("jobs", Kind::Value),
     ("seeds", Kind::Value),
     ("case", Kind::Many),
@@ -605,6 +737,20 @@ pub fn command(words: Vec<String>, out: &mut impl Write) -> Result<(), Failure> 
         )));
     }
     refuse_images(&args, "images")?;
+    if let Some(file) = args.get("summary") {
+        let text =
+            std::fs::read_to_string(file).map_err(|e| Failure::error(format!("{file}: {e}")))?;
+        let summary =
+            summarize_results(&text).map_err(|e| Failure::error(format!("{file}: {e}")))?;
+        let shown = if args.flag("json") {
+            pyjson::dumps_indent(&Value::Array(summary), 1, false)
+        } else {
+            format_results(&summary)
+        };
+        writeln!(out, "{shown}").map_err(|e| Failure::error(e.to_string()))?;
+        return Ok(());
+    }
+    let drawn_truth = args.choice("truth", "fixed", &["fixed", "drawn"])? == "drawn";
     let route = args.choice("route", "meta", &["meta", "baseten", "lane", "muse"])?;
     let mut policies = args.many("policy");
     for p in &policies {
@@ -616,6 +762,7 @@ pub fn command(words: Vec<String>, out: &mut impl Write) -> Result<(), Failure> 
     }
     let mut options = PolicyOptions {
         playbook: args.get("playbook").map(String::from),
+        drawn_truth,
         ..Default::default()
     };
     if policies.iter().any(|p| p == "reason") {
@@ -651,6 +798,14 @@ pub fn command(words: Vec<String>, out: &mut impl Write) -> Result<(), Failure> 
         jobs as usize,
         &options,
     )?;
+    if let Some(file) = args.get("append") {
+        let model = options
+            .model_spec
+            .as_ref()
+            .map(|m| format!("{}:{}", m.route, m.model));
+        append_results(Path::new(file), &rows, model.as_deref(), drawn_truth)
+            .map_err(|e| Failure::error(format!("{file}: {e}")))?;
+    }
     let text = if args.flag("json") {
         rows_json(&rows)
     } else {

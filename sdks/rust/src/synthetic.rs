@@ -67,36 +67,66 @@ pub fn observe(
     o.validate()?;
     Ok(o)
 }
+/// Runs experiments for a case: on the hidden system (synthetic data), or
+/// by replaying recorded runs, each at most once (a dataset backtest).
 pub struct SyntheticRunner {
-    sim: FunctionSimulator,
-    truth: Params,
-    noise: NoiseModel,
-    rng: NumpyRng,
+    source: RunnerSource,
+}
+enum RunnerSource {
+    Generate {
+        sim: FunctionSimulator,
+        truth: Params,
+        noise: NoiseModel,
+        rng: NumpyRng,
+    },
+    Recorded(IndexMap<String, Observation>),
 }
 impl SyntheticRunner {
     pub fn new(sim: FunctionSimulator, truth: Params, noise: NoiseModel, seed: u64) -> Self {
         Self {
-            sim,
-            truth,
-            noise,
-            rng: NumpyRng::new(seed),
+            source: RunnerSource::Generate {
+                sim,
+                truth,
+                noise,
+                rng: NumpyRng::new(seed),
+            },
+        }
+    }
+    /// Replays `runs` by experiment name; each run is returned once.
+    pub fn recorded(runs: IndexMap<String, Observation>) -> Self {
+        Self {
+            source: RunnerSource::Recorded(runs),
         }
     }
     pub fn run(&mut self, experiment: &Value) -> Result<Observation> {
-        observe(
-            &self.sim,
-            &self.truth,
-            experiment,
-            &self.noise,
-            &mut self.rng,
-            "train",
-            None,
-        )
+        match &mut self.source {
+            RunnerSource::Generate {
+                sim,
+                truth,
+                noise,
+                rng,
+            } => observe(sim, truth, experiment, noise, rng, "train", None),
+            RunnerSource::Recorded(runs) => {
+                let name = experiment
+                    .as_str()
+                    .or_else(|| experiment["name"].as_str())
+                    .unwrap_or_default();
+                runs.shift_remove(name).ok_or_else(|| {
+                    invalid(format!(
+                        "no recorded run {name:?} is left; recorded: {}",
+                        runs.keys().cloned().collect::<Vec<_>>().join(", ")
+                    ))
+                })
+            }
+        }
     }
 }
 impl Runner for SyntheticRunner {
     fn kind(&self) -> &str {
-        "synthetic"
+        match self.source {
+            RunnerSource::Generate { .. } => "synthetic",
+            RunnerSource::Recorded(_) => "recorded",
+        }
     }
     fn run(&mut self, experiment: &str, _: &Value) -> Result<Observation> {
         self.run(&json!(experiment))
@@ -381,6 +411,7 @@ pub fn oscillator_case(
             max_experiments: Some(max_experiments),
             bias: bias_on("x", bias),
             missing: Some(missing),
+            ..Default::default()
         },
     )
 }
@@ -401,6 +432,7 @@ pub fn thermal_case(
             max_experiments: Some(max_experiments),
             bias: bias_on("T", bias),
             missing: Some(missing),
+            ..Default::default()
         },
     )
 }
@@ -433,6 +465,7 @@ pub fn battery_case_with(
             max_experiments: Some(max_experiments),
             bias: bias_on("v", bias),
             missing: None,
+            ..Default::default()
         },
     )
 }

@@ -1,13 +1,19 @@
 # Examples: templates, demos and backtests
 
-Status: rev 3 (2026-11-07). Plan steps 1 and 2 are implemented
-(I91c47241e650e419b25036afffb9d6ed, the SDK cases; I124d47e38ec757fbc1b16e66fa4cec3c, the CLI); step 3 is not. Every choice EX-1..EX-10 is
-an operator decision (2026-11-07; EX-4..EX-8 answered in the /open-questions
-walkthrough that day). EX-7 and EX-8 differ from the agent's recommendation;
-see the table. Where the draft format below differs from what was built,
-"Implemented" is current.
+Status: rev 4 (2026-11-07). All three plan steps are implemented; see
+"Implemented" (step 1 and 2 Change-Ids are listed there; step 3 is the
+commit "Draw backtest truth per seed, replay recorded runs and score models").
+Every choice EX-1..EX-10 is an operator decision (2026-11-07; EX-4..EX-8
+answered in the /open-questions walkthrough that day). EX-7 and EX-8 differ
+from the agent's recommendation; see the table. Where the draft format
+below differs from what was built, "Implemented" is current. One open
+agent choice, EX-11 (below), awaits operator review.
 
-## Implemented (steps 1 and 2)
+## Implemented
+
+Steps 1 and 2 (I91c47241e650e419b25036afffb9d6ed, the SDK cases;
+I124d47e38ec757fbc1b16e66fa4cec3c, the CLI):
+
 
 - `examples/blank.template/`, `battery-fit.demo/`, and
   `oscillator.backtest/`, `thermal.backtest/`, `battery.backtest/` (the six
@@ -265,6 +271,68 @@ listed with `url` and `sha256` and fetched on first use into
 cases have no dataset files and stay offline; demos keep their bundled data.
 CI runs dataset cases from a pre-populated cache of that directory.
 
+Step 3:
+
+- **Per-seed truth (EX-4).** `hidden/cases.toml` may have `[prior]`, one
+  `uniform = [lo, hi]` or `log_uniform = [lo, hi]` per `[truth]`
+  parameter (the fixed value must lie inside). With `autophys bench --truth
+  drawn` (Python `run_case(..., truth="drawn")`), each generator case's
+  truth is drawn for its seed from `default_rng([seed, 3])`, in `[truth]`
+  order, identically in both SDKs (a test pins seed 1's draw in each).
+  `autophys examples --check` runs the regime check: for 32 seeds, the
+  drawn truth must leave the same parameters non-identified from the
+  starting data as the fixed truth does, and the starting data plus every
+  catalog experiment must leave exactly `expected_non_identified` (a case
+  with no experiments: from its starting data). The three built-ins have
+  ranges that pass (tests use 48 seeds). The battery short-pulse answer is a
+  noise-level threshold, so its ranges are narrow (about +/-12%); +/-40%
+  ranges flipped it in 9 of 16 seeds.
+- **EX-11 (agent-chosen, pending operator review): fixed truth stays the
+  default.** EX-4 says random truth per seed with one fixed seed as the CI
+  baseline. Drawing by default would change the data of every built-in
+  case at every seed, which breaks the recorded reasoner cassettes, the
+  committed training data (`train/sft/data`) and comparisons with stored
+  results. So `--truth fixed` is the default and `--truth drawn` is what
+  model comparisons should use; results record which. Strongest
+  alternative: draw by default for seeds other than 0 and re-record the
+  cassettes and training data. Reversal: change the default in `bench` and
+  `run_case`; small, plus the re-recording.
+- **Recorded runs (EX-5).** `[[dataset]]` tables (public ones in
+  `example.toml`, held-out ones in `hidden/cases.toml`) give `name`,
+  `settings` (the program the run used), `file` (folders on disk only) or
+  `url`, `sha256`, `columns` (`t` plus each channel), `sigma` and
+  `provenance` (`measured` needs `license` and `source`). A case with
+  `source = "datasets"` names datasets in `train`/`validation`; its
+  experiment menu is the remaining public datasets, each runnable once;
+  `[case.NAME] test = [...]` names the held-out runs. Each run is read as a
+  plain CSV and interpolated onto its settings' time grid (as
+  `numpy.interp`). With no `[truth]`, there is no parameter error and no
+  reveal record; the score is held-out prediction error and the diagnosis.
+- **Downloads (EX-7).** A `url` (`https://`, `http://`, `file://`) is
+  fetched once into `AUTOPHYS_DATASETS_DIR`, else
+  `$XDG_DATA_HOME/tento/autophys/datasets`, else
+  `~/.local/share/tento/autophys/datasets`, named by its sha256 and
+  verified on every read. A built-in backtest may only use `url`. No
+  built-in dataset backtest ships yet: it needs measured data we may
+  redistribute and a place to host it (open question below).
+- **A backtest's own simulator (EX-6, phase 3).** `[system] project =
+  "module:attr"` in a folder on disk imports the module from the example
+  folder: the Rust SDK through `python -m autophys.worker --root DIR`
+  (`AUTOPHYS_PYTHON`, else `python3`), the Python SDK directly. Built-ins
+  must use a built-in model.
+- **Comparing models.** `autophys bench --append RESULTS.jsonl` appends one
+  row per run with `model` (`route:model`, null offline), `truth`, the
+  binary's version and commit. `autophys bench --summary RESULTS.jsonl`
+  prints one row per (case, policy, model, truth): passed/runs, median max
+  relative error, median test RMSE, median steps, total cost. A run passes
+  when it is validated or rightly inconclusive, its diagnosis is right and,
+  when the truth is known, every scored quantity is within 10% (the `train
+  eval` rule). Result rows' `requested` now lists the train runs after the
+  starting ones (identical for generator cases).
+- Validation: with fixed truth, `bench --seeds 3` and Python `run_case` over
+  the 42 baseline runs are still identical to the pre-change baseline; Rust
+  workspace tests pass; Python 620 passed / 13 skipped.
+
 ## Running a backtest
 
 The existing commands read backtest examples instead of the hard-coded
@@ -350,23 +418,26 @@ autophys bench --example ./my-cell.backtest#cell-a17 --policy reason --model …
 | EX-5 | In a dataset case the model's experiment menu is exactly the recorded runs; the score is held-out prediction error, plus parameter error only when truth is known | operator, 2026-11-07 (recommended option) | offer the full menu and refuse unrecorded requests (realistic, but mostly measures refusal handling) | change the runner's catalogue; small |
 | EX-6 | Phased: phase 1 backtests use only the built-in simulators (`battery_ecm`, `oscillator`, `thermal`), so both SDKs run every case; phase 3 adds a backtest's own Python simulator through the `autophys.worker` that `mcp` uses | operator, 2026-11-07 (recommended option) | built-in only; or own simulator first | resequence the plan; small |
 | EX-7 | Backtest datasets are always downloaded by URL and sha256 into the data dir, never embedded; demos keep bundled data; CI uses a cache | operator, 2026-11-07 (agent recommended embedding files under 1 MB) | embed small files; embed everything | allow embedding again; small |
+| EX-11 | Fixed truth stays the default; `--truth drawn` draws per seed (EX-4), and results record which | agent-chosen, pending operator review (implemented) | draw by default for seeds other than 0 and re-record the reasoner cassettes and committed training data | change the default in `bench` and `run_case`, then re-record; small plus the re-recording |
 | EX-10 | `--example` takes `[SCHEME:]SOURCE[#CASE]`: `builtin:` (bare names) and `path:` (`./`, `../`, `/`, `~`) now, `github:`/`https:` later; `#` separates the case, replacing EX-9's `/`, which would collide with path segments in remote sources | operator, 2026-11-07 (recommended option) | schemes with `/` for cases; no schemes (EX-9 as first recorded) | change the separator or drop the prefixes; small until references appear in stored results and docs |
 | EX-9 | `bench`, `research` and `train eval` drop `--case` for one repeatable `--example TARGET` (`example`, `example/case` — separator superseded by EX-10's `#` — or a `.backtest` path with an optional case); case names become local (`battery#full`, …); old `--case` names, replay files and results map through a table | operator, 2026-11-07 (agent recommended a positional `TARGET`; operator chose the flag, matching `new --example`) | positional `bench [TARGET...]`; or keeping `--example` and `--case` as two levels | rename the flag; small while `bench` is a developer tool |
 | EX-8 | The demo (`closed_loop.py` `HIDDEN_CELL`, `battery_fit.py` `TRUTH`) and `battery.backtest`'s baseline truth are separate copies with no required link or check | operator, 2026-11-07 ("separate copies is fine"; this replaced an interrupted "load from backtest" answer; agent recommended separate copies plus a CI equality check) | a CI check that the values match; or loading the demo's cell from the backtest | add the check; trivial |
 
 ## Plan
 
-1. **Kinds for what exists.** Done (see Implemented).
-2. **The existing cases become backtests.** Done (see Implemented).
-3. **New capability**, not started: `[truth.prior]` per-seed truth with the
-   regime check (EX-4), dataset cases with downloaded data (EX-5, EX-7),
-   `bench --summary`, then a backtest's own simulator through the worker
-   (EX-6). `--example ./x.backtest` for generator cases already works.
+1. **Kinds for what exists.** Done.
+2. **The existing cases become backtests.** Done.
+3. **New capability.** Done (per-seed truth, recorded runs, downloads, own
+   simulators, `--append`/`--summary`). Not done: a built-in dataset
+   backtest (blocked on data and hosting), and running each demo's
+   `[[expected]]` commands in CI.
 
 ## Open questions
 
-- **Measured data:** is there a battery data set we can redistribute (and
-  under which license) for the first dataset case? Without one, phase 3
-  ships the dataset format with a synthetic recording only.
-- **Prior ranges (work, not a choice):** each case's EX-4 ranges need the
-  regime check before they ship.
+- **Measured data and hosting:** is there a battery data set we can
+  redistribute (and under which license), and where should built-in
+  datasets live (GitHub release assets of this repository are the obvious
+  place)? Until both are answered, no built-in dataset backtest ships; the
+  format, downloads and checks are implemented and tested with local files.
+- **EX-11** (above): keep fixed truth as the default, or draw by default
+  and re-record the cassettes and training data.
