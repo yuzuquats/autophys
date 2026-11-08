@@ -11,7 +11,7 @@ import pytest
 from autophys import Display, Project, simulator
 from autophys.synthetic import case_project
 from autophys.client import RemoteClient
-from autophys.http import HttpStore
+from autophys.http import HttpError, HttpStore
 from autophys.models import battery_ecm, oscillator, thermal_rc
 from autophys.simulator import CallBudget, SimulationError
 from autophys.store import MemoryStore, JsonlStore, StoreError, canonical
@@ -175,16 +175,26 @@ def test_http_upload_and_idempotence():
 
 
 @pytest.mark.parametrize("status", [404, 405])
-def test_http_old_daemon_warns_once(status):
+def test_http_old_daemon_is_an_upgrade_error(status):
     with FakeAutophys() as fake:
         fake.display_status = status
         store = HttpStore(fake.url, fake.issue_key())
         project = Project("toy", toy(declaration()))
-        with pytest.warns(RuntimeWarning, match="daemon too old") as caught:
-            wb = RemoteClient(store).project(project)
-            store.register_display(wb.project_id, project)
-        assert len(caught) == 1
-        assert len(store.config_versions(wb.project_id)) == 1
+        with pytest.raises(HttpError, match="too old for display manifests.*upgrade the autophys daemon") as caught:
+            RemoteClient(store).project(project)
+        assert caught.value.status == status and caught.value.error == "display_upload_failed"
+        pid = store.ensure_project("toy")
+        assert len(store.config_versions(pid)) == 1  # the config went up before the display
+        with pytest.raises(HttpError, match="upgrade"):
+            store.register_display(pid, project)  # every attempt errors, not only the first
+
+
+def test_http_display_unknown_project_is_not_an_upgrade_error():
+    with FakeAutophys() as fake:
+        store = HttpStore(fake.url, fake.issue_key())
+        with pytest.raises(HttpError) as caught:
+            store.put_display("prj_missing", b'{"format":1}')
+        assert caught.value.status == 404 and "upgrade" not in str(caught.value)
 
 
 @pytest.mark.parametrize("body,message", [(b'{"format":2}', "expected format 1"),

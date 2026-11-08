@@ -29,7 +29,6 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
-import warnings
 from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Any, Iterable, Iterator
@@ -55,6 +54,23 @@ class HttpError(RuntimeError):
 
 class AuthError(HttpError):
     pass
+
+
+def _route_missing(error: HttpError) -> bool:
+    """True when the daemon has no such route, as opposed to a missing resource.
+
+    The daemon answers an unknown route with 404 ``unknown route`` (older
+    builds with an empty body) or 405; a 404 naming a resource, such as
+    ``unknown investigation``, is an ordinary error.
+    """
+    return error.status == 405 or (error.status == 404 and error.message in ("", "unknown route"))
+
+
+def _daemon_too_old(error: HttpError, feature: str) -> HttpError:
+    """RS-REMOTE-2: a daemon without a feature's endpoint is an error, never a skip."""
+    return HttpError(error.status, error.error,
+                     f"the daemon is too old for {feature} (no endpoint); upgrade the autophys daemon",
+                     retry_after=error.retry_after, path=error.path)
 
 
 def request_json(
@@ -312,8 +328,6 @@ class HttpStore(Store):
         self._wait_state: dict[str, str | None] = {"last_wait": None}
         self._project_id: str | None = None
         self._bound_project_name: str | None = None
-        self._display_warned = False
-        self._reveal_warned = False
 
     @property
     def last_wait(self) -> str | None:
@@ -417,14 +431,11 @@ class HttpStore(Store):
         try:
             with urllib.request.urlopen(req, timeout=self.timeout):
                 pass
-        except urllib.error.HTTPError as error:
-            status = error.code
-            error.close()
-            if status in (404, 405):
-                if not self._display_warned:
-                    self._display_warned = True
-                    warnings.warn("daemon too old for display manifests (HTTP 404/405)", RuntimeWarning, stacklevel=2)
-                return
+        except urllib.error.HTTPError as raw:
+            error = _http_error(raw)  # parsed only to classify; server text is not echoed
+            status = error.status
+            if _route_missing(error):
+                raise _daemon_too_old(HttpError(status, "display_upload_failed"), "display manifests") from None
             if status == 413:
                 raise StoreError("display manifest exceeds 256 KiB limit") from None
             if status == 422:
@@ -458,7 +469,7 @@ class HttpStore(Store):
         self._see(j["id"], j)
         return j["id"]
 
-    def append(self, investigation, kind, payload, *, record_id=None) -> Record | None:
+    def append(self, investigation, kind, payload, *, record_id=None) -> Record:
         from .workbook import canonical_payload
         payload, _ = canonical_payload(payload)
         rid = record_id if record_id is not None else uuid.uuid4().hex
@@ -482,12 +493,9 @@ class HttpStore(Store):
         try:
             j = self._req("POST", path, envelope, headers={"Idempotency-Key": rid})
         except HttpError as error:
-            if kind != "reveal" or error.status not in (404, 405):
-                raise
-            if not self._reveal_warned:
-                warnings.warn("daemon does not support reveal; skipping ground truth record", RuntimeWarning, stacklevel=2)
-                self._reveal_warned = True
-            return None
+            if kind == "reveal" and _route_missing(error):
+                raise _daemon_too_old(error, "reveal records") from None
+            raise
         self._see(investigation, j)
         return _to_record(j["record"])
 

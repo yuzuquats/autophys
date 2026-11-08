@@ -158,15 +158,21 @@ def test_http_reveal_and_old_daemon(monkeypatch):
         with pytest.raises(HttpError) as e:
             store.append(inv, "reveal", reveal_payload())
         assert e.value.status == 409
-    for status in (404, 405):
+    for status, message in ((404, "unknown route"), (404, ""), (405, "")):
         old = HttpStore("http://unused", "fake")
         def missing(*args, **kwargs):
-            raise HttpError(status, "unsupported")
+            raise HttpError(status, "not_found", message)
         monkeypatch.setattr(old, "_req", missing)
-        with pytest.warns(RuntimeWarning, match="does not support reveal") as warnings:
-            assert old.append("inv", "reveal", reveal_payload()) is None
-            assert old.append("inv", "reveal", reveal_payload()) is None
-        assert len(warnings) == 1
+        for _ in range(2):  # every attempt errors; nothing is skipped
+            with pytest.raises(HttpError, match="too old for reveal records.*upgrade the autophys daemon") as e:
+                old.append("inv", "reveal", reveal_payload())
+            assert e.value.status == status
+    def unknown_investigation(*args, **kwargs):
+        raise HttpError(404, "not_found", "unknown investigation")
+    monkeypatch.setattr(old, "_req", unknown_investigation)
+    with pytest.raises(HttpError) as e:
+        old.append("inv", "reveal", reveal_payload())
+    assert e.value.message == "unknown investigation"  # a missing resource is not an old daemon
     def denied(*args, **kwargs):
         raise HttpError(403, "denied")
     monkeypatch.setattr(old, "_req", denied)

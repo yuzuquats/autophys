@@ -306,7 +306,11 @@ class FakeAutophys:
                 if display and method == "PUT":
                     pid = display.group(1)
                     if pid not in fake.projects:
-                        return self._err(404, "not_found")
+                        return self._err(404, "not_found", "unknown project")
+                    if fake.display_status == 404:
+                        return self._err(404, "not_found", "unknown route")
+                    if fake.display_status == 405:
+                        return self._err(405, "method_not_allowed")
                     if fake.display_status:
                         return self._err(fake.display_status, "display_rejected", "untrusted server text")
                     if len(raw) > 256 * 1024:
