@@ -187,6 +187,57 @@ pub(crate) fn check_batch(records: &[BatchRecord]) -> Result<Vec<Kind>> {
     Ok(kinds)
 }
 
+/// The attachment guarantee of the removed `…/attachment` route, kept for
+/// batches: a `data_attached` event at batch index `i` whose
+/// `measurement_version` points into the batch must name a measurement of
+/// it, and when measurements precede it in the batch it must name one of
+/// them. A measurement is named by its record hash (through `hash_of`, as
+/// Rust's `attach_data` sends, or literally) or by its payload `version`
+/// (the dataset version Python's `attach_data` sends). `earlier` are the
+/// kinds and results of records `0..i`. Events whose batch holds no
+/// measurement and whose link names no batch record are not affected.
+fn check_attachment_link(
+    i: usize,
+    r: &BatchRecord,
+    payload: &Value,
+    earlier: &[Kind],
+    out: &[Appended],
+) -> Result<()> {
+    if payload.get("event").and_then(Value::as_str) != Some("data_attached") {
+        return Ok(());
+    }
+    let link = &payload["measurement_version"];
+    if let Some(&j) = r.hash_of.get("measurement_version") {
+        if earlier[j] != Kind::Measurement {
+            return Err(Error::invalid(
+                format!("records[{i}].hash_of.measurement_version"),
+                format!("records[{j}] is a {}, not a measurement", earlier[j].as_str()),
+            ));
+        }
+        return Ok(());
+    }
+    let names = |j: usize| {
+        let record = &out[j].record;
+        link.as_str() == Some(record.hash.as_str())
+            || (earlier[j] == Kind::Measurement
+                && record.payload.get("version").is_some_and(|v| v == link))
+    };
+    let path = format!("records[{i}].payload.measurement_version");
+    if let Some(j) = (0..i).find(|&j| names(j)) {
+        if earlier[j] != Kind::Measurement {
+            return Err(Error::invalid(
+                path,
+                format!("names records[{j}], a {}, not a measurement", earlier[j].as_str()),
+            ));
+        }
+        return Ok(());
+    }
+    if earlier.contains(&Kind::Measurement) {
+        return Err(Error::invalid(path, "must identify a measurement of this batch"));
+    }
+    Ok(())
+}
+
 /// Point a refusal at batch record `i`: `payload.x` becomes `records[i].payload.x`.
 fn batch_error(i: usize, e: Error) -> Error {
     match e {
@@ -925,12 +976,16 @@ impl Investigation {
     /// `idempotency_conflict`, and the proposal state machine applies. Any
     /// refusal writes nothing. A record's [`BatchRecord::hash_of`] fills
     /// top-level payload fields with the hash of an earlier record of the
-    /// batch before it is checked. Returns one [`Appended`] per record.
+    /// batch before it is checked. One check spans records: a `data_attached`
+    /// event linking into the batch must name a measurement, and with
+    /// measurements in the batch it must name one of them (by hash, or by
+    /// payload `version` as Python sends). Returns one [`Appended`] per record.
     pub fn append_batch(&self, records: &[BatchRecord]) -> Result<Vec<Appended>> {
         if let Some(r) = &self.wb.remote {
             return r.append_batch(&self.id, records);
         }
         let kinds = check_batch(records)?;
+        let batch_kinds = kinds.clone();
         let mut conn = self.wb.conn()?;
         let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
         if !projections::investigation_exists(&tx, &self.id)? {
@@ -946,6 +1001,7 @@ impl Investigation {
                 }
             }
             validate::payload_shape(kind, &payload).map_err(at)?;
+            check_attachment_link(i, r, &payload, &batch_kinds[..i], &out)?;
             let text = canonical(&payload);
             if text.len() > validate::MAX_PAYLOAD_BYTES {
                 return Err(Error::TooLarge(validate::MAX_PAYLOAD_BYTES));

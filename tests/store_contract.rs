@@ -1256,6 +1256,82 @@ async fn batch_appends_all_or_none_and_replays_by_record_id() {
     assert_eq!(s, 404);
 }
 
+/// The removed attachment route refused a `data_attached` event that did not
+/// name its measurement; the batch keeps that. A link into the batch must
+/// be a measurement, and with measurements in the batch the event must name
+/// one: by hash (`hash_of`, Rust) or by payload `version` (Python).
+#[actix_web::test]
+async fn batch_data_attached_must_name_its_measurement() {
+    let f = fixture();
+    let app = app!(f.api);
+    let (key, inv) = seeded(&app, &f.api).await;
+    let k = Some(key.as_str());
+    let batch = format!("/investigations/{inv}/records");
+    macro_rules! all {
+        ($app:expr) => {{
+            let (_, r) = call($app, get(&batch, k).to_request()).await;
+            r["records"].as_array().unwrap().len()
+        }};
+    }
+    let approve = |pid: &str| {
+        json!({"records": [
+            env(&format!("{pid}-prop"), "proposal", proposed(pid)),
+            env(&format!("{pid}-ok"), "proposal", json!({"proposal_id": pid, "event": "approved", "by": "test"})),
+        ]})
+    };
+    for pid in ["p1", "p2", "p3"] {
+        let (s, out) = call(&app, post(&batch, k, &approve(pid)).to_request()).await;
+        assert_eq!(s, 201, "{out}");
+    }
+    let observation = json!({"t": [0.0], "y": {"T": [1.0]}});
+    let rust_m = env("m-rust", "measurement", json!({"observation": observation}));
+    let python_m = env("m-py", "measurement", json!({"version": 3, "digest": "d", "observation": observation}));
+    let attached = |id: &str, pid: &str, link: Value| {
+        env(id, "proposal", json!({"proposal_id": pid, "event": "data_attached", "measurement_version": link}))
+    };
+    let linked = |id: &str, pid: &str, index: usize| {
+        let mut e = env(id, "proposal", json!({"proposal_id": pid, "event": "data_attached"}));
+        e["hash_of"] = json!({"measurement_version": index});
+        e
+    };
+    let before = all!(&app);
+    for (body, path, why) in [
+        (
+            json!({"records": [env("p4-prop", "proposal", proposed("p4")), linked("e-1", "p1", 0)]}),
+            "records[1].hash_of.measurement_version",
+            "hash_of names a proposal record, not a measurement",
+        ),
+        (
+            json!({"records": [rust_m.clone(), attached("e-2", "p1", json!("0".repeat(64)))]}),
+            "records[1].payload.measurement_version",
+            "a hash that is not the batch's measurement",
+        ),
+        (
+            json!({"records": [python_m.clone(), attached("e-3", "p1", json!(4))]}),
+            "records[1].payload.measurement_version",
+            "another dataset version than the batch's measurement",
+        ),
+    ] {
+        let (s, e) = call(&app, post(&batch, k, &body).to_request()).await;
+        assert_eq!((s, e["error"].as_str(), e["path"].as_str()), (422, Some("invalid_payload"), Some(path)), "{why}: {e}");
+        assert_eq!(all!(&app), before, "a refused batch wrote records: {why}");
+    }
+
+    // What the SDKs send: Rust links the hash, Python the dataset version.
+    let rust = json!({"records": [rust_m, linked("e-rust", "p1", 0)]});
+    let (s, out) = call(&app, post(&batch, k, &rust).to_request()).await;
+    assert_eq!(s, 201, "{out}");
+    assert_eq!(out["records"][1]["record"]["payload"]["measurement_version"], out["records"][0]["record"]["hash"]);
+    let python = json!({"records": [python_m, attached("e-py", "p2", json!(3))]});
+    let (s, out) = call(&app, post(&batch, k, &python).to_request()).await;
+    assert_eq!(s, 201, "{out}");
+    // An event alone names no batch record and is checked as before.
+    let alone = json!({"records": [attached("e-alone", "p3", json!(1))]});
+    let (s, out) = call(&app, post(&batch, k, &alone).to_request()).await;
+    assert_eq!(s, 201, "{out}");
+    assert_eq!(all!(&app), before + 5);
+}
+
 #[actix_web::test]
 async fn outlook_is_validated_and_passed_through_untouched() {
     let f = fixture();

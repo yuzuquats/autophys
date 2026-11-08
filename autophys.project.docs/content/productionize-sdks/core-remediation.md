@@ -6,7 +6,7 @@ Two remote record POSTs commit independently. Retrying them can repair a partial
 
 | Decision | Recommendation and compatibility | Alternative and reversal |
 | --- | --- | --- |
-| CORE-01, operator 2026-11-08: changed to a generic batch API, not implemented | Add a dedicated atomic attachment endpoint accepting the existing record payloads and IDs; both SDKs use it. An old daemon returns 404/405, propagated without a two-POST fallback. | Broad batch transaction framework adds unnecessary surface. Reversal removes the additive route/client call; no data conversion is needed. |
+| CORE-01, operator 2026-11-08: changed to a generic batch API, built as `POST …/records` (see the note below) | Add a dedicated atomic attachment endpoint accepting the existing record payloads and IDs; both SDKs use it. An old daemon returns 404/405, propagated without a two-POST fallback. | Broad batch transaction framework adds unnecessary surface. Reversal removes the additive route/client call; no data conversion is needed. |
 | CORE-02, operator 2026-11-08: confirmed | Reject executable configuration drift before run/approve/attach/resume. Keep simulator identity and legitimate free/fixed overrides. | Copying every simulator/callback can alter identity and budget ownership. Reversal is a small boundary change, no stored migration. |
 | CORE-03, operator 2026-11-08: confirmed | Normalize absent/empty targets to default collection; accept case-insensitive HTTP(S), normalize authority/default ports/trailing slash; reject userinfo/query/fragment and ambiguous URL-like targets before effects. Bind discovered saved keys to this normalized identity; explicit keys retain explicit destination authority. | Accepting ambiguous destinations risks unintended persistence or credential disclosure. Reversal affects input validation only. |
 | CORE-04, operator 2026-11-08: changed, `project(name)` opens in both SDKs, not implemented | Retain Rust project(name) creation and Python project(name) open-existing semantics; add explicit Rust open_project and Python ensure_project counterparts. | Breaking either established method is unnecessary. Additive methods are cheap to reverse. |
@@ -18,6 +18,15 @@ Deferred without waiver: A5 ephemeral/JSONL capability, A6 visual policy, FS01/F
 The external round packet will distinguish changed code from proven acceptance, name artifact/source identity, exact tests and resource stops, and preserve unresolved objections for five independent rejudges. The campaign is unfinished.
 
 ## The additive transport preserves each existing record dialect
+
+Superseded 2026-11-08 (CORE-01, CORE-01a): the attachment route below was
+built, then replaced by the batch `POST /api/v1/investigations/{inv}/records`
+and removed. The batch gives each record the store validation of a single
+`Investigation::append` (key-only; no per-route rules or `by` stamping) and
+keeps the link check: a `data_attached` event must name a measurement of the
+batch, by hash or by Python's payload `version`. See
+[store.md](../store.md) and
+[review-20261108-implementation.md](../review-20261108-implementation.md).
 
 `POST /api/v1/investigations/{inv}/proposals/{pid}/attachment` accepts `measurement: {id, kind: "measurement", payload}`, `attachment_id`, and optional `attachment_payload`. Omitting the last field derives the Rust record API's `{proposal_id,event:"data_attached",measurement_version:<measurement hash>}` inside the transaction. Python supplies its existing measurement version/dataset digest/observation payload and event digest with integer linkage. Its content-derived IDs and Rust remote's proposal-derived IDs remain unchanged. The server validates the event/proposal/linkage and both global IDs, admits only approved/edited proposals, and folds both records under one immediate transaction. Complete identical retries replay before transition checks; changed content conflicts; a legacy orphan is not repaired or migrated implicitly. Existing `/measurements` and `/data` single-record routes keep their meaning.
 

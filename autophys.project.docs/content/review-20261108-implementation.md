@@ -190,9 +190,14 @@ advancing the cursor); workspace 326/0/2.
   `{"records": [{"id", "kind", "payload", "hash_of"?}, ...]}`, 1 to 64
   envelopes within the 1 MiB + 64 KiB body limit.
 - Appended in order in one `BEGIN IMMEDIATE` transaction, all or none. Each
-  record is checked as its single-record route would check it (kind, payload
-  shape and size, the proposal state machine) against the state the earlier
-  records leave; `investigation` records are refused.
+  record gets the store validation `Investigation::append` gives one record,
+  keyed by record id (kind, payload shape and size, the proposal state
+  machine) against the state the earlier records leave; `investigation`
+  records are refused. (Corrected in review round 1: the single routes' own
+  rules, their per-route kind and event allowlists, the path proposal id and
+  the server stamping `by` on decisions, do not apply; the route takes keys
+  only. A `data_attached` event must name a measurement of the batch when it
+  links into the batch or the batch holds measurements.)
 - Idempotent by record id: the same id and content replays
   (`created: false`), the same id with other content is 409
   `idempotency_conflict`; replays and new records may mix. An

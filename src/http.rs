@@ -772,9 +772,13 @@ async fn ingest_value(
 /// `POST /investigations/{inv}/records`: append `{"records": [...]}` in
 /// order, all or none, in one transaction (CORE-01). Each element is a record
 /// envelope `{id, kind, payload}` plus an optional `hash_of` (payload fields
-/// filled with an earlier element's hash); each is checked as its
-/// single-record route would check it, replays by id, and any refusal writes
-/// nothing. Answers `{records: [{record, gseq, created}], gseq}`, 201 when
+/// filled with an earlier element's hash). Each gets the store validation
+/// [`Investigation::append`] gives one record, keyed by its record id (kind,
+/// payload shape and size, replay or conflict, the proposal state machine),
+/// plus the attachment link check of `Investigation::append_batch`. The
+/// single routes' own rules do not apply: no [`Rule`] (any kind and proposal
+/// event, no path proposal id) and no server-stamped `by`, since the route
+/// takes keys only. Any refusal writes nothing. Answers `{records: [{record, gseq, created}], gseq}`, 201 when
 /// any record is new, else 200. Idempotency is per record id, so the route
 /// takes no `Idempotency-Key`.
 async fn append_records(
