@@ -333,23 +333,19 @@ pub fn default_server_db() -> Result<PathBuf> {
 /// collection the way the collection follows `$AUTOPHYS_HOME`.
 pub fn server_db_for(collection: &Path) -> Result<PathBuf> {
     let standard = std::env::var_os("HOME").map(|h| PathBuf::from(h).join("autophys"));
-    Ok(choose_server_db(
-        &AppDirs::resolve(APP_ID)?.data,
-        collection,
-        standard.as_deref(),
-    ))
+    choose_server_db(&AppDirs::resolve(APP_ID)?.data, collection, standard.as_deref())
 }
 
 /// The app-data `server.db` serves the collection it is already pinned to,
 /// or `~/autophys` while it is unpinned; that keeps every existing key and
 /// pairing where it was. Any other collection gets its own database under
 /// `collections/<name>-<hash of its path>/`.
-fn choose_server_db(data: &Path, collection: &Path, standard: Option<&Path>) -> PathBuf {
+fn choose_server_db(data: &Path, collection: &Path, standard: Option<&Path>) -> Result<PathBuf> {
     let shared = data.join("server.db");
     let root = resolved(collection);
-    match pinned_local_root(&shared) {
-        Some(pinned) if pinned == root => return shared,
-        None if standard.is_some_and(|s| resolved(s) == root) => return shared,
+    match pinned_local_root(&shared)? {
+        Some(pinned) if pinned == root => return Ok(shared),
+        None if standard.is_some_and(|s| resolved(s) == root) => return Ok(shared),
         _ => {}
     }
     use sha2::{Digest, Sha256};
@@ -362,52 +358,72 @@ fn choose_server_db(data: &Path, collection: &Path, standard: Option<&Path>) -> 
         .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
         .take(40)
         .collect();
-    data.join("collections")
+    Ok(data
+        .join("collections")
         .join(format!("{name}-{}", hex::encode(&digest[..8])))
-        .join("server.db")
+        .join("server.db"))
 }
 
 /// The collection a server database's local workspace is pinned to, if the
 /// database exists and has served one. Read only: choosing a database never
 /// creates or migrates one.
-pub fn pinned_local_root(server_db: &Path) -> Option<PathBuf> {
-    use rusqlite::{Connection, OpenFlags};
-    if !server_db.is_file() {
-        return None;
+pub fn pinned_local_root(server_db: &Path) -> Result<Option<PathBuf>> {
+    use rusqlite::{Connection, OpenFlags, OptionalExtension};
+    if !server_db.exists() {
+        return Ok(None);
     }
-    let conn = Connection::open_with_flags(server_db, OpenFlags::SQLITE_OPEN_READ_ONLY).ok()?;
-    conn.query_row("SELECT root FROM workspaces WHERE id = 'local'", [], |r| {
-        r.get::<_, String>(0)
-    })
-    .ok()
-    .map(PathBuf::from)
+    // A database that exists but cannot be read is an error, not "unpinned":
+    // treating it as unpinned would start an empty database for a collection
+    // whose keys and pairings are in this one.
+    let read = || -> rusqlite::Result<Option<String>> {
+        let conn = Connection::open_with_flags(server_db, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+        let has_table: bool = conn.query_row(
+            "SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'workspaces')",
+            [],
+            |r| r.get(0),
+        )?;
+        if !has_table {
+            return Ok(None);
+        }
+        conn.query_row("SELECT root FROM workspaces WHERE id = 'local'", [], |r| r.get(0))
+            .optional()
+    };
+    read()
+        .map(|root| root.map(PathBuf::from))
+        .with_context(|| format!("read which collection {} serves", server_db.display()))
 }
 
 /// `path` with symlinks resolved as far as it exists, so a collection names
 /// the same database before and after its directory is created (the server
 /// pins the canonical path).
 fn resolved(path: &Path) -> PathBuf {
+    use std::path::Component;
     let absolute = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
-    let mut tail = Vec::new();
-    let mut head = absolute.as_path();
-    loop {
-        if let Ok(real) = std::fs::canonicalize(head) {
-            return tail.iter().rev().fold(real, |acc, part| acc.join(part));
-        }
-        match (head.parent(), head.file_name()) {
-            (Some(parent), Some(name)) => {
-                tail.push(name.to_os_string());
-                head = parent;
+    let parts: Vec<Component> = absolute.components().collect();
+    for split in (1..=parts.len()).rev() {
+        let Ok(mut real) = std::fs::canonicalize(parts[..split].iter().collect::<PathBuf>()) else {
+            continue;
+        };
+        // The rest does not exist yet, so it holds no symlinks: `..` removes
+        // the previous name, as it will once create_dir_all has made it.
+        for part in &parts[split..] {
+            match part {
+                Component::CurDir => {}
+                Component::ParentDir => {
+                    real.pop();
+                }
+                other => real.push(other),
             }
-            _ => return absolute,
         }
+        return real;
     }
+    absolute
 }
 
 /// A local (no `--login`) server must serve the collection its database is
 /// pinned to; say so at startup instead of answering every request 403.
 fn check_pin(collection: &Path, server_db: &Path) -> Result<()> {
-    let Some(pinned) = pinned_local_root(server_db) else {
+    let Some(pinned) = pinned_local_root(server_db)? else {
         return Ok(());
     };
     let root = resolved(collection);
@@ -694,19 +710,19 @@ mod tests {
         let (data, standard, other) = (tmp.join("data"), tmp.join("autophys"), tmp.join("scratch/coll"));
         let shared = data.join("server.db");
         // Unpinned: ~/autophys takes the shared database, anything else its own.
-        assert_eq!(choose_server_db(&data, &standard, Some(&standard)), shared);
-        let own = choose_server_db(&data, &other, Some(&standard));
+        assert_eq!(choose_server_db(&data, &standard, Some(&standard)).unwrap(), shared);
+        let own = choose_server_db(&data, &other, Some(&standard)).unwrap();
         assert!(own.starts_with(data.join("collections")) && own.ends_with("server.db"));
         assert!(own.parent().unwrap().file_name().unwrap().to_string_lossy().starts_with("coll-"));
         // The same collection names the same database before and after it exists.
         std::fs::create_dir_all(&other).unwrap();
-        assert_eq!(choose_server_db(&data, &other, Some(&standard)), own);
-        assert_ne!(choose_server_db(&data, &tmp.join("scratch/coll2"), Some(&standard)), own);
+        assert_eq!(choose_server_db(&data, &other, Some(&standard)).unwrap(), own);
+        assert_ne!(choose_server_db(&data, &tmp.join("scratch/coll2"), Some(&standard)).unwrap(), own);
         // A shared database already pinned to a collection keeps serving it
         // (existing keys stay put); ~/autophys then gets its own.
         pin(&shared, &resolved(&other));
-        assert_eq!(choose_server_db(&data, &other, Some(&standard)), shared);
-        let standard_own = choose_server_db(&data, &standard, Some(&standard));
+        assert_eq!(choose_server_db(&data, &other, Some(&standard)).unwrap(), shared);
+        let standard_own = choose_server_db(&data, &standard, Some(&standard)).unwrap();
         assert!(standard_own.starts_with(data.join("collections")));
         std::fs::remove_dir_all(&tmp).unwrap();
     }
@@ -719,11 +735,40 @@ mod tests {
         std::fs::create_dir_all(&a).unwrap();
         assert!(check_pin(&b, &db).is_ok(), "a missing database pins nothing");
         pin(&db, &resolved(&a));
-        assert_eq!(pinned_local_root(&db), Some(resolved(&a)));
+        assert_eq!(pinned_local_root(&db).unwrap(), Some(resolved(&a)));
         assert!(check_pin(&a, &db).is_ok());
         let message = check_pin(&b, &db).unwrap_err().to_string();
         assert!(message.contains("serves the collection"), "{message}");
         assert!(message.contains("Omit --server-db"), "{message}");
+        std::fs::remove_dir_all(&tmp).unwrap();
+    }
+
+    #[test]
+    fn an_unreadable_server_database_is_an_error_not_unpinned() {
+        let tmp = std::env::temp_dir().join(format!("ap-g1-bad-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let data = tmp.join("data");
+        std::fs::create_dir_all(&data).unwrap();
+        // A database without the workspaces table yet pins nothing.
+        rusqlite::Connection::open(data.join("server.db")).unwrap();
+        assert_eq!(pinned_local_root(&data.join("server.db")).unwrap(), None);
+        std::fs::write(data.join("server.db"), b"not a sqlite database, padded past the header size")
+            .unwrap();
+        let e = choose_server_db(&data, &tmp.join("coll"), None).unwrap_err();
+        assert!(format!("{e:#}").contains("read which collection"), "{e:#}");
+        assert!(check_pin(&tmp.join("coll"), &data.join("server.db")).is_err());
+        std::fs::remove_dir_all(&tmp).unwrap();
+    }
+
+    #[test]
+    fn a_missing_collection_names_the_path_it_will_have() {
+        let tmp = std::env::temp_dir().join(format!("ap-g1-dots-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let typed = tmp.join("missing/../coll/./x");
+        let before = resolved(&typed);
+        std::fs::create_dir_all(&typed).unwrap();
+        assert_eq!(before, std::fs::canonicalize(&typed).unwrap());
         std::fs::remove_dir_all(&tmp).unwrap();
     }
 

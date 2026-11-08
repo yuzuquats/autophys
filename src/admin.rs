@@ -330,7 +330,20 @@ pub fn run(
         }),
         _ => unreachable!("checked above"),
     };
-    result.unwrap_or_else(|e| fail(err, &e.to_string()))
+    result.unwrap_or_else(|e| {
+        // Each collection has its own server database (G1-DB), so a code or
+        // key made by a server for another collection is not in this one.
+        let hint = if e.status() == 404 {
+            format!(
+                " in the server database {}; each collection has its own, so pass the \
+                 server's --collection (or --server-db)",
+                server_db.display()
+            )
+        } else {
+            String::new()
+        };
+        fail(err, &format!("{e}{hint}"))
+    })
 }
 
 /// `db verify`: `wb.verify()` on every workbook (or `--project`'s), with
