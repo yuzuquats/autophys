@@ -1,9 +1,8 @@
 # Build the 2026-11-08 review decisions
 
-Status: built, 2026-11-08 (all eight decisions); independent review round 1 returned six findings, fixed ("Review round 1 fixes" under Remaining work). SHAs below are as of HEAD `e31f3d7`; Change-Ids are the stable names. The operator said "start" after the
-`/open-questions` review recorded in [decisions.md](decisions.md) ("Operator
-review, 2026-11-08" and the sub-questions). Nothing here is pushed or
-released; commits stay local on yuzuquats `~/workspace/autophys` master.
+Status: built, deployed and published, 2026-11-08. SHAs are the published
+commits on origin/master (restacks before the push were mapped by Change-Id);
+`6590251` is the deployed release's own identity.
 
 ## What changes
 
@@ -40,7 +39,7 @@ this plan.
 
 Tracked here as each wave lands.
 
-**RS-REMOTE-2: done** (`8f3c1a9`, `I6009dcdbcda1cf93fd70e97ec63e2866`).
+**RS-REMOTE-2: done** (`dac03c9`, `I6009dcdbcda1cf93fd70e97ec63e2866`).
 Python's `HttpStore` raises `HttpError` (status and code kept) with "the
 daemon is too old for reveal records / display manifests (no endpoint);
 upgrade the autophys daemon" on every attempt, instead of warning once and
@@ -54,7 +53,7 @@ Tests:
 `test_curves_reveal.py`, `test_display.py`. Rust already returns the HTTP
 error; giving it the same upgrade wording is optional Rust-side follow-up.
 
-**DM-D1 (Python): done** (`f4f5d26`, `Ic24293b548e74e9f62a642f806af2c60`).
+**DM-D1 (Python): done** (`68536e9`, `Ic24293b548e74e9f62a642f806af2c60`).
 `workbook.py` has `INITIAL_VERSION = 1` (new files), `SCHEMA_VERSION = 2`
 (newest read and written) and an append-only `_MIGRATIONS` tuple run inside
 the writing transaction. New `WorkbookStore.put_display` / `display` match
@@ -87,7 +86,7 @@ needs a format-2 section once the Rust half lands.
 
 ### DM-RS-1: done
 
-`7ae2cb7` (`I4f63a8230efc2cf463a5d907805eb885`). Rust `Trajectory` has no
+`f88704d` (`I4f63a8230efc2cf463a5d907805eb885`). Rust `Trajectory` has no
 map `Deref`/`DerefMut`. Accessors: `outputs()`/`outputs_mut()` (the `y`
 map, time under `"t"`), `inputs()`/`inputs_mut()`, and `t()`,
 `output(name)`, `input(name)` returning `Result<&[f64], ChannelError>`;
@@ -121,16 +120,16 @@ and convert the model tests and the remaining test call sites (about ten
 lines) in the same release that is allowed to move the model hashes.
 
 Tests: `cargo test --workspace --locked` on yuzuquats, 323 passed, 0
-failed, 2 ignored (baseline at `ddecbbb`, before the change: 321/0/2; the
+failed, 2 ignored (baseline at `f44852b`, before the change: 321/0/2; the
 two new tests are the trajectory unit tests). `autophys new --lang rust`
-for `blank` and `battery-fit`, pinned to `7ae2cb7` through a `file://`
+for `blank` and `battery-fit`, pinned to `f88704d` through a `file://`
 SDK repo, builds in release; both run, and `battery-fit --demo` writes a
 `demo.csv` byte-identical to the shipped one.
 
 ### UI-27: done
 
 `Ie4f804d3ea81ab924611f3d5cefc1bc9` and `I3babbef47e5b61f8fedbdc0df2ea9a62`
-(`fc4283b`, `d05d850` as of `b916788`). New project is the operator-chosen
+(`0d626d4`, `d9177c2` as of `5cfb1a1`). New project is the operator-chosen
 SDK stepper: create with `autophys new my-project --lang python|rust`,
 connect with `autophys connect <page origin> --name my-device` and approve
 the device from its pending card in the step (approval advances), then run
@@ -154,7 +153,7 @@ approved per run) and `seed.py --connected`; screenshots in
 
 ### RS-REMOTE-1: done
 
-`0067d04` (`I312a644864bfa193ee73218cd2782f6d`). `autophys::remote::Remote`
+`199c4fb` (`I312a644864bfa193ee73218cd2782f6d`). `autophys::remote::Remote`
 is async over reqwest 0.12 (rustls, webpki roots, ring) and tokio:
 requests, projects, investigations, records, proposals, appends, SSE
 streams (`RecordStream::next().await`), approval waits and
@@ -190,7 +189,7 @@ advancing the cursor); workspace 326/0/2.
 
 ### CORE-01: done
 
-`799234b` (`Ia265d1b94e62c5cd0e711976fbba5b72`). Contract:
+`b116ef4` (`Ia265d1b94e62c5cd0e711976fbba5b72`). Contract:
 
 - `POST /api/v1/investigations/{inv}/records`, `Keyed` auth, body
   `{"records": [{"id", "kind", "payload", "hash_of"?}, ...]}`, 1 to 64
@@ -224,7 +223,7 @@ HTTP (no fallback); `Investigation::attach_records` is removed. Python
 `HttpStore.attach_data` posts the batch (with content-derived ids until review round 1, now Rust's investigation/proposal/kind ids) and
 `HttpStore.append_batch` is now atomic through it; the fake server
 implements the route. A daemon without the route gives "too old for batch
-record appends … upgrade the autophys daemon" in both SDKs (in `9849710`).
+record appends … upgrade the autophys daemon" in both SDKs (in `e0bf786`).
 
 Agent-chosen, pending operator review: CORE-01-a the route path (alternative
 `POST /investigations/{inv}/batch`); CORE-01-b `hash_of` linkage (alternative:
@@ -247,7 +246,7 @@ tests) passing against a real daemon and a Rust peer.
 
 ### CORE-04: done
 
-`e4b7409` (`Ib8f521611f865d8ff5462fa64020266c`). Rust `Client::project(name)`
+`9a1fab4` (`Ib8f521611f865d8ff5462fa64020266c`). Rust `Client::project(name)`
 opens: locally it is 404 `not_found` unless the slug's file exists (no file
 written), a file holding another name stays 409 `conflict`; remotely it opens
 through the project list. `ensure_project` creates; `project_with(Project)`
@@ -260,7 +259,7 @@ Test: `project_by_name_opens_and_only_ensure_project_creates`.
 
 ### DM-D1 (Rust): done
 
-`9849710` (`Iadc35d7dfcd6f0dfcb60ff1c2a212497`). `schema.rs` has the display
+`e0bf786` (`Iadc35d7dfcd6f0dfcb60ff1c2a212497`). `schema.rs` has the display
 DDL, byte for byte, as step 1 to 2, `INITIAL_VERSION = 1` and `VERSION = 2`
 (exported `INITIAL_FORMAT_VERSION`, `FORMAT_VERSION`). `migrate` on open
 creates new files at 1, accepts 1 and 2, refuses newer and never runs step 2;
@@ -283,7 +282,7 @@ Tests: `sdks/rust/tests/workbook_format2.rs` (10, mirroring
 `display`), the daemon display test checks the upload moves only that
 workbook to format 2, and a Python non-ASCII digest test.
 
-Wave 2 validation on yuzuquats after `9849710`: `cargo test --workspace
+Wave 2 validation on yuzuquats after `e0bf786`: `cargo test --workspace
 --locked` 342 passed, 0 failed, 2 ignored (baseline 323; +17 from this wave,
 +2 from peers' G8-TRAIN/G3-NAME commits); `python3 -m pytest -q -p
 no:cacheprovider sdks/python/tests` 669 passed, 13 skipped (baseline 665;
@@ -299,7 +298,7 @@ Cargo); this wave used an uncommitted scratch peer.
 
 ### O-3a: done
 
-`a932728` (`I1e9b4c7a2d5f80364b1e7c9a2d4f6b18`) runs `ops/deploy.sh` under
+`866e0f0` (`I1e9b4c7a2d5f80364b1e7c9a2d4f6b18`) runs `ops/deploy.sh` under
 `LC_ALL=C`: in a UTF-8 locale bash's `[A-Za-z]` matched `é`, so the existing
 deploy test failed at HEAD. `I7d2a5e8c1b4f93062a7d5e1c8b3f4a29`
 renders `--browser-origin http://autophys.<host>.tento.localhost` into the
@@ -311,18 +310,18 @@ only) and is validated before sed. `python3 -m pytest ops/test_deploy.py`:
 
 An independent review of the build (2026-11-08) returned six findings; each
 is fixed in a scoped commit on yuzuquats `~/workspace/autophys` master
-(SHAs as of HEAD `a1f060a`; local history has been restacked before, so
+(SHAs as of HEAD `a014c35`; local history has been restacked before, so
 Change-Ids are the stable names). Nothing is pushed or deployed;
 `autophys.service` keeps running the earlier build until the next deploy.
 
 | Finding | Fix | Commit |
 | --- | --- | --- |
-| 1 (blocking). UI-27 removed the Thermal wizard's UI but the daemon still served `POST /workbench/projects` and `POST /workbench/projects/{pid}/investigations` to any allowed browser origin | **UI-27 backend removal done**: both routes, `src/http/workbench.rs`, the run registry only it used and `tests/browser_workbench.rs` are gone; a store_contract test pins both paths at 404 for a browser and a key. No UI or e2e caller used them. Built-in models elsewhere (bench, `sdks/rust/src/models`) are untouched | `b12c924` `I6d08b4d44d86063ab2714e7dbc4f4151` |
-| 2. A `--browser-origin` flag replaced `AUTOPHYS_BROWSER_ORIGINS`, so deploy's flag (O-3a) dropped a drop-in's origins | `parse_serve` joins them, environment first, duplicates dropped; test, help, Docs, rust-sdk.md and the deploy.sh comment updated | `8dfec15` `Ia37aa9c7b5cc814d166ae1a2b1eab65f` |
-| 3. Docs claimed batched records are checked as their single routes would check them; the batch also lost the attachment route's measurement link check | Docs corrected (store.md, the CORE-01 entry above, core-remediation.md, the http.rs and SDK doc comments): the batch applies `Investigation::append`'s store validation, key-only, without per-route allowlists, path proposal ids or server-stamped `by`. `Investigation::append_batch` now refuses a `data_attached` whose link into the batch is not a measurement, or that names none of the measurements that precede it in the batch; a measurement is named by its hash (Rust, `hash_of`) or its payload `version` (Python) | `85f7016` `I0724c809353210fee30999fec88cf6f3` |
-| 4. `attach_data` record ids differed between SDKs (Python hashed the payload in) | Python derives them from investigation, proposal and kind, as Rust (`attach_record_id` in both, the same two ids pinned in each SDK's tests); no test or golden relied on the payload hash. Rust's doc comment now also describes a second local call | `09d396a` `I591ab31cb17fd9fbb34b7c7c0015f10b` |
-| 5. Python `HttpStore.append_batch` gave each record a fresh uuid4, so a retry duplicated it | Every Python store's `append_batch` takes `(kind, payload)` or `(kind, payload, record_id)`; uuid4 stays the fallback; docs say only records with ids are retry-safe; `attach_data` passes its ids through it | `09d396a` (with 4) |
-| 6. The blocking facade's in-runtime cost was undocumented | Module and `run` docs plus rust-sdk.md: one new helper thread per call inside a runtime, the caller's runtime thread blocked, a current-thread runtime (actix worker) stalled. The TLS note says reqwest takes the process-default rustls provider, else ring, and nothing may rely on rustls's crate-feature default. RS-REMOTE-2: documented that the Python reveal error arrives after the outcome is written (behaviour unchanged) | `a1f060a` `I8da1463b1f558472b911750a25ac1f3a` |
+| 1 (blocking). UI-27 removed the Thermal wizard's UI but the daemon still served `POST /workbench/projects` and `POST /workbench/projects/{pid}/investigations` to any allowed browser origin | **UI-27 backend removal done**: both routes, `src/http/workbench.rs`, the run registry only it used and `tests/browser_workbench.rs` are gone; a store_contract test pins both paths at 404 for a browser and a key. No UI or e2e caller used them. Built-in models elsewhere (bench, `sdks/rust/src/models`) are untouched | `914956b` `I6d08b4d44d86063ab2714e7dbc4f4151` |
+| 2. A `--browser-origin` flag replaced `AUTOPHYS_BROWSER_ORIGINS`, so deploy's flag (O-3a) dropped a drop-in's origins | `parse_serve` joins them, environment first, duplicates dropped; test, help, Docs, rust-sdk.md and the deploy.sh comment updated | `2829efa` `Ia37aa9c7b5cc814d166ae1a2b1eab65f` |
+| 3. Docs claimed batched records are checked as their single routes would check them; the batch also lost the attachment route's measurement link check | Docs corrected (store.md, the CORE-01 entry above, core-remediation.md, the http.rs and SDK doc comments): the batch applies `Investigation::append`'s store validation, key-only, without per-route allowlists, path proposal ids or server-stamped `by`. `Investigation::append_batch` now refuses a `data_attached` whose link into the batch is not a measurement, or that names none of the measurements that precede it in the batch; a measurement is named by its hash (Rust, `hash_of`) or its payload `version` (Python) | `96527b0` `I0724c809353210fee30999fec88cf6f3` |
+| 4. `attach_data` record ids differed between SDKs (Python hashed the payload in) | Python derives them from investigation, proposal and kind, as Rust (`attach_record_id` in both, the same two ids pinned in each SDK's tests); no test or golden relied on the payload hash. Rust's doc comment now also describes a second local call | `df7ae68` `I591ab31cb17fd9fbb34b7c7c0015f10b` |
+| 5. Python `HttpStore.append_batch` gave each record a fresh uuid4, so a retry duplicated it | Every Python store's `append_batch` takes `(kind, payload)` or `(kind, payload, record_id)`; uuid4 stays the fallback; docs say only records with ids are retry-safe; `attach_data` passes its ids through it | `df7ae68` (with 4) |
+| 6. The blocking facade's in-runtime cost was undocumented | Module and `run` docs plus rust-sdk.md: one new helper thread per call inside a runtime, the caller's runtime thread blocked, a current-thread runtime (actix worker) stalled. The TLS note says reqwest takes the process-default rustls provider, else ring, and nothing may rely on rustls's crate-feature default. RS-REMOTE-2: documented that the Python reveal error arrives after the outcome is written (behaviour unchanged) | `a014c35` `I8da1463b1f558472b911750a25ac1f3a` |
 
 Agent-chosen, pending operator review:
 
@@ -352,7 +351,7 @@ Agent-chosen, pending operator review:
   through `use_preconfigured_tls`, which adds `rustls` and `webpki-roots` as
   direct dependencies (a Cargo.lock edit); not done.
 
-Tests on yuzuquats at `a1f060a`: `cargo test --workspace --locked` 344
+Tests on yuzuquats at `a014c35`: `cargo test --workspace --locked` 344
 passed, 0 failed, 2 ignored (baseline 342: minus the 2 removed
 `browser_workbench` tests, plus 3 new, plus 1 from a peer's fit-penalty
 commit restacked below this range); `python3 -m pytest -q -p
@@ -424,18 +423,28 @@ Pushed `f9b9a7b..551a1f8` (32 commits, this session's Change-Ids only) to
 needed because a peer had already published its interleaved G8-LOOP commits.
 
 Agent review receipt (independent read-only Opus reviewers; agent review, not
-an operator verdict): round 1 at `0a96ea7` changes required (Thermal daemon
-routes live, 5 non-blocking) → fixed; round 2 at `b916788` ready (5
+an operator verdict): round 1 at `0a65618` changes required (Thermal daemon
+routes live, 5 non-blocking) → fixed; round 2 at `5cfb1a1` ready (5
 non-blocking) → 4 fixed, 1 accepted; round 3 bound to base `f9b9a7b`, tip
 `551a1f8`: ready. `git range-diff` showed the 27 round-2 commits unchanged by
 the restack. Checks on an export of `551a1f8`: cargo 344 passed, 2 ignored;
 Python 678 passed, 13 skipped.
 
-Follow-ups from round 3 (non-blocking, not started):
+Follow-ups from round 3 (the first two fixed after the push, below):
 - `sdks/python/tests/fake_server.py` runs the link check before the
   same-id/different-content conflict, so it answers 422 where the daemon
   answers 409; add a Rust `store_contract` assertion for that case too.
-- `decisions.md` cites pre-restack SHAs (`799234b`, `0067d04`, `8f3c1a9`,
-  `9849710`, `7ae2cb7`, `f4f5d26`) without Change-Ids; replace them.
+- `decisions.md` cites pre-restack SHAs (`b116ef4`, `199c4fb`, `dac03c9`,
+  `e0bf786`, `f88704d`, `68536e9`) without Change-Ids; replace them.
 - No SDK release has been cut; 0.1.x clients cannot attach against the
   deployed daemon.
+
+### Round 3 follow-ups: done
+
+`I3e8a1c6f9b2d47058e3a1c9f6b2d4e70`: the Python fake server decides replay or
+`idempotency_conflict` for a reused id before the link rule, as the daemon
+does; `test_http.py` and `store_contract.rs` pin the 409 (the Python test
+fails against the previous fake). Every cited SHA in this page and
+`decisions.md` now resolves on master: pre-restack SHAs were mapped to their
+published twins by Change-Id. `display-manifest.md`'s 2026-11-04 SHAs predate
+this project and were left alone.
