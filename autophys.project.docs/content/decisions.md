@@ -176,6 +176,21 @@ above is stale; this register is authoritative.
 | RS-REMOTE-1a | **One async transport plus a thin blocking facade** (`autophys::blocking`, like `reqwest::blocking`); the CLI, the investigation loop and scripts use the facade (agent recommended) | every current caller (CLI commands, investigation loop, simulator and fit traits) is synchronous |
 | CORE-01a | **Remove the old attachment route**; only the batch endpoint remains. Agent recommended keeping a deprecated alias | v0.1.0 to v0.1.2 call `POST /investigations/{inv}/proposals/{pid}/attachment` with no fallback, so they cannot attach data against a daemon without it and must upgrade |
 
+### Build choices reviewed (operator, 2026-11-08, fourth `/open-questions` pass)
+
+The agent choices recorded while building the review decisions
+([review-20261108-implementation.md](review-20261108-implementation.md),
+[ui.md](ui.md) UI-27-a..e).
+
+| Id | Decision | Implementation |
+| --- | --- | --- |
+| DM-RS-1b | **Changed: remove `Index<&str>` from Rust `Trajectory` now**; only the `?`-returning accessors remain. The operator accepted the one-time cost: the built-in models' test code changes, so their source hashes and every bench project's config version move once (config drift shown on the next run). Agent recommended keeping it until a release that moves those hashes anyway | not started |
+| RR1-b | **Changed: new `data_attached` records carry the measurement record's hash in `measurement_version` in both SDKs** (Python stops writing the dataset version integer). Readers keep accepting integer records already written. The Python change is in `agent.py`, coordinated with the peer session editing it (agent recommended) | not started |
+| CORE-01-a..e, RR1-a | **Confirmed as built**: `POST /investigations/{inv}/records`, `hash_of`, per-record replay with mixed batches, the 64-record cap, general per-record rules, and the preceding-measurement link rule (its payload-version branch stays for older clients) | built, published |
+| RS-REMOTE-1-a..c, RR1-c | **Confirmed as built**: reqwest 0.12, `blocking` always compiled, one shared runtime plus a helper thread inside another runtime, TLS provider not pinned (process default, else ring) | built, published |
+| RS-REMOTE-1-d | **Changed: reuse connections** on the shared, process-lifetime runtime instead of one connection per request, after confirming every call path runs on that runtime; each request to a remote https daemon otherwise pays a new TCP and TLS handshake (agent recommended) | not started |
+| UI-27-a..e | **Confirmed as built**: runnable placeholder names, Thermal start button removed, completion rule, workspace re-read on the existing poll, native toggle buttons | built, deployed, published |
+
 ### Implementation follow-ups from this review
 
 All eight were built on 2026-11-08; see
