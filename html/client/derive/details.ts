@@ -61,6 +61,16 @@ export function paramsTable(c: ProjectConfig, fit: Fit): TableRow[] {
   return rows;
 }
 
+/** Identifiability per free parameter from the recorded identification summary: verdict and ± when known. */
+export function identificationTable(c: ProjectConfig, fit: Fit): TableRow[] {
+  return fit.free.map((name) => {
+    const k = certaintyOf(fit, name), label = { text: name, unit: unitOf(c, name) };
+    if (k.kind === "ridge") return { dim: true, cells: [label, { text: "", tag: { text: "not identified", tone: "warn" as const } }, { text: "", end: true }] };
+    if (k.kind === "identified") return { cells: [label, { text: "", tag: { text: "identified", tone: "ok" as const } }, { text: k.std == null ? "± not recorded" : plusMinus(c, name, k.std), end: true }] };
+    return { cells: [label, { text: "not recorded" }, { text: "", end: true }] };
+  });
+}
+
 export function detailsModel(s: State): DetailsModel {
   const selected = selectedDetails(s);
   const m: DetailsModel = { ...selected, sections: selected.sections.map((section) => {

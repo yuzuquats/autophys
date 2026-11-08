@@ -1,5 +1,5 @@
 import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
-import { initialSelection, reduce } from "../controller.ts";
+import { initialSelection, reduce, reportText } from "../controller.ts";
 import { fixtures, replay } from "../fixtures/source.ts";
 import { detailsModel } from "./details.ts";
 import { mainModel } from "./main.ts";
@@ -171,4 +171,25 @@ Deno.test("finished summary states the recorded identification, and ± once the 
   assertStringIncludes(t, plusMinus(c, a, 0.0084));
   assert(!t.includes("(identified; uncertainty not recorded)"));
   assertStringIncludes(t, "(not identified)");
+});
+
+Deno.test("identifiability card and report list each parameter's recorded identification and ±", () => {
+  const copy = structuredClone(ws), done = (i: (typeof ws.projects)[0]["investigations"][0]) => ["validated", "inconclusive"].includes(stateOf(i)) && i.fits.length > 0;
+  const project = copy.projects.find(p => p.investigations.some(done))!, inv = project.investigations.find(done)!;
+  const fit = inv.fits.at(-1)!, [a, b] = fit.free, c = project.configs.find(x => x.version === inv.configVersion)!;
+  fit.sensitivity = null;
+  fit.identification = { identified: [a], nonIdentified: [b], condition: 2.98, marginal: { [a]: 0.007 } };
+  const body = JSON.stringify(mainModel({ ...state(project.id, inv.id), ws: copy }).body);
+  const card = body.match(/"heading":"Identifiability".*?"heading":"Landscape"/)?.[0] ?? "";
+  assertStringIncludes(card, `1 of ${fit.free.length} identified`);
+  assertStringIncludes(card, plusMinus(c, a, 0.007));
+  assertStringIncludes(card, "not identified");
+  assert(!card.includes("Identified: "), "per-parameter rows replace the one-line list");
+  const report = reportText({ source: "fixture", gseq: 7 } as Parameters<typeof reportText>[0], project, inv);
+  assertStringIncludes(report, `Fit #${fit.n}:`);
+  assertStringIncludes(report, `${plusMinus(c, a, 0.007)} (identified)`);
+  assertStringIncludes(report, `- ${b}: not identified`);
+  assertStringIncludes(report, "Condition 2.98");
+  delete fit.identification.marginal;
+  assertStringIncludes(reportText({ source: "fixture", gseq: 7 } as Parameters<typeof reportText>[0], project, inv), "(identified; uncertainty not recorded)");
 });

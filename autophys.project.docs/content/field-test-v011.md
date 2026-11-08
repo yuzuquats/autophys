@@ -46,5 +46,18 @@ Validation: `deno check` and `deno test` over `html/` (130 passed, including a
 new summary test and the extended daemon wire test); the Python SDK suite and
 the Rust `curves_reveal` test with new assertions on the recorded marginal.
 
+Follow-up (same day): the Report download (`controller.ts` `reportText`) read
+only the full sensitivity result, so for daemon fits it had no fit or
+parameter lines; it now writes the fit line, each free parameter through
+`certaintyOf` (± and identified, "identified; uncertainty not recorded", or
+"not identified") and the condition. The Identifiability card replaces its
+one-line "Identified: … Not identified: …" text with a per-parameter table
+(identified / not identified tag and ±) and an "n of m identified" caption.
+Checked on a fresh simulated battery loop served by a scratch daemon: round 1
+shows C1 and R1 not identified, round 2 all three identified with C1 ±0.84%,
+R0 ±0.39%, R1 ±0.67%. `deno test` over `html/`: 131 passed.
+
 Remaining: G1, G3–G6 above. The Identifiability card still has no singular
 values or directions for daemon fits; recording them is a separate choice.
+Fits written outside the agent loop (a script that calls `fit` and appends the
+record itself) still have no ±: UNC-2, open.

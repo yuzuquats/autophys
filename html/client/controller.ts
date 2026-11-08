@@ -7,7 +7,7 @@ import { accessibleView, canHandle } from "./access.ts";
 import type { Capabilities } from "./context.ts";
 import { approvalsPath, type Snapshot } from "./api.ts";
 import type { Investigation, Project, Workspace } from "./domain.ts";
-import { latestFit, proposalLabel, statusText, decisionProposal } from "./derive/shared.ts";
+import { certaintyOf, configFor, latestFit, plusMinus, proposalLabel, statusText, decisionProposal, unitOf } from "./derive/shared.ts";
 import {
   ancestors,
   connectionFailure,
@@ -262,22 +262,37 @@ export function reportText(
 ): string {
   const fit = latestFit(inv),
     lines = [`# ${project.name} · ${inv.name}`, "", statusText(inv).text, ""];
-  if (fit?.sensitivity) {
+  // Daemon fits carry only the recorded identification summary; read it as the workbench does.
+  const s = fit && (fit.sensitivity ?? fit.identification);
+  if (fit && s) {
+    const c = configFor(project, inv);
     lines.push(
       `Fit #${fit.n}: χ²/N ${fit.chi2N.toFixed(2)} over ${
         fit.measurements.join(", ")
       }`,
     );
-    for (const c of fit.sensitivity.combos) {
+    for (const x of fit.sensitivity?.combos ?? []) {
       lines.push(
-        `- ${c.name} = ${sig(c.value, 4)} ± ${sig(c.logStd * 100, 2)}%`,
+        `- ${x.name} = ${sig(x.value, 4)} ± ${sig(x.logStd * 100, 2)}%`,
       );
     }
-    for (const k of fit.sensitivity.identified) {
-      lines.push(`- ${k} = ${sig(fit.params[k], 4)} (identified)`);
+    for (const name of fit.free) {
+      const k = certaintyOf(fit, name),
+        unit = unitOf(c, name),
+        value = `${name} = ${sig(fit.params[name], 4)}${unit ? " " + unit : ""}`;
+      if (k.kind === "ridge") lines.push(`- ${name}: not identified`);
+      else if (k.kind === "identified") {
+        lines.push(
+          k.std == null
+            ? `- ${value} (identified; uncertainty not recorded)`
+            : `- ${value} ${plusMinus(c, name, k.std)} (identified)`,
+        );
+      } else lines.push(`- ${value}`);
     }
-    for (const k of fit.sensitivity.nonIdentified) {
-      lines.push(`- ${k}: not identified`);
+    if (s.condition != null) {
+      lines.push(
+        `Condition ${s.condition > 1e6 ? "> 10⁶" : sig(s.condition, 3)}`,
+      );
     }
   }
   for (const p of inv.proposals) {

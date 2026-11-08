@@ -119,6 +119,7 @@ this record I81f7837f7c0ee007ff06.
 | ID | Decision | Source | State |
 | --- | --- | --- | --- |
 | UNC-1 | The recorded `analyze_sensitivity` step result gains `marginal_log_std` (per-parameter one-sigma log uncertainty; `null` for the report's `inf`), in both SDKs, and the workbench falls back to the recorded identified/not-identified verdict when no uncertainty is recorded. Before: the step recorded only the verdict and the UI ignored it on the finished summary, calling identified parameters "unbounded". Reason: the number already exists at record time and the change is additive, so old workbooks keep working. Strongest alternative: record the full report (singular values and vectors) so the daemon path matches the fixture path, which also fills the Identifiability card but grows every step record and the record contract further. Reversal: drop the key from both SDKs and `wire.ts`; nothing else reads it, and the verdict fallback stays useful on its own | **agent-chosen, pending operator review** | implemented |
+| UNC-2 | Open: should the fit record itself carry `marginal_log_std`, so fits written outside the agent loop (no `analyze_sensitivity` step) also show ±? Today the ± travels only in that step's result, and such fits read "uncertainty not recorded". Recommendation: yes, computed at fit time in both SDKs, with the step result kept for older readers. Cost: a sensitivity pass per recorded fit and a wider fit-record contract, which is why it waits for a decision. | **open, operator decision** | not started |
 
 ## Build cache, 2026-11-07
 

@@ -6,7 +6,7 @@ import {
   validationPanels,
 } from "./charts.ts";
 import { truthPanels } from "./truth.ts";
-import { paramsTable } from "./details.ts";
+import { identificationTable, paramsTable } from "./details.ts";
 import { anchor, investigationRounds, investigationTarget, measurementAnchor, roundAnchor } from "./rounds.ts";
 import { stateOf } from "../proposal.ts";
 import { configurationSections, experimentSections, knownSection } from "./configuration.ts";
@@ -237,10 +237,11 @@ export function investigationPage(s: State, project: Project, sel: Exclude<Sel, 
       blocks: [{ kind: "table", rows: paramsTable(c, f) }] } : null;
     const condition = f?.sensitivity?.condition ?? f?.identification?.condition;
     const identifiability: InvestigationCard | null = f ? { id: roundAnchor(inv, r, "identifiability"), heading: "Identifiability",
-      caption: f.sensitivity ? `Rank ${rankOf(f.sensitivity)} of ${f.sensitivity.names.length} · ${at}` : at,
-      blocks: f.sensitivity ? [] : [gap(f.identification
-        ? `Identified: ${f.identification.identified.join(", ") || "none"}. Not identified: ${f.identification.nonIdentified.join(", ") || "none"}. Singular values and directions are not recorded.`
-        : "No singular values or directions recorded for this fit.")],
+      caption: f.sensitivity ? `Rank ${rankOf(f.sensitivity)} of ${f.sensitivity.names.length} · ${at}`
+        : f.identification ? `${f.free.filter(n => f.identification!.identified.includes(n)).length} of ${f.free.length} identified · ${at}` : at,
+      blocks: f.sensitivity ? [] : f.identification
+        ? [{ kind: "table", rows: identificationTable(c, f) }, gap("Singular values and directions are not recorded for this fit.")]
+        : [gap("No singular values or directions recorded for this fit.")],
       panels: [
         { charts: [], blocks: [{ kind: "facts", rows: [{ label: "Condition", value:
           condition == null ? "not recorded"
