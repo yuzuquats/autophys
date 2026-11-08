@@ -416,3 +416,26 @@ Tested against the release binary:
 
 Not published: these commits are not pushed and no SDK release was cut. SDK
 0.1.x clients cannot attach data against this daemon (CORE-01a).
+
+### Published, 2026-11-08
+
+Pushed `f9b9a7b..551a1f8` (32 commits, this session's Change-Ids only) to
+`https://github.com/yuzuquats/autophys` master as a fast-forward; no sink was
+needed because a peer had already published its interleaved G8-LOOP commits.
+
+Agent review receipt (independent read-only Opus reviewers; agent review, not
+an operator verdict): round 1 at `0a96ea7` changes required (Thermal daemon
+routes live, 5 non-blocking) → fixed; round 2 at `b916788` ready (5
+non-blocking) → 4 fixed, 1 accepted; round 3 bound to base `f9b9a7b`, tip
+`551a1f8`: ready. `git range-diff` showed the 27 round-2 commits unchanged by
+the restack. Checks on an export of `551a1f8`: cargo 344 passed, 2 ignored;
+Python 678 passed, 13 skipped.
+
+Follow-ups from round 3 (non-blocking, not started):
+- `sdks/python/tests/fake_server.py` runs the link check before the
+  same-id/different-content conflict, so it answers 422 where the daemon
+  answers 409; add a Rust `store_contract` assertion for that case too.
+- `decisions.md` cites pre-restack SHAs (`799234b`, `0067d04`, `8f3c1a9`,
+  `9849710`, `7ae2cb7`, `f4f5d26`) without Change-Ids; replace them.
+- No SDK release has been cut; 0.1.x clients cannot attach against the
+  deployed daemon.
