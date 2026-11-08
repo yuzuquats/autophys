@@ -18,8 +18,8 @@ push or deployment approval. No paid provider/Modal run occurred.
 Autophys is a general physics-investigation workbench: Python/Rust SDK numerics,
 append-only workbooks, daemon/API/SSE and generic browser presentation, with human
 approve/edit/reject/attach/refit/resume and outcome-before-reveal/no-resume isolation.
-The browser starter is restricted synthetic thermal; arbitrary simulators use
-the SDK. Standalone use must not require a fleet account, private service or sibling
+The browser has no simulator starter since UI-27 (2026-11-08); every simulator
+runs through the SDK. Standalone use must not require a fleet account, private service or sibling
 source checkout.
 
 W-1 is modest and **agent-chosen, pending operator review**: six seed0

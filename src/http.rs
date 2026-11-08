@@ -23,7 +23,6 @@
 pub mod auth;
 mod display;
 mod sse;
-mod workbench;
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
@@ -60,7 +59,6 @@ pub struct Api {
     pub keys: Arc<KeyStore>,
     pub sessions: auth::BrowserSessions,
     wake: broadcast::Sender<String>,
-    workbench: workbench::Jobs,
     runtimes: Arc<Mutex<HashMap<String, Runtime>>>,
     pub(crate) context: Option<crate::workspaces::AppContext>,
     pub(crate) owner: Option<String>,
@@ -68,7 +66,7 @@ pub struct Api {
 }
 
 #[derive(Clone)]
-struct Runtime { client: Client, wake: broadcast::Sender<String>, jobs: workbench::Jobs }
+struct Runtime { client: Client, wake: broadcast::Sender<String> }
 
 impl std::fmt::Debug for Api {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -87,7 +85,6 @@ impl Api {
             keys: Arc::new(keys),
             sessions: auth::BrowserSessions::default(),
             wake,
-            workbench: workbench::Jobs::default(),
             runtimes: Arc::new(Mutex::new(HashMap::new())),
             context: None, owner: None, credential: None,
         }
@@ -115,13 +112,13 @@ impl Api {
             Some(r) => r.clone(),
             None => {
                 let (wake, _) = broadcast::channel(1024);
-                let runtime = Runtime { client: if resolved.owner == "local" { self.client.clone() } else { autophys::connect(resolved.root.to_str())? }, wake, jobs: self.workbench.clone() };
+                let runtime = Runtime { client: if resolved.owner == "local" { self.client.clone() } else { autophys::connect(resolved.root.to_str())? }, wake };
                 runtimes.insert(id, runtime.clone());
                 runtime
             }
         };
         let mut api = self.clone();
-        api.client = runtime.client; api.wake = runtime.wake; api.workbench = runtime.jobs;
+        api.client = runtime.client; api.wake = runtime.wake;
         api.context = Some(resolved.context); api.owner = Some(resolved.owner); api.credential = Some(credential);
         Ok(api)
     }
@@ -197,8 +194,6 @@ pub fn scope(api: Api) -> actix_web::Scope {
         .route("/pairings/{user_code}/deny", web::post().to(pairing_deny))
         .route("/whoami", web::get().to(whoami))
         .route("/context", web::get().to(app_context))
-        .route("/workbench/projects", web::post().to(workbench::create))
-        .route("/workbench/projects/{pid}/investigations", web::post().to(workbench::start))
         .route("/workspace", web::get().to(workspace))
         .route("/stream", web::get().to(sse::stream))
         .route("/projects", web::get().to(projects))

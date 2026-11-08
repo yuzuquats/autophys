@@ -432,6 +432,34 @@ async fn keyless_writes_refuse_cross_origin_and_form_posts() {
     assert_eq!(s, 201, "keyed call without Origin");
 }
 
+/// UI-27: the built-in Thermal starter is gone with its API; no caller, a
+/// same-origin browser or a keyed device, can create a project or start a
+/// daemon-side simulation through `/workbench`.
+#[actix_web::test]
+async fn workbench_starter_routes_are_removed() {
+    let f = fixture();
+    let app = app!(f.api);
+    let (key, _) = seeded(&app, &f.api).await;
+    let projects = f.api.client.projects().unwrap().len();
+    let setup = json!({"name": "Browser project", "model": "thermal_rc",
+        "c": 400., "r": 1.5, "power": 10., "duration": 600.});
+    let pid = f.api.client.projects().unwrap()[0].id.clone();
+    for path in [
+        "/workbench/projects".to_string(),
+        format!("/workbench/projects/{pid}/investigations"),
+    ] {
+        let (s, _) = call(
+            &app,
+            browser(&f.api, post(&path, None, &setup), true).to_request(),
+        )
+        .await;
+        assert_eq!(s, 404, "browser {path}");
+        let (s, _) = call(&app, post(&path, Some(&key), &setup).to_request()).await;
+        assert_eq!(s, 404, "keyed {path}");
+    }
+    assert_eq!(f.api.client.projects().unwrap().len(), projects);
+}
+
 /// O-3: the browser lists and decides pairings; nothing secret is shown.
 #[actix_web::test]
 async fn browser_approves_and_denies_pairings() {

@@ -452,7 +452,10 @@ and approves its investigations." and has three steps in the same std-stepper:
 
 The Thermal wizard UI is removed with its draft/validation model, fields,
 styles, `Source.projects` client calls and tests. The daemon's `/workbench`
-routes (`src/http/workbench.rs`) are unchanged. The empty workspace, the
+routes (`POST /workbench/projects` and `POST
+/workbench/projects/{pid}/investigations`, `src/http/workbench.rs`) were removed
+in review round 1 (2026-11-08), so no browser origin can start a built-in
+simulation; the daemon has no simulator of its own. The empty workspace, the
 walkthrough and Docs no longer mention a built-in starter. Unchanged: no
 Details panel on New project, New project → Devices → divider → PROJECTS →
 tree, aligned header bands, step focus on navigation, and the UI boundaries.

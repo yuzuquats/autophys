@@ -47,8 +47,8 @@ python|rust`, then `autophys connect <this page's origin> --name <device>` with
 the pending device approved in place, then the project's program records its
 first investigation, which opens automatically. The page origin reaches the
 Controller from the composition root; views never read it. The built-in Thermal
-wizard is gone from the UI; the daemon's `/workbench` API is unchanged. These
-controls use the signed-in Controller and never swap in a fixture data source.
+wizard is gone, and so is the daemon's `/workbench` API it called: projects and
+investigations are created only by an SDK. These controls use the signed-in Controller and never swap in a fixture data source.
 
 Each workbook holds configuration versions, investigations, measurements, fits,
 proposals, decisions and validation records. The Rust/Python SDK computes results
