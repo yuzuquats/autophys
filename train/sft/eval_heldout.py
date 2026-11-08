@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 import sys
 from dataclasses import asdict
 from pathlib import Path
@@ -72,7 +73,7 @@ def main(argv=None) -> int:
     for case in a.case or list(CASES):
         for seed in a.seeds:
             for policy in policies:
-                workbook = a.out / f"{policy}-{case}-{seed}.ap-workbook"
+                workbook = a.out / f"{policy}-{re.sub(r'[^A-Za-z0-9._-]+', '_', case)}-{seed}.ap-workbook"
                 options = {"workbook_path": str(workbook)}
                 if policy == "reason":
                     options |= {"model_spec": ModelSpec("policy", a.route, a.model),

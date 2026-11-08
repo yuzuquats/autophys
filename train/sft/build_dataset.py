@@ -37,6 +37,7 @@ from autophys.synthetic import case_project
 from autophys.reasoner import FakeReasoner, parse_json_content
 from autophys.store import MemoryStore
 from autophys.synthetic import CASES
+from autophys.synthetic import case as case_factory
 
 HERE = Path(__file__).parent
 
@@ -86,7 +87,7 @@ class DistilPolicy:
 
 
 def run(case: str, seed: int, playbook: str) -> tuple[list[dict], dict]:
-    view, evaluator = CASES[case](seed)
+    view, evaluator = case_factory(case)(seed)
     project = case_project(view)
     policy = DistilPolicy(playbook)
     inv = Investigation(project, view.dataset, view.runner, policy=policy, store=MemoryStore(), seed=seed,
@@ -101,7 +102,7 @@ def run(case: str, seed: int, playbook: str) -> tuple[list[dict], dict]:
         Decision.parse(parse_json_content(s["target"]), param_names=inv.sim.param_names, catalog=list(project.catalog))
 
     # The teacher-forced trajectory must equal the plain scripted policy's.
-    view2, _ = CASES[case](seed)
+    view2, _ = case_factory(case)(seed)
     ref = Investigation(case_project(view2), view2.dataset, view2.runner, policy=ScriptedPolicy(),
                         store=MemoryStore(), seed=seed).run()
     same = (ref.status, ref.steps, ref.estimate, ref.experiments) == (out.status, out.steps, out.estimate, out.experiments)
