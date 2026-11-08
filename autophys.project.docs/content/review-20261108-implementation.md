@@ -1,6 +1,6 @@
 # Build the 2026-11-08 review decisions
 
-Status: built, 2026-11-08 (all eight decisions; independent review pending). SHAs below are as of HEAD `e31f3d7`; Change-Ids are the stable names. The operator said "start" after the
+Status: built, 2026-11-08 (all eight decisions); independent review round 1 returned six findings, fixed ("Review round 1 fixes" under Remaining work). SHAs below are as of HEAD `e31f3d7`; Change-Ids are the stable names. The operator said "start" after the
 `/open-questions` review recorded in [decisions.md](decisions.md) ("Operator
 review, 2026-11-08" and the sub-questions). Nothing here is pushed or
 released; commits stay local on yuzuquats `~/workspace/autophys` master.
@@ -137,7 +137,9 @@ the device from its pending card in the step (approval advances), then run
 the program; the first investigation opens when it appears. The Thermal RC
 wizard, its model, styles, client `projects` calls and tests are gone; the
 empty workspace, walkthrough and Docs point at the SDK flow;
-`src/http/workbench.rs` is untouched. Agent-chosen details UI-27-a..e
+`src/http/workbench.rs` was left in place by this commit; **its daemon API
+was removed in review round 1** (`I6d08b4d44d86063ab2714e7dbc4f4151`, below),
+so UI-27's removal now covers the backend too. Agent-chosen details UI-27-a..e
 (runnable placeholder names, removing the thermal "Start simulated
 investigation" action, completion rule, workspace re-read while open, native
 toggle buttons) are in `ui.md`, pending operator review. `decisions.md`
@@ -302,3 +304,57 @@ renders `--browser-origin http://autophys.<host>.tento.localhost` into the
 unit's ExecStart; `AUTOPHYS_BROWSER_ORIGIN` overrides it (empty: loopback
 only) and is validated before sed. `python3 -m pytest ops/test_deploy.py`:
 2 passed. Takes effect at the next deploy.
+
+### Review round 1 fixes
+
+An independent review of the build (2026-11-08) returned six findings; each
+is fixed in a scoped commit on yuzuquats `~/workspace/autophys` master
+(SHAs as of HEAD `a1f060a`; local history has been restacked before, so
+Change-Ids are the stable names). Nothing is pushed or deployed;
+`autophys.service` keeps running the earlier build until the next deploy.
+
+| Finding | Fix | Commit |
+| --- | --- | --- |
+| 1 (blocking). UI-27 removed the Thermal wizard's UI but the daemon still served `POST /workbench/projects` and `POST /workbench/projects/{pid}/investigations` to any allowed browser origin | **UI-27 backend removal done**: both routes, `src/http/workbench.rs`, the run registry only it used and `tests/browser_workbench.rs` are gone; a store_contract test pins both paths at 404 for a browser and a key. No UI or e2e caller used them. Built-in models elsewhere (bench, `sdks/rust/src/models`) are untouched | `b12c924` `I6d08b4d44d86063ab2714e7dbc4f4151` |
+| 2. A `--browser-origin` flag replaced `AUTOPHYS_BROWSER_ORIGINS`, so deploy's flag (O-3a) dropped a drop-in's origins | `parse_serve` joins them, environment first, duplicates dropped; test, help, Docs, rust-sdk.md and the deploy.sh comment updated | `8dfec15` `Ia37aa9c7b5cc814d166ae1a2b1eab65f` |
+| 3. Docs claimed batched records are checked as their single routes would check them; the batch also lost the attachment route's measurement link check | Docs corrected (store.md, the CORE-01 entry above, core-remediation.md, the http.rs and SDK doc comments): the batch applies `Investigation::append`'s store validation, key-only, without per-route allowlists, path proposal ids or server-stamped `by`. `Investigation::append_batch` now refuses a `data_attached` whose link into the batch is not a measurement, or that names none of the batch's measurements; a measurement is named by its hash (Rust, `hash_of`) or its payload `version` (Python) | `85f7016` `I0724c809353210fee30999fec88cf6f3` |
+| 4. `attach_data` record ids differed between SDKs (Python hashed the payload in) | Python derives them from investigation, proposal and kind, as Rust (`attach_record_id` in both, the same two ids pinned in each SDK's tests); no test or golden relied on the payload hash. Rust's doc comment now also describes a second local call | `09d396a` `I591ab31cb17fd9fbb34b7c7c0015f10b` |
+| 5. Python `HttpStore.append_batch` gave each record a fresh uuid4, so a retry duplicated it | Every Python store's `append_batch` takes `(kind, payload)` or `(kind, payload, record_id)`; uuid4 stays the fallback; docs say only records with ids are retry-safe; `attach_data` passes its ids through it | `09d396a` (with 4) |
+| 6. The blocking facade's in-runtime cost was undocumented | Module and `run` docs plus rust-sdk.md: one new helper thread per call inside a runtime, the caller's runtime thread blocked, a current-thread runtime (actix worker) stalled. The TLS note says reqwest takes the process-default rustls provider, else ring, and nothing may rely on rustls's crate-feature default. RS-REMOTE-2: documented that the Python reveal error arrives after the outcome is written (behaviour unchanged) | `a1f060a` `I8da1463b1f558472b911750a25ac1f3a` |
+
+Agent-chosen, pending operator review:
+
+- **RR1-a, the batch link rule.** Before: the batch accepted any
+  `measurement_version`. After: an event linking into the batch must name a
+  measurement, and an event preceded by measurements in its batch must name
+  one of them (hash or payload `version`). Reason: it is the removed route's
+  pair guarantee, generalised, and both SDKs' attachments pass it. Strongest
+  alternative: check only explicit links (`hash_of` or a batch record's
+  hash), which leaves a Python-shaped pair with a wrong version accepted.
+  Implemented in `sdks/rust/src/workbook.rs` (`check_attachment_link`), so
+  the Rust local store enforces it too. The Python local stores and the test
+  fake server do not (Python's only batch writer is its own consistent
+  pair); mirroring it there is small. Reversal: delete the one call.
+- **RR1-b, SDKs disagree on `measurement_version`.** Python records the
+  dataset version (an integer, also in the measurement payload), Rust the
+  measurement record's hash; `agent.py`'s cost lookup already reads both.
+  Not changed here (a record-visible contract choice); the link check
+  accepts both.
+- **RR1-c, TLS provider.** The brief asked for a note that the provider is
+  chosen explicitly; it is not: reqwest 0.12 uses an installed process
+  default, else ring. The note says so. Making it explicit means building a
+  rustls `ClientConfig` with `ring::default_provider()` and passing it
+  through `use_preconfigured_tls`, which adds `rustls` and `webpki-roots` as
+  direct dependencies (a Cargo.lock edit); not done.
+
+Tests on yuzuquats at `a1f060a`: `cargo test --workspace --locked` 344
+passed, 0 failed, 2 ignored (baseline 342: minus the 2 removed
+`browser_workbench` tests, plus 3 new, plus 1 from a peer's fit-penalty
+commit restacked below this range); `python3 -m pytest -q -p
+no:cacheprovider sdks/python/tests` 676 passed, 13 skipped (669 plus 6 new
+plus 1 peer); with `AUTOPHYS_RUST_BIN`, `AUTOPHYS_RUST_WEB_ROOT` and
+`AUTOPHYS_CORE_PEER` (the scratch peer `/tmp/autophys-core-peer`, still not a
+Cargo target) the atomic-remote, cross-writer, core-boundary, display and
+reveal suites pass with no skips (119); `deno test --allow-read --config
+html/deno.json html/` 141 passed; `deno check` clean; `python3
+ops/test_deploy.py` 2 OK.
