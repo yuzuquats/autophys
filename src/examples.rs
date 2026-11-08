@@ -592,20 +592,20 @@ pub fn command(args: Vec<String>, out: &mut impl Write) -> Result<Value, Failure
             } else {
                 format!(" ({})", e.manifest.languages.join(", "))
             };
-            let _ = writeln!(out, "  {:<12} {}{langs}", e.name, e.manifest.title);
+            let _ = writeln!(out, "  {:<17} {}{langs}", e.name, e.manifest.title);
             if let Ok(b) = e.backtest() {
                 let cases: Vec<String> = b
                     .cases
                     .iter()
-                    .map(|c| {
-                        if c.suite {
-                            c.name.clone()
-                        } else {
-                            format!("{} (planted)", c.name)
+                    .map(|c| match (c.suite, c.source) {
+                        (true, _) => c.name.clone(),
+                        (false, backtest::CaseSource::Datasets) => {
+                            format!("{} (recorded runs, downloads)", c.name)
                         }
+                        (false, _) => format!("{} (planted)", c.name),
                     })
                     .collect();
-                let _ = writeln!(out, "  {:<12} cases: {}", "", cases.join(", "));
+                let _ = writeln!(out, "  {:<17} cases: {}", "", cases.join(", "));
             }
         }
         let _ = writeln!(out);
@@ -636,6 +636,7 @@ mod tests {
                 ("backtest", "oscillator"),
                 ("backtest", "thermal"),
                 ("backtest", "battery"),
+                ("backtest", "battery-recorded"),
             ]
         );
         for e in &all {

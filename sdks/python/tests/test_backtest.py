@@ -158,3 +158,18 @@ def test_a_backtest_can_bring_its_own_python_simulator(tmp_path):
     assert b.project == "lab_sim_module:simulator"
     view, ev = b.build(b.case(name), 0)
     assert view.simulator.name == "thermal_rc" and ev.truth == b.truth
+
+
+@pytest.mark.skipif(not (REPO_EXAMPLES / "battery-recorded.backtest" / "data").is_dir(), reason="needs the repository data/")
+def test_the_recorded_battery_backtest_builds_from_a_filled_cache(tmp_path, monkeypatch):
+    import hashlib
+
+    for f in (REPO_EXAMPLES / "battery-recorded.backtest" / "data").iterdir():
+        data = f.read_bytes()
+        (tmp_path / hashlib.sha256(data).hexdigest()).write_bytes(data)
+    monkeypatch.setenv("AUTOPHYS_DATASETS_DIR", str(tmp_path))
+    view, ev = case("battery-recorded#two-tests")(0)
+    assert view.name == "battery-recorded"
+    assert list(view.catalog) == ["discharge_1A", "pulse_2A", "pulse_train"]
+    assert len(list(view.dataset)) == 2 and len(ev.test) == 1
+    assert "battery-recorded" not in CASES and "battery-recorded" not in PLANTED_CASES

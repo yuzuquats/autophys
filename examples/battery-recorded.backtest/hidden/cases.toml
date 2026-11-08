@@ -1,0 +1,27 @@
+# Hidden from every policy: the cell generate.py recorded, and the held-out run.
+[truth]
+R0 = 0.031
+R1 = 0.052
+C1 = 2100.0
+
+[case.two-tests]
+test = ["unseen_train"]
+combos = { R0 = { R0 = 1.0 }, R1 = { R1 = 1.0 }, C1 = { C1 = 1.0 } }
+expected_non_identified = []
+note = "Any of the longer programs resolves the 109 s polarization time constant; the short pulse alone does not determine R1."
+
+[case.one-test]
+test = ["unseen_train"]
+combos = { R0 = { R0 = 1.0 }, R1 = { R1 = 1.0 }, C1 = { C1 = 1.0 } }
+expected_non_identified = []
+note = "One longer program is enough; the choice is which."
+
+[[dataset]]
+name = "unseen_train"
+settings = { kind = "pulse_train", current = 1.5, on = 40.0, off = 60.0, duration = 500.0, rate = 1.0, capacity_ah = 2.5, soc0 = 0.9 }
+url = "https://raw.githubusercontent.com/yuzuquats/autophys/master/examples/battery-recorded.backtest/data/unseen_train.csv"
+sha256 = "7a6cb27dc4c863f4ca88aecb7f2038eda14218094f9f65fcd5601b55b469568a"
+columns = { t = "time", v = "voltage" }
+sigma = { v = 0.002 }
+provenance = "synthetic"
+generator = "generate.py: battery_ecm at a hidden cell, 2 mV noise"

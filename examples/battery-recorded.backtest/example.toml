@@ -1,0 +1,83 @@
+# A backtest manifest: see autophys.project.docs/content/examples.md.
+# Recorded runs of one cell (synthesized by generate.py until measured data
+# that may be redistributed exists). The model starts from a short pulse and
+# a 1 A check, and may request up to two more recorded programs; held-out
+# runs in hidden/cases.toml score its predictions. Data is fetched by url
+# and checked by sha256 into the datasets directory (EX-7); the files also
+# sit in data/ in the repository, which hosts them.
+kind = "backtest"
+title = "Battery cell from recorded runs: discover R0, R1 and C1"
+summary = "Cycler recordings of one cell. Pick which recorded programs to look at, fit the 1RC model and say what the data determines."
+languages = []
+
+[system]
+model = "battery_ecm"
+experiment_cost = { setup_hours = 1.0 }
+
+[[case]]
+name = "two-tests"
+id = "battery-recorded"
+suite = false
+source = "datasets"
+budget = { max_experiments = 2, max_test_hours = 3.0 }
+train = ["pulse_short"]
+validation = ["check_1A"]
+
+[[case]]
+name = "one-test"
+id = "battery-recorded-one"
+suite = false
+source = "datasets"
+budget = { max_experiments = 1, max_test_hours = 3.0 }
+train = ["pulse_short"]
+validation = ["check_1A"]
+
+[[dataset]]
+name = "pulse_short"
+settings = { kind = "pulse", current = 2.0, on = 6.0, duration = 25.0, rate = 32.0, capacity_ah = 2.5, soc0 = 0.9 }
+url = "https://raw.githubusercontent.com/yuzuquats/autophys/master/examples/battery-recorded.backtest/data/pulse_short.csv"
+sha256 = "478081580251929f94e806267063cc367f4ffaea9dffc4d21de26921e2965e52"
+columns = { t = "time", v = "voltage" }
+sigma = { v = 0.002 }
+provenance = "synthetic"
+generator = "generate.py: battery_ecm at a hidden cell, 2 mV noise"
+
+[[dataset]]
+name = "check_1A"
+settings = { kind = "pulse", current = 1.0, on = 6.0, duration = 25.0, rate = 32.0, capacity_ah = 2.5, soc0 = 0.9 }
+url = "https://raw.githubusercontent.com/yuzuquats/autophys/master/examples/battery-recorded.backtest/data/check_1A.csv"
+sha256 = "355d0206d56c1bf0e31bb3d027bb7c597a59b7e53f865c9eea246cb8fc78f801"
+columns = { t = "time", v = "voltage" }
+sigma = { v = 0.002 }
+provenance = "synthetic"
+generator = "generate.py: battery_ecm at a hidden cell, 2 mV noise"
+
+[[dataset]]
+name = "discharge_1A"
+settings = { kind = "constant", current = 1.0, duration = 600.0, rate = 1.0, capacity_ah = 2.5, soc0 = 0.9 }
+url = "https://raw.githubusercontent.com/yuzuquats/autophys/master/examples/battery-recorded.backtest/data/discharge_1A.csv"
+sha256 = "68168c8675655bf44b5d2103d59e7f6329112351b37b64461025cdc51f933a5b"
+columns = { t = "time", v = "voltage" }
+sigma = { v = 0.002 }
+provenance = "synthetic"
+generator = "generate.py: battery_ecm at a hidden cell, 2 mV noise"
+
+[[dataset]]
+name = "pulse_2A"
+settings = { kind = "pulse", current = 2.0, on = 30.0, duration = 300.0, rate = 2.0, capacity_ah = 2.5, soc0 = 0.9 }
+url = "https://raw.githubusercontent.com/yuzuquats/autophys/master/examples/battery-recorded.backtest/data/pulse_2A.csv"
+sha256 = "52d4ead5e42c9d4ed5a34b6efc1d49926570819a2a0bf89f9a16ca9e63f1487a"
+columns = { t = "time", v = "voltage" }
+sigma = { v = 0.002 }
+provenance = "synthetic"
+generator = "generate.py: battery_ecm at a hidden cell, 2 mV noise"
+
+[[dataset]]
+name = "pulse_train"
+settings = { kind = "pulse_train", current = 2.0, on = 10.0, off = 20.0, duration = 300.0, rate = 2.0, capacity_ah = 2.5, soc0 = 0.9 }
+url = "https://raw.githubusercontent.com/yuzuquats/autophys/master/examples/battery-recorded.backtest/data/pulse_train.csv"
+sha256 = "f6d399d01738d835a4d5daa5896f0198ce4acbdc66dfe76cbe2fd97718b833c1"
+columns = { t = "time", v = "voltage" }
+sigma = { v = 0.002 }
+provenance = "synthetic"
+generator = "generate.py: battery_ecm at a hidden cell, 2 mV noise"

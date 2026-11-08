@@ -50,7 +50,7 @@ except ModuleNotFoundError:  # Python 3.10
     import tomli as tomllib
 
 #: The built-in backtests, in suite order.
-BUILTIN = ("oscillator", "thermal", "battery")
+BUILTIN = ("oscillator", "thermal", "battery", "battery-recorded")
 KINDS = ("template", "demo", "backtest")
 _NAME = re.compile(r"[a-z0-9-]+\Z")
 
@@ -523,7 +523,7 @@ def suite() -> list[str]:
 
 
 def planted() -> list[str]:
-    return [c.id for b in builtins() for c in b.cases if not c.suite]
+    return [c.id for b in builtins() for c in b.cases if not c.suite and c.source == "generator"]
 
 
 def resolve_case(text: str) -> tuple[Backtest, str]:

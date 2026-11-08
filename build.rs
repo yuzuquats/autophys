@@ -176,6 +176,10 @@ fn embed(root: &Path, dir: &str, skip: &[&str], out: &str) {
         }
         // What running an example in place writes at its project root
         // (`examples/<name>/<language>/`, the root its `.gitignore` anchors).
+        // A backtest's recorded runs are fetched by url, never built in (EX-7).
+        if dir == "examples" && name.len() >= 3 && name[0].ends_with(".backtest") && name[1] == "data" {
+            continue;
+        }
         if dir == "examples"
             && name.len() == 3
             && (name[2] == "demo.csv" || name[2] == "fit.csv" || name[2].ends_with(".png"))

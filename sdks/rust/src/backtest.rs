@@ -47,7 +47,7 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 /// The built-in backtests in suite order: `(name, example.toml, hidden/cases.toml)`.
-pub const BUILTIN: [(&str, &str, &str); 3] = [
+pub const BUILTIN: [(&str, &str, &str); 4] = [
     (
         "oscillator",
         include_str!("backtests/oscillator.backtest/example.toml"),
@@ -62,6 +62,11 @@ pub const BUILTIN: [(&str, &str, &str); 3] = [
         "battery",
         include_str!("backtests/battery.backtest/example.toml"),
         include_str!("backtests/battery.backtest/hidden/cases.toml"),
+    ),
+    (
+        "battery-recorded",
+        include_str!("backtests/battery-recorded.backtest/example.toml"),
+        include_str!("backtests/battery-recorded.backtest/hidden/cases.toml"),
     ),
 ];
 
@@ -1349,7 +1354,12 @@ mod tests {
         assert_eq!(suite(), crate::synthetic::CASES.map(String::from).to_vec());
         let planted: Vec<String> = builtins()
             .iter()
-            .flat_map(|b| b.cases.iter().filter(|c| !c.suite).map(|c| c.id.clone()))
+            .flat_map(|b| {
+                b.cases
+                    .iter()
+                    .filter(|c| !c.suite && c.source == CaseSource::Generator)
+                    .map(|c| c.id.clone())
+            })
             .collect();
         assert_eq!(
             planted,
@@ -1626,13 +1636,48 @@ mod tests {
         );
     }
 
+    static ENV: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// The built-in recorded backtest runs offline once its files are in
+    /// the datasets directory (here copied from the repository's data/).
+    #[test]
+    fn the_recorded_battery_backtest_builds_from_a_filled_cache() {
+        let data = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../examples/battery-recorded.backtest/data");
+        if !data.is_dir() {
+            return; // a source export without the repository's examples/
+        }
+        let tmp = tempfile::tempdir().unwrap();
+        for entry in std::fs::read_dir(&data).unwrap() {
+            let bytes = std::fs::read(entry.unwrap().path()).unwrap();
+            std::fs::write(tmp.path().join(sha256_hex(&bytes)), bytes).unwrap();
+        }
+        let _env = ENV.lock().unwrap_or_else(|e| e.into_inner());
+        // SAFETY: every test that sets AUTOPHYS_DATASETS_DIR holds ENV.
+        unsafe { std::env::set_var("AUTOPHYS_DATASETS_DIR", tmp.path()) };
+        let built = build_case("battery-recorded#two-tests", 0, &Overrides::default());
+        unsafe { std::env::remove_var("AUTOPHYS_DATASETS_DIR") };
+        let (view, ev) = built.unwrap();
+        assert_eq!(view.name, "battery-recorded");
+        assert_eq!(
+            view.catalog.as_ref().unwrap().keys().collect::<Vec<_>>(),
+            ["discharge_1A", "pulse_2A", "pulse_train"]
+        );
+        assert_eq!((view.dataset.iter().count(), ev.test.len()), (2, 1));
+        assert!(
+            !suite().contains(&"battery-recorded".to_string()),
+            "the default suite stays offline"
+        );
+    }
+
     #[test]
     fn urls_are_fetched_once_into_the_data_directory() {
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path().join("heater.backtest");
         dataset_example(&dir, true);
         let cache = tmp.path().join("cache");
-        // SAFETY: tests in this module that read AUTOPHYS_DATASETS_DIR run here only.
+        let _env = ENV.lock().unwrap_or_else(|e| e.into_inner());
+        // SAFETY: every test that sets AUTOPHYS_DATASETS_DIR holds ENV.
         unsafe { std::env::set_var("AUTOPHYS_DATASETS_DIR", &cache) };
         let (b, name) = resolve_case(&format!("{}#rec", dir.display())).unwrap();
         b.build(b.case(&name).unwrap(), 0, &Overrides::default())
