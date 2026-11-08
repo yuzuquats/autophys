@@ -1,6 +1,6 @@
 # autophys decisions: what the operator ruled and what agents chose
 
-Status: rev 1, 2026-11-04. This page is the index of autophys decisions.
+Status: rev 2, 2026-11-08 (operator review of every pending agent choice). This page is the index of autophys decisions.
 Operator rulings are listed with their date. Agent choices stay **pending
 operator review** until `/open-questions` confirms, changes or defers them;
 silence is not confirmation. Earlier decision tables are not repeated here:
@@ -151,3 +151,26 @@ choices from one summary table per group.
 | E-1a | Confirmed: zero-axis (scalar) outlooks are allowed; an axis with no values is refused | built |
 
 store.md's AX-8 to AX-17 callouts still read "pending operator review"; they were settled on 2026-11-04 (the batch and AX-9/AX-10/AX-17 rows above), and that wording is stale.
+
+### Groups confirmed from summary tables (operator, 2026-11-08)
+
+| Group | Ids | Decision | Implementation |
+| --- | --- | --- | --- |
+| CLI | CLI-4, CLI-5, CLI-6, CLI-7, CLI-9, CLI-12, CLI-13, CLI-14 (cli.md) | Confirmed as built. CLI-12 means Rust-era bench scores are not directly comparable with Python-era ones | built |
+| UI | UI-5 to UI-20, INV-1 to INV-4 (investigation-page.md), LC-01 (approval-header.md), UI-approval-rows-1 and the row defaults (ui-refinement-implementation.md), drawer DM-1 (drawer-motion.md) | Confirmed as built | built |
+| UI-27 | New project (ui.md) | **Changed: SDK stepper only (option C).** New project becomes a three-step SDK flow: `autophys new --lang python\|rust`, `autophys connect <daemon> --name <device>` with the pairing code approved in place, then the first investigation appearing. The built-in Thermal wizard is removed and not kept as a demo. Operator saw mocks of A (today), B (SDK plus Try a demo, agent-recommended) and C | **not implemented** (the Thermal wizard ships) |
+| Layout and packaging | OSS-1 to OSS-3 (oss-layout.md), AP-5 to AP-7 (tento-plan.md), MP-1 and MP-3 to MP-6 (muse-plugin.md) | Confirmed as built; MP-5 (battery-only CSV import) may widen later with the display manifest | built |
+| Productionize method | W-1, PP-1, R1-D1, R1-D2, R2-D1, R2-D2, R2-D3, R2B-D1, R2B-D2, R2-PY-D1, R3A-D1, R3B-D1, SP-1 | Confirmed as built; budgets stay diagnostics, not SLOs | built |
+| Battery cases | BT-1 to BT-4 (sdk.md) | Confirmed as built | built |
+| Research-loop proposals | AR-2, AR-4, AR-5 (sdk.md) | **Deferred** to the research loop's first real run, together with EX-11's switch to drawn truth | not built |
+
+The per-page "agent-chosen, pending operator review" wording for every id
+above is stale; this register is authoritative.
+
+### Implementation follow-ups from this review (not started)
+
+DM-D1 (format 2; settle DM-D1a first), CORE-01 (generic batch API; CORE-01a),
+CORE-04 (`project(name)` opens in both SDKs), RS-REMOTE-1 (async Rust remote;
+RS-REMOTE-1a), RS-REMOTE-2 (Python errors on a daemon without reveal/display),
+DM-RS-1 (explicit `Trajectory` struct; DM-RS-1a), O-3a (deploy passes the
+host's `--browser-origin`), UI-27 (SDK stepper, wizard removed).
