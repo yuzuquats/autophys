@@ -36,7 +36,9 @@ import { ApiError, daemon, type Cursor, type DaemonOptions, type EventStream } f
 import { Controller } from "./controller.ts";
 import { fixtures } from "./fixtures/source.ts";
 import { Store } from "./store.ts";
-import { displayTime, when, whenUtc, type WireRecord, type WireWorkspace } from "./wire.ts";
+import { displayTime, when, whenFull, whenUtc, type WireRecord, type WireWorkspace } from "./wire.ts";
+import { reportText } from "./controller.ts";
+import { investigationNode } from "./derive/tree.ts";
 
 // Record times render in the viewer's zone; pin one so the expected strings hold on every host.
 displayTime.zone = "America/Los_Angeles";
@@ -46,6 +48,20 @@ Deno.test("wire: record times read in local time with the zone, and keep the exa
   assertEquals([when(ts), whenUtc(ts)], ["Nov 7 16:30 PST", "2026-11-08 00:30 UTC"]);
   assertEquals(when(Date.UTC(2026, 6, 4, 19, 5) / 1000), "Jul 4 12:05 PDT");
   assertEquals([when(NaN), whenUtc(NaN)], ["–", ""]);
+});
+
+Deno.test("wire: a document's time carries the date, the zone and UTC (G6-EXPORT)", () => {
+  assertEquals(whenFull("2026-11-08 00:30 UTC", "Nov 7 16:30 PST"), "2026-11-07 16:30 PST (00:30 UTC)");
+  assertEquals(whenFull("2026-07-04 19:05 UTC", "x"), "2026-07-04 12:05 PDT (19:05 UTC)");
+  assertEquals([whenFull(undefined, "now"), whenFull("", "Nov 7"), whenFull(null, "")], ["now", "Nov 7", ""]);
+});
+
+Deno.test("daemon: the Markdown report dates its decisions in full; the sidebar row hovers the UTC time", async () => {
+  const d = fakeDaemon(), snap = await daemon(d.opts).load();
+  const project = snap.workspace.projects[0], inv = project.investigations[0];
+  Object.assign(inv.proposals[0], { status: "approved", decidedBy: "james", decidedAt: "Nov 4 02:09 PST", decidedAtUtc: "2026-11-04 10:09 UTC" });
+  assertStringIncludes(reportText(snap, project, inv), "by james at 2026-11-04 02:09 PST (10:09 UTC)");
+  assertEquals(investigationNode(project, inv).title, "2026-11-04 10:07 UTC");
 });
 
 const settle = () => new Promise((r) => setTimeout(r, 0));

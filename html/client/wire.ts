@@ -50,6 +50,19 @@ export function whenUtc(ts: number): string {
   return `${d.getUTCFullYear()}-${two(d.getUTCMonth() + 1)}-${two(d.getUTCDate())} ${two(d.getUTCHours())}:${two(d.getUTCMinutes())} UTC`;
 }
 
+/** A whole time for a document that has no hover, from `whenUtc`'s value:
+ * "2026-11-08 03:12 PST (11:12 UTC)" (G6-EXPORT). `fallback` (the screen
+ * label) stands when there is no UTC value, as for fixtures. */
+export function whenFull(utc: string | null | undefined, fallback: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}) UTC$/.exec(utc ?? "");
+  if (!m) return fallback;
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]));
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+    timeZone: displayTime.zone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZoneName: "short",
+  }).formatToParts(d).map((x) => [x.type, x.value]));
+  return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute} ${p.timeZoneName} (${m[4]}:${m[5]} UTC)`;
+}
+
 /** "free_response" → "Free response". */
 const humanize = (id: string) => (id.charAt(0).toUpperCase() + id.slice(1)).replace(/_/g, " ");
 

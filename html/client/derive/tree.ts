@@ -116,6 +116,7 @@ export function investigationNode(
   return {
     id: ids.inv(inv),
     label: investigationName(project, inv),
+    ...(inv.updatedUtc ? { title: inv.updatedUtc } : {}),
     icon: "investigation",
     selectable: true,
     trail: investigationTrail(inv),

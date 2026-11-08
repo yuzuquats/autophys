@@ -148,7 +148,7 @@ export class AutophysSidebar {
         twisty,
       });
       const labels = new Map<string, string>();
-      const visit = (nodes: SidebarModel["nodes"]) => { for (const n of nodes) { labels.set(n.id, `${n.label} · ${n.id}`); if (n.children) visit(n.children); } };
+      const visit = (nodes: SidebarModel["nodes"]) => { for (const n of nodes) { labels.set(n.id, [n.label, n.title, n.id].filter(Boolean).join(" · ")); if (n.children) visit(n.children); } };
       visit(model.nodes);
       for (const id of this.rowCache.keys()) if (!labels.has(id)) this.rowCache.delete(id);
       for (const row of this.tree.shadowRoot?.querySelectorAll<HTMLElement>("[role=treeitem]") ?? []) {

@@ -31,6 +31,7 @@ import {
 } from "./derive/project-setup.ts";
 import { projectRootId } from "./derive/tree.ts";
 import { sig } from "./derive/fmt.ts";
+import { whenFull } from "./wire.ts";
 import { type Decision, parseField } from "./proposal.ts";
 import type { Store } from "./store.ts";
 import type { Action } from "../ui/view-model.ts";
@@ -260,8 +261,11 @@ export function reportText(
   project: Project,
   inv: Investigation,
 ): string {
-  const fit = latestFit(inv),
-    lines = [`# ${project.name} · ${inv.name}`, "", statusText(inv).text, ""];
+  // A pasted report has no hover: its times carry the date and UTC (G6-EXPORT).
+  const status = statusText(inv),
+    fit = latestFit(inv),
+    lines = [`# ${project.name} · ${inv.name}`, "",
+      status.title ? status.text.replace(inv.updated, whenFull(inv.updatedUtc, inv.updated)) : status.text, ""];
   // Daemon fits carry only the recorded identification summary; read it as the workbench does.
   const s = fit && (fit.sensitivity ?? fit.identification);
   if (fit && (s || fit.identificationSkipped)) {
@@ -303,7 +307,7 @@ export function reportText(
     lines.push(
       "",
       `Proposal ${proposalLabel(p)}: ${p.status}${
-        p.decidedBy ? ` by ${p.decidedBy} at ${p.decidedAt}` : ""
+        p.decidedBy ? ` by ${p.decidedBy} at ${whenFull(p.decidedAtUtc, p.decidedAt ?? "")}` : ""
       }`,
     );
   }

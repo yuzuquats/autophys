@@ -145,6 +145,13 @@ Deno.test("main: crumb links, meta, buttons, panels in columns and one credit li
   assertStringIncludes(empty, `ap-viewer ap-empty"><p>Needs data</p>`);
 });
 
+Deno.test("main: the meta line and a decision card caption hover their exact UTC time (G6)", () => {
+  const html = mainMarkup({ ...main, meta: "Validated · Nov 4 02:07 PST", metaTitle: "2026-11-04 10:07 UTC",
+    body: { kind: "decision", cards: [{ heading: "Summary", caption: "Validated · Nov 4 02:07 PST", captionTitle: "2026-11-04 10:07 UTC", blocks: [] }] } }, 824);
+  assertStringIncludes(html, `id="ap-meta" title="Validated · Nov 4 02:07 PST (2026-11-04 10:07 UTC)"`);
+  assertStringIncludes(html, `title="2026-11-04 10:07 UTC">Validated · Nov 4 02:07 PST</p>`);
+});
+
 const proposal: DetailsModel = {
   icon: "proposal", title: "Sine force", cardName: true, status: { text: "Awaiting approval" },
   sections: [

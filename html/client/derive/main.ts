@@ -196,7 +196,7 @@ export function investigationPage(s: State, project: Project, sel: Exclude<Sel, 
   ].filter(Boolean).join(" ") : "No converged fit recorded yet.";
   let summary: InvestigationCard = proposal && !finished
     ? { ...summarySection(s, c, inv, proposal), id: anchor(inv, "summary") }
-    : { id: anchor(inv, "summary"), heading: "Summary", caption: statusText(inv).text, blocks: [] };
+    : { id: anchor(inv, "summary"), heading: "Summary", caption: statusText(inv).text, captionTitle: statusText(inv).title, blocks: [] };
   if (!finished) {
     if (summary.blocks[0]?.kind === "text") summary.blocks[0].text = diagnosis + " " + summary.blocks[0].text;
     else summary.blocks.push({ kind: "text", lead: true, text: diagnosis + " " + statusText(inv).text });
@@ -284,6 +284,6 @@ export function investigationPage(s: State, project: Project, sel: Exclude<Sel, 
     ...pageRounds.map(r => ({ label: r.title, target: r.id })),
   ];
   return { crumb: [{ label: project.name }, { label: investigationLabel(project, inv) }],
-    meta: `${statusText(inv).text} · ${experimentsUsed(inv)} / ${c.budgets.maxExperiments} experiments`, actions: [], credit: "",
+    meta: `${statusText(inv).text} · ${experimentsUsed(inv)} / ${c.budgets.maxExperiments} experiments`, metaTitle: statusText(inv).title, actions: [], credit: "",
     body: { kind: "investigation", pageId: inv.id, selectionId: s.selected[project.id] ?? inv.id, target, jumps, summary, outcome, rounds: pageRounds } };
 }

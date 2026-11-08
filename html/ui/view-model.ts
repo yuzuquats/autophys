@@ -28,6 +28,8 @@ export type TreeNode = {
   dim?: boolean;
   /** Whether clicking a branch selects it; a leaf always does. */
   selectable: boolean;
+  /** Added to the row's hover text, e.g. the exact UTC time behind the label's time. */
+  title?: string;
   /** `null` is a leaf. */
   children: TreeNode[] | null;
 };
@@ -120,6 +122,8 @@ export type MainModel = {
   connectionError?: string;
   crumb: Crumb[];
   meta: string;
+  /** Added to the meta line's hover text, e.g. the exact UTC time behind it. */
+  metaTitle?: string;
   actions: Action[];
   body: MainBody;
   /** The one credit line under the viewer. */
@@ -170,7 +174,7 @@ export type Block =
   | { kind: "trace"; steps: TraceRow[] };
 
 /** `caption` is one line under the heading; renderers without a caption slot ignore it. */
-export type Section = { heading: string; caption?: string; blocks: Block[] };
+export type Section = { heading: string; caption?: string; /** Hover text for the caption, e.g. its exact UTC time. */ captionTitle?: string; blocks: Block[] };
 
 export type DetailsModel = {
   icon: IconName;

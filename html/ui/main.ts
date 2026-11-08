@@ -21,9 +21,10 @@ export { buttonMarkup } from "./actions.ts";
 
 /** The whole main surface at `width` pixels. */
 /** A card: a std-round surface, a list-cell header (title, caption under it) and its content. */
-const cardMarkup = (cls: string, title: string, caption: string, inner: string, summary = false) => {
+const cardMarkup = (cls: string, title: string, caption: string, inner: string, summary = false, captionTitle = "") => {
   const heading = summary ? `<h2>${esc(title)}</h2>` : `<h3>${esc(title)}</h3>`;
-  const meta = caption ? `<p${summary ? ' class="ap-summary-meta"' : ""}>${esc(caption)}</p>` : "";
+  const tip = captionTitle ? ` title="${esc(captionTitle)}"` : "";
+  const meta = caption ? `<p${summary ? ' class="ap-summary-meta"' : ""}${tip}>${esc(caption)}</p>` : "";
   return `<section class="ap-card ${cls}${summary ? " ap-main-summary" : ""}"><std-round floating bg="var(--ap-card-bg)" border="var(--ap-line)" radius="10"></std-round><header class="ap-card-head" data-ap-cell>${heading}${summary ? "" : meta}</header>${summary ? `<div class="ap-summary-copy">${inner}</div>${meta}` : inner}</section>`;
 };
 
@@ -34,7 +35,7 @@ export function mainMarkup(model: MainModel, width: number, classes: MainClasses
     if (last) return `<b title="${esc(c.label)}" aria-current="page">${esc(c.label)}</b>`;
     return c.id ? `<button type="button" title="${esc(c.label)}" ${ATTR.role}="select" ${ATTR.id}="${esc(c.id)}">${esc(c.label)}</button>` : `<span title="${esc(c.label)}">${esc(c.label)}</span>`;
   }).join(sep);
-  const toolbar = `<div class="${esc([classes.toolbar ?? "", "ap-toolbar"].filter(Boolean).join(" "))}"><nav class="ap-crumb" aria-label="Selection" title="${esc(breadcrumbText(model.crumb))}">${crumb}</nav><div class="ap-right"><span class="ap-meta" id="ap-meta" title="${esc(model.meta)}">${esc(model.meta)}</span>${model.actions.map((a) => buttonMarkup(a, classes)).join("")}</div></div>`;
+  const toolbar = `<div class="${esc([classes.toolbar ?? "", "ap-toolbar"].filter(Boolean).join(" "))}"><nav class="ap-crumb" aria-label="Selection" title="${esc(breadcrumbText(model.crumb))}">${crumb}</nav><div class="ap-right"><span class="ap-meta" id="ap-meta" title="${esc(model.metaTitle ? `${model.meta} (${model.metaTitle})` : model.meta)}">${esc(model.meta)}</span>${model.actions.map((a) => buttonMarkup(a, classes)).join("")}</div></div>`;
   let body: string;
   if (model.body.kind === "project-setup") {
     body = newProjectMarkup(model.body);
@@ -53,7 +54,7 @@ export function mainMarkup(model: MainModel, width: number, classes: MainClasses
   } else if (model.body.kind === "investigation") {
     body = investigationMarkup(model.body, width, model.crumb.at(-1)?.label);
   } else if (model.body.kind === "decision") {
-    body = `<div class="ap-viewer ap-decision-view">${model.body.cards.map((s, i) => cardMarkup("ap-dcard", s.heading, s.caption ?? "", s.blocks.map(blockMarkup).join(""), i === 0 && s.blocks.some(b => b.kind === "text" && b.lead))).join("")}</div>`;
+    body = `<div class="ap-viewer ap-decision-view">${model.body.cards.map((s, i) => cardMarkup("ap-dcard", s.heading, s.caption ?? "", s.blocks.map(blockMarkup).join(""), i === 0 && s.blocks.some(b => b.kind === "text" && b.lead), s.captionTitle)).join("")}</div>`;
   } else if (model.body.kind === "configuration") {
     // Each card's header is a list cell: the title with its caption under it (hydrated to std-list-cell-layout).
     const card = cardMarkup;
@@ -92,7 +93,7 @@ function investigationMarkup(body: InvestigationBody, width: number, title?: str
   const card = (c: InvestigationCard, w = inner, summary = false) => {
     const rows = (c.rows ?? []).map(r => `<details class="ap-measurement" id="${esc(r.id)}" data-ap-disclosure${r.open ? " open" : ""}><summary><b>${esc(r.label)}</b><span>${esc(r.meta)}</span></summary><div class="ap-measurement-plot">${panels(r.panels, w, r.id)}</div></details>`).join("");
     return cardMarkup("ap-investigation-card", summary ? title ?? c.heading : c.heading, c.caption ?? "",
-      c.blocks.map(blockMarkup).join("") + panels(c.panels ?? [], w, c.id) + rows, summary)
+      c.blocks.map(blockMarkup).join("") + panels(c.panels ?? [], w, c.id) + rows, summary, c.captionTitle)
       .replace('<section class=', `<section id="${esc(c.id)}" tabindex="-1" class=`);
   };
   const jumpNav = (items: InvestigationBody["jumps"], label: string) => items.length
