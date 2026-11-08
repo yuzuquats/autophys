@@ -612,7 +612,9 @@ impl Investigation {
             self.project.stop.rule,
             &r.params,
         )?;
-        let out = json!({"condition_number":s.condition_number,"identified":s.identified,"non_identified":s.non_identified,"non_identifiable":s.non_identifiable_directions().iter().map(|d|&d.combination).collect::<Vec<_>>()});
+        let out = json!({"condition_number":s.condition_number,"identified":s.identified,"non_identified":s.non_identified,"non_identifiable":s.non_identifiable_directions().iter().map(|d|&d.combination).collect::<Vec<_>>(),
+            // One-sigma log uncertainty per parameter; null (the report's inf) when it is on a ridge.
+            "marginal_log_std":s.marginal_log_std.iter().map(|(n,v)|(n.clone(),if v.is_finite(){json!(v)}else{Value::Null})).collect::<serde_json::Map<_,_>>()});
         self.sens = Some(s);
         self.jac = Some(j);
         self.sens_fit = Some(self.fit_id);

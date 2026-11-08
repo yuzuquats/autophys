@@ -4,7 +4,8 @@ import { fixtures, replay } from "../fixtures/source.ts";
 import { detailsModel } from "./details.ts";
 import { mainModel } from "./main.ts";
 import { investigationRounds } from "./rounds.ts";
-import { parseSel } from "./shared.ts";
+import { parseSel, plusMinus } from "./shared.ts";
+import { stateOf } from "../proposal.ts";
 
 const src = fixtures(), snap = await src.load(), ws = replay(snap.workspace, src.log);
 const initial = { ...initialSelection(ws), ws };
@@ -152,4 +153,22 @@ Deno.test("investigation cards preserve recorded fit assumptions, condition and 
   assert(model.body.kind === "investigation");
   assertStringIncludes(JSON.stringify(model.body.outcome), "heldout@1");
   assertStringIncludes(JSON.stringify(model.body.outcome), "not recorded");
+});
+
+Deno.test("finished summary states the recorded identification, and ± once the SDK records it", () => {
+  const copy = structuredClone(ws), done = (i: (typeof ws.projects)[0]["investigations"][0]) => ["validated", "inconclusive"].includes(stateOf(i)) && i.fits.length > 0;
+  const project = copy.projects.find(p => p.investigations.some(done))!, inv = project.investigations.find(done)!;
+  const fit = inv.fits.at(-1)!, [a, b] = fit.free, c = project.configs.find(x => x.version === inv.configVersion)!;
+  const text = () => JSON.stringify(mainModel({ ...state(project.id, inv.id), ws: copy }).body);
+  fit.sensitivity = null;
+  fit.identification = { identified: [a], nonIdentified: [b], condition: 3 };
+  let t = text();
+  assert(!t.includes("not recorded or unbounded"), "an identified parameter is never called unbounded");
+  assertStringIncludes(t, "(identified; uncertainty not recorded)");
+  assertStringIncludes(t, "(not identified)");
+  fit.identification.marginal = { [a]: 0.0084 };
+  t = text();
+  assertStringIncludes(t, plusMinus(c, a, 0.0084));
+  assert(!t.includes("(identified; uncertainty not recorded)"));
+  assertStringIncludes(t, "(not identified)");
 });

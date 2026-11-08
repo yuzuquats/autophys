@@ -129,6 +129,23 @@ export function defaultExpanded(project: Project): string[] {
 export const unitOf = (c: ProjectConfig, name: string) => c.params.find((p) => p.name === name)?.unit ?? "";
 const coordOf = (c: ProjectConfig, name: string) => c.params.find((p) => p.name === name)?.coord ?? "log";
 
+/**
+ * What a fit says about one parameter: fixed, identified (with its one-sigma log uncertainty
+ * when recorded), on a ridge, or unknown. Reads the full sensitivity result when there is one,
+ * else the SDK's recorded identification summary.
+ */
+export type Certainty = { kind: "fixed" } | { kind: "identified"; std: number | null } | { kind: "ridge" } | { kind: "unknown" };
+export function certaintyOf(fit: Fit, name: string): Certainty {
+  if (!fit.free.includes(name)) return { kind: "fixed" };
+  const s = fit.sensitivity ?? fit.identification;
+  if (!s) return { kind: "unknown" };
+  if (s.identified.includes(name)) {
+    const std = s.marginal?.[name];
+    return { kind: "identified", std: std != null && Number.isFinite(std) ? std : null };
+  }
+  return s.nonIdentified.includes(name) ? { kind: "ridge" } : { kind: "unknown" };
+}
+
 /** ± for a parameter's marginal 1σ: relative for log parameters, absolute in its unit otherwise. */
 export function plusMinus(c: ProjectConfig, name: string, std: number): string {
   if (coordOf(c, name) === "log") return pct(std);

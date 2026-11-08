@@ -127,8 +127,10 @@ export type Fit = {
   /**
    * What the SDK's identifiability rule concluded at this fit, when only its summary was
    * recorded (the daemon's step records carry no singular values or vectors). Null otherwise.
+   * `marginal` is each identified parameter's one-sigma log uncertainty, absent from records
+   * written before the SDK recorded it.
    */
-  identification?: { identified: string[]; nonIdentified: string[]; condition: number | null } | null;
+  identification?: { identified: string[]; nonIdentified: string[]; condition: number | null; marginal?: Record<string, number> } | null;
 };
 
 export type GainPhase = { gain: number; phase: number };

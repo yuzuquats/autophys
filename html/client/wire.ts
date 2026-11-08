@@ -233,7 +233,8 @@ export function mapInvestigation(records: WireRecord[], configs: { version: stri
       if (action === "analyze_sensitivity" && Array.isArray(result.identified)) {
         nonIdentified = strs(result.non_identified);
         const fit = fits.find((f) => f.n === num(p.fit_id)) ?? fits[fits.length - 1];
-        if (fit) fit.identification = { identified: strs(result.identified), nonIdentified, condition: Number.isFinite(num(result.condition_number)) ? num(result.condition_number) : null };
+        if (fit) fit.identification = { identified: strs(result.identified), nonIdentified, condition: Number.isFinite(num(result.condition_number)) ? num(result.condition_number) : null,
+          ...(result.marginal_log_std && typeof result.marginal_log_std === "object" ? { marginal: numeric(result.marginal_log_std) } : {}) };
       }
       if (action === "rank_experiments" && Array.isArray(result.ranking)) ranking = { criterion: str(result.criterion) || "min_eig", rows: result.ranking };
     } else if (r.kind === "proposal") {

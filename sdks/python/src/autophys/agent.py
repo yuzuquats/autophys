@@ -635,6 +635,8 @@ class Investigation:
             "identified": self.sens.identified,
             "non_identified": self.sens.non_identified,
             "non_identifiable": [d.combination for d in self.sens.non_identifiable_directions],
+            # One-sigma log uncertainty per parameter; null (the report's inf) when it is on a ridge.
+            "marginal_log_std": {n: float(v) if np.isfinite(v) else None for n, v in self.sens.marginal_log_std.items()},
         }
 
     def tool_rank_experiments(self, criterion: str = "min_eig") -> dict:

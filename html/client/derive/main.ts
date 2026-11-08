@@ -13,7 +13,7 @@ import { configurationSections, experimentSections, knownSection } from "./confi
 import { simulatorLabel, specOf } from "../config.ts";
 import { engineering, int, shortHash, sig, pct } from "./fmt.ts";
 import { displayedFields, outlookAt } from "./outlook.ts";
-import { configFor, investigationLabel, defaultSelection, ids, experimentsUsed, latestConfig, latestFit, parseSel, projectOf, proposalLabel, rankOf, type State, type Sel, statusText, plusMinus } from "./shared.ts";
+import { configFor, investigationLabel, defaultSelection, ids, experimentsUsed, latestConfig, latestFit, parseSel, projectOf, proposalLabel, rankOf, type State, type Sel, statusText, plusMinus, certaintyOf } from "./shared.ts";
 
 
 
@@ -205,8 +205,12 @@ export function investigationPage(s: State, project: Project, sel: Exclude<Sel, 
     const check = v.state === "needs-data" ? "No held-out check recorded."
       : `Held-out χ²/N ${number(v.chi2N)} (≤ ${number(v.threshold)}) on ${v.state === "summary" ? v.measurements.join(", ") || "unrecorded data" : v.measurement}.`;
     const params = fit ? c.params.map(p => {
-      const std = fit.sensitivity?.marginal[p.name], bounded = fit.sensitivity?.identified.includes(p.name);
-      return `${p.name} ${number(fit.params[p.name])} ${p.unit}${bounded && std != null && Number.isFinite(std) ? " " + plusMinus(c, p.name, std) : !fit.free.includes(p.name) ? " (fixed)" : " (uncertainty not recorded or unbounded)"}`.trim();
+      const k = certaintyOf(fit, p.name);
+      const note = k.kind === "fixed" ? " (fixed)"
+        : k.kind === "ridge" ? " (not identified)"
+        : k.kind === "unknown" ? " (uncertainty not recorded)"
+        : k.std != null ? " " + plusMinus(c, p.name, k.std) : " (identified; uncertainty not recorded)";
+      return `${p.name} ${number(fit.params[p.name])} ${p.unit}${note}`.trim();
     }).join("; ") : "No converged fit recorded.";
     summary = { ...summary, caption: `${rounds.length} round${rounds.length === 1 ? "" : "s"} · ${experimentsUsed(inv)} / ${c.budgets.maxExperiments} experiments`,
       blocks: [{ kind: "text", text: verdict, lead: true, tone: inv.state === "validated" ? "ok" : "warn" },

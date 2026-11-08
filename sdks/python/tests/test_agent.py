@@ -22,6 +22,13 @@ def actions(store, inv):
     return [r.payload.get("decision", {}).get("action") for r in store.records(inv, "step")]
 
 
+def sensitivity_results(store, inv):
+    """Recorded analyze_sensitivity results, checked to be strict JSON (no inf or NaN)."""
+    out = [r.payload["result"] for r in store.records(inv, "step") if r.payload["decision"]["action"] == "analyze_sensitivity"]
+    json.dumps(out, allow_nan=False)
+    return out
+
+
 def test_scripted_free_only_is_inconclusive_with_named_combination():
     view, ev = oscillator_case(0, max_experiments=0)
     store = MemoryStore()
@@ -31,6 +38,7 @@ def test_scripted_free_only_is_inconclusive_with_named_combination():
     assert out.non_identifiable_combinations == ["m^1 * c^1 * k^1"]
     assert any("not identified" in r for r in out.reasons)
     assert actions(store, out.investigation) == ["optimize_parameters", "analyze_sensitivity", "validate_predictions", "stop"]
+    assert sensitivity_results(store, out.investigation)[-1]["marginal_log_std"] == {"m": None, "c": None, "k": None}
     rel = ev.relative_errors(out.estimate)
     assert rel["c/m"] < 0.02 and rel["k/m"] < 0.02
 
@@ -43,6 +51,8 @@ def test_scripted_requests_resonance_and_validates():
     assert actions(store, out.investigation) == [
         "optimize_parameters", "analyze_sensitivity", "rank_experiments", "request_experiment",
         "optimize_parameters", "analyze_sensitivity", "validate_predictions", "stop"]
+    marginal = sensitivity_results(store, out.investigation)[-1]["marginal_log_std"]
+    assert set(marginal) == {"m", "c", "k"} and all(0 < v <= 0.1 for v in marginal.values())
     req = [r for r in store.records(out.investigation, "step") if r.payload["decision"]["action"] == "request_experiment"][0]
     assert req.payload["decision"]["arguments"] == {"experiment": "sine_0.44Hz"}
     assert max(ev.relative_errors(out.estimate).values()) < 0.01

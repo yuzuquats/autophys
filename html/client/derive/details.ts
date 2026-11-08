@@ -8,7 +8,7 @@ import { configurationSections } from "./configuration.ts";
 import { pairingExpiry } from "./pairing.ts";
 import { displayedFields, outlookAt } from "./outlook.ts";
 import {
-  configFor, investigationLabel, defaultSelection, draftKey, experimentsUsed, ids, latestConfig, latestFit, parseSel, plusMinus, projectOf, type State, statusText, unitOf, decisionProposal,
+  certaintyOf, configFor, investigationLabel, defaultSelection, draftKey, experimentsUsed, ids, latestConfig, latestFit, parseSel, plusMinus, projectOf, type State, statusText, unitOf, decisionProposal,
 } from "./shared.ts";
 
 
@@ -27,11 +27,14 @@ const allows = (s: State, e: Decision["event"]) => !s.events || s.events.include
 function whereItStands(c: ProjectConfig, fit: Fit | null): Section {
   if (!fit) return { heading: "Where it stands", blocks: [{ kind: "text", text: "No converged fit yet", tone: "muted" }] };
   if (!fit.sensitivity && fit.identification) {
-    const id = fit.identification;
+    const id = fit.identification, std = (k: string) => { const x = certaintyOf(fit, k); return x.kind === "identified" ? x.std : null; };
+    const value = (k: string) => `${sig(fit.params[k], 3)} ${unitOf(c, k)}`.trim();
     return { heading: "Where it stands", blocks: [{ kind: "facts", rows: [
-      ...id.identified.map((k) => ({ label: k, value: `${sig(fit.params[k], 3)} ${unitOf(c, k)}`.trim(), tag: { text: "identified", tone: "ok" as const } })),
+      ...id.identified.map((k) => { const s = std(k); return s == null
+        ? { label: k, value: value(k), tag: { text: "identified", tone: "ok" as const } }
+        : { label: k, value: `${sig(fit.params[k], 3)} ${plusMinus(c, k, s)}` }; }),
       ...id.nonIdentified.map((k) => ({ label: k, value: "", tag: { text: "not identified", tone: "warn" as const } })),
-    ] }, { kind: "missing", title: "Not recorded yet", description: "Parameter uncertainties have not been recorded by the SDK." }] };
+    ] }, ...(id.identified.every((k) => std(k) != null) ? [] : [{ kind: "missing" as const, title: "Not recorded yet", description: "Parameter uncertainties have not been recorded by the SDK." }])] };
   }
   if (!fit.sensitivity) return { heading: "Where it stands", blocks: [{ kind: "text", text: `No sensitivity recorded at Fit #${fit.n}`, tone: "muted" }] };
   const s = fit.sensitivity;
@@ -48,10 +51,11 @@ export function paramsTable(c: ProjectConfig, fit: Fit): TableRow[] {
   const rows: TableRow[] = c.params.map((p) => {
     const value = { text: sig(fit.params[p.name], 3), end: true };
     const name = { text: p.name, unit: p.unit };
-    if (!fit.free.includes(p.name)) return { cells: [name, value, { text: "", tag: { text: "fixed", tone: "muted" as const }, end: true }] };
-    if (!s) return { cells: [name, value, { text: "", end: true }] };
-    if (s.nonIdentified.includes(p.name)) return { dim: true, cells: [name, value, { text: "", tag: { text: "ridge", tone: "warn" as const }, end: true }] };
-    return { cells: [name, value, { text: "", tag: { text: plusMinus(c, p.name, s.marginal[p.name]), tone: "ok" as const }, end: true }] };
+    const k = certaintyOf(fit, p.name);
+    if (k.kind === "fixed") return { cells: [name, value, { text: "", tag: { text: "fixed", tone: "muted" as const }, end: true }] };
+    if (k.kind === "unknown") return { cells: [name, value, { text: "", end: true }] };
+    if (k.kind === "ridge") return { dim: true, cells: [name, value, { text: "", tag: { text: "ridge", tone: "warn" as const }, end: true }] };
+    return { cells: [name, value, { text: "", tag: { text: k.std == null ? "identified" : plusMinus(c, p.name, k.std), tone: "ok" as const }, end: true }] };
   });
   for (const x of s?.combos ?? []) rows.push({ cells: [{ text: x.name }, { text: sig(x.value, 3), end: true }, { text: "", tag: { text: pct(x.logStd), tone: "ok" }, end: true }] });
   return rows;

@@ -62,7 +62,7 @@ function workspace(): WireWorkspace {
     rec("measurement", { observation: { experiment: "free_response", settings: { x0: 0.1, duration: 2 }, t: [0, 0.5, 1, 1.5, 2], y: { x: [0.1, 0.05, null, -0.02, 0.01] }, sigma: { x: 0.01 }, split: "train", source: "bench", meta: {} } }),
     rec("measurement", { observation: { experiment: "free_response", settings: { x0: 0.1, duration: 2 }, t: [0, 1, 2], y: { x: [0.1, 0, 0.01] }, sigma: { x: 0.01 }, split: "validation", source: "bench", meta: {} } }),
     rec("run", { fit_id: 1, model: "base", simulator: "oscillator", params: { m: 1.1, k: 9.5 }, loss: 3.2, chi2_per_n: 1.04, n: 5, nfev: 40, status: 1, message: "", success: true, loss_kind: "linear", at_bounds: [], starts: [{}, {}, {}], seed: 7 }),
-    rec("step", { index: 1, fit_id: 1, decision: { action: "analyze_sensitivity" }, result: { condition_number: 1.5e7, identified: ["k"], non_identified: ["m"], non_identifiable: ["m·k"] }, simulations: 12 }),
+    rec("step", { index: 1, fit_id: 1, decision: { action: "analyze_sensitivity" }, result: { condition_number: 1.5e7, identified: ["k"], non_identified: ["m"], non_identifiable: ["m·k"], marginal_log_std: { k: 0.012, m: null } }, simulations: 12 }),
     rec("step", { index: 2, fit_id: 1, decision: { action: "rank_experiments" }, result: { criterion: "min_eig", ranking: [["sine", 40, 900], ["free_response", 0, 10]] }, simulations: 30 }),
     rec("proposal", { proposal_id: "prop_1", event: "proposed", experiment: "sine", settings: { amplitude: 1, frequency: 0.4, duration: 2 }, rationale: "a sine pins m", criterion: "min_eig", score: 5, outlook: OUTLOOK }),
     rec("outcome", { status: "awaiting_data", validation: null, simulations: 42 }),
@@ -120,7 +120,7 @@ Deno.test("daemon: load maps projects, config versions and every record kind ont
   assertEquals(inv.measurements[0].rate, 2);
   const fit = inv.fits[0];
   assertEquals([fit.n, fit.chi2N, fit.evals, fit.starts, fit.basins, fit.measurements, fit.curves], [1, 1.04, 40, 3, null, ["free_response@1"], {}]);
-  assertEquals(fit.identification, { identified: ["k"], nonIdentified: ["m"], condition: 1.5e7 });
+  assertEquals(fit.identification, { identified: ["k"], nonIdentified: ["m"], condition: 1.5e7, marginal: { k: 0.012 } });
   const p = inv.proposals[0];
   assertEquals([p.id, p.status, p.atFit, p.hypothesis, p.fixedSettings], ["prop_1", "proposed", 1, "a sine pins m", { duration: 2 }]);
   assertEquals(p.fields.map((f) => [f.name, f.value, f.lo, f.hi]), [["amplitude", 1, 0.5, 2], ["frequency", 0.4, 0.1, 1]]);

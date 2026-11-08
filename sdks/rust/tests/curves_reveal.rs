@@ -361,7 +361,15 @@ fn python_reveal_numbers_and_exact_nonuncertainty_fields() {
             .map(|r| Observation::from_dict(r.payload["observation"].clone()).unwrap()),
     )
     .unwrap();
-    inv.tool_analyze_sensitivity().unwrap();
+    let sens = inv.tool_analyze_sensitivity().unwrap();
+    let marginal = sens["marginal_log_std"].as_object().unwrap();
+    for name in sens["identified"].as_array().unwrap() {
+        let v = marginal[name.as_str().unwrap()].as_f64().unwrap();
+        assert!(v > 0. && v <= 0.1, "{name}: {v}");
+    }
+    for name in sens["non_identified"].as_array().unwrap() {
+        assert!(marginal[name.as_str().unwrap()].is_null(), "{name} is on a ridge");
+    }
     let outcome = records
         .iter()
         .find(|r| r.kind == "outcome")
