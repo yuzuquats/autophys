@@ -145,3 +145,141 @@ Tests: `deno test --allow-read --config html/deno.json html/` 138 passed,
 daemons 47971/47972 with real `autophys connect` devices (one denied, one
 approved per run) and `seed.py --connected`; screenshots in
 `yuzuquats:~/.cache/autophys/ui27-20261108T104915Z/shots/`.
+
+### RS-REMOTE-1: done
+
+`0067d04` (`I312a644864bfa193ee73218cd2782f6d`). `autophys::remote::Remote`
+is async over reqwest 0.12 (rustls, webpki roots, ring) and tokio:
+requests, projects, investigations, records, proposals, appends, SSE
+streams (`RecordStream::next().await`), approval waits and
+`remote::auth::{pair_start, pair_poll, whoami}`. `autophys::blocking`
+(RS-REMOTE-1a) is the thin facade `Client`, `Workbook`, the investigation
+loop, the CLI and scripts use: `blocking::Remote`, `blocking::RecordStream`
+(an `Iterator`) and `blocking::auth`. It waits on a process-wide one-worker
+runtime; called inside a tokio runtime it runs the future on a scoped helper
+thread instead of panicking. Public `HttpError`/`Error` shapes and messages
+are unchanged; one SSE frame parser serves the blocking `Sse<R>` and the
+async stream. Cargo.lock gains reqwest and its hyper/tower stack (24
+packages); `ureq` stays for the reasoner and the backtest fetch.
+
+Agent-chosen, pending operator review: RS-REMOTE-1-a reqwest 0.12 rather
+than 0.13 (alternative: 0.13, a version bump later); RS-REMOTE-1-b
+`blocking` always compiled, no feature gate (alternative: a default
+`blocking` feature, small to add); RS-REMOTE-1-c one shared runtime plus a
+helper thread inside a runtime (alternative: refuse with an error inside a
+runtime, as `reqwest::blocking` panics); RS-REMOTE-1-d no idle connection
+pool (`pool_max_idle_per_host(0)`), so no connection outlives the runtime
+that opened it (cost: one TCP connect per request on loopback; reversal is
+one builder line once callers share a runtime).
+
+Breaking: `Client::remote()`/`Workbook::remote()` return
+`&autophys::blocking::Remote`; `remote::Remote` methods and
+`remote::auth::{pair_start, pair_poll, whoami}` are async; its `timeout` and
+`stream_idle` are set through `blocking::Remote::set_timeout` /
+`set_stream_idle` on the facade.
+
+Tests: three new transport tests (async client on the caller's runtime,
+blocking facade inside a current-thread runtime, blocking stream iteration
+advancing the cursor); workspace 326/0/2.
+
+### CORE-01: done
+
+`799234b` (`Ia265d1b94e62c5cd0e711976fbba5b72`). Contract:
+
+- `POST /api/v1/investigations/{inv}/records`, `Keyed` auth, body
+  `{"records": [{"id", "kind", "payload", "hash_of"?}, ...]}`, 1 to 64
+  envelopes within the 1 MiB + 64 KiB body limit.
+- Appended in order in one `BEGIN IMMEDIATE` transaction, all or none. Each
+  record is checked as its single-record route would check it (kind, payload
+  shape and size, the proposal state machine) against the state the earlier
+  records leave; `investigation` records are refused.
+- Idempotent by record id: the same id and content replays
+  (`created: false`), the same id with other content is 409
+  `idempotency_conflict`; replays and new records may mix. An
+  `Idempotency-Key` header is refused (400): idempotency is per record.
+- `hash_of: {field: index}` fills a top-level payload field with the hash of
+  an earlier record of the batch; Rust `attach_data` links the
+  `data_attached` event's `measurement_version` to the measurement this way.
+- Reply `{"records": [{"record", "gseq", "created"}], "gseq": max}`, 201 if
+  any record is new, else 200. Errors are the `ApiError` shapes, with
+  `path` prefixed `records[i].` (or `records` for the count).
+- `POST …/proposals/{pid}/attachment` is removed (CORE-01a): 404.
+
+SDKs: Rust `Investigation::append_batch(&[BatchRecord])`, `BatchRecord`,
+`MAX_BATCH_RECORDS`; `attach_data` is a two-record batch locally and over
+HTTP (no fallback); `Investigation::attach_records` is removed. Python
+`HttpStore.attach_data` posts the batch with content-derived ids and
+`HttpStore.append_batch` is now atomic through it; the fake server
+implements the route. A daemon without the route gives "too old for batch
+record appends … upgrade the autophys daemon" in both SDKs (in `9849710`).
+
+Agent-chosen, pending operator review: CORE-01-a the route path (alternative
+`POST /investigations/{inv}/batch`); CORE-01-b `hash_of` linkage (alternative:
+callers precompute hashes, which needs the chain head and races);
+CORE-01-c per-record replay, mixed batches allowed (alternative: whole-batch
+replay only); CORE-01-d the 64-record cap; CORE-01-e the old route's strict
+pair checks (both records replay or neither) are replaced by the per-record
+rules. Reversal of each is local to `workbook.rs`, `http.rs` and the two
+clients, before external adoption.
+
+Breaking: SDK 0.1.0 to 0.1.2 cannot attach data against this daemon (they
+call the removed route); these SDKs cannot attach against an older daemon;
+`Investigation::attach_records` is gone.
+
+Tests: `store_contract.rs` batch test (atomic refusal by kind, payload,
+proposal state and duplicate id; empty/missing records; `hash_of` linkage;
+replay 200; conflict 409; header 400; old route 404), SDK pre-request batch
+checks, `test_http.py` batch/attach test, and `test_atomic_remote.py` (4
+tests) passing against a real daemon and a Rust peer.
+
+### CORE-04: done
+
+`e4b7409` (`Ib8f521611f865d8ff5462fa64020266c`). Rust `Client::project(name)`
+opens: locally it is 404 `not_found` unless the slug's file exists (no file
+written), a file holding another name stays 409 `conflict`; remotely it opens
+through the project list. `ensure_project` creates; `project_with(Project)`
+keeps creating (through `ensure_project`), like Python's
+`project(Project)`. Python already opened. Callers changed: SDK and daemon
+tests that meant to create; the CLI, daemon, `examples/` and the
+investigation loop already used `ensure_project` or a `Project`. Breaking:
+Rust code relying on `project(name)` to create must call `ensure_project`.
+Test: `project_by_name_opens_and_only_ensure_project_creates`.
+
+### DM-D1 (Rust): done
+
+`9849710` (`Iadc35d7dfcd6f0dfcb60ff1c2a212497`). `schema.rs` has the display
+DDL, byte for byte, as step 1 to 2, `INITIAL_VERSION = 1` and `VERSION = 2`
+(exported `INITIAL_FORMAT_VERSION`, `FORMAT_VERSION`). `migrate` on open
+creates new files at 1, accepts 1 and 2, refuses newer and never runs step 2;
+`upgrade` runs steps inside the caller's transaction and refuses a newer
+format written after open. `put_display` (the daemon's display route
+included) upgrades to 2 in its `BEGIN IMMEDIATE` transaction and commits
+even when unchanged. Reads never create the table. Canonical JSON agrees
+between the SDKs on a non-ASCII manifest (both ASCII-escape and sort by code
+point, floats included); a pinned digest test is in each SDK; no golden
+changed. Rust now gives the RS-REMOTE-2 upgrade wording for missing reveal,
+display and batch routes. `workbook-format.md` has the format-2 section;
+`display-manifest.md` and the `decisions.md` implementation column are
+updated for DM-D1, CORE-01, CORE-04, RS-REMOTE-1, RS-REMOTE-2 and DM-RS-1.
+
+Breaking: a workbook given a display is format 2 and SDK 0.1.x refuses it;
+`FORMAT_VERSION` is now 2 (use `INITIAL_FORMAT_VERSION`).
+
+Tests: `sdks/rust/tests/workbook_format2.rs` (10, mirroring
+`test_workbook_format2.py`; the failed-write case injects a view named
+`display`), the daemon display test checks the upload moves only that
+workbook to format 2, and a Python non-ASCII digest test.
+
+Wave 2 validation on yuzuquats after `9849710`: `cargo test --workspace
+--locked` 342 passed, 0 failed, 2 ignored (baseline 323; +17 from this wave,
++2 from peers' G8-TRAIN/G3-NAME commits); `python3 -m pytest -q -p
+no:cacheprovider sdks/python/tests` 669 passed, 13 skipped (baseline 665;
++2 from this wave, +2 from peers); with `AUTOPHYS_RUST_BIN`,
+`AUTOPHYS_RUST_WEB_ROOT` and `AUTOPHYS_CORE_PEER` set, the cross-writer,
+atomic-remote, core-boundary, display and reveal suites pass with no skips
+(119 passed).
+
+Open: `decisions.md` still says UI-27 "not implemented" (not this wave).
+The `AUTOPHYS_CORE_PEER` binary the env-gated Python tests need is not a
+build target (`sdks/rust/tests/support/core_peer.rs` is not wired into
+Cargo); this wave used an uncommitted scratch peer.
