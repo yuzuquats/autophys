@@ -509,8 +509,6 @@ struct Worker {
     dir: PathBuf,
     /// Passed to every worker as `AUTOPHYS_TRAIN_DATA`.
     data: PathBuf,
-    /// Runs and loops from before the code/data split, for listing only.
-    legacy: Option<PathBuf>,
     python: PathBuf,
     limits: WorkerLimits,
 }
@@ -632,9 +630,6 @@ struct TrainDirs {
     install: Option<PathBuf>,
     /// Runs, loops, datasets and anything else the workers write.
     data: PathBuf,
-    /// The pre-split default (`<app data>/train/sft`), where runs and loops
-    /// lived beside the workers; read for listing and a note, never written.
-    legacy: Option<PathBuf>,
 }
 
 /// Code: an explicit `--train-dir`/`AUTOPHYS_TRAIN_DIR`, else the built-in
@@ -657,7 +652,6 @@ fn train_dirs(
             code,
             install: None,
             data,
-            legacy: None,
         });
     }
     let train = app_data()?.join("train");
@@ -665,34 +659,8 @@ fn train_dirs(
     Ok(TrainDirs {
         code: install.join("train").join("sft"),
         install: Some(install),
-        legacy: data_dir.is_none().then(|| train.join("sft")),
         data: data_dir.unwrap_or_else(|| train.join("data")),
     })
-}
-
-/// Whether `dir/name` holds at least one entry.
-fn has_entries(dir: &Path, name: &str) -> bool {
-    std::fs::read_dir(dir.join(name)).is_ok_and(|mut e| e.next().is_some())
-}
-
-/// One stderr line, once per process, when runs or loops from before the
-/// code/data split exist and the new data directory has none. They are never
-/// moved or deleted.
-fn note_legacy(legacy: &Path, data: &Path) {
-    static NOTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-    let old = ["runs", "loops"].iter().any(|n| has_entries(legacy, n));
-    let new = ["runs", "loops"].iter().any(|n| has_entries(data, n));
-    if !old || new || NOTED.swap(true, std::sync::atomic::Ordering::SeqCst) {
-        return;
-    }
-    let note = format!(
-        "autophys train: runs/loops from before the code/data split are still in {0}; new output goes to {1}. Use the old ones with --data-dir {0} (or --train-dir {0} to also run the workers there)\n",
-        legacy.display(),
-        data.display()
-    );
-    if let Ok(mut sink) = Diagnostics::open() {
-        let _ = sink.forward(note.as_bytes());
-    }
 }
 
 /// Writes `files` into `dir` and returns the ones it left alone because they
@@ -805,9 +773,6 @@ impl Worker {
             Some(root) => install_code(root, embedded_workers::FILES, embedded_sdk::FILES)?,
             None => dirs.code.clone(),
         };
-        if let Some(legacy) = &dirs.legacy {
-            note_legacy(legacy, &dirs.data);
-        }
         let python = flags
             .get("python")
             .map(PathBuf::from)
@@ -823,35 +788,16 @@ impl Worker {
         Ok(Worker {
             dir,
             data: dirs.data,
-            legacy: dirs.legacy,
             python,
             limits: WorkerLimits::from_env()?,
         })
     }
 
-    /// The entries of `<data>/<kind>` (`runs` or `loops`), then those only in
-    /// the pre-split folder, with that folder as their `location`. Old
-    /// entries are listed, never moved.
-    fn listing(&self, kind: &str) -> Vec<(PathBuf, Option<String>)> {
-        let names = |dir: &Path| -> Vec<PathBuf> {
-            std::fs::read_dir(dir.join(kind))
-                .map(|e| e.flatten().map(|e| e.path()).collect())
-                .unwrap_or_default()
-        };
-        let current = names(&self.data);
-        let seen: BTreeSet<_> = current
-            .iter()
-            .filter_map(|p| p.file_name().map(|n| n.to_owned()))
-            .collect();
-        let mut out: Vec<_> = current.into_iter().map(|p| (p, None)).collect();
-        if let Some(legacy) = &self.legacy {
-            for path in names(legacy) {
-                if path.file_name().is_some_and(|n| !seen.contains(n)) {
-                    out.push((path, Some(legacy.display().to_string())));
-                }
-            }
-        }
-        out
+    /// The entries of `<data>/<kind>` (`runs` or `loops`).
+    fn listing(&self, kind: &str) -> Vec<PathBuf> {
+        std::fs::read_dir(self.data.join(kind))
+            .map(|e| e.flatten().map(|e| e.path()).collect())
+            .unwrap_or_default()
     }
 
     fn budgeted(mut self, gate: &Value) -> Self {
@@ -1985,7 +1931,7 @@ pub fn runs(args: Vec<String>) -> Result<Value, Failure> {
     let go = || -> Result<Value> {
         let worker = Worker::new(&flags)?;
         let mut rows = Vec::new();
-        for (entry, location) in worker.listing("runs") {
+        for entry in worker.listing("runs") {
             let path = entry.join("manifest.json");
             let Ok(m) = read_json(&path) else { continue };
             rows.push(json!({
@@ -2000,9 +1946,6 @@ pub fn runs(args: Vec<String>) -> Result<Value, Failure> {
                 "heldout_decisions": m.get("heldout_decisions"),
                 "last_val_nll": m.get("last_val_nll"),
             }));
-            if let Some(location) = location {
-                rows.last_mut().expect("just pushed")["location"] = json!(location);
-            }
         }
         rows.sort_by(|a, b| b["planned_at"].as_str().cmp(&a["planned_at"].as_str()));
         Ok(Value::Array(rows))
@@ -3102,7 +3045,7 @@ pub fn loops(args: Vec<String>) -> Result<Value, Failure> {
     let go = || -> Result<Value> {
         let worker = Worker::new(&flags)?;
         let mut rows = Vec::new();
-        for (entry, location) in worker.listing("loops") {
+        for entry in worker.listing("loops") {
             let Ok(s) = read_json(&entry.join("state.json")) else {
                 continue;
             };
@@ -3121,9 +3064,6 @@ pub fn loops(args: Vec<String>) -> Result<Value, Failure> {
                 "max_usd": s.pointer("/plan/max_usd"),
                 "planned_at": s["planned_at"],
             }));
-            if let Some(location) = location {
-                rows.last_mut().expect("just pushed")["location"] = json!(location);
-            }
         }
         rows.sort_by(|a, b| b["planned_at"].as_str().cmp(&a["planned_at"].as_str()));
         Ok(Value::Array(rows))
@@ -3249,7 +3189,6 @@ d.mkdir(parents=True)
         assert_eq!(d1.data, app.join("train/data"));
         assert_eq!(d1.data, d2.data);
         assert!(!d1.data.starts_with(app.join("train/code")));
-        assert_eq!(d1.legacy, Some(app.join("train/sft")));
 
         let Ok(python) = find_python(Path::new("python3"), std::env::var_os("PATH").as_deref())
         else {
@@ -3261,7 +3200,6 @@ d.mkdir(parents=True)
         let worker = Worker {
             dir: i1.clone(),
             data: d1.data.clone(),
-            legacy: d1.legacy.clone(),
             python,
             limits: WorkerLimits::from_env().unwrap(),
         };
@@ -3286,7 +3224,6 @@ d.mkdir(parents=True)
                 code: cwd.join("rel/sft"),
                 install: None,
                 data: cwd.join("rel/sft"),
-                legacy: None
             }
         );
         let dirs =
@@ -3295,40 +3232,11 @@ d.mkdir(parents=True)
             (dirs.code, dirs.data),
             (PathBuf::from("/abs/sft"), cwd.join("out"))
         );
-        // A data directory with the built-in code: no pre-split note or listing.
+        // A data directory with the built-in code.
         let app = PathBuf::from("/app");
         let dirs = train_dirs(None, Some("/d".into()), || Ok(app.clone()), "k", cwd).unwrap();
         assert_eq!(dirs.install, Some(app.join("train/code/k")));
-        assert_eq!((dirs.data, dirs.legacy), (PathBuf::from("/d"), None));
-    }
-
-    #[test]
-    fn listings_include_pre_split_entries_without_moving_them() {
-        let root = tempfile::tempdir().unwrap();
-        let (data, legacy) = (root.path().join("data"), root.path().join("sft"));
-        for dir in [
-            data.join("runs/a"),
-            legacy.join("runs/a"),
-            legacy.join("runs/b"),
-        ] {
-            std::fs::create_dir_all(dir).unwrap();
-        }
-        let worker = Worker {
-            dir: legacy.clone(),
-            data: data.clone(),
-            legacy: Some(legacy.clone()),
-            python: PathBuf::from("python3"),
-            limits: WorkerLimits::from_env().unwrap(),
-        };
-        let mut rows = worker.listing("runs");
-        rows.sort();
-        let at = Some(legacy.display().to_string());
-        assert_eq!(
-            rows,
-            vec![(data.join("runs/a"), None), (legacy.join("runs/b"), at)]
-        );
-        assert!(worker.listing("loops").is_empty());
-        assert!(legacy.join("runs/b").is_dir());
+        assert_eq!(dirs.data, PathBuf::from("/d"));
     }
 
     #[test]

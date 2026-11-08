@@ -59,10 +59,8 @@ sets to its data directory: `--data-dir`, else the `--train-dir` (outputs beside
 before), else `train/data` above. Run by hand without it, a worker writes next to itself, as in
 a checkout. To work on the workers themselves, pass `--train-dir train/sft` from a checkout.
 
-Runs and loops from before the split stay in `~/.local/share/tento/autophys/train/sft`; they are
-not moved. `train runs` and `train loops` list them with their `location`, and while the new data
-directory has none, each command prints one stderr line pointing at them. Continue with them
-through `--data-dir` (or `--train-dir`) set to that folder.
+Runs and loops made by v0.1.1 are in `~/.local/share/tento/autophys/train/sft`. Nothing moves
+or reads them automatically; to use one, pass `--data-dir` (or `--train-dir`) set to that folder.
 
 | command | what it does |
 |---|---|
