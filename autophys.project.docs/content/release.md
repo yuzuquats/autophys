@@ -1,9 +1,88 @@
 # GitHub releases
 
+## v0.1.2, 2026-11-07
+
+Published at https://github.com/yuzuquats/autophys/releases/tag/v0.1.2 (marked
+latest). Patch release: the operator asked for a patch, not a minor, until they
+say otherwise. The tag (lightweight, created by `gh release`) points at
+`7b963a3`, the tip of the push `7619174..7b963a3`: the examples/backtest work
+in [examples.md](examples.md) (EX-1 to EX-11), CLI-16, the version bump and a
+follow-up fix.
+
+| Commit | Change | Change-Id |
+| --- | --- | --- |
+| `8fc88f6` | Spec examples as templates, demos and backtests | `Ia37e14ff3321c72591c3c44fdedf6e81` |
+| `ad2789b` | Record the examples and CLI-16 decisions | `I4d32ec0ee02b0f68073911d5ed8faab4` |
+| `5b6cc13` | Record EX-9: one --example flag selects what bench runs | `I26f894e429fa05cc9ff805a86d2a4bd8` |
+| `d3e99dd` | Record EX-10: scheme references with #case for --example | `Ia50765524077f7c9a77a5c941fd3e68c` |
+| `00bb473` | Declare the benchmark cases as backtest examples | `I91c47241e650e419b25036afffb9d6ed` |
+| `4b27ce0` | Give examples kinds and select backtests with --example | `I124d47e38ec757fbc1b16e66fa4cec3c` |
+| `ab32da9` | Draw backtest truth per seed, replay recorded runs and score models | `I7b089d8708e3d55fa14b85f8db6a0e7b` |
+| `57e68a9` | Split the training workers code cache from their outputs (CLI-16) | `Iefadf53750e7f250dd0b271bea961111` |
+| `6bdab8f` | Add a backtest of synthesized recorded battery runs | `Idf714b108e003ed71e0028554533d250` |
+| `4b0d205` | Say why live bench runs fail, and record the live backtests | `Icbb9bbcae7a1e9a069c8506b212db436` |
+| `de7aa0a` | Version autophys 0.1.2 | see commit |
+| `7b963a3` | Let training workers take any backtest case, and fix stale example paths | see commit |
+
+| Asset | sha256 |
+| --- | --- |
+| `autophys-v0.1.2-x86_64-unknown-linux-gnu.tar.gz` | `6430d77cd82ad34cd5dcb2245d2c54ad83a9f27b006f49e3d66004da4727248b` |
+| `autophys-v0.1.2-aarch64-apple-darwin.tar.gz` | `9bc2384838c8206481105ec8697fbaec7ab61e391a61f5ecf8c89dd59241e728` |
+
+### Review
+
+Agent review, not an operator verdict. Round 1 (Claude Opus 5.5 on API
+credits, a one-off exception the operator authorized after the Codex review
+stalled and both non-credit Claude routes were rate-limited) returned ready,
+with non-blocking findings; `7b963a3` fixed three of them (`train dataset`
+crashed on planted cases, `train eval` put reference ids in file names, stale
+`examples/battery-fit/` paths). Round 2 (same reviewer) checked the fix, the
+patch ids of the reordered commits and the trailers, and returned ready.
+Receipt: `yuzuquats:~/.local/state/tento/reviews/autophys/examples-v0.1.2-20261107.md`.
+
+### Validation
+
+- The pushed prefix, from a `git archive` export: 313 Rust tests, Python SDK
+  621 passed (13 skipped), train/sft 38 passed, `autophys examples --check`
+  clean.
+- Each archive was built by `ops/release.sh` from a fresh clone of GitHub at
+  `7b963a3` (local `master` carried another session's unpublished commits),
+  with `CARGO_TARGET_DIR` passed explicitly; the script ran the full cargo and
+  Deno suites and its packed smoke test. Linux built on yuzuquats. macOS built
+  on rwc-01's boot volume (operator-authorized one-off: its external SSD was
+  mounted but every access failed with "Interrupted system call"), and the
+  build tree was deleted afterwards.
+- Both assets were downloaded back from the draft and checked with isolated
+  homes: sha256, `--version` names `7b963a3`, `autophys new --lang python`
+  pinned the SDK to the commit, the README walkthrough (validated, held-out
+  chi2/N 1.04, verify ok), `serve` from the packed file (web_id `3e8f0bf7…`
+  Linux, `789df627…` macOS), pairing and `whoami`, the walkthrough over HTTP,
+  and headless Chrome on `/` and `/app` (through `tento-headless-js`; no
+  console, page or request errors; the investigations show validated).
+- New in this release: with an empty dataset cache, `bench --example
+  battery-recorded --policy scripted` downloaded the recorded runs from GitHub,
+  verified their sha256 and validated both cases (max relative error 1.07%).
+- After publishing, anonymous `curl` downloads of both assets matched their
+  sha256 and served healthz and `/app`; the macOS executable passed
+  `codesign -v` and carried no quarantine attribute.
+
+### Caveats
+
+- On yuzuquats (Ubuntu), chrome-headless-shell needs `--no-sandbox`: AppArmor
+  blocks unprivileged user namespaces. The check loaded only the local app.
+- Open, from review: training runs made before CLI-16 are not found in the new
+  data directory unless `--data-dir` points there, so `--resume` starts a new
+  loop; `--seeds N` on a recorded case repeats identical replays; `bias` and
+  `missing` are ignored for recorded cases; a wheel built with current
+  setuptools has not been checked for the backtest package data.
+- EX-11 (fixed truth by default) is agent-chosen, pending operator review.
+- The Linux binary needs glibc 2.39 or later; the macOS executable is ad-hoc
+  signed, not notarized.
+
 ## v0.1.1, 2026-11-07
 
-Published at https://github.com/yuzuquats/autophys/releases/tag/v0.1.1 (marked
-latest). The annotated tag points at `090512e`, the tip of the push
+Published at https://github.com/yuzuquats/autophys/releases/tag/v0.1.1 (latest
+until v0.1.2). The annotated tag points at `090512e`, the tip of the push
 `59df761..090512e`:
 
 | Commit | Change | Change-Id |
