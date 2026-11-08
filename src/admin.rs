@@ -91,7 +91,7 @@ fn parse(args: impl IntoIterator<Item = String>) -> Result<Args, String> {
             "--read-write" => out.read_only = Some(false),
             "--demo" => out.demo = Some(true),
             "--no-demo" => out.demo = Some(false),
-            s if s.starts_with("--") => return Err(format!("unknown flag {s:?}")),
+            s if s.starts_with("--") => return Err(format!("unknown option {s:?}")),
             _ => out.words.push(arg),
         }
     }
@@ -133,7 +133,12 @@ pub fn run(
             | ("db", ["verify" | "check"])
     );
     if !valid {
-        return usage(err, &format!("{command} {}", words.join(" ")));
+        return usage(
+            err,
+            &format!("wrong arguments for {command} {}", words.join(" "))
+                .trim_end()
+                .to_string(),
+        );
     }
     let collection = args.collection.clone().unwrap_or(defaults.collection);
     if command == "db" {

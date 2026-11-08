@@ -143,7 +143,10 @@ pub fn parse_serve(
             "--browser-origin" => {
                 flagged_origins.extend(origins(&flag_value(&key, inline, &mut args)?)?)
             }
-            other => return Err(format!("unknown argument {other:?}\n{USAGE}")),
+            other if other.starts_with('-') => {
+                return Err(format!("unknown option {other:?}\n{USAGE}"));
+            }
+            other => return Err(format!("unexpected argument {other:?}\n{USAGE}")),
         }
     }
     let mut browser_origins: Vec<String> = Vec::new();
@@ -186,7 +189,10 @@ pub fn parse_build_web(args: impl IntoIterator<Item = String>) -> Result<Option<
         let (key, inline) = split_flag(&arg);
         match key.as_str() {
             "--out" => out = Some(PathBuf::from(flag_value(&key, inline, &mut args)?)),
-            other => return Err(format!("unknown argument {other:?}\n{USAGE}")),
+            other if other.starts_with('-') => {
+                return Err(format!("unknown option {other:?}\n{USAGE}"));
+            }
+            other => return Err(format!("unexpected argument {other:?}\n{USAGE}")),
         }
     }
     Ok(out)

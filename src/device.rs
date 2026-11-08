@@ -203,10 +203,12 @@ pub fn whoami(args: Vec<String>, out: &mut impl Write) -> Result<Value, Failure>
                 )
             }
             other => {
-                return Err(Failure::usage(
-                    format!("unexpected argument {other:?}"),
-                    WHOAMI_USAGE,
-                ));
+                let kind = if other.starts_with('-') {
+                    "unknown option"
+                } else {
+                    "unexpected argument"
+                };
+                return Err(Failure::usage(format!("{kind} {other:?}"), WHOAMI_USAGE));
             }
         }
     }

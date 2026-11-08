@@ -352,7 +352,8 @@ impl Failure {
     /// workers. Even a final error must not wait for a stopped log collector.
     pub fn report(&self) {
         if let Ok(mut sink) = Diagnostics::open() {
-            let message = format!("autophys: {}\n", self.message());
+            let message =
+                crate::cli_error::render(&self.message(), matches!(self, Failure::Usage(_)));
             let _ = sink.forward(&message.as_bytes()[..message.len().min(16 * 1024)]);
         }
     }
@@ -456,7 +457,7 @@ impl Flags {
                     .or_default()
                     .push(value);
             } else {
-                return Err(format!("unknown flag --{name}\n{USAGE}"));
+                return Err(format!("unknown option \"--{name}\"\n{USAGE}"));
             }
         }
         Ok(flags)

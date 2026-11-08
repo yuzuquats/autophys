@@ -49,6 +49,13 @@ Release archives add `THIRD-PARTY-LICENSES.txt` for every compiled crate.
 Broader extraction/pruning of upstream libraries is a separate design change;
 it must retain their actual transitive closure and existing notices.
 
+## App-owned CLI failure patch (G4)
+
+`patches/autophys-cli-errors/` records autophys's one change to vendored
+`tento-lisp-cmd` (2026-11-08): an opt-out from printing a command's usage
+block to stdout on failure, and one-line argument errors. Its README lists
+both files and how to reverse the patch.
+
 ## App-owned bundler context patch (Round 2)
 
 The historical snapshot generator, fifteen-patch series and `vendor.lock` are

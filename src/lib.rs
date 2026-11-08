@@ -15,6 +15,7 @@
 pub mod accounts;
 pub mod admin;
 pub mod app;
+pub mod cli_error;
 pub mod device;
 pub mod devtools;
 pub mod embedded;

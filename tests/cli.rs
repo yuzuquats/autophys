@@ -221,3 +221,72 @@ fn failed_verification_keeps_json_output_and_exits_one() {
         assert_eq!(reports[0]["report"]["projections_match"], false);
     }
 }
+
+/// G4 (operator decision 2026-11-08): a failure writes nothing to stdout and
+/// one `autophys: REASON` line to stderr, plus a `--help` pointer when the
+/// arguments were wrong. `--json | jq` never sees usage text.
+#[test]
+fn failures_are_one_stderr_line_with_a_help_hint_and_no_stdout() {
+    let home = tempfile::tempdir().unwrap();
+    let hint = |command: &str| format!("Try `autophys {command} --help` for the options.\n");
+    let cases: Vec<(Vec<&str>, i32, String)> = vec![
+        (
+            vec!["records", "--json"],
+            2,
+            format!("autophys: missing required option --investigation\n{}", hint("records")),
+        ),
+        (
+            vec!["records", "--investigation", "x", "--jsn"],
+            2,
+            format!("autophys: unknown option \"--jsn\"\n{}", hint("records")),
+        ),
+        (
+            vec!["approve"],
+            2,
+            format!("autophys: missing required option --investigation\n{}", hint("approve")),
+        ),
+        (
+            vec!["verify", "nope.ap-workbook"],
+            2,
+            format!("autophys: unexpected argument \"nope.ap-workbook\"\n{}", hint("verify")),
+        ),
+        (
+            vec!["train", "--bogus"],
+            2,
+            format!(
+                "autophys: unknown option \"--bogus\"; train needs a subcommand\n{}",
+                hint("train")
+            ),
+        ),
+        (
+            vec!["train", "dataset", "--bogus"],
+            2,
+            format!("autophys: unknown option \"--bogus\"\n{}", hint("train dataset")),
+        ),
+        (
+            vec!["new", "--bogus"],
+            2,
+            format!("autophys: unknown option \"--bogus\"\n{}", hint("new")),
+        ),
+        (
+            vec!["fit"],
+            2,
+            "autophys: unknown command \"fit\"\nTry `autophys --help` for the commands.\n".into(),
+        ),
+        (
+            vec!["records", "--investigation", "inv_nope", "--json"],
+            1,
+            "autophys: unknown investigation\n".into(),
+        ),
+    ];
+    for (args, code, expected) in cases {
+        let output = run(home.path(), &args);
+        assert_eq!(output.status.code(), Some(code), "{args:?}");
+        assert!(
+            output.stdout.is_empty(),
+            "{args:?}: stdout={}",
+            String::from_utf8_lossy(&output.stdout)
+        );
+        assert_eq!(String::from_utf8_lossy(&output.stderr), expected, "{args:?}");
+    }
+}

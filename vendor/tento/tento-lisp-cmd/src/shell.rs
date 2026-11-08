@@ -79,6 +79,11 @@ where
   /// policy (tsh: the rc files it may trust with more than a script), set by
   /// [`Self::with_startup_unit_scope`]. `None`: no marking.
   pub startup_unit_scope: Option<StartupUnitScope>,
+  /// Whether a failing command first prints its usage block (to stdout).
+  /// Default `true`. An embedder that reports its own one-line errors turns
+  /// it off per group with [`Self::without_usage_on_failure`], so a failure
+  /// never writes to stdout ahead of piped output.
+  pub usage_on_failure: bool,
 }
 
 /// One line of the prelude seed: the file it was read from and its line there
@@ -114,7 +119,16 @@ where
       prelude: None,
       prelude_origin: std::rc::Rc::from([]),
       startup_unit_scope: None,
+      usage_on_failure: true,
     }
+  }
+
+  /// Stop this group's failing commands from printing their usage block; see
+  /// [`Self::usage_on_failure`]. Applies to this group only, so set it on
+  /// each nested group too. Builder-style.
+  pub fn without_usage_on_failure(mut self) -> Self {
+    self.usage_on_failure = false;
+    self
   }
 
   /// Declare one CAPABILITY this group provides (a [`ProvideEntry`]) — the
@@ -581,9 +595,10 @@ impl<T: Clone> Callable for Scripts<T> {
     // missing argument (e.g. `ux-test view <unknown-session>`) tells the
     // user what the command actually accepts. Gated on the command having
     // args — a no-arg command's usage block would just be noise on an
-    // unrelated runtime error.
+    // unrelated runtime error. An embedder can opt out
+    // (`usage_on_failure`) and report failures itself.
     let options = subcommand.help();
-    if options.is_empty() {
+    if options.is_empty() || !self.usage_on_failure {
       return subcommand.call_with_argv(self.info.clone(), argv);
     }
     let (name, description, long) = (

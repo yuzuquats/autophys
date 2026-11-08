@@ -10,6 +10,7 @@ use tento_sh::{CommandArg, Scripts, command};
 pub fn scripts() -> Scripts<()> {
     let mut tree = Scripts::new(())
         .with_app_identity("autophys", env!("CARGO_PKG_VERSION"), "autophys")
+        .without_usage_on_failure()
         .add_command(serve)
         .add_command(build_web)
         .add_command(pack)
@@ -40,17 +41,20 @@ pub fn scripts() -> Scripts<()> {
 
 fn pair_commands() -> Scripts<()> {
     Scripts::new(())
+        .without_usage_on_failure()
         .add_command(pair_list)
         .add_command(pair_approve)
         .add_command(pair_deny)
 }
 fn keys_commands() -> Scripts<()> {
     Scripts::new(())
+        .without_usage_on_failure()
         .add_command(keys_list)
         .add_command(keys_revoke)
 }
 fn users_commands() -> Scripts<()> {
     Scripts::new(())
+        .without_usage_on_failure()
         .add_command(users_list)
         .add_command(users_add)
         .add_command(users_remove)
@@ -58,12 +62,14 @@ fn users_commands() -> Scripts<()> {
 }
 fn db_commands() -> Scripts<()> {
     Scripts::new(())
+        .without_usage_on_failure()
         .add_command(db_verify)
         .add_command(db_check)
 }
 
 fn train_commands() -> Scripts<()> {
     Scripts::new(())
+        .without_usage_on_failure()
         .add_command(train_dataset)
         .add_command(train_run)
         .add_command(train_eval)
@@ -72,9 +78,8 @@ fn train_commands() -> Scripts<()> {
         .add_command(train_loops)
 }
 
-/// Train errors are reported here and end the process: returning `Err` would
-/// make the dispatcher print the generic command help to stdout first, which
-/// both buries the message and corrupts `--json` output.
+/// Train errors are reported here and end the process, in the one failure
+/// shape ([`crate::cli_error`]) and with the train exit status.
 fn train_result(result: Result<Value, crate::train::Failure>) -> tento_sh::Result<Value> {
     match result {
         Ok(value) => Ok(value),
@@ -155,7 +160,7 @@ fn user_result(result: Result<Value, crate::device::Failure>) -> tento_sh::Resul
         Ok(value) => Ok(value),
         Err(failure) => {
             let _ = std::io::stdout().flush();
-            eprintln!("autophys: {}", failure.message);
+            crate::cli_error::report(&failure.message, false);
             std::process::exit(failure.code.into());
         }
     }
@@ -190,7 +195,7 @@ fn with_cases(args: Vec<String>) -> Vec<String> {
     match crate::examples::examples_to_cases(args) {
         Ok(words) => words,
         Err(message) => {
-            eprintln!("autophys: {message}");
+            crate::cli_error::report(&message, true);
             std::process::exit(2);
         }
     }
@@ -225,7 +230,7 @@ fn devtool(result: Result<(), crate::devtools::Failure>) -> tento_sh::Result<Val
     match result {
         Ok(()) => Ok(Value::Null),
         Err(failure) => {
-            eprintln!("autophys: {}", failure.message);
+            crate::cli_error::report(&failure.message, false);
             std::process::exit(failure.code.into());
         }
     }
@@ -675,24 +680,22 @@ pub async fn run(mut argv: Vec<String>, out: &mut impl Write) -> u8 {
         }
         return 0;
     }
-    if !help
-        && matches!(
-            argv.get(1).map(String::as_str),
-            Some("pair" | "keys" | "users" | "db" | "train")
-        )
-        && argv.get(2).is_none_or(|word| word.starts_with('-'))
-    {
-        if argv[1] == "train" {
-            eprintln!(
-                "autophys: a train subcommand is required\n{}",
-                crate::train::USAGE
-            );
-            return 2;
-        }
-        eprintln!(
-            "autophys: an admin subcommand is required\n{}",
-            crate::admin::USAGE
-        );
+    let group = matches!(
+        argv.get(1).map(String::as_str),
+        Some("pair" | "keys" | "users" | "db" | "train")
+    );
+    // The command the `--help` hint names: `records`, or `train dataset`.
+    crate::cli_error::set_command(match (argv.get(1), argv.get(2)) {
+        (Some(name), Some(sub)) if group && !sub.starts_with('-') => format!("{name} {sub}"),
+        (Some(name), _) => name.clone(),
+        (None, _) => String::new(),
+    });
+    if !help && group && argv.get(2).is_none_or(|word| word.starts_with('-')) {
+        let reason = match argv.get(2) {
+            Some(flag) => format!("unknown option {flag:?}; {} needs a subcommand", argv[1]),
+            None => format!("{} needs a subcommand", argv[1]),
+        };
+        crate::cli_error::report(&reason, true);
         return 2;
     }
     let result = match scripts.call_with_argv(argv.clone()) {
@@ -717,10 +720,35 @@ pub async fn run(mut argv: Vec<String>, out: &mut impl Write) -> u8 {
             u8::from(failed)
         }
         Err(error) => {
-            if let tento_sh::Error::CommandNotFound { name, .. } = &error {
-                eprintln!("autophys: unknown command {name:?}\n{error}");
-            } else if !error.to_string().is_empty() {
-                eprintln!("autophys: {error}");
+            match &error {
+                tento_sh::Error::CommandNotFound {
+                    name, suggestion, ..
+                } => {
+                    // The library names it `<namespace> <word>`; a nested miss
+                    // (`train nope`) points at its group's help.
+                    let word = name.strip_prefix("autophys ").unwrap_or(name);
+                    let did_you_mean = suggestion
+                        .as_ref()
+                        .map(|s| format!(" (did you mean {s:?}?)"))
+                        .unwrap_or_default();
+                    let group = word.split_once(' ').map_or("", |(group, _)| group);
+                    eprint!(
+                        "{}",
+                        crate::cli_error::render_for(
+                            group,
+                            &format!("unknown command {word:?}{did_you_mean}"),
+                            true
+                        )
+                    );
+                }
+                tento_sh::Error::ArgParseError(message) => crate::cli_error::report(message, true),
+                tento_sh::Error::MissingSubcommand(_) | tento_sh::Error::NoSuchSubcommand => {
+                    crate::cli_error::report(&error.to_string(), true)
+                }
+                _ if !error.to_string().is_empty() => {
+                    crate::cli_error::report(&error.to_string(), false)
+                }
+                _ => {}
             }
             match error {
                 tento_sh::Error::ArgParseError(_)

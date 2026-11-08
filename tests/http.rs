@@ -244,7 +244,8 @@ fn binary_lists_its_subcommands() {
         "{help}"
     );
     // The store's commands exist; with no subcommand each is a usage error
-    // that opens no database (tests/store_admin.rs covers them working).
+    // that opens no database (tests/store_admin.rs covers them working). The
+    // error is one line plus a pointer to the group's --help (G4).
     for command in ["pair", "keys", "db"] {
         let out = Command::new(bin)
             .arg(command)
@@ -252,8 +253,13 @@ fn binary_lists_its_subcommands() {
             .output()
             .unwrap();
         assert_eq!(out.status.code(), Some(2), "{command}");
-        assert!(
-            String::from_utf8_lossy(&out.stderr).contains("usage: autophys pair list"),
+        assert!(out.stdout.is_empty(), "{command}");
+        assert_eq!(
+            String::from_utf8_lossy(&out.stderr),
+            format!(
+                "autophys: {command} needs a subcommand\n\
+                 Try `autophys {command} --help` for the options.\n"
+            ),
             "{command}"
         );
     }

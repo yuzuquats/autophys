@@ -336,7 +336,7 @@ where
       }
     } else {
       let Some(unwrapped_key) = key else {
-        return Err(Error::ArgParseError("param without option".to_string()));
+        return Err(Error::ArgParseError(format!("unexpected argument {arg:?}")));
       };
       let value = parse_value(arg);
       map.insert(unwrapped_key, value);
@@ -418,7 +418,7 @@ pub fn bind_tokens(schema: &ArgSchema, tokens: Vec<ArgToken>) -> crate::Result<s
       if !schema.is_empty() && !schema.named.iter().any(|f| &f.name == name)
         && !schema.positionals.contains(name) && schema.variadic.as_ref() != Some(name)
       {
-        return Err(Error::ArgParseError(format!("unknown flag \"--{}\"", name.replace('_', "-"))));
+        return Err(Error::ArgParseError(format!("unknown option \"--{}\"", name.replace('_', "-"))));
       }
     }
     match tok {
@@ -440,9 +440,11 @@ pub fn bind_tokens(schema: &ArgSchema, tokens: Vec<ArgToken>) -> crate::Result<s
             a.push(v);
           }
         } else {
-          return Err(Error::ArgParseError(format!(
-            "unexpected positional argument: {v}"
-          )));
+          let word = match &v {
+            serde_json::Value::String(s) => format!("{s:?}"),
+            other => other.to_string(),
+          };
+          return Err(Error::ArgParseError(format!("unexpected argument {word}")));
         }
       }
     }
@@ -451,7 +453,8 @@ pub fn bind_tokens(schema: &ArgSchema, tokens: Vec<ArgToken>) -> crate::Result<s
 }
 
 /// The shared serde tail: deserialize a bind document into the param type `T`,
-/// with the rich expected/provided error built from `T::display_help()`.
+/// with a one-line error naming the offending option (the full option list is
+/// what `--help` is for).
 /// `provided_keys` are the call's keys, already display-formatted by the caller
 /// (`--key` for argv, `:key` for Lisp).
 pub fn bind_doc_to<T>(doc: serde_json::Value, provided_keys: Vec<String>) -> crate::Result<T>
@@ -465,18 +468,39 @@ where
     }
   }
   serde_json::from_value(doc).map_err(|e| {
-    let expected_fields = T::display_help();
-    if expected_fields.is_empty() {
-      Error::Other(e.into())
+    let message = e.to_string();
+    if T::display_help().is_empty() {
+      // A command without options given one: serde says `invalid type: map,
+      // expected unit`; name the option instead.
+      match provided_keys.first() {
+        Some(key) if message.starts_with("invalid type: map") => {
+          Error::ArgParseError(format!("unknown option {key:?}"))
+        }
+        _ => Error::Other(e.into()),
+      }
     } else {
-      let expected_list = expected_fields.join(", ");
-      let provided_list = provided_keys.join(", ");
-      Error::ArgParseError(format!(
-        "Failed to parse arguments.\nExpected: {}\nProvided: {}\nError: {}",
-        expected_list, provided_list, e
-      ))
+      Error::ArgParseError(one_line_bind_error(&message, &provided_keys))
     }
   })
+}
+
+/// serde's field errors as option-shaped one-liners, in the caller's spelling
+/// (`--key` for argv, `:key` for Lisp, judged from the provided keys):
+/// ``missing field `x_y` `` -> `missing required option --x-y`;
+/// ``unknown field `x`, expected ...`` -> `unknown option "--x"`.
+fn one_line_bind_error(message: &str, provided_keys: &[String]) -> String {
+  let lisp = provided_keys.first().is_some_and(|key| key.starts_with(':'));
+  let option = |rest: &str| {
+    let name = rest.split('`').next().unwrap_or("");
+    if lisp { format!(":{name}") } else { format!("--{}", name.replace('_', "-")) }
+  };
+  if let Some(rest) = message.strip_prefix("missing field `") {
+    return format!("missing required option {}", option(rest));
+  }
+  if let Some(rest) = message.strip_prefix("unknown field `") {
+    return format!("unknown option {:?}", option(rest));
+  }
+  format!("invalid arguments: {}", message.lines().next().unwrap_or(message))
 }
 
 #[cfg(test)]
