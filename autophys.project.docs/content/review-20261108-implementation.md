@@ -525,3 +525,20 @@ test server) and `blocking_facade_inside_a_runtime_reuses_and_async_client_does_
 two more). Both fail with the selector disabled (2 and 3 connections where
 1 is expected). `cargo test --workspace --locked` 347 passed, 0 failed, 2
 ignored.
+
+### Review of DM-RS-1b, RS-REMOTE-1-d and RR1-b
+
+Independent read-only review, bound to base `0cfc49d` and tip `c2e0b03`:
+ready, no blocking findings; cargo 347 passed, 2 ignored; Python 688
+passed, 14 skipped; the daemon-backed attach and cross-writer tests 15
+passed. Acted on:
+- The pooled client kept idle connections 30 s while the daemon (actix-web
+  default) closes them after 5 s, so a request about 5 s after the last one
+  could be written onto a closing connection and fail. `POOL_IDLE` is now
+  4 s, below the daemon's keep-alive (`I1f6c9a3e8b2d47056f1c9a8e3b2d6f41`).
+- Release note: a direct `HttpStore.attach_data` retry of a pair first
+  written by an older Python (integer link) now conflicts instead of
+  replaying; `Investigation.attach_data` is unaffected because it skips a
+  proposal already `data_attached` with the same digest.
+Accepted: the shared client reads proxy environment variables once per
+process.

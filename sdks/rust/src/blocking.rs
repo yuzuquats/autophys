@@ -22,7 +22,7 @@
 //! caller's thread or the helper thread, polls its future inside
 //! `block_on` of this module's runtime, so the HTTP client's connection tasks
 //! are spawned on it and that runtime is never shut down. Those requests use
-//! one process-wide pooled client (idle connections kept 30 s); a request
+//! one process-wide pooled client (idle connections kept 4 s, under the daemon's 5 s keep-alive); a request
 //! made through the async API on any other runtime uses a client without an
 //! idle pool, so no connection outlives the runtime that opened it.
 use crate::workbook::{ConfigVersion, Investigation, Snapshot, StoredDisplay, Workbook};

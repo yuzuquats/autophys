@@ -130,10 +130,13 @@ pub(crate) fn normalize_server(server: &str) -> Result<String> {
     let port = port.filter(|p| *p != if scheme == "http" {80} else {443});
     Ok(format!("{scheme}://{host}{}{}", port.map(|p|format!(":{p}")).unwrap_or_default(), uri.path().trim_end_matches('/')))
 }
-/// How long the facade's pooled client keeps an idle connection. A daemon
-/// that closes sooner (actix-web's default keep-alive is 5 s) is noticed as
-/// soon as the connection's task, on the facade runtime, reads the close.
-const POOL_IDLE: Duration = Duration::from_secs(30);
+/// How long the facade's pooled client keeps an idle connection: below the
+/// daemon's keep-alive (actix-web's default, 5 s). A connection the server
+/// closes while a request is being written on it fails that request, and a
+/// written request is not retried, so the client must drop idle connections
+/// before the server does. Connections through a proxy with a shorter idle
+/// limit than this can still meet that race.
+const POOL_IDLE: Duration = Duration::from_secs(4);
 
 /// The process-wide pooled client, used only by requests running on the
 /// blocking facade's runtime (RS-REMOTE-1-d). A hyper connection is driven
