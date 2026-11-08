@@ -39,3 +39,44 @@ this plan.
 ## Remaining work
 
 Tracked here as each wave lands.
+
+**RS-REMOTE-2: done** (`4e44370`, `I6009dcdbcda1cf93fd70e97ec63e2866`).
+Python's `HttpStore` raises `HttpError` (status and code kept) with "the
+daemon is too old for reveal records / display manifests (no endpoint);
+upgrade the autophys daemon" on every attempt, instead of warning once and
+skipping. Only a missing route counts: 405, or 404 with the daemon's
+`unknown route` message (or an empty body); a 404 such as `unknown
+investigation` or `unknown project` is raised unchanged. Tests:
+`test_curves_reveal.py`, `test_display.py`. Rust already returns the HTTP
+error; giving it the same upgrade wording is optional Rust-side follow-up.
+
+**DM-D1 (Python): done** (`e48ce0c`, `Ic24293b548e74e9f62a642f806af2c60`).
+`workbook.py` has `INITIAL_VERSION = 1` (new files), `SCHEMA_VERSION = 2`
+(newest read and written) and an append-only `_MIGRATIONS` tuple run inside
+the writing transaction. New `WorkbookStore.put_display` / `display` match
+the Rust `Workbook`; local `register_display` stays a no-op, as in Rust.
+Tests: `test_workbook_format2.py` (new file is v1 and opening never
+migrates; first write moves to v2 with the exact DDL; v2 reads read-only and
+writable; v1 with the old optional table reads, then upgrades on its next
+write; v3 refused on open and when written after open; a failed write,
+including one injected after the migration step, leaves v1; rejected
+manifests change nothing). The Rust SDK and daemon must mirror:
+
+- DDL, byte for byte (SQLite stores it without `IF NOT EXISTS` and `;`):
+  `"CREATE TABLE IF NOT EXISTS display (\n              project TEXT PRIMARY KEY REFERENCES projects(id),\n              digest TEXT NOT NULL, body TEXT NOT NULL, created REAL NOT NULL\n            );"`
+  (the statement in `manifest.rs` today), appended as migration step 2 in
+  `schema.rs`.
+- `migrate` on open must stop at format 1 for new files and never run step
+  2; readers accept 1 and 2 and refuse >2. `put_display`, in its one
+  `BEGIN IMMEDIATE` transaction: refuse >2, run the steps up to 2 and set
+  `user_version = 2`, then compare digests and upsert. Commit even when the
+  digest is unchanged (today Rust returns early without committing), so a
+  v1 file holding the old table always leaves the write at v2.
+- Reading a display never creates the table or changes the format.
+
+Breaking for release notes: a workbook given a display is format 2 and
+SDK 0.1.x refuses it; Python `SCHEMA_VERSION` is now 2 (use
+`INITIAL_VERSION` for "format of a new workbook"); against a daemon without
+`reveal` or `display`, Python errors instead of skipping. Open:
+`workbook-format.md` still describes the format-1 optional extension and
+needs a format-2 section once the Rust half lands.
