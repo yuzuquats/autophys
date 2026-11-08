@@ -325,7 +325,8 @@ database, which otherwise follows the collection (decision G1-DB in
 silently converted. The old argument parser remains in place.
 Repeatable `--browser-origin ORIGIN` or comma-separated
 `AUTOPHYS_BROWSER_ORIGINS` admits an explicitly configured
-tento.localhost origin; flagged values override the environment. JSON plus
+tento.localhost origin; flagged and environment origins are joined
+(duplicates dropped), so a deploy's flag keeps a drop-in's origins. JSON plus
 Origin CSRF checks and keyed SDK calls retain their existing rules.
 AX-9 replaces the header-only read exemption with a document-issued cookie:
 GET `/`, `/app` and `/app/*` mint a fresh random 256-bit

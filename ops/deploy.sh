@@ -20,7 +20,8 @@ fi
 # The tento.localhost proxy serves the workbench from its own origin, so that
 # origin must be allowed to make keyless browser approvals (O-3a). It also
 # lands in the unit file through sed: accept only a plain http(s) origin.
-# AUTOPHYS_BROWSER_ORIGIN overrides it; set it empty to allow only loopback.
+# AUTOPHYS_BROWSER_ORIGIN overrides it; set it empty to pass no flag. serve
+# adds the flag's origin to any AUTOPHYS_BROWSER_ORIGINS a unit drop-in sets.
 if [ "${AUTOPHYS_BROWSER_ORIGIN+set}" = set ]; then
   origin=$AUTOPHYS_BROWSER_ORIGIN
 else

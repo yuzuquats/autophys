@@ -110,7 +110,9 @@ fn origins(text: &str) -> Result<Vec<String>, String> {
 /// `AUTOPHYS_PUBLIC_URL` (an origin), `--server-db` /
 /// `AUTOPHYS_SERVER_DB`, and `--browser-origin` (repeatable,
 /// comma-separated) / `AUTOPHYS_BROWSER_ORIGINS`. Flags win over the
-/// environment.
+/// environment, except browser origins: the flagged and environment origins
+/// are joined (environment first, duplicates dropped), so a deploy that
+/// passes `--browser-origin` keeps the origins a unit drop-in sets.
 pub fn parse_serve(
     args: impl IntoIterator<Item = String>,
     env: impl Fn(&str) -> Option<String>,
@@ -120,7 +122,7 @@ pub fn parse_serve(
     let mut web_root = nonempty("AUTOPHYS_WEB_ROOT");
     let mut collection = nonempty("AUTOPHYS_HOME");
     let mut server_db = nonempty("AUTOPHYS_SERVER_DB");
-    let mut browser_origins = match nonempty("AUTOPHYS_BROWSER_ORIGINS") {
+    let env_origins = match nonempty("AUTOPHYS_BROWSER_ORIGINS") {
         Some(list) => origins(&list)?,
         None => Vec::new(),
     };
@@ -144,8 +146,11 @@ pub fn parse_serve(
             other => return Err(format!("unknown argument {other:?}\n{USAGE}")),
         }
     }
-    if !flagged_origins.is_empty() {
-        browser_origins = flagged_origins;
+    let mut browser_origins: Vec<String> = Vec::new();
+    for origin in env_origins.into_iter().chain(flagged_origins) {
+        if !browser_origins.contains(&origin) {
+            browser_origins.push(origin);
+        }
     }
     let addr = parse_loopback(addr.as_deref().unwrap_or(DEFAULT_ADDR))?;
     let web_root = web_root.map(PathBuf::from);
@@ -783,7 +788,7 @@ mod tests {
     }
 
     #[test]
-    fn browser_origins_come_from_flags_or_env() {
+    fn browser_origins_join_flags_and_env() {
         let env = |k: &str| {
             (k == "AUTOPHYS_BROWSER_ORIGINS").then(|| {
                 "http://autophys.rwc-dev-01.tento.localhost, https://x.localhost:8443/".to_string()
@@ -797,19 +802,28 @@ mod tests {
                 "https://x.localhost:8443"
             ]
         );
-        let flagged = parse_serve(
-            [
-                "--browser-origin",
-                "http://a.localhost",
-                "--browser-origin=http://b.localhost",
-            ]
-            .map(String::from),
-            env,
-        )
-        .unwrap();
+        let flags = [
+            "--browser-origin",
+            "http://a.localhost",
+            "--browser-origin=http://b.localhost,https://x.localhost:8443",
+        ]
+        .map(String::from);
+        let flagged = parse_serve(flags.clone(), |_| None).unwrap();
         assert_eq!(
             flagged.browser_origins,
-            ["http://a.localhost", "http://b.localhost"]
+            ["http://a.localhost", "http://b.localhost", "https://x.localhost:8443"]
+        );
+        // A deploy passes the flag; a drop-in's environment origins stay.
+        let both = parse_serve(flags, env).unwrap();
+        assert_eq!(
+            both.browser_origins,
+            [
+                "http://autophys.rwc-dev-01.tento.localhost",
+                "https://x.localhost:8443",
+                "http://a.localhost",
+                "http://b.localhost",
+            ],
+            "flag and environment origins are joined, duplicates dropped"
         );
         assert!(
             parse_serve(

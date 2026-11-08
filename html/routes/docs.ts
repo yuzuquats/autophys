@@ -423,7 +423,7 @@ The \`train\` commands drive the Python workers in \`train/sft\` (see its \`READ
 | \`train eval\` | Evaluate policies on held-out cases. \`--out DIR\` (new), \`--seeds 3,4\`, \`--case NAME\`, \`--policy reason\\|scripted\` (repeatable; default both), \`--route baseten\\|meta\\|lane\` (default \`baseten\`), \`--model NAME\` (needed for \`reason\`), \`--replay FILE\`. Live calls need \`AUTOPHYS_ALLOW_LIVE_REASON=1\`. \`--backend modal --run NAME --gpu GPU --usd-per-hour X --max-usd Y\` evaluates a trained Modal adapter. |
 | \`train runs\` | List run manifests, newest first. Plans and history live under \`<train-dir>/runs/NAME/\`. |
 
-**Environment.** \`serve\` also reads these variables; a flag takes precedence over its variable.
+**Environment.** \`serve\` also reads these variables; a flag takes precedence over its variable, except \`--browser-origin\`, whose origins are added to \`AUTOPHYS_BROWSER_ORIGINS\`.
 
 | Variable | Flag | Default |
 | --- | --- | --- |
@@ -431,7 +431,7 @@ The \`train\` commands drive the Python workers in \`train/sft\` (see its \`READ
 | \`AUTOPHYS_WEB_ROOT\` | \`--web-root\` | embedded app, or a build from source |
 | \`AUTOPHYS_HOME\` | \`--collection\` | \`~/autophys\` |
 | \`AUTOPHYS_SERVER_DB\` | \`--server-db\` | \`server.db\` in the app's data directory (\`~/.local/share/tento/autophys/server.db\` on Linux) |
-| \`AUTOPHYS_BROWSER_ORIGINS\` | \`--browser-origin\` | none (comma-separated) |
+| \`AUTOPHYS_BROWSER_ORIGINS\` | \`--browser-origin\` (joined with the variable) | none (comma-separated) |
 | \`AUTOPHYS_LOGIN\` | \`--login\` | off (\`1\`, \`true\` or \`yes\` turns it on) |
 | \`AUTOPHYS_PUBLIC_URL\` | \`--public-url\` | unset: pairing links use the bound address |
 
