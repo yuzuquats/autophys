@@ -208,13 +208,15 @@ export function investigationPage(s: State, project: Project, sel: Exclude<Sel, 
       const k = certaintyOf(fit, p.name);
       const note = k.kind === "fixed" ? " (fixed)"
         : k.kind === "ridge" ? " (not identified)"
+        : k.kind === "unchecked" ? " (not checked)"
         : k.kind === "unknown" ? " (uncertainty not recorded)"
         : k.std != null ? " " + plusMinus(c, p.name, k.std) : " (identified; uncertainty not recorded)";
       return `${p.name} ${number(fit.params[p.name])} ${p.unit}${note}`.trim();
     }).join("; ") : "No converged fit recorded.";
     summary = { ...summary, caption: `${rounds.length} round${rounds.length === 1 ? "" : "s"} · ${experimentsUsed(inv)} / ${c.budgets.maxExperiments} experiments`,
       blocks: [{ kind: "text", text: verdict, lead: true, tone: inv.state === "validated" ? "ok" : "warn" },
-        { kind: "text", text: check + " " + params, lead: true }] };
+        { kind: "text", text: check + " " + params + (fit?.identificationSkipped && !fit.identification && !fit.sensitivity
+          ? `. Identifiability was not checked at Fit #${fit.n}: ${fit.identificationSkipped}.` : ""), lead: true }] };
   }
   const outcome: InvestigationCard[] = finished || inv.validation.state !== "needs-data" || inv.reveal || sel.kind === "validate" || sel.kind === "truth"
     ? [validationCard(c, inv), ...(inv.reveal ? [{ id: anchor(inv, "truth"), heading: "Ground truth", caption: "Revealed after the outcome",
@@ -241,7 +243,9 @@ export function investigationPage(s: State, project: Project, sel: Exclude<Sel, 
         : f.identification ? `${f.free.filter(n => f.identification!.identified.includes(n)).length} of ${f.free.length} identified · ${at}` : at,
       blocks: f.sensitivity ? [] : f.identification
         ? [{ kind: "table", rows: identificationTable(c, f) }, { kind: "text", tone: "muted", text: "Singular values and directions are not recorded for this fit." }]
-        : [gap("No singular values or directions recorded for this fit.")],
+        : f.identificationSkipped
+          ? [{ kind: "missing", title: "Not checked", description: `Identifiability was not checked for this fit: ${f.identificationSkipped}.` }]
+          : [gap("No singular values or directions recorded for this fit.")],
       panels: [
         { charts: [], blocks: [{ kind: "facts", rows: [{ label: "Condition", value:
           condition == null ? "not recorded"

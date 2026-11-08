@@ -36,7 +36,9 @@ function whereItStands(c: ProjectConfig, fit: Fit | null): Section {
       ...id.nonIdentified.map((k) => ({ label: k, value: "", tag: { text: "not identified", tone: "warn" as const } })),
     ] }, ...(id.identified.every((k) => std(k) != null) ? [] : [{ kind: "missing" as const, title: "Not recorded yet", description: "Parameter uncertainties have not been recorded by the SDK." }])] };
   }
-  if (!fit.sensitivity) return { heading: "Where it stands", blocks: [{ kind: "text", text: `No sensitivity recorded at Fit #${fit.n}`, tone: "muted" }] };
+  if (!fit.sensitivity) return { heading: "Where it stands", blocks: [{ kind: "text", tone: "muted", text: fit.identificationSkipped
+    ? `Identifiability not checked at Fit #${fit.n}: ${fit.identificationSkipped}`
+    : `No sensitivity recorded at Fit #${fit.n}` }] };
   const s = fit.sensitivity;
   const rows: Fact[] = [
     ...s.combos.map((x) => ({ label: x.name, value: `${sig(x.value, 3)} ${pct(x.logStd)}` })),
@@ -54,6 +56,7 @@ export function paramsTable(c: ProjectConfig, fit: Fit): TableRow[] {
     const k = certaintyOf(fit, p.name);
     if (k.kind === "fixed") return { cells: [name, value, { text: "", tag: { text: "fixed", tone: "muted" as const }, end: true }] };
     if (k.kind === "unknown") return { cells: [name, value, { text: "", end: true }] };
+    if (k.kind === "unchecked") return { cells: [name, value, { text: "", tag: { text: "not checked", tone: "muted" as const }, end: true }] };
     if (k.kind === "ridge") return { dim: true, cells: [name, value, { text: "", tag: { text: "ridge", tone: "warn" as const }, end: true }] };
     return { cells: [name, value, { text: "", tag: { text: k.std == null ? "identified" : plusMinus(c, p.name, k.std), tone: "ok" as const }, end: true }] };
   });

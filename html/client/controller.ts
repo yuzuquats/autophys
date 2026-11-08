@@ -264,7 +264,7 @@ export function reportText(
     lines = [`# ${project.name} · ${inv.name}`, "", statusText(inv).text, ""];
   // Daemon fits carry only the recorded identification summary; read it as the workbench does.
   const s = fit && (fit.sensitivity ?? fit.identification);
-  if (fit && s) {
+  if (fit && (s || fit.identificationSkipped)) {
     const c = configFor(project, inv);
     lines.push(
       `Fit #${fit.n}: χ²/N ${fit.chi2N.toFixed(2)} over ${
@@ -287,9 +287,13 @@ export function reportText(
             ? `- ${value} (identified; uncertainty not recorded)`
             : `- ${value} ${plusMinus(c, name, k.std)} (identified)`,
         );
-      } else lines.push(`- ${value} (identification not recorded)`);
+      } else if (k.kind === "unchecked") lines.push(`- ${value} (not checked)`);
+      else lines.push(`- ${value} (identification not recorded)`);
     }
-    if (s.condition != null) {
+    if (!s && fit.identificationSkipped) {
+      lines.push(`Identifiability not checked: ${fit.identificationSkipped}`);
+    }
+    if (s?.condition != null) {
       lines.push(
         `Condition ${s.condition > 1e6 ? "> 10⁶" : sig(s.condition, 3)}`,
       );

@@ -238,6 +238,8 @@ export function mapInvestigation(records: WireRecord[], configs: { version: stri
         const fit = (action === "analyze_sensitivity" ? fits.find((f) => f.n === num(p.fit_id)) : undefined) ?? fits[fits.length - 1];
         if (fit) fit.identification = { identified: strs(checked.identified), nonIdentified, condition: Number.isFinite(num(checked.condition_number)) ? num(checked.condition_number) : null,
           ...(checked.marginal_log_std && typeof checked.marginal_log_std === "object" ? { marginal: numeric(checked.marginal_log_std) } : {}) };
+      } else if (str(checked.skipped) && fits.length) {
+        fits[fits.length - 1].identificationSkipped = str(checked.skipped);
       }
       if (action === "rank_experiments" && Array.isArray(result.ranking)) ranking = { criterion: str(result.criterion) || "min_eig", rows: result.ranking };
     } else if (r.kind === "proposal") {

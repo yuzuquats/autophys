@@ -117,6 +117,7 @@ Deno.test("daemon: a fitting step's identification (identify_every_fit) lands on
   assertEquals(fits.map((f) => f.n), [1, 2]);
   assertEquals(fits[0].identification, { identified: ["m", "k"], nonIdentified: [], condition: 2.98, marginal: { m: 0.008, k: 0.004 } });
   assertEquals(fits[1].identification ?? null, null);
+  assertEquals([fits[0].identificationSkipped, fits[1].identificationSkipped], [undefined, "simulation budget exhausted"]);
 });
 
 Deno.test("daemon: load maps projects, config versions and every record kind onto the domain", async () => {

@@ -198,3 +198,24 @@ Deno.test("identifiability card and report list each parameter's recorded identi
   delete fit.identification.marginal;
   assertStringIncludes(reportText({ source: "fixture", gseq: 7 } as Parameters<typeof reportText>[0], project, inv), "(identified; uncertainty not recorded)");
 });
+
+Deno.test("a fit whose identifiability check was skipped says why, everywhere it would show certainty", () => {
+  const copy = structuredClone(ws), done = (i: (typeof ws.projects)[0]["investigations"][0]) => ["validated", "inconclusive"].includes(stateOf(i)) && i.fits.length > 0;
+  const project = copy.projects.find(p => p.investigations.some(done))!, inv = project.investigations.find(done)!;
+  const fit = inv.fits.at(-1)!, why = "simulation budget exhausted";
+  fit.sensitivity = null;
+  fit.identification = null;
+  fit.identificationSkipped = why;
+  const body = JSON.stringify(mainModel({ ...state(project.id, inv.id), ws: copy }).body);
+  assertStringIncludes(body, `(not checked). Identifiability was not checked at Fit #${fit.n}: ${why}.`);
+  assertStringIncludes(body, " (not checked)");
+  assert(!body.includes("(uncertainty not recorded)"), "a skipped check is not an unrecorded one");
+  const card = body.match(/"heading":"Identifiability".*?"heading":"Landscape"/)?.[0] ?? "";
+  assertStringIncludes(card, `"title":"Not checked","description":"Identifiability was not checked for this fit: ${why}."`);
+  const params = body.match(/"heading":"Parameters".*?"heading":"Identifiability"/)?.[0] ?? "";
+  assertStringIncludes(params, `"tag":{"text":"not checked","tone":"muted"}`);
+  const report = reportText({ source: "fixture", gseq: 7 } as Parameters<typeof reportText>[0], project, inv);
+  assertStringIncludes(report, `Fit #${fit.n}:`);
+  assert(report.split("\n").some(l => l.startsWith(`- ${fit.free[0]} = `) && l.endsWith("(not checked)")), report);
+  assertStringIncludes(report, `Identifiability not checked: ${why}`);
+});

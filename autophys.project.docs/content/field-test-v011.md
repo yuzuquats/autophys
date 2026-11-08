@@ -66,5 +66,8 @@ values or directions for daemon fits; recording them is a separate choice.
 A fit's ± no longer depends on the policy running a separate
 `analyze_sensitivity` step: `analysis.identify_every_fit` (default on) checks
 every adopted fit and records it with that fit's step (decision ANA-1, which
-replaces the open UNC-2). Workbooks recorded before it, and fits whose check
-the simulation budget cut short, still read "uncertainty not recorded".
+replaces the open UNC-2). Workbooks recorded before it still read
+"uncertainty not recorded". A fit whose check was skipped says so with the
+SDK's reason ("simulation budget exhausted", or the check's failure): "not
+checked" in the summary, Parameters and Report, and a "Not checked" note with
+the reason on the Identifiability card and in Details.

@@ -131,14 +131,15 @@ const coordOf = (c: ProjectConfig, name: string) => c.params.find((p) => p.name 
 
 /**
  * What a fit says about one parameter: fixed, identified (with its one-sigma log uncertainty
- * when recorded), on a ridge, or unknown. Reads the full sensitivity result when there is one,
+ * when recorded), on a ridge, not checked (with the SDK's reason), or unknown. Reads the full sensitivity result when there is one,
  * else the SDK's recorded identification summary.
  */
-export type Certainty = { kind: "fixed" } | { kind: "identified"; std: number | null } | { kind: "ridge" } | { kind: "unknown" };
+export type Certainty = { kind: "fixed" } | { kind: "identified"; std: number | null } | { kind: "ridge" }
+  | { kind: "unchecked"; reason: string } | { kind: "unknown" };
 export function certaintyOf(fit: Fit, name: string): Certainty {
   if (!fit.free.includes(name)) return { kind: "fixed" };
   const s = fit.sensitivity ?? fit.identification;
-  if (!s) return { kind: "unknown" };
+  if (!s) return fit.identificationSkipped ? { kind: "unchecked", reason: fit.identificationSkipped } : { kind: "unknown" };
   if (s.identified.includes(name)) {
     const std = s.marginal?.[name];
     return { kind: "identified", std: std != null && Number.isFinite(std) ? std : null };

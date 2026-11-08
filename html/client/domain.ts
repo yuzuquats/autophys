@@ -131,6 +131,11 @@ export type Fit = {
    * written before the SDK recorded it.
    */
   identification?: { identified: string[]; nonIdentified: string[]; condition: number | null; marginal?: Record<string, number> } | null;
+  /**
+   * Why the SDK recorded no identifiability check for this fit, when it said so (the
+   * simulation budget ran out, or the check failed). Absent otherwise.
+   */
+  identificationSkipped?: string;
 };
 
 export type GainPhase = { gain: number; phase: number };
