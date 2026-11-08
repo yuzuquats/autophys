@@ -24,6 +24,7 @@ import csv
 import json
 import os
 import re
+import shlex
 import sys
 from pathlib import Path
 
@@ -196,8 +197,13 @@ def approve_command(inv) -> str:
 
 def where() -> str:
     server = target()
-    home = os.environ.get("AUTOPHYS_HOME", "~/autophys")
-    return f"{server.rstrip('/')}/app" if server else f"the local workbook in {home} (view it with `autophys serve`)"
+    if server:
+        return f"{server.rstrip('/')}/app"
+    home = os.environ.get("AUTOPHYS_HOME")
+    if not home:
+        return "the local workbook in ~/autophys (view it with `autophys serve`)"
+    # Name the collection so the hint works from a shell without AUTOPHYS_HOME.
+    return f"the local workbook in {home} (view it with `autophys serve --collection {shlex.quote(home)}`)"
 
 
 def print_outcome(inv, out) -> None:
