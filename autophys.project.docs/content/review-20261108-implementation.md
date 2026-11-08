@@ -301,7 +301,7 @@ Cargo); this wave used an uncommitted scratch peer.
 
 `a932728` (`I1e9b4c7a2d5f80364b1e7c9a2d4f6b18`) runs `ops/deploy.sh` under
 `LC_ALL=C`: in a UTF-8 locale bash's `[A-Za-z]` matched `é`, so the existing
-deploy test failed at HEAD. `96b5f8f` (`I7d2a5e8c1b4f93062a7d5e1c8b3f4a29`)
+deploy test failed at HEAD. `I7d2a5e8c1b4f93062a7d5e1c8b3f4a29`
 renders `--browser-origin http://autophys.<host>.tento.localhost` into the
 unit's ExecStart; `AUTOPHYS_BROWSER_ORIGIN` overrides it (empty: loopback
 only) and is validated before sed. `python3 -m pytest ops/test_deploy.py`:
