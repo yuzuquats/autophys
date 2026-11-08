@@ -94,8 +94,11 @@ export TENTO_APP_DATA_DIR="$lab_state/data"
 Open `http://127.0.0.1:4795`; stop with Ctrl-C. The TENTO_APP_* names are
 compatibility overrides from the vendored directory library, not a connection
 to another service. With no overrides the collection is `AUTOPHYS_HOME`, else
-`~/autophys`; keys/accounts use `~/.local/share/tento/autophys/server.db` and
-web cache uses `~/.cache/tento/autophys` on Linux. Existing defaults remain so
+`~/autophys`; keys/accounts use `~/.local/share/tento/autophys/server.db` for
+`~/autophys` (or for whichever collection that database already serves), while
+any other collection gets its own `collections/<name>-<hash>/server.db` beside
+it, so `AUTOPHYS_HOME=<dir> autophys serve` serves `<dir>` (decision G1-DB;
+`--login` keeps the one shared database). Web cache uses `~/.cache/tento/autophys` on Linux. Existing defaults remain so
 an upgrade does not lose sight of server keys or workbooks. Explicit
 `--collection`, `--server-db`, `--web-root` and `AUTOPHYS_PROJECT_ROOT` let an
 installation choose its own locations. `TENTO_WEB` is an optional compiler

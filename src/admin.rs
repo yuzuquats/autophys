@@ -101,8 +101,10 @@ fn parse(args: impl IntoIterator<Item = String>) -> Result<Args, String> {
 /// Where the admin commands find the collection and the server database.
 pub struct Defaults {
     pub collection: PathBuf,
-    /// The server database in app data (or an explicitly configured path).
-    pub server_db: PathBuf,
+    /// An explicitly configured server database (`AUTOPHYS_SERVER_DB`).
+    /// `None` uses [`crate::server_db_for`] the collection, the same database
+    /// `serve` opens for it.
+    pub server_db: Option<PathBuf>,
     /// Where `users add` links point (`AUTOPHYS_PUBLIC_URL`); without it the
     /// link is a path for the operator to complete.
     pub public_url: Option<String>,
@@ -137,7 +139,13 @@ pub fn run(
     if command == "db" {
         return db_verify(&args, &collection, out, err);
     }
-    let server_db = args.server_db.clone().unwrap_or(defaults.server_db);
+    let server_db = match args.server_db.clone().or(defaults.server_db) {
+        Some(path) => path,
+        None => match crate::server_db_for(&collection) {
+            Ok(path) => path,
+            Err(e) => return fail(err, &format!("locate the server database: {e:#}")),
+        },
+    };
     let keys = match KeyStore::open(&server_db) {
         Ok(k) => k,
         Err(e) => return fail(err, &format!("open {}: {e}", server_db.display())),

@@ -33,5 +33,6 @@ pub use app::{APP_ID, AppConfig, BuildInfo, TENTO, domain};
 pub use server::{
     DEFAULT_ADDR, ServeConfig, USAGE, build_web, check_build_status, check_route_tree,
     default_collection, default_server_db, default_web_root, http_server, parse_build_web,
-    parse_loopback, parse_serve, project_root, run, serve, termination, webapp,
+    parse_loopback, parse_serve, pinned_local_root, project_root, run, serve, server_db_for,
+    termination, webapp,
 };

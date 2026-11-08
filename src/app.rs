@@ -150,7 +150,39 @@ async fn api_not_found(req: HttpRequest) -> HttpResponse {
         .json(serde_json::json!({ "ok": false, "error": "not found", "path": req.path() }))
 }
 
+/// `/app` is a page a person opens, so a refusal is a page too: the same
+/// status and message the API gives, as HTML rather than bare JSON.
 async fn app_document(
+    req: HttpRequest,
+    shell: web::Data<Shell>,
+    sessions: web::Data<crate::http::auth::BrowserSessions>,
+    api: Option<web::Data<Api>>,
+) -> HttpResponse {
+    match app_page(req, shell, sessions, api).await {
+        Ok(response) => response,
+        Err(error) => error_page(&error),
+    }
+}
+
+pub(crate) fn error_page(error: &crate::error::ApiError) -> HttpResponse {
+    let status = actix_web::http::StatusCode::from_u16(error.status())
+        .unwrap_or(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR);
+    let message = crate::login::escape(&error.to_string());
+    let title = crate::login::escape(status.canonical_reason().unwrap_or("Error"));
+    HttpResponse::build(status)
+        .insert_header((actix_web::http::header::CACHE_CONTROL, "no-store"))
+        .content_type("text/html; charset=utf-8")
+        .body(format!(
+            "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">\
+             <title>autophys: {title}</title></head><body style=\"font: 15px/1.5 \
+             system-ui, sans-serif; max-width: 40rem; margin: 4rem auto; padding: 0 1rem\">\
+             <h1 style=\"font-size: 1.25rem\">autophys can't open this page ({code} {title})</h1>\
+             <p>{message}</p></body></html>",
+            code = status.as_u16(),
+        ))
+}
+
+async fn app_page(
     req: HttpRequest,
     shell: web::Data<Shell>,
     sessions: web::Data<crate::http::auth::BrowserSessions>,
@@ -249,5 +281,25 @@ fn with_badge(html: Vec<u8>, badge: &str) -> Vec<u8> {
     match text.rfind("</body>") {
         Some(at) => format!("{}{badge}{}", &text[..at], &text[at..]).into_bytes(),
         None => format!("{text}{badge}").into_bytes(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[actix_web::test]
+    async fn a_refused_app_page_is_html_with_the_reason() {
+        let error = crate::error::ApiError::Forbidden(
+            "Local collection differs from its registered workspace <x>.".into(),
+        );
+        let response = error_page(&error);
+        assert_eq!(response.status().as_u16(), 403);
+        let content_type = response.headers().get("content-type").unwrap().to_str().unwrap();
+        assert!(content_type.starts_with("text/html"), "{content_type}");
+        let body = actix_web::body::to_bytes(response.into_body()).await.unwrap();
+        let body = String::from_utf8(body.to_vec()).unwrap();
+        assert!(body.contains("(403 Forbidden)"), "{body}");
+        assert!(body.contains("registered workspace &lt;x&gt;."), "{body}");
     }
 }

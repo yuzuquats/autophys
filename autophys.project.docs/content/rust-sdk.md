@@ -317,7 +317,8 @@ statements remain in `src/`. Keys and pairing operations live in
 server-only statements are included from `sql/keys/`.
 `serve --collection DIR` (`--db DIR` alias) / `AUTOPHYS_HOME` selects
 the collection; `--server-db FILE` / `AUTOPHYS_SERVER_DB` selects the key
-database. These are fresh format-v1 workbooks; no legacy daemon database is
+database, which otherwise follows the collection (decision G1-DB in
+[field-test-v011.md](field-test-v011.md)). These are fresh format-v1 workbooks; no legacy daemon database is
 silently converted. The old argument parser remains in place.
 Repeatable `--browser-origin ORIGIN` or comma-separated
 `AUTOPHYS_BROWSER_ORIGINS` admits an explicitly configured

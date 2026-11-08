@@ -37,7 +37,8 @@ pub const USAGE: &str =
        autophys workspace list | bind | key | profile | seed [--server-db FILE] [--apply]\n       autophys db verify [--rebuild] [--json] [--project NAME]   (db check is the same)
        autophys train dataset | run | eval | runs | loop | loops   (autophys train for details)
        (pair, keys and db also take --collection DIR and --server-db FILE;
-        --db DIR is an alias of --collection)";
+        --db DIR is an alias of --collection; without --server-db each
+        collection has its own server database, except under --login)";
 
 /// Parse a listen address and refuse anything that is not a literal loopback
 /// IP. Host names are refused too: `localhost` can resolve to a routable
@@ -64,7 +65,7 @@ pub struct ServeConfig {
     /// means [`default_collection`].
     pub collection: Option<PathBuf>,
     /// The server database (keys, pairings). `None` means
-    /// [`default_server_db`] in the app data directory.
+    /// [`server_db_for`] the collection ([`default_server_db`] with `--login`).
     pub server_db: Option<PathBuf>,
     /// Extra origins whose keyless browser writes are admitted (O-3), such as
     /// `http://autophys.rwc-dev-01.tento.localhost`.
@@ -326,6 +327,103 @@ pub fn default_server_db() -> Result<PathBuf> {
     Ok(AppDirs::resolve(APP_ID)?.data.join("server.db"))
 }
 
+/// The server database for `collection` when neither `--server-db` nor
+/// `AUTOPHYS_SERVER_DB` names one (decision G1-DB). A server database pins
+/// the one local collection it serves, so the default follows the
+/// collection the way the collection follows `$AUTOPHYS_HOME`.
+pub fn server_db_for(collection: &Path) -> Result<PathBuf> {
+    let standard = std::env::var_os("HOME").map(|h| PathBuf::from(h).join("autophys"));
+    Ok(choose_server_db(
+        &AppDirs::resolve(APP_ID)?.data,
+        collection,
+        standard.as_deref(),
+    ))
+}
+
+/// The app-data `server.db` serves the collection it is already pinned to,
+/// or `~/autophys` while it is unpinned; that keeps every existing key and
+/// pairing where it was. Any other collection gets its own database under
+/// `collections/<name>-<hash of its path>/`.
+fn choose_server_db(data: &Path, collection: &Path, standard: Option<&Path>) -> PathBuf {
+    let shared = data.join("server.db");
+    let root = resolved(collection);
+    match pinned_local_root(&shared) {
+        Some(pinned) if pinned == root => return shared,
+        None if standard.is_some_and(|s| resolved(s) == root) => return shared,
+        _ => {}
+    }
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(root.as_os_str().as_encoded_bytes());
+    let name: String = root
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .take(40)
+        .collect();
+    data.join("collections")
+        .join(format!("{name}-{}", hex::encode(&digest[..8])))
+        .join("server.db")
+}
+
+/// The collection a server database's local workspace is pinned to, if the
+/// database exists and has served one. Read only: choosing a database never
+/// creates or migrates one.
+pub fn pinned_local_root(server_db: &Path) -> Option<PathBuf> {
+    use rusqlite::{Connection, OpenFlags};
+    if !server_db.is_file() {
+        return None;
+    }
+    let conn = Connection::open_with_flags(server_db, OpenFlags::SQLITE_OPEN_READ_ONLY).ok()?;
+    conn.query_row("SELECT root FROM workspaces WHERE id = 'local'", [], |r| {
+        r.get::<_, String>(0)
+    })
+    .ok()
+    .map(PathBuf::from)
+}
+
+/// `path` with symlinks resolved as far as it exists, so a collection names
+/// the same database before and after its directory is created (the server
+/// pins the canonical path).
+fn resolved(path: &Path) -> PathBuf {
+    let absolute = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
+    let mut tail = Vec::new();
+    let mut head = absolute.as_path();
+    loop {
+        if let Ok(real) = std::fs::canonicalize(head) {
+            return tail.iter().rev().fold(real, |acc, part| acc.join(part));
+        }
+        match (head.parent(), head.file_name()) {
+            (Some(parent), Some(name)) => {
+                tail.push(name.to_os_string());
+                head = parent;
+            }
+            _ => return absolute,
+        }
+    }
+}
+
+/// A local (no `--login`) server must serve the collection its database is
+/// pinned to; say so at startup instead of answering every request 403.
+fn check_pin(collection: &Path, server_db: &Path) -> Result<()> {
+    let Some(pinned) = pinned_local_root(server_db) else {
+        return Ok(());
+    };
+    let root = resolved(collection);
+    if pinned == root {
+        return Ok(());
+    }
+    anyhow::bail!(
+        "the server database {} serves the collection {}, not {}. Omit --server-db \
+         (and AUTOPHYS_SERVER_DB) to use this collection's own database, or pass \
+         another --server-db.",
+        server_db.display(),
+        pinned.display(),
+        root.display()
+    )
+}
+
 /// tento-web returns `Ok` from a build whose bundle reported errors; the
 /// `build-status.json` it writes beside `routes/` says whether it was clean.
 /// A failed bundle is an error carrying esbuild's messages. A failed per-file
@@ -432,10 +530,16 @@ pub async fn run(serve_config: ServeConfig) -> Result<()> {
         },
     };
     let collection = serve_config.collection.unwrap_or_else(default_collection);
+    // A --login server keeps the one app-data database its accounts and
+    // workspace assignments live in; a local server's follows the collection.
     let server_db = match serve_config.server_db {
         Some(path) => path,
-        None => default_server_db()?,
+        None if serve_config.login => default_server_db()?,
+        None => server_db_for(&collection)?,
     };
+    if !serve_config.login {
+        check_pin(&collection, &server_db)?;
+    }
     let options = Options {
         // The app lists devices waiting to pair; that is where a code is approved.
         verification_url: match &serve_config.public_url {
@@ -488,12 +592,13 @@ pub async fn run(serve_config: ServeConfig) -> Result<()> {
         );
     }
     eprintln!(
-        "autophys {} ({}) serving {} {} and collection {} on http://{}",
+        "autophys {} ({}) serving {} {} and collection {} (server database {}) on http://{}",
         info.version,
         info.commit,
         if build { "dev build" } else { "prebuilt" },
         config.web_root.display(),
         collection.display(),
+        server_db.display(),
         listener.local_addr()?,
     );
     serve(http_server(listener, webapp)?, termination()).await?;
@@ -568,6 +673,58 @@ mod tests {
                 .ends_with("tento/autophys/server.db")
         );
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    fn pin(db: &Path, root: &Path) {
+        std::fs::create_dir_all(db.parent().unwrap()).unwrap();
+        let conn = rusqlite::Connection::open(db).unwrap();
+        conn.execute_batch("CREATE TABLE workspaces (id TEXT PRIMARY KEY, root TEXT NOT NULL)")
+            .unwrap();
+        conn.execute(
+            "INSERT INTO workspaces (id, root) VALUES ('local', ?1)",
+            [root.to_string_lossy().as_ref()],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn the_server_database_follows_the_collection() {
+        let tmp = std::env::temp_dir().join(format!("ap-g1-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let (data, standard, other) = (tmp.join("data"), tmp.join("autophys"), tmp.join("scratch/coll"));
+        let shared = data.join("server.db");
+        // Unpinned: ~/autophys takes the shared database, anything else its own.
+        assert_eq!(choose_server_db(&data, &standard, Some(&standard)), shared);
+        let own = choose_server_db(&data, &other, Some(&standard));
+        assert!(own.starts_with(data.join("collections")) && own.ends_with("server.db"));
+        assert!(own.parent().unwrap().file_name().unwrap().to_string_lossy().starts_with("coll-"));
+        // The same collection names the same database before and after it exists.
+        std::fs::create_dir_all(&other).unwrap();
+        assert_eq!(choose_server_db(&data, &other, Some(&standard)), own);
+        assert_ne!(choose_server_db(&data, &tmp.join("scratch/coll2"), Some(&standard)), own);
+        // A shared database already pinned to a collection keeps serving it
+        // (existing keys stay put); ~/autophys then gets its own.
+        pin(&shared, &resolved(&other));
+        assert_eq!(choose_server_db(&data, &other, Some(&standard)), shared);
+        let standard_own = choose_server_db(&data, &standard, Some(&standard));
+        assert!(standard_own.starts_with(data.join("collections")));
+        std::fs::remove_dir_all(&tmp).unwrap();
+    }
+
+    #[test]
+    fn a_server_database_pinned_elsewhere_fails_at_startup() {
+        let tmp = std::env::temp_dir().join(format!("ap-g1-pin-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let (a, b, db) = (tmp.join("a"), tmp.join("b"), tmp.join("server.db"));
+        std::fs::create_dir_all(&a).unwrap();
+        assert!(check_pin(&b, &db).is_ok(), "a missing database pins nothing");
+        pin(&db, &resolved(&a));
+        assert_eq!(pinned_local_root(&db), Some(resolved(&a)));
+        assert!(check_pin(&a, &db).is_ok());
+        let message = check_pin(&b, &db).unwrap_err().to_string();
+        assert!(message.contains("serves the collection"), "{message}");
+        assert!(message.contains("Omit --server-db"), "{message}");
+        std::fs::remove_dir_all(&tmp).unwrap();
     }
 
     #[test]

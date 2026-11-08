@@ -348,9 +348,8 @@ fn admin(group: &str, action: &str, args: Vec<String>) -> tento_sh::Result<Value
     let defaults = crate::admin::Defaults {
         collection: crate::default_collection(),
         server_db: std::env::var_os("AUTOPHYS_SERVER_DB")
-            .map(std::path::PathBuf::from)
-            .map(Ok)
-            .unwrap_or_else(crate::default_server_db)?,
+            .filter(|v| !v.is_empty())
+            .map(std::path::PathBuf::from),
         public_url: std::env::var("AUTOPHYS_PUBLIC_URL")
             .ok()
             .filter(|v| !v.is_empty()),
