@@ -43,7 +43,8 @@ from .playbook import Playbook, load_playbook
 from .usage import normalize_usage, price_for, usage_total
 from .sensitivity import SensitivityReport, identification, jacobian, report_from_jacobian
 from .project import Project, policy_from_config
-from .simulator import CallBudget, SimulationBudgetExceeded, SimulationError, Simulator, aligned_prediction, describe_observation
+from .simulator import (CallBudget, GridMismatchError, SimulationBudgetExceeded, SimulationError, Simulator,
+                        aligned_prediction, describe_observation)
 from .store import MemoryStore, Store, StoreError
 
 LOSSES = ("linear", "soft_l1", "huber", "cauchy", "arctan")
@@ -972,7 +973,9 @@ class Investigation:
                     result = self._dispatch(decision)
                     self.last_error = ""
                     self.history.append(f"{decision.action}: ok")
-                except ToolError as e:
+                except (ToolError, GridMismatchError) as e:
+                    # A grid mismatch is the data's fault: record it as this step's
+                    # result and let the policy react, as the Rust loop does (G8-LOOP).
                     result = {"error": str(e)}
                     self.last_error = f"{decision.action}: {e}"
                     self.history.append(f"{decision.action}: error {e}")

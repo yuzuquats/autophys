@@ -52,10 +52,30 @@ def test_validation_reusing_train_settings_names_the_observation():
     assert str(e.value) == MESSAGE
 
 
-def test_scripted_run_stops_with_the_named_error_not_an_index_error():
+def _step_errors(inv, out, action):
+    return [r.payload["result"]["error"] for r in inv.store.records(out.investigation, "step")
+            if r.payload.get("decision", {}).get("action") == action and "error" in (r.payload.get("result") or {})]
+
+
+def test_a_scripted_run_records_the_named_validation_error_and_finishes():
+    # G8-LOOP: the error is a step result, as in the Rust loop, and the run still writes an outcome.
     inv = _investigation(_obs(kinetics.experiment("treated"), [1.1, 1.1], "validation"))
-    with pytest.raises(GridMismatchError, match=r"validation observation 1 of 1 \(experiment 'treated'\)"):
-        inv.run()
+    out = inv.run()
+    assert out.status == "budget_exhausted"
+    errors = _step_errors(inv, out, "validate_predictions")
+    assert errors and errors[0] == MESSAGE
+    assert inv.store.records(out.investigation, "outcome")
+
+
+def test_a_scripted_run_records_the_named_training_error_and_finishes():
+    bad = _obs(kinetics.experiment("treated"), [0.5, 1.0, 2.0], "train")
+    project = Project(name="kinetics", simulator=kinetics, budgets=Budgets(max_experiments=0))
+    train = _obs(kinetics.experiment("treated"), GRID, "train")
+    inv = Investigation(project, ap.Dataset([train, bad]), ProposalRunner(), policy=ScriptedPolicy(), store=MemoryStore())
+    out = inv.run()
+    assert out.status == "budget_exhausted"
+    errors = _step_errors(inv, out, "optimize_parameters")
+    assert errors and errors[0].startswith("train observation 2 of 2 (experiment 'treated')")
 
 
 def test_validation_with_its_own_grid_is_scored():
