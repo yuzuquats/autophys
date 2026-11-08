@@ -127,7 +127,10 @@ changes format when it first gets a display, never when it is opened.
 `WorkbookStore.display(project_id)` reads it. Binding a project to a local
 workbook does not write its display (an `HttpStore` uploads it to the daemon). An
 `HttpStore` whose daemon has no `reveal` or `display` endpoint raises
-`HttpError` saying the daemon is too old and should be upgraded.
+`HttpError` saying the daemon is too old and should be upgraded. A reveal
+comes after the outcome, so against such a daemon the error arrives with the
+`outcome` record already written; upgrade the daemon and append the reveal
+again.
 
 `HttpStore.attach_data` commits the measurement and its `data_attached`
 event in one batch whose record ids derive from the investigation, the

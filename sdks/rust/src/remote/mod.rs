@@ -136,6 +136,9 @@ impl Remote {
         // No idle pool: each request gets its own connection, as the earlier
         // per-request agent did, so a connection never outlives the runtime
         // that opened it (the facade's runtime or a caller's own).
+        // TLS: reqwest takes rustls's process-default CryptoProvider if one is
+        // installed, else ring; the workspace enables both ring and aws-lc-rs,
+        // so never rely on rustls's crate-feature default (ambiguous here).
         let client = reqwest::Client::builder()
             .pool_max_idle_per_host(0)
             .build()

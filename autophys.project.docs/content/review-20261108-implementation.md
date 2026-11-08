@@ -46,7 +46,11 @@ daemon is too old for reveal records / display manifests (no endpoint);
 upgrade the autophys daemon" on every attempt, instead of warning once and
 skipping. Only a missing route counts: 405, or 404 with the daemon's
 `unknown route` message (or an empty body); a 404 such as `unknown
-investigation` or `unknown project` is raised unchanged. Tests:
+investigation` or `unknown project` is raised unchanged. A reveal is
+appended after the outcome, so against such a daemon the reveal error
+arrives with the `outcome` record already written (documented in review
+round 1; the erroring behaviour is the operator's decision and unchanged).
+Tests:
 `test_curves_reveal.py`, `test_display.py`. Rust already returns the HTTP
 error; giving it the same upgrade wording is optional Rust-side follow-up.
 

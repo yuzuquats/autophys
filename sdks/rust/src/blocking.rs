@@ -10,7 +10,13 @@
 //! Called from inside a tokio runtime (an `async fn`, a `#[tokio::main]`
 //! CLI, a test), a blocking call does not panic: it waits on a helper thread
 //! and blocks the calling task's thread meanwhile, as any blocking I/O would.
-//! Async code should use [`crate::remote::Remote`] directly instead.
+//! That costs one new OS thread per call (spawned and joined each time, not
+//! pooled), and the caller's runtime thread does no other work until the
+//! request returns, for up to the request timeout or, on a stream, the idle
+//! limit. On a current-thread runtime, such as an actix-web worker or
+//! `#[tokio::test]`, every other task on that runtime stalls meanwhile.
+//! Async code should use [`crate::remote::Remote`] directly instead, or move
+//! the call off the runtime (`spawn_blocking`, `actix_web::web::block`).
 use crate::workbook::{ConfigVersion, Investigation, Snapshot, StoredDisplay, Workbook};
 use crate::{
     Appended, BatchRecord, Error, InvestigationInfo, Logged, Project, Proposal, Record, Result,
@@ -36,7 +42,8 @@ fn runtime() -> Result<&'static tokio::runtime::Runtime> {
 
 /// Wait for `future` on the facade's runtime. Outside any runtime the caller
 /// thread polls it; inside one (where `block_on` would panic) a scoped helper
-/// thread does, and the caller waits for it.
+/// thread spawned for this call does, and the caller's thread blocks until
+/// it is joined (see the module docs for the cost).
 pub(crate) fn run<T, F>(future: F) -> Result<T>
 where
     T: Send,

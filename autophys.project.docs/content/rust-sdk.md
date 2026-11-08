@@ -228,7 +228,16 @@ autophys/
   an async HTTP client (`reqwest` on tokio, RS-REMOTE-1, 2026-11-08; it was
   blocking `ureq` before). `autophys::blocking` is the synchronous facade the
   record API, the CLI and scripts use. It does not depend on tento or actix,
-  so it builds without `vendor/`.
+  so it builds without `vendor/`. Outside a tokio runtime a facade call
+  runs on the facade's one-worker runtime. Inside one it spawns a new helper
+  thread per call and blocks the calling runtime thread until the request
+  returns (up to the request timeout, or a stream's idle limit), so on a
+  current-thread runtime, such as an actix-web worker, every other task on it
+  stalls; async callers use `autophys::remote::Remote`, or move the call to
+  `spawn_blocking`/`web::block`. TLS takes rustls's process-default crypto
+  provider if one is installed, else ring (reqwest's own fallback); the
+  workspace also builds aws-lc-rs, so nothing may rely on rustls's
+  crate-feature default.
 
 ## Moving today's code
 
