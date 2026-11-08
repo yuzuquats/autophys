@@ -392,3 +392,27 @@ Tests on yuzuquats, run one after the other: `cargo test --workspace
 --locked` 344 passed, 0 failed, 2 ignored (the replay case extends an
 existing test); `python3 -m pytest -q -p no:cacheprovider sdks/python/tests`
 678 passed, 13 skipped (676 plus 1 new plus 1 from a peer's G8-LOOP commit).
+
+### Deployed, 2026-11-08
+
+The operator asked to deploy and test. `ops/deploy.sh` ran from a fresh clone
+of local master `6590251` (the shared checkout holds a peer's untracked note,
+which the clean-tree gate refuses), so the release still names its exact
+source: `~/.local/share/tento/services/autophys/6590251-20261108`. The live
+service previously ran `b6f420e` (origin/master), an ancestor of `6590251`.
+The deploy gate's cargo and Deno suites passed with no failures.
+
+Tested against the release binary:
+- live 127.0.0.1:4794 and https://autophys.lona.so report `6590251`; the unit
+  runs `--browser-origin http://autophys.yuzuquats.tento.localhost` beside the
+  drop-in's origins; 0 restarts. The old attachment route and both
+  `/workbench` routes answer 404; `/investigations/{inv}/records` asks for a key.
+- `tests/e2e/sidebar-flow.ts` on two scratch daemons of the release binary:
+  46 checks passed, 14 screenshots, a real `autophys connect` device approved
+  in the New project stepper.
+- Daemon-backed Python suites with `AUTOPHYS_RUST_BIN` set to the release
+  binary (atomic remote, cross-writer, core boundaries, display, curves and
+  reveal, HTTP, format 2): 165 passed, 1 skipped (live reasoner smoke).
+
+Not published: these commits are not pushed and no SDK release was cut. SDK
+0.1.x clients cannot attach data against this daemon (CORE-01a).
