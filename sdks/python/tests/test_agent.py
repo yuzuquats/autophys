@@ -190,6 +190,19 @@ def test_edited_proposal_is_recorded():
     assert st["status"] == "edited" and st["settings"]["amplitude"] == 1.0
 
 
+def test_an_edited_proposal_with_a_numpy_setting_is_refused():
+    view, _ = oscillator_case(0, max_experiments=1)
+    store = MemoryStore()
+    catalog = {n: {"max_runs": None} for n in view.simulator.experiments}
+    catalog["sine_0.44Hz"]["edit"] = {"amplitude": [1.0, 3.0]}
+    inv = Investigation(project_for(view, catalog=catalog), view.dataset, ProposalRunner(), policy=ScriptedPolicy(), store=store)
+    pid = inv.run().proposal_id
+    edited = {"kind": "sine", "amplitude": np.array([1.0]), "freq": 0.44, "duration": 10.0, "rate": 100.0}
+    with pytest.raises(ValueError, match=r"setting 'amplitude' must be a JSON value \(got numpy.ndarray\)"):
+        inv.approve(pid, settings=edited)
+    assert store.proposal_status(inv.id, pid)["status"] == "proposed"
+
+
 def test_compare_models_adopts_sensor_bias():
     view, _ = thermal_case(0, bias=0.5)
     out = Investigation(project_for(view), view.dataset, view.runner, policy=ScriptedPolicy()).run()

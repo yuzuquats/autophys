@@ -335,8 +335,8 @@ pub fn run(
         // key made by a server for another collection is not in this one.
         let hint = if e.status() == 404 {
             format!(
-                " in the server database {}; each collection has its own, so pass the \
-                 server's --collection (or --server-db)",
+                " in the server database {}; each collection has its own, so if it was \
+                 made by a server for another collection, pass that --collection (or --server-db)",
                 server_db.display()
             )
         } else {

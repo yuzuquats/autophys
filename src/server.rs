@@ -377,6 +377,9 @@ pub fn pinned_local_root(server_db: &Path) -> Result<Option<PathBuf>> {
     // whose keys and pairings are in this one.
     let read = || -> rusqlite::Result<Option<String>> {
         let conn = Connection::open_with_flags(server_db, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+        // A running server may hold a brief lock (migration, checkpoint);
+        // wait as the key store does rather than fail the command.
+        conn.busy_timeout(std::time::Duration::from_secs(5))?;
         let has_table: bool = conn.query_row(
             "SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'workspaces')",
             [],

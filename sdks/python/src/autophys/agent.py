@@ -35,7 +35,7 @@ from typing import Any, Protocol
 
 import numpy as np
 
-from .data import Dataset, Observation
+from .data import Dataset, Observation, check_settings
 from .design import outlook, rank_experiments
 from .fit import FitResult, fit
 from .reasoner import BudgetError, Reasoner, ReasonerError, parse_json_content
@@ -809,7 +809,10 @@ class Investigation:
         ev = "edited" if settings is not None else "approved"
         payload = {"proposal_id": proposal_id, "event": ev, **self._decision_actor(by)}
         if settings is not None:
+            # Recorded as given: the JSON-value check (G7-VAL) runs here, as
+            # it does wherever settings reach a record.
             payload["settings"] = self.sim.experiment(settings)
+            check_settings("<edited>", payload["settings"])
         self._record("proposal", payload)
 
     def reject(self, proposal_id: str, *, by: str = "user", reason: str = "") -> None:
