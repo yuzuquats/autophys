@@ -37,15 +37,32 @@ Captured by the SDK's own code (`ReasonLanePolicy.decide`), not copied:
 
 The Rust CLI owns the workflow: dataset identity, budget gates, run manifests,
 evaluation and history. These scripts are its worker. All commands take
-`--train-dir DIR` (`AUTOPHYS_TRAIN_DIR`) and
+`--train-dir DIR` (`AUTOPHYS_TRAIN_DIR`), `--data-dir DIR` (`AUTOPHYS_TRAIN_DATA`) and
 `--python FILE` (`AUTOPHYS_TRAIN_PYTHON`, default `python3` on PATH, including an activated venv).
-Without `--train-dir`, `autophys` installs the copy of these workers built into it in
-`~/.local/share/tento/autophys/train/sft` and works there, with the Python SDK the Modal
-images build from in `~/.local/share/tento/autophys/sdks/python`, so a release binary needs no
-checkout. Runs, loops and datasets are written beside the workers. A later version replaces
-only the files an install wrote and nobody changed since; an edited file is kept and named on
-stderr (remove it to get the built-in one back). To work on the workers themselves, pass
-`--train-dir train/sft` from a checkout.
+
+Code and data are kept apart (CLI-16). Without `--train-dir`, `autophys` installs the copy of
+these workers built into it, with the Python SDK the Modal images build from, in a code cache
+keyed by the binary's version and a hash of the built-in files:
+
+```
+~/.local/share/tento/autophys/train/
+  code/<version>-<hash>/train/sft      the workers (run from here)
+  code/<version>-<hash>/sdks/python    the SDK (../../sdks/python, as in a checkout)
+  data/                                runs/, loops/, data/ (datasets): survives upgrades
+```
+
+so a release binary needs no checkout and two builds never share one copy of the workers.
+Within a cache, an install replaces only the files it wrote and nobody changed since; an
+edited file is kept and named on stderr (remove it to get the built-in one back). Nothing is
+deleted, including older caches. Every worker writes under `AUTOPHYS_TRAIN_DATA`, which the CLI
+sets to its data directory: `--data-dir`, else the `--train-dir` (outputs beside the workers, as
+before), else `train/data` above. Run by hand without it, a worker writes next to itself, as in
+a checkout. To work on the workers themselves, pass `--train-dir train/sft` from a checkout.
+
+Runs and loops from before the split stay in `~/.local/share/tento/autophys/train/sft`; they are
+not moved. `train runs` and `train loops` list them with their `location`, and while the new data
+directory has none, each command prints one stderr line pointing at them. Continue with them
+through `--data-dir` (or `--train-dir`) set to that folder.
 
 | command | what it does |
 |---|---|
@@ -287,7 +304,7 @@ python train/sft/model_assets.py acquire --model Qwen/Qwen3.6-35B-A3B \
   --revision "$MODEL_REVISION" --output /absolute/path/to/model-assets
 export AUTOPHYS_TRAIN_MODEL_ASSETS=/absolute/path/to/model-assets
 cd train/sft
-python build_dataset.py           # offline, writes data/
+python build_dataset.py           # offline, writes data/ (or $AUTOPHYS_TRAIN_DATA/data)
 python patch_chat_template.py     # writes a serving template
 python train_sft.py               # dry run: lengths, schedule, billed tokens
 python selftest_replay.py         # harness check, offline

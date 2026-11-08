@@ -39,6 +39,18 @@ from render import end_of_turn, render_prompt, special_tokens
 HERE = Path(__file__).parent
 
 
+def out_root() -> Path:
+    """Where this worker writes: ``AUTOPHYS_TRAIN_DATA`` (``autophys train``
+    sets it to its data directory), else next to this file, as in a checkout."""
+    return Path(os.environ.get("AUTOPHYS_TRAIN_DATA") or HERE).expanduser()
+
+
+def default_dataset() -> Path:
+    """The dataset ``train dataset`` writes by default, else the one shipped here."""
+    built = out_root() / "data"
+    return built if (built / "train.jsonl").is_file() else HERE / "data"
+
+
 def load(path: Path) -> list[tuple[str, str]]:
     """(system, user, answer) text per row."""
     pairs = []
@@ -254,7 +266,7 @@ def lr_at(step: int, total: int, base: float, warmup: int) -> float:
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     p.add_argument("--base-model", default="Qwen/Qwen3.6-35B-A3B")
-    p.add_argument("--data", type=Path, default=HERE / "data")
+    p.add_argument("--data", type=Path, default=default_dataset())
     p.add_argument("--model-assets", type=Path, help="prepared local model assets; no implicit downloads")
     p.add_argument("--expected-assets-sha256", help="planner manifest digest required for a live launch")
     p.add_argument("--rank", type=int, default=32)
@@ -331,7 +343,7 @@ def main(argv=None) -> int:
 def train_live(a, client, enc, tr, va, summary, started):
     from baseten.loops import AdamParams
     total = summary["schedule"]["updates"]
-    run_dir = HERE / "runs" / a.name
+    run_dir = out_root() / "runs" / a.name
     run_dir.mkdir(parents=True, exist_ok=True)
     train_data = [datum(*x) for x in tr]
     val_data = [datum(*x) for x in va]

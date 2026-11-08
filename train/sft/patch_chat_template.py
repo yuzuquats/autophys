@@ -19,12 +19,25 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
 from render import render_prompt, template_env
 
 HERE = Path(__file__).parent
+
+
+def out_root() -> Path:
+    """Where this worker writes: ``AUTOPHYS_TRAIN_DATA`` (``autophys train``
+    sets it to its data directory), else next to this file, as in a checkout."""
+    return Path(os.environ.get("AUTOPHYS_TRAIN_DATA") or HERE).expanduser()
+
+
+def default_dataset() -> Path:
+    """The dataset ``train dataset`` writes by default, else the one shipped here."""
+    built = out_root() / "data"
+    return built if (built / "train.jsonl").is_file() else HERE / "data"
 
 # (old, new) pairs; each must match at least once in the upstream template.
 PATCHES = [
@@ -51,7 +64,7 @@ def patch(text: str) -> str:
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     p.add_argument("--model", default="Qwen/Qwen3.6-35B-A3B")
-    p.add_argument("--data", type=Path, default=HERE / "data" / "train.jsonl")
+    p.add_argument("--data", type=Path, default=default_dataset() / "train.jsonl")
     p.add_argument("--model-assets", type=Path, help="prepared model_assets.py directory (no network)")
     a = p.parse_args(argv)
     from model_assets import ModelAssets
@@ -72,11 +85,11 @@ def main(argv=None) -> int:
         upstream_note = "renders developer" + ("" if "S" in up else " but DROPS its content")
     except Exception as e:  # noqa: BLE001 - jinja raise_exception
         upstream_note = f"rejects developer: {e}"
-    out = HERE / "serving" / (a.model.replace("/", "__") + ".jinja")
+    out = out_root() / "serving" / (a.model.replace("/", "__") + ".jinja")
     out.parent.mkdir(exist_ok=True)
     out.write_text(patched)
     print(f"{a.model}: upstream template {upstream_note}")
-    print(f"verified {len(rows)} SDK prompts render byte-identically to training; wrote {out.relative_to(HERE)}")
+    print(f"verified {len(rows)} SDK prompts render byte-identically to training; wrote {out}")
     return 0
 
 

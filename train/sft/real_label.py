@@ -58,6 +58,14 @@ from autophys.reasoner import FakeReasoner, ReasonerError, parse_json_content
 from autophys.store import MemoryStore, canonical
 
 HERE = Path(__file__).resolve().parent
+
+
+def out_root() -> Path:
+    """Where this worker writes: ``AUTOPHYS_TRAIN_DATA`` (``autophys train``
+    sets it to its data directory), else next to this file, as in a checkout."""
+    return Path(os.environ.get("AUTOPHYS_TRAIN_DATA") or HERE).expanduser()
+
+
 EVIDENCE = Path(os.environ.get("AUTOPHYS_REAL_EVIDENCE",
                                "~/.local/state/autophys/evidence/onori-pozzato-2022")).expanduser()
 PROJECT_REF = "m50t_hppc:project"
@@ -424,13 +432,13 @@ def main(argv=None) -> int:
     for name in ("advance", "autolabel", "label-response", "export"):
         s = sub.add_parser(name)
         s.add_argument("--labels", type=Path, required=True)
-        s.add_argument("--work", type=Path, default=HERE / "label-work")
+        s.add_argument("--work", type=Path, default=out_root() / "label-work")
         s.add_argument("--playbook", default="default")
         if name == "label-response":
             s.add_argument("--response", required=True)
             s.add_argument("--labeller", required=True)
         if name == "export":
-            s.add_argument("--out", type=Path, default=HERE / "data-real")
+            s.add_argument("--out", type=Path, default=out_root() / "data-real")
     a = p.parse_args(argv)
     return {"advance": cmd_advance, "autolabel": cmd_autolabel, "label-response": cmd_label_response, "export": cmd_export}[a.cmd](a)
 

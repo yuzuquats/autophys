@@ -2,10 +2,13 @@
 //!
 //! Rust owns the workflow: building the dataset, the budget gate, run
 //! manifests, evaluation and the run history. A Python worker from `train/sft`
-//! (built into the binary, see [`install_workers`]) does what has to live next
+//! (built into the binary, see [`install_code`]) does what has to live next
 //! to the model: chat templates, tokenization and
 //! the GPU step (today Baseten Loops). Training data is a view of synthetic
-//! investigations; this module adds no state to the record store.
+//! investigations; this module adds no state to the record store. Code and
+//! data are separate (CLI-16): the workers run from a version-keyed code
+//! cache or a `--train-dir`, and write runs, loops and datasets to the data
+//! directory passed to them as `AUTOPHYS_TRAIN_DATA` (see [`train_dirs`]).
 //!
 //! Nothing here spends money unless `train run --live` or `train loop --live` passes the budget
 //! gate: an explicit price, an explicit cap and an estimate under that cap.
@@ -39,7 +42,9 @@ pub const USAGE: &str =
                            [--model-assets DIR] [--example REF]... [--live] [--resume]
        autophys train runs | train loops
        (all take --train-dir DIR (AUTOPHYS_TRAIN_DIR; default: the built-in workers,
-        installed in ~/.local/share/tento/autophys/train/sft)
+        installed in ~/.local/share/tento/autophys/train/code/VERSION-HASH/train/sft),
+        --data-dir DIR (AUTOPHYS_TRAIN_DATA; runs, loops and datasets; default: the
+        --train-dir if given, else ~/.local/share/tento/autophys/train/data)
         and --python FILE (AUTOPHYS_TRAIN_PYTHON, default python3 on PATH))
        worker limits: AUTOPHYS_TRAIN_WORKER_TIMEOUT_SECONDS (default 86400;
                       budgeted workers use provider timeout +120s unless overridden),
@@ -408,6 +413,9 @@ fn live_retry_allowed(previous_status: Option<&str>) -> Result<(), String> {
     }
 }
 const SPLITS: &[&str] = &["train", "validation", "heldout"];
+/// Valued flags every train command takes: where the workers and their
+/// outputs are, and which interpreter runs them.
+const WORKER_FLAGS: &[&str] = &["train-dir", "data-dir", "python"];
 
 /// Parsed `--flag value` and `--switch` words. Unknown flags are refused so a
 /// typo can never silently fall back to a default (such as a larger model).
@@ -434,7 +442,7 @@ impl Flags {
             };
             if switches.contains(&name) && inline.is_none() {
                 flags.switches.insert(name.to_string());
-            } else if valued.contains(&name) || ["train-dir", "python"].contains(&name) {
+            } else if valued.contains(&name) || WORKER_FLAGS.contains(&name) {
                 let value = match inline {
                     Some(value) => value,
                     None => words
@@ -494,10 +502,15 @@ impl Flags {
     }
 }
 
-/// Where the worker scripts live and which interpreter runs them.
+/// Where the worker scripts live, where their outputs go and which
+/// interpreter runs them.
 #[derive(Clone)]
 struct Worker {
     dir: PathBuf,
+    /// Passed to every worker as `AUTOPHYS_TRAIN_DATA`.
+    data: PathBuf,
+    /// Runs and loops from before the code/data split, for listing only.
+    legacy: Option<PathBuf>,
     python: PathBuf,
     limits: WorkerLimits,
 }
@@ -547,17 +560,49 @@ mod embedded_sdk {
 /// bytes it wrote there.
 const WORKER_MANIFEST: &str = ".autophys-workers.json";
 
-/// The default train directory: the app's data directory, with the workers
-/// built into this binary installed. It also holds the runs, loops and
-/// datasets, because the workers write those next to themselves. The Python
-/// SDK goes to `sdks/python` beside it, the `../../sdks/python` the workers'
-/// Modal images build from, as in a checkout.
-fn default_train_dir() -> Result<PathBuf> {
-    let data = tento_dirs::AppDirs::resolve(crate::app::APP_ID)?.data;
-    let dir = data.join("train").join("sft");
+type Files = &'static [(&'static str, &'static [u8])];
+
+/// The code cache key of this binary's built-in workers and SDK:
+/// `CARGO_PKG_VERSION-<first 12 hex of a SHA-256 over every embedded name and
+/// its bytes>`. The version keeps the directory readable; the content hash
+/// keeps two different builds of one version apart (a dirty tree or a source
+/// export without Git has no meaningful commit), while two builds with
+/// identical workers share a cache harmlessly.
+fn code_key(version: &str, sets: &[Files]) -> String {
+    let mut hasher = Sha256::new();
+    for files in sets {
+        for (name, bytes) in *files {
+            hasher.update((name.len() as u64).to_le_bytes());
+            hasher.update(name.as_bytes());
+            hasher.update((bytes.len() as u64).to_le_bytes());
+            hasher.update(bytes);
+        }
+        hasher.update(b"\0set");
+    }
+    format!("{version}-{}", &hex::encode(hasher.finalize())[..12])
+}
+
+/// This binary's [`code_key`], hashed once per process.
+fn builtin_key() -> &'static str {
+    static KEY: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    KEY.get_or_init(|| {
+        code_key(
+            env!("CARGO_PKG_VERSION"),
+            &[embedded_workers::FILES, embedded_sdk::FILES],
+        )
+    })
+}
+
+/// Installs the built-in code under `root` (`<app data>/train/code/<key>`):
+/// the workers in `train/sft` and the Python SDK in `sdks/python`, the
+/// `../../sdks/python` the workers' Modal images build from, as in a
+/// checkout. Returns the workers' directory. Nothing the workers write goes
+/// here: their outputs go to the data directory (see [`Worker::new`]).
+fn install_code(root: &Path, workers: Files, sdk: Files) -> Result<PathBuf> {
+    let dir = root.join("train").join("sft");
     for (target, files) in [
-        (data.join("sdks").join("python"), embedded_sdk::FILES),
-        (dir.clone(), embedded_workers::FILES),
+        (root.join("sdks").join("python"), sdk),
+        (dir.clone(), workers),
     ] {
         let kept = install_workers(&target, files)
             .with_context(|| format!("installing the training workers in {}", target.display()))?;
@@ -574,6 +619,80 @@ fn default_train_dir() -> Result<PathBuf> {
         }
     }
     Ok(dir)
+}
+
+/// Where `autophys train` runs its workers and where their outputs go.
+#[derive(Debug, PartialEq)]
+struct TrainDirs {
+    /// The workers' directory: an explicit one (a checkout), or
+    /// `<install>/train/sft`.
+    code: PathBuf,
+    /// The version-keyed cache (`<app data>/train/code/<key>`) to install the
+    /// built-in code into, when no workers' directory is given.
+    install: Option<PathBuf>,
+    /// Runs, loops, datasets and anything else the workers write.
+    data: PathBuf,
+    /// The pre-split default (`<app data>/train/sft`), where runs and loops
+    /// lived beside the workers; read for listing and a note, never written.
+    legacy: Option<PathBuf>,
+}
+
+/// Code: an explicit `--train-dir`/`AUTOPHYS_TRAIN_DIR`, else the built-in
+/// workers in `<app data>/train/code/<key>`. Data: `--data-dir`/
+/// `AUTOPHYS_TRAIN_DATA`; else an explicit train directory keeps its outputs
+/// beside its workers, as before; else `<app data>/train/data`, which
+/// survives upgrades. Relative paths are made absolute against `cwd`,
+/// because the workers run in another directory.
+fn train_dirs(
+    train_dir: Option<PathBuf>,
+    data_dir: Option<PathBuf>,
+    app_data: impl FnOnce() -> Result<PathBuf>,
+    key: &str,
+    cwd: &Path,
+) -> Result<TrainDirs> {
+    let data_dir = data_dir.map(|d| cwd.join(d));
+    if let Some(code) = train_dir.map(|d| cwd.join(d)) {
+        let data = data_dir.unwrap_or_else(|| code.clone());
+        return Ok(TrainDirs {
+            code,
+            install: None,
+            data,
+            legacy: None,
+        });
+    }
+    let train = app_data()?.join("train");
+    let install = train.join("code").join(key);
+    Ok(TrainDirs {
+        code: install.join("train").join("sft"),
+        install: Some(install),
+        legacy: data_dir.is_none().then(|| train.join("sft")),
+        data: data_dir.unwrap_or_else(|| train.join("data")),
+    })
+}
+
+/// Whether `dir/name` holds at least one entry.
+fn has_entries(dir: &Path, name: &str) -> bool {
+    std::fs::read_dir(dir.join(name)).is_ok_and(|mut e| e.next().is_some())
+}
+
+/// One stderr line, once per process, when runs or loops from before the
+/// code/data split exist and the new data directory has none. They are never
+/// moved or deleted.
+fn note_legacy(legacy: &Path, data: &Path) {
+    static NOTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    let old = ["runs", "loops"].iter().any(|n| has_entries(legacy, n));
+    let new = ["runs", "loops"].iter().any(|n| has_entries(data, n));
+    if !old || new || NOTED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
+    let note = format!(
+        "autophys train: runs/loops from before the code/data split are still in {0}; new output goes to {1}. Use the old ones with --data-dir {0} (or --train-dir {0} to also run the workers there)\n",
+        legacy.display(),
+        data.display()
+    );
+    if let Ok(mut sink) = Diagnostics::open() {
+        let _ = sink.forward(note.as_bytes());
+    }
 }
 
 /// Writes `files` into `dir` and returns the ones it left alone because they
@@ -669,16 +788,26 @@ fn replace_file(path: &Path, bytes: &[u8]) -> Result<()> {
 
 impl Worker {
     fn new(flags: &Flags) -> Result<Self> {
-        let dir = match flags
-            .get("train-dir")
-            .map(PathBuf::from)
-            .or_else(|| env_path("AUTOPHYS_TRAIN_DIR"))
-        {
-            // Absolute, because the workers run with it as their directory.
-            Some(dir) if dir.is_relative() => std::env::current_dir()?.join(dir),
-            Some(dir) => dir,
-            None => default_train_dir()?,
+        let dirs = train_dirs(
+            flags
+                .get("train-dir")
+                .map(PathBuf::from)
+                .or_else(|| env_path("AUTOPHYS_TRAIN_DIR")),
+            flags
+                .get("data-dir")
+                .map(PathBuf::from)
+                .or_else(|| env_path("AUTOPHYS_TRAIN_DATA")),
+            || Ok(tento_dirs::AppDirs::resolve(crate::app::APP_ID)?.data),
+            builtin_key(),
+            &std::env::current_dir()?,
+        )?;
+        let dir = match &dirs.install {
+            Some(root) => install_code(root, embedded_workers::FILES, embedded_sdk::FILES)?,
+            None => dirs.code.clone(),
         };
+        if let Some(legacy) = &dirs.legacy {
+            note_legacy(legacy, &dirs.data);
+        }
         let python = flags
             .get("python")
             .map(PathBuf::from)
@@ -693,9 +822,36 @@ impl Worker {
         }
         Ok(Worker {
             dir,
+            data: dirs.data,
+            legacy: dirs.legacy,
             python,
             limits: WorkerLimits::from_env()?,
         })
+    }
+
+    /// The entries of `<data>/<kind>` (`runs` or `loops`), then those only in
+    /// the pre-split folder, with that folder as their `location`. Old
+    /// entries are listed, never moved.
+    fn listing(&self, kind: &str) -> Vec<(PathBuf, Option<String>)> {
+        let names = |dir: &Path| -> Vec<PathBuf> {
+            std::fs::read_dir(dir.join(kind))
+                .map(|e| e.flatten().map(|e| e.path()).collect())
+                .unwrap_or_default()
+        };
+        let current = names(&self.data);
+        let seen: BTreeSet<_> = current
+            .iter()
+            .filter_map(|p| p.file_name().map(|n| n.to_owned()))
+            .collect();
+        let mut out: Vec<_> = current.into_iter().map(|p| (p, None)).collect();
+        if let Some(legacy) = &self.legacy {
+            for path in names(legacy) {
+                if path.file_name().is_some_and(|n| !seen.contains(n)) {
+                    out.push((path, Some(legacy.display().to_string())));
+                }
+            }
+        }
+        out
     }
 
     fn budgeted(mut self, gate: &Value) -> Self {
@@ -724,6 +880,7 @@ impl Worker {
         let child = Command::new(&self.python)
             .args(argv)
             .current_dir(&self.dir)
+            .env("AUTOPHYS_TRAIN_DATA", &self.data)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -1057,7 +1214,7 @@ pub fn dataset(args: Vec<String>) -> Result<Value, Failure> {
             flags
                 .get("out")
                 .map(PathBuf::from)
-                .unwrap_or_else(|| worker.dir.join("data")),
+                .unwrap_or_else(|| worker.data.join("data")),
         )?;
         if let Some(gate) = &gate {
             if gate["live_allowed"] != true {
@@ -1276,7 +1433,7 @@ pub fn run(args: Vec<String>) -> Result<Value, Failure> {
         } else {
             std::env::current_dir()?.join(&data)
         };
-        let run_dir = worker.dir.join("runs").join(&name);
+        let run_dir = worker.data.join("runs").join(&name);
         let manifest_path = run_dir.join("manifest.json");
         let _reservation = reserve_run(&run_dir)?;
         // Protect provenance before even the offline planner can run.
@@ -1634,7 +1791,7 @@ fn eval_modal_run(
             gate["refusal"].as_str().unwrap_or("budget gate")
         );
     }
-    let run_dir = worker.dir.join("runs").join(run);
+    let run_dir = worker.data.join("runs").join(run);
     let _reservation = reserve_run(&run_dir)?;
     let manifest_path = run_dir.join("manifest.json");
     let manifest = read_json(&manifest_path)
@@ -1828,11 +1985,8 @@ pub fn runs(args: Vec<String>) -> Result<Value, Failure> {
     let go = || -> Result<Value> {
         let worker = Worker::new(&flags)?;
         let mut rows = Vec::new();
-        let Ok(entries) = std::fs::read_dir(worker.dir.join("runs")) else {
-            return Ok(Value::Array(rows));
-        };
-        for entry in entries.flatten() {
-            let path = entry.path().join("manifest.json");
+        for (entry, location) in worker.listing("runs") {
+            let path = entry.join("manifest.json");
             let Ok(m) = read_json(&path) else { continue };
             rows.push(json!({
                 "name": m["name"],
@@ -1846,6 +2000,9 @@ pub fn runs(args: Vec<String>) -> Result<Value, Failure> {
                 "heldout_decisions": m.get("heldout_decisions"),
                 "last_val_nll": m.get("last_val_nll"),
             }));
+            if let Some(location) = location {
+                rows.last_mut().expect("just pushed")["location"] = json!(location);
+            }
         }
         rows.sort_by(|a, b| b["planned_at"].as_str().cmp(&a["planned_at"].as_str()));
         Ok(Value::Array(rows))
@@ -2548,7 +2705,7 @@ pub fn run_loop(args: Vec<String>) -> Result<Value, Failure> {
     if live && plan.model_assets.is_none() { return Err("live loop requires prepared --model-assets (or AUTOPHYS_TRAIN_MODEL_ASSETS)".into()); }
     let go = || -> Result<Value> {
         let worker = Worker::new(&flags)?;
-        let dir = worker.dir.join("loops").join(&plan.name);
+        let dir = worker.data.join("loops").join(&plan.name);
         let _reservation = if live || !resume { Some(reserve_run(&dir)?) } else { None };
         let state_path = dir.join("state.json");
         let previous = match std::fs::read(&state_path) {
@@ -2632,7 +2789,7 @@ pub fn run_loop(args: Vec<String>) -> Result<Value, Failure> {
         let mut driver = LoopDriver {
             plan: &plan,
             worker: &worker,
-            passthrough: flags.passthrough(&["train-dir", "python"]),
+            passthrough: flags.passthrough(WORKER_FLAGS),
             dir: dir.clone(),
             state,
         };
@@ -2816,7 +2973,7 @@ impl LoopDriver<'_> {
         let run_name = self.plan.run_name(iteration);
         let manifest_path = self
             .worker
-            .dir
+            .data
             .join("runs")
             .join(&run_name)
             .join("manifest.json");
@@ -2945,11 +3102,8 @@ pub fn loops(args: Vec<String>) -> Result<Value, Failure> {
     let go = || -> Result<Value> {
         let worker = Worker::new(&flags)?;
         let mut rows = Vec::new();
-        let Ok(entries) = std::fs::read_dir(worker.dir.join("loops")) else {
-            return Ok(Value::Array(rows));
-        };
-        for entry in entries.flatten() {
-            let Ok(s) = read_json(&entry.path().join("state.json")) else {
+        for (entry, location) in worker.listing("loops") {
+            let Ok(s) = read_json(&entry.join("state.json")) else {
                 continue;
             };
             rows.push(json!({
@@ -2967,6 +3121,9 @@ pub fn loops(args: Vec<String>) -> Result<Value, Failure> {
                 "max_usd": s.pointer("/plan/max_usd"),
                 "planned_at": s["planned_at"],
             }));
+            if let Some(location) = location {
+                rows.last_mut().expect("just pushed")["location"] = json!(location);
+            }
         }
         rows.sort_by(|a, b| b["planned_at"].as_str().cmp(&a["planned_at"].as_str()));
         Ok(Value::Array(rows))
@@ -3049,6 +3206,129 @@ mod tests {
             assert!(sdk.contains(&required), "{required} missing from {sdk:?}");
         }
         assert!(sdk.iter().all(|n| !n.starts_with("tests/") && !n.contains("__pycache__")), "{sdk:?}");
+    }
+
+    const WRITER: &[u8] = b"import os, pathlib
+d = pathlib.Path(os.environ['AUTOPHYS_TRAIN_DATA']) / 'runs' / 'x'
+d.mkdir(parents=True)
+(d / 'run.json').write_text('{}')
+";
+    const WORKERS_V1: Files = &[("train_sft.py", b"v1"), ("write.py", WRITER)];
+    const WORKERS_V2: Files = &[("train_sft.py", b"v2"), ("write.py", WRITER)];
+    const SDK: Files = &[("pyproject.toml", b"sdk")];
+
+    #[test]
+    fn code_versions_install_side_by_side_and_outputs_go_to_the_data_dir() {
+        let root = tempfile::tempdir().unwrap();
+        let app = root.path().join("app");
+        let k1 = code_key("0.1.1", &[WORKERS_V1, SDK]);
+        let k2 = code_key("0.1.1", &[WORKERS_V2, SDK]);
+        // Same version, different built-in bytes: different caches.
+        assert_ne!(k1, k2);
+        assert!(
+            k1.starts_with("0.1.1-") && k1.len() == "0.1.1-".len() + 12,
+            "{k1}"
+        );
+        assert_ne!(k1, code_key("0.1.2", &[WORKERS_V1, SDK]));
+        assert_eq!(k1, code_key("0.1.1", &[WORKERS_V1, SDK]));
+        let cwd = root.path().join("cwd");
+        let resolve = |key: &str| train_dirs(None, None, || Ok(app.clone()), key, &cwd).unwrap();
+        let (d1, d2) = (resolve(&k1), resolve(&k2));
+        let i1 = install_code(d1.install.as_ref().unwrap(), WORKERS_V1, SDK).unwrap();
+        let i2 = install_code(d2.install.as_ref().unwrap(), WORKERS_V2, SDK).unwrap();
+        assert_eq!((&i1, &i2), (&d1.code, &d2.code));
+        assert_eq!(i1, app.join("train/code").join(&k1).join("train/sft"));
+        assert_eq!(std::fs::read(i1.join("train_sft.py")).unwrap(), b"v1");
+        assert_eq!(std::fs::read(i2.join("train_sft.py")).unwrap(), b"v2");
+        // The workers' Modal images find the SDK at ../../sdks/python.
+        assert_eq!(
+            std::fs::read(i1.join("../../sdks/python/pyproject.toml")).unwrap(),
+            b"sdk"
+        );
+        // One data directory for every version, outside the code cache.
+        assert_eq!(d1.data, app.join("train/data"));
+        assert_eq!(d1.data, d2.data);
+        assert!(!d1.data.starts_with(app.join("train/code")));
+        assert_eq!(d1.legacy, Some(app.join("train/sft")));
+
+        let Ok(python) = find_python(Path::new("python3"), std::env::var_os("PATH").as_deref())
+        else {
+            eprintln!("skipping the worker write: no python3 on PATH");
+            return;
+        };
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let _entered = runtime.enter();
+        let worker = Worker {
+            dir: i1.clone(),
+            data: d1.data.clone(),
+            legacy: d1.legacy.clone(),
+            python,
+            limits: WorkerLimits::from_env().unwrap(),
+        };
+        worker.capture("write.py", &[]).unwrap();
+        assert_eq!(
+            std::fs::read(d1.data.join("runs/x/run.json")).unwrap(),
+            b"{}"
+        );
+        assert!(!i1.join("runs").exists());
+        assert!(!app.join("train/code").join(&k1).join("runs").exists());
+    }
+
+    #[test]
+    fn an_explicit_train_dir_keeps_outputs_beside_it_unless_a_data_dir_is_given() {
+        let cwd = Path::new("/work");
+        let never =
+            || -> Result<PathBuf> { panic!("an explicit --train-dir needs no app directory") };
+        let dirs = train_dirs(Some("rel/sft".into()), None, never, "k", cwd).unwrap();
+        assert_eq!(
+            dirs,
+            TrainDirs {
+                code: cwd.join("rel/sft"),
+                install: None,
+                data: cwd.join("rel/sft"),
+                legacy: None
+            }
+        );
+        let dirs =
+            train_dirs(Some("/abs/sft".into()), Some("out".into()), never, "k", cwd).unwrap();
+        assert_eq!(
+            (dirs.code, dirs.data),
+            (PathBuf::from("/abs/sft"), cwd.join("out"))
+        );
+        // A data directory with the built-in code: no pre-split note or listing.
+        let app = PathBuf::from("/app");
+        let dirs = train_dirs(None, Some("/d".into()), || Ok(app.clone()), "k", cwd).unwrap();
+        assert_eq!(dirs.install, Some(app.join("train/code/k")));
+        assert_eq!((dirs.data, dirs.legacy), (PathBuf::from("/d"), None));
+    }
+
+    #[test]
+    fn listings_include_pre_split_entries_without_moving_them() {
+        let root = tempfile::tempdir().unwrap();
+        let (data, legacy) = (root.path().join("data"), root.path().join("sft"));
+        for dir in [
+            data.join("runs/a"),
+            legacy.join("runs/a"),
+            legacy.join("runs/b"),
+        ] {
+            std::fs::create_dir_all(dir).unwrap();
+        }
+        let worker = Worker {
+            dir: legacy.clone(),
+            data: data.clone(),
+            legacy: Some(legacy.clone()),
+            python: PathBuf::from("python3"),
+            limits: WorkerLimits::from_env().unwrap(),
+        };
+        let mut rows = worker.listing("runs");
+        rows.sort();
+        let at = Some(legacy.display().to_string());
+        assert_eq!(
+            rows,
+            vec![(data.join("runs/a"), None), (legacy.join("runs/b"), at)]
+        );
+        assert!(worker.listing("loops").is_empty());
+        assert!(legacy.join("runs/b").is_dir());
     }
 
     #[test]

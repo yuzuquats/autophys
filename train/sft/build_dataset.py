@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sys
 from collections import Counter
 from pathlib import Path
@@ -36,6 +37,14 @@ from autophys.synthetic import case_project
 from autophys.reasoner import FakeReasoner, parse_json_content
 from autophys.store import MemoryStore
 from autophys.synthetic import CASES
+
+HERE = Path(__file__).parent
+
+
+def out_root() -> Path:
+    """Where this worker writes: ``AUTOPHYS_TRAIN_DATA`` (``autophys train``
+    sets it to its data directory), else next to this file, as in a checkout."""
+    return Path(os.environ.get("AUTOPHYS_TRAIN_DATA") or HERE).expanduser()
 
 
 def seeds(text: str) -> list[int]:
@@ -121,7 +130,7 @@ def run(case: str, seed: int, playbook: str) -> tuple[list[dict], dict]:
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    p.add_argument("--out", type=Path, default=Path(__file__).parent / "data")
+    p.add_argument("--out", type=Path, default=out_root() / "data")
     p.add_argument("--train-seeds", type=seeds, default=seeds("0,1,2"))
     p.add_argument("--val-seeds", type=seeds, default=seeds("5,6"))
     p.add_argument("--heldout-seeds", type=seeds, default=seeds("3,4"))

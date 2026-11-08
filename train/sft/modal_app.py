@@ -15,7 +15,8 @@ Loops: the model's own chat template, loss on the answer and the template's
 end-of-turn marker only. Before and after training it decodes every held-out
 prompt greedily and scores the decision against the scripted target, so a
 smoke test shows whether training changed anything. The adapter is saved
-to the ``autophys-train`` volume; ``runs/<name>/run.json`` is written locally.
+to the ``autophys-train`` volume; ``runs/<name>/run.json`` is written locally, under
+``AUTOPHYS_TRAIN_DATA`` (the CLI's data directory) or else next to this file.
 
 ``eval_main`` runs the full closed-loop benchmark (``eval_heldout.py``,
 reason vs scripted) against a trained adapter served on 127.0.0.1 inside one
@@ -345,7 +346,8 @@ def train_main(name: str, base_model: str, data: str, gpu: str, timeout: int, hp
     fn = train_lora.with_options(gpu=gpu, timeout=timeout)
     record = fn.remote(cfg, load(d / "train.jsonl"), load(d / "validation.jsonl"), rows, meta)
     record["gpu"] = gpu
-    run_dir = HERE / "runs" / name
+    # The CLI passes its data directory; by hand, runs/ sits next to this file.
+    run_dir = Path(os.environ.get("AUTOPHYS_TRAIN_DATA") or HERE).expanduser() / "runs" / name
     run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "run.json").write_text(json.dumps(record, indent=1) + "\n")
     print(f"run_id={record['run_id']} adapter={record['sampler_weights']}", flush=True)
