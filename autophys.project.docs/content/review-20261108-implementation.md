@@ -1,6 +1,6 @@
 # Build the 2026-11-08 review decisions
 
-Status: plan, 2026-11-08. The operator said "start" after the
+Status: built, 2026-11-08 (all eight decisions; independent review pending). SHAs below are as of HEAD `e31f3d7`; Change-Ids are the stable names. The operator said "start" after the
 `/open-questions` review recorded in [decisions.md](decisions.md) ("Operator
 review, 2026-11-08" and the sub-questions). Nothing here is pushed or
 released; commits stay local on yuzuquats `~/workspace/autophys` master.
@@ -40,7 +40,7 @@ this plan.
 
 Tracked here as each wave lands.
 
-**RS-REMOTE-2: done** (`4e44370`, `I6009dcdbcda1cf93fd70e97ec63e2866`).
+**RS-REMOTE-2: done** (`8f3c1a9`, `I6009dcdbcda1cf93fd70e97ec63e2866`).
 Python's `HttpStore` raises `HttpError` (status and code kept) with "the
 daemon is too old for reveal records / display manifests (no endpoint);
 upgrade the autophys daemon" on every attempt, instead of warning once and
@@ -50,7 +50,7 @@ investigation` or `unknown project` is raised unchanged. Tests:
 `test_curves_reveal.py`, `test_display.py`. Rust already returns the HTTP
 error; giving it the same upgrade wording is optional Rust-side follow-up.
 
-**DM-D1 (Python): done** (`e48ce0c`, `Ic24293b548e74e9f62a642f806af2c60`).
+**DM-D1 (Python): done** (`f4f5d26`, `Ic24293b548e74e9f62a642f806af2c60`).
 `workbook.py` has `INITIAL_VERSION = 1` (new files), `SCHEMA_VERSION = 2`
 (newest read and written) and an append-only `_MIGRATIONS` tuple run inside
 the writing transaction. New `WorkbookStore.put_display` / `display` match
@@ -83,7 +83,7 @@ needs a format-2 section once the Rust half lands.
 
 ### DM-RS-1: done
 
-`b4dfc6e` (`I4f63a8230efc2cf463a5d907805eb885`). Rust `Trajectory` has no
+`7ae2cb7` (`I4f63a8230efc2cf463a5d907805eb885`). Rust `Trajectory` has no
 map `Deref`/`DerefMut`. Accessors: `outputs()`/`outputs_mut()` (the `y`
 map, time under `"t"`), `inputs()`/`inputs_mut()`, and `t()`,
 `output(name)`, `input(name)` returning `Result<&[f64], ChannelError>`;
@@ -117,15 +117,15 @@ and convert the model tests and the remaining test call sites (about ten
 lines) in the same release that is allowed to move the model hashes.
 
 Tests: `cargo test --workspace --locked` on yuzuquats, 323 passed, 0
-failed, 2 ignored (baseline at `5d64e70`, before the change: 321/0/2; the
+failed, 2 ignored (baseline at `ddecbbb`, before the change: 321/0/2; the
 two new tests are the trajectory unit tests). `autophys new --lang rust`
-for `blank` and `battery-fit`, pinned to `b4dfc6e` through a `file://`
+for `blank` and `battery-fit`, pinned to `7ae2cb7` through a `file://`
 SDK repo, builds in release; both run, and `battery-fit --demo` writes a
 `demo.csv` byte-identical to the shipped one.
 
 ### UI-27: done
 
-`517d8a2` (`Ie4f804d3ea81ab924611f3d5cefc1bc9`) and `88959b3`
+`a2394e3` (`Ie4f804d3ea81ab924611f3d5cefc1bc9`) and `ddd1bb7`
 (`I3babbef47e5b61f8fedbdc0df2ea9a62`). New project is the operator-chosen
 SDK stepper: create with `autophys new my-project --lang python|rust`,
 connect with `autophys connect <page origin> --name my-device` and approve
@@ -283,3 +283,13 @@ Open: `decisions.md` still says UI-27 "not implemented" (not this wave).
 The `AUTOPHYS_CORE_PEER` binary the env-gated Python tests need is not a
 build target (`sdks/rust/tests/support/core_peer.rs` is not wired into
 Cargo); this wave used an uncommitted scratch peer.
+
+### O-3a: done
+
+`a932728` (`I1e9b4c7a2d5f80364b1e7c9a2d4f6b18`) runs `ops/deploy.sh` under
+`LC_ALL=C`: in a UTF-8 locale bash's `[A-Za-z]` matched `é`, so the existing
+deploy test failed at HEAD. `96b5f8f` (`I7d2a5e8c1b4f93062a7d5e1c8b3f4a29`)
+renders `--browser-origin http://autophys.<host>.tento.localhost` into the
+unit's ExecStart; `AUTOPHYS_BROWSER_ORIGIN` overrides it (empty: loopback
+only) and is validated before sed. `python3 -m pytest ops/test_deploy.py`:
+2 passed. Takes effect at the next deploy.

@@ -158,7 +158,7 @@ store.md's AX-8 to AX-17 callouts still read "pending operator review"; they wer
 | --- | --- | --- | --- |
 | CLI | CLI-4, CLI-5, CLI-6, CLI-7, CLI-9, CLI-12, CLI-13, CLI-14 (cli.md) | Confirmed as built. CLI-12 means Rust-era bench scores are not directly comparable with Python-era ones | built |
 | UI | UI-5 to UI-20, INV-1 to INV-4 (investigation-page.md), LC-01 (approval-header.md), UI-approval-rows-1 and the row defaults (ui-refinement-implementation.md), drawer DM-1 (drawer-motion.md) | Confirmed as built | built |
-| UI-27 | New project (ui.md) | **Changed: SDK stepper only (option C).** New project becomes a three-step SDK flow: `autophys new --lang python\|rust`, `autophys connect <daemon> --name <device>` with the pairing code approved in place, then the first investigation appearing. The built-in Thermal wizard is removed and not kept as a demo. Operator saw mocks of A (today), B (SDK plus Try a demo, agent-recommended) and C | **not implemented** (the Thermal wizard ships) |
+| UI-27 | New project (ui.md) | **Changed: SDK stepper only (option C).** New project becomes a three-step SDK flow: `autophys new --lang python\|rust`, `autophys connect <daemon> --name <device>` with the pairing code approved in place, then the first investigation appearing. The built-in Thermal wizard is removed and not kept as a demo. Operator saw mocks of A (today), B (SDK plus Try a demo, agent-recommended) and C | **implemented** (`Ie4f804d3ea81ab924611f3d5cefc1bc9`, `I3babbef47e5b61f8fedbdc0df2ea9a62`); agent choices UI-27-a..e in ui.md pending review |
 | Layout and packaging | OSS-1 to OSS-3 (oss-layout.md), AP-5 to AP-7 (tento-plan.md), MP-1 and MP-3 to MP-6 (muse-plugin.md) | Confirmed as built; MP-5 (battery-only CSV import) may widen later with the display manifest | built |
 | Productionize method | W-1, PP-1, R1-D1, R1-D2, R2-D1, R2-D2, R2-D3, R2B-D1, R2B-D2, R2-PY-D1, R3A-D1, R3B-D1, SP-1 | Confirmed as built; budgets stay diagnostics, not SLOs | built |
 | Battery cases | BT-1 to BT-4 (sdk.md) | Confirmed as built | built |
@@ -176,10 +176,9 @@ above is stale; this register is authoritative.
 | RS-REMOTE-1a | **One async transport plus a thin blocking facade** (`autophys::blocking`, like `reqwest::blocking`); the CLI, the investigation loop and scripts use the facade (agent recommended) | every current caller (CLI commands, investigation loop, simulator and fit traits) is synchronous |
 | CORE-01a | **Remove the old attachment route**; only the batch endpoint remains. Agent recommended keeping a deprecated alias | v0.1.0 to v0.1.2 call `POST /investigations/{inv}/proposals/{pid}/attachment` with no fallback, so they cannot attach data against a daemon without it and must upgrade |
 
-### Implementation follow-ups from this review (not started)
+### Implementation follow-ups from this review
 
-DM-D1 (format 2; settle DM-D1a first), CORE-01 (generic batch API; CORE-01a),
-CORE-04 (`project(name)` opens in both SDKs), RS-REMOTE-1 (async Rust remote;
-RS-REMOTE-1a), RS-REMOTE-2 (Python errors on a daemon without reveal/display),
-DM-RS-1 (explicit `Trajectory` struct; DM-RS-1a), O-3a (deploy passes the
-host's `--browser-origin`), UI-27 (SDK stepper, wizard removed).
+All eight were built on 2026-11-08; see
+[review-20261108-implementation.md](review-20261108-implementation.md). Commits
+are named there by Change-Id, since local history may be restacked before it
+is pushed.
