@@ -14,3 +14,6 @@ vendor/tento/target/
 
 # Local issue notes (filed from field testing; not tracked).
 /issues/
+
+# Local experiment proposals (field-testing programme; not tracked).
+/proposals/
