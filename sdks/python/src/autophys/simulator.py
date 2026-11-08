@@ -23,6 +23,8 @@ from typing import Any, Callable, Mapping
 
 import numpy as np
 
+from .data import check_settings
+
 
 class SimulationResult(dict):
     """The historical t/output dict, with input channels kept separately.
@@ -114,6 +116,7 @@ def _validate_experiment(name: str, settings: Mapping[str, Any]) -> dict:
     s = dict(settings)
     if "kind" not in s:
         raise ValueError(f"experiment {name}: missing 'kind'")
+    check_settings(name, s)
     for key in ("duration", "rate"):
         if key in s and not (isinstance(s[key], (int, float)) and s[key] > 0):
             raise ValueError(f"experiment {name}: {key} must be positive")
@@ -146,6 +149,12 @@ class Simulator:
     _hash: str = field(default="", compare=False, repr=False)
 
     display: Any = field(default=None, compare=False, repr=False)
+
+    def __post_init__(self) -> None:
+        # G7-VAL: a catalog entry is recorded and hashed as JSON, so a value
+        # JSON cannot hold fails here, naming it, not at the first record.
+        for n, settings in self.experiments.items():
+            check_settings(n, settings)
 
     def with_display(self, display) -> "Simulator":
         """Attach presentation only; schema, hashes and equality are unchanged."""

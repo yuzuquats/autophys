@@ -19,6 +19,57 @@ import numpy as np
 SPLITS = ("train", "validation", "test")
 
 
+def _type_name(v: Any) -> str:
+    t = type(v)
+    return t.__qualname__ if t.__module__ == "builtins" else f"{t.__module__}.{t.__qualname__}"
+
+
+def _json_problem(v: Any, path: str, leaf: str) -> tuple[str, str] | None:
+    """The first non-JSON value under ``v`` as ``(path, reason)``, or None.
+
+    Accepts exactly what ``json.dumps(..., allow_nan=False)`` encodes without
+    a ``default`` hook and without changing a value's type: so the record
+    digest and the replayed record see the settings the live run used.
+    """
+    if v is None or isinstance(v, (str, bool, int)):
+        return None
+    if isinstance(v, float):
+        if np.isfinite(v):
+            return None
+        return path, f"must be a JSON value (got {v!r}); JSON has no NaN or infinity, use a finite number or None"
+    if isinstance(v, (list, tuple)):
+        for i, x in enumerate(v):
+            if (bad := _json_problem(x, f"{path}[{i}]", f"{leaf}[{i}]")) is not None:
+                return bad
+        return None
+    if isinstance(v, Mapping):
+        for k, x in v.items():
+            if not isinstance(k, str):
+                return path, (f"must be a JSON value (key {k!r} is {_type_name(k)}); "
+                              f"JSON object keys are strings, e.g. {str(k)!r}")
+            if (bad := _json_problem(x, f"{path}.{k}", k)) is not None:
+                return bad
+        return None
+    got = f"must be a JSON value (got {_type_name(v)})"
+    if isinstance(v, np.ndarray):
+        return path, f"{got}; use a list, e.g. {leaf}.tolist()"
+    if isinstance(v, np.generic):
+        return path, f"{got}; use a plain Python value, e.g. {leaf}.item()"
+    return path, f"{got}; use a dict, list, str, int, float, bool or None"
+
+
+def check_settings(experiment: str, settings: Any) -> None:
+    """Raise ValueError naming the experiment and setting unless ``settings``
+    is a mapping of JSON values (G7-VAL). Values are never converted."""
+    if not isinstance(settings, Mapping):
+        raise ValueError(f"experiment {experiment!r}: settings must be a mapping (got {_type_name(settings)})")
+    for k, v in settings.items():
+        if not isinstance(k, str):
+            raise ValueError(f"experiment {experiment!r}: setting names must be strings (got {k!r})")
+        if (bad := _json_problem(v, k, k)) is not None:
+            raise ValueError(f"experiment {experiment!r}: setting {bad[0]!r} {bad[1]}")
+
+
 @dataclass
 class Observation:
     experiment: str
@@ -40,6 +91,7 @@ class Observation:
     def validate(self) -> None:
         if self.split not in SPLITS:
             raise ValueError(f"split must be one of {SPLITS}")
+        check_settings(self.experiment, self.settings)
         for ch, v in self.y.items():
             if v.shape != self.t.shape:
                 raise ValueError(f"channel {ch}: shape {v.shape} != t {self.t.shape}")
