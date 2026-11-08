@@ -11,3 +11,6 @@ vendor/tento/target/
 # shared skills under .claude/skills stay tracked.
 .claude/*
 !.claude/skills/
+
+# Local issue notes (filed from field testing; not tracked).
+/issues/
