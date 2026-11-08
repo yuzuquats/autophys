@@ -1352,6 +1352,12 @@ async fn batch_data_attached_must_name_its_measurement() {
         "{e}"
     );
     assert_eq!(all!(&app), before + 6);
+    // A reused id with other content is a conflict, decided before the link
+    // rule, which applies only to records the batch writes.
+    let reused = json!({"records": [later("m-later-3", 11), attached("e-py", "p2", json!(5))]});
+    let (s, e) = call(&app, post(&batch, k, &reused).to_request()).await;
+    assert_eq!((s, e["error"].as_str()), (409, Some("idempotency_conflict")), "{e}");
+    assert_eq!(all!(&app), before + 6);
 }
 
 #[actix_web::test]

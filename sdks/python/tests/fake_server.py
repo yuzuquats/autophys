@@ -122,10 +122,18 @@ class FakeAutophys:
 
     # ------------------------------------------------------------------
     def _stored(self, inv: str, rid: str, kind: str, payload: dict) -> bool:
-        """Whether ``_append`` would replay this record (same id and content)."""
-        return any(r["id"] == rid and r["investigation"] == inv and r["kind"] == kind
-                   and canonical(r["payload"]) == canonical(payload)
-                   for records in self.records.values() for r in records)
+        """Whether ``_append`` would replay this record (same id and content).
+
+        An id already used for other content is an ``idempotency_conflict``
+        here, as in the daemon, before any rule that applies only to records
+        the batch writes."""
+        for records in self.records.values():
+            for r in records:
+                if r["id"] == rid:
+                    if r["investigation"] == inv and r["kind"] == kind and canonical(r["payload"]) == canonical(payload):
+                        return True
+                    raise WorkbookError("idempotency_conflict", "record id was already used for different content")
+        return False
 
     def _append(self, inv: str, rid: str, kind: str, payload: dict) -> dict:
         if kind == "investigation":

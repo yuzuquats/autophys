@@ -158,6 +158,10 @@ def test_fake_batch_refuses_a_mislinked_python_pair_and_replays_stored_records(s
         store.append_batch(inv, [("measurement", measurement(8), "m-8"), ("proposal", attached("p2", 1), "e-2")])
     assert (e.value.status, e.value.path) == (422, "records[1].payload.measurement_version")
     assert len(store.records(inv)) == before + 3
+    with pytest.raises(HttpError) as e:  # a reused id with other content conflicts first
+        store.append_batch(inv, [("measurement", measurement(8), "m-8"), ("proposal", attached("p1", 5), "e-1")])
+    assert (e.value.status, e.value.error) == (409, "idempotency_conflict")
+    assert len(store.records(inv)) == before + 3
 
 
 @pytest.mark.parametrize("kind", ["memory", "jsonl", "workbook"])
