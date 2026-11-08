@@ -33,7 +33,7 @@ from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
-from .store import Record, Store, StoreError, canonical, config_hash
+from .store import Record, Store, StoreError, batch_items, canonical, config_hash
 
 API_PREFIX = "/api/v1"
 DEFAULT_SERVER = "http://127.0.0.1:4794"
@@ -54,6 +54,14 @@ class HttpError(RuntimeError):
 
 class AuthError(HttpError):
     pass
+
+
+def attach_record_id(investigation: str, proposal_id: str, kind: str) -> str:
+    """The record id :meth:`HttpStore.attach_data` gives its ``kind`` record
+    (``measurement`` or ``proposal``): the SHA-256 of the canonical JSON
+    ``{"investigation", "kind", "proposal_id"}``, as Rust's ``attach_record_id``."""
+    return hashlib.sha256(canonical({"investigation": investigation, "proposal_id": proposal_id,
+                                     "kind": kind}).encode()).hexdigest()
 
 
 def _route_missing(error: HttpError) -> bool:
@@ -499,28 +507,35 @@ class HttpStore(Store):
         self._see(investigation, j)
         return _to_record(j["record"])
 
-    def append_batch(self, investigation: str, items: list[tuple[str, dict]]) -> list[Record]:
-        """Append ``(kind, payload)`` records all or none (``POST …/records``).
+    def append_batch(self, investigation: str, items: list[tuple]) -> list[Record]:
+        """Append ``(kind, payload)`` or ``(kind, payload, record_id)`` records
+        all or none (``POST …/records``).
 
-        Each record gets a new random id, as :meth:`append` gives one; a
-        daemon without the batch route raises :class:`HttpError` and nothing
-        is written one record at a time.
+        The daemon replays a record whose id it already holds with the same
+        content, so a batch retried with the same ids after a lost response
+        writes nothing twice; pass ids when you may retry. A record without
+        one (``None`` or a 2-tuple) gets a new random id, as :meth:`append`
+        gives one, and a retry appends it again. A daemon without the batch
+        route raises :class:`HttpError` and nothing is written one record at
+        a time.
         """
-        return self._batch(investigation, [(uuid.uuid4().hex, kind, payload) for kind, payload in items])
+        return self._batch(investigation, [(uuid.uuid4().hex if rid is None else rid, kind, payload)
+                                           for kind, payload, rid in batch_items(items)])
 
     def attach_data(self, investigation: str, proposal_id: str, measurement: dict, attached: dict) -> Record:
         """Commit the measurement and its ``data_attached`` event in one batch.
 
-        The record ids derive from their content, so a retry after a lost
-        response replays the committed pair. A daemon without the batch
-        route (before CORE-01) raises :class:`HttpError`; there is no
-        fallback to two separate appends.
+        The record ids derive from the investigation, the proposal and the
+        kind only (:func:`attach_record_id`), the ids Rust's ``attach_data``
+        sends: a retry with the same records after a lost response replays
+        the committed pair, and different data for the same proposal is
+        ``idempotency_conflict``, whichever SDK attached first. A daemon
+        without the batch route (before CORE-01) raises :class:`HttpError`;
+        there is no fallback to two separate appends.
         """
-        def identity(kind, payload):
-            return hashlib.sha256(canonical({"investigation": investigation, "proposal_id": proposal_id,
-                                             "kind": kind, "payload": payload}).encode()).hexdigest()
-        records = self._batch(investigation, [(identity("measurement", measurement), "measurement", measurement),
-                                              (identity("proposal", attached), "proposal", attached)])
+        records = self.append_batch(investigation, [
+            ("measurement", measurement, attach_record_id(investigation, proposal_id, "measurement")),
+            ("proposal", attached, attach_record_id(investigation, proposal_id, "proposal"))])
         return records[-1]
 
     def _batch(self, investigation: str, items: list[tuple[str, str, dict]]) -> list[Record]:

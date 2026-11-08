@@ -129,6 +129,13 @@ workbook does not write its display (an `HttpStore` uploads it to the daemon). A
 `HttpStore` whose daemon has no `reveal` or `display` endpoint raises
 `HttpError` saying the daemon is too old and should be upgraded.
 
+`HttpStore.attach_data` commits the measurement and its `data_attached`
+event in one batch whose record ids derive from the investigation, the
+proposal and the kind only, as Rust's do: a retry after a lost response
+replays the pair, and different data for the same proposal is
+`idempotency_conflict`. `append_batch` items are `(kind, payload)` or
+`(kind, payload, record_id)`; only records given ids are safe to retry.
+
 | Call | What it does |
 | --- | --- |
 | `ap.connect(target=None, api_key=None)` | a directory (local collection; files created on project creation), a `*.ap-workbook` path, an `http(s)://` daemon URL, or nothing (`$AUTOPHYS_HOME`, default `~/autophys`) |
@@ -261,7 +268,7 @@ are `{error, message}`.
 | `POST /investigations/{id}/proposals/{pid}/approvals` | envelope, event `approved`, `edited` (with `settings`) or `rejected` | `{record}`; 409 unless `proposed` |
 | `POST /investigations/{id}/proposals/{pid}/data` | envelope, event `data_attached` with `measurement_version` | `{record}`; 409 unless approved or edited |
 | `GET /investigations/{id}/records?kind=` | | `{records}` |
-| `POST /investigations/{id}/records` | `{records: [{id, kind, payload, hash_of?}]}`, 1 to 64 envelopes | `{records: [{record, gseq, created}], gseq}`: all appended in one transaction or none; each replays by id. `HttpStore.attach_data` and `append_batch` use it |
+| `POST /investigations/{id}/records` | `{records: [{id, kind, payload, hash_of?}]}`, 1 to 64 envelopes | `{records: [{record, gseq, created}], gseq}`: all appended in one transaction or none; each replays by id. `HttpStore.attach_data` and `append_batch` use it; pass `(kind, payload, record_id)` items to make a retried batch replay (records without an id get a random one and append again) |
 | `GET /stream?after={gseq}` | | `text/event-stream`: `id: <gseq>`, `event: record`, `data: <record>` |
 
 A record is `{id, investigation, seq, kind, ts, payload, prev_hash, hash}`;

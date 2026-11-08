@@ -105,6 +105,19 @@ class StoreError(RuntimeError):
     pass
 
 
+def batch_items(items) -> list[tuple[str, Any, str | None]]:
+    """Normalise ``append_batch`` items to ``(kind, payload, record_id or None)``."""
+    out = []
+    for item in items:
+        if len(item) == 2:
+            out.append((item[0], item[1], None))
+        elif len(item) == 3:
+            out.append(tuple(item))
+        else:
+            raise StoreError("append_batch items are (kind, payload) or (kind, payload, record_id)")
+    return out
+
+
 def config_hash(config: dict) -> str:
     return "sha256:" + hashlib.sha256(canonical(config).encode()).hexdigest()
 
@@ -140,14 +153,19 @@ class Store(ABC):
     @abstractmethod
     def append(self, investigation: str, kind: str, payload: dict, *, record_id: str | None = None) -> Record: ...
 
-    def append_batch(self, investigation: str, items: list[tuple[str, dict]]) -> list[Record]:
-        """Append ``(kind, payload)`` records in order, all or none where the store can.
+    def append_batch(self, investigation: str, items: list[tuple]) -> list[Record]:
+        """Append ``(kind, payload)`` or ``(kind, payload, record_id)`` records in order,
+        all or none where the store can.
 
-        Local stores commit the batch together (WorkbookStore in one
-        transaction) and HttpStore posts it to the daemon's batch route;
-        this default appends one at a time.
+        ``record_id`` is the record's idempotency key, as for :meth:`append`;
+        ``None`` or a missing id gets a new random id. A caller that may
+        retry a batch (over HTTP, after a lost response) must pass ids, or
+        the retry appends the records again. Local stores commit the batch
+        together (WorkbookStore in one transaction) and HttpStore posts it to
+        the daemon's batch route; this default appends one at a time.
         """
-        return [self.append(investigation, kind, payload) for kind, payload in items]
+        return [self.append(investigation, kind, payload, record_id=rid)
+                for kind, payload, rid in batch_items(items)]
 
     @abstractmethod
     def records(self, investigation: str, kind: str | None = None) -> list[Record]: ...
@@ -289,7 +307,7 @@ class MemoryStore(Store):
         with self._lock:
             n = len(self._logs.get(investigation, ()))
             try:
-                return [self._append_locked(investigation, kind, payload, None) for kind, payload in items]
+                return [self._append_locked(investigation, kind, payload, rid) for kind, payload, rid in batch_items(items)]
             except BaseException:
                 if investigation in self._logs:
                     del self._logs[investigation][n:]
@@ -439,7 +457,7 @@ class JsonlStore(Store):
         return self._append_many(investigation, [(kind, payload, record_id)])[0]
 
     def append_batch(self, investigation, items):
-        return self._append_many(investigation, [(kind, payload, None) for kind, payload in items])
+        return self._append_many(investigation, batch_items(items))
 
     def _append_many(self, investigation, items) -> list[Record]:
         """Validate every item, then write all new lines with one write and fsync."""

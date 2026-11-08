@@ -213,7 +213,7 @@ advancing the cursor); workspace 326/0/2.
 SDKs: Rust `Investigation::append_batch(&[BatchRecord])`, `BatchRecord`,
 `MAX_BATCH_RECORDS`; `attach_data` is a two-record batch locally and over
 HTTP (no fallback); `Investigation::attach_records` is removed. Python
-`HttpStore.attach_data` posts the batch with content-derived ids and
+`HttpStore.attach_data` posts the batch (with content-derived ids until review round 1, now Rust's investigation/proposal/kind ids) and
 `HttpStore.append_batch` is now atomic through it; the fake server
 implements the route. A daemon without the route gives "too old for batch
 record appends … upgrade the autophys daemon" in both SDKs (in `9849710`).

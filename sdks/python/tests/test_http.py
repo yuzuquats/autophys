@@ -9,7 +9,7 @@ import pytest
 
 from fake_server import FakeAutophys
 from autophys.agent import Investigation, ProposalRunner, ScriptedPolicy
-from autophys.http import (AuthError, DEFAULT_SERVER, HttpError, HttpStore, iter_sse, load_credentials, pair_poll,
+from autophys.http import (AuthError, DEFAULT_SERVER, HttpError, HttpStore, attach_record_id, iter_sse, load_credentials, pair_poll,
                            pair_start, request_json, save_credentials, whoami)
 from autophys.project import Budgets, Project
 from autophys.reasoner import HttpReasoner, ReasonerError, parse_json_content
@@ -84,6 +84,70 @@ def test_append_batch_and_attach_use_one_all_or_none_request(server):
     assert store.attach_data(inv, "p1", measurement, attached).id == event.id  # retry replays
     assert len(store.records(inv)) == count
     assert store.cursors.get(inv, 0) > 0
+
+
+def test_attach_data_ids_match_rust():
+    """Pinned beside Rust's ``attach_record_ids_are_pinned``: investigation, proposal and kind only."""
+    inv = "inv_0123456789abcdef"
+    assert attach_record_id(inv, "p1", "measurement") == "a3308062ff06ee2329516dc557d43df8e6b19c8af8d451ec75505b32f880e573"
+    assert attach_record_id(inv, "p1", "proposal") == "7b756cec3893e8115c284be56da6d2b94645805fc160fd78e4bd9e9cb495e545"
+
+
+def _batch_investigation(server):
+    store = HttpStore(server.url, server.issue_key())
+    pid = store.ensure_project("thermal")
+    cfg = {"name": "thermal"}
+    return store, store.create_investigation({"project_id": pid, "config_version": store.put_config_version(pid, config_hash(cfg), cfg)})
+
+
+def test_attach_data_ids_ignore_the_payload_so_other_data_conflicts(server):
+    """As in Rust: different data for an attached proposal is idempotency_conflict, not a new pair."""
+    store, inv = _batch_investigation(server)
+    store.append(inv, "proposal", {"proposal_id": "p1", "event": "proposed", "experiment": "e", "settings": {}})
+    server.approve_record(inv, "p1")
+    measurement = {"version": 1, "digest": "d", "observation": {"experiment": "e", "t": [0.0], "y": {"T": [1.0]}}}
+    attached = {"proposal_id": "p1", "event": "data_attached", "measurement_version": 1, "digest": "d"}
+    event = store.attach_data(inv, "p1", measurement, attached)
+    assert event.id == attach_record_id(inv, "p1", "proposal")
+    assert store.records(inv, "measurement")[-1].id == attach_record_id(inv, "p1", "measurement")
+    other = {**measurement, "digest": "e"}
+    with pytest.raises(HttpError) as e:
+        store.attach_data(inv, "p1", other, {**attached, "digest": "e"})
+    assert e.value.error == "idempotency_conflict"
+
+
+def test_append_batch_takes_caller_ids_so_a_retry_replays(server):
+    """Ids make a retried batch idempotent; records without one get fresh uuid4 ids and append again."""
+    store, inv = _batch_investigation(server)
+    items = [("run", {"n": 1}, "batch-run-1"), ("step", {"n": 2}, "batch-step-1")]
+    first = store.append_batch(inv, items)
+    count = len(store.records(inv))
+    again = store.append_batch(inv, items)  # a retry after a lost response
+    assert [r.id for r in first] == [r.id for r in again] == ["batch-run-1", "batch-step-1"]
+    assert first == again and len(store.records(inv)) == count
+    with pytest.raises(HttpError) as e:
+        store.append_batch(inv, [("run", {"n": 99}, "batch-run-1")])
+    assert e.value.error == "idempotency_conflict" and len(store.records(inv)) == count
+    mixed = store.append_batch(inv, [("run", {"n": 3}, None), ("step", {"n": 4})])
+    assert len(store.records(inv)) == count + 2
+    store.append_batch(inv, [("run", {"n": 3}, None), ("step", {"n": 4})])
+    assert len(store.records(inv)) == count + 4, "without ids a retry appends again"
+    assert all(len(r.id) == 32 for r in mixed)
+
+
+@pytest.mark.parametrize("kind", ["memory", "jsonl", "workbook"])
+def test_local_append_batch_takes_caller_ids(tmp_path, kind):
+    from autophys.store import JsonlStore, MemoryStore
+    from autophys.workbook import WorkbookStore
+    store = {"memory": MemoryStore, "jsonl": lambda: JsonlStore(tmp_path / "j"),
+             "workbook": lambda: WorkbookStore(tmp_path / "w.ap-workbook")}[kind]()
+    pid = store.ensure_project("thermal")
+    cfg = {"name": "thermal"}
+    inv = store.create_investigation({"project_id": pid, "config_version": store.put_config_version(pid, config_hash(cfg), cfg)})
+    items = [("run", {"n": 1}, "local-run"), ("step", {"n": 2})]
+    first = store.append_batch(inv, items)
+    assert first[0].id == "local-run"
+    assert store.append_batch(inv, items[:1])[0] == first[0]
 
 
 def test_http_store_rejects_bad_key_and_unpinned(server):

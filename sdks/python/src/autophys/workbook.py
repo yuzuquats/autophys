@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from ._text import rust_trim
-from .store import _clean, GENESIS, Record, Store, StoreError, canonical, chain_hash
+from .store import _clean, GENESIS, Record, Store, StoreError, batch_items, canonical, chain_hash
 
 #: ``PRAGMA application_id`` of a workbook: ASCII ``APWB``.
 APPLICATION_ID = 0x41505742
@@ -754,9 +754,13 @@ class WorkbookStore(Store):
         with self._tx() as c:
             return self._append_tx(c, investigation, kind, *item)
 
-    def append_batch(self, investigation: str, items: list[tuple[str, dict]]) -> list[Record]:
-        """Append the records in one ``BEGIN IMMEDIATE`` transaction: all or none."""
-        prepared = [(kind, *append_payload(kind, payload, None)) for kind, payload in items]
+    def append_batch(self, investigation: str, items: list[tuple]) -> list[Record]:
+        """Append the records in one ``BEGIN IMMEDIATE`` transaction: all or none.
+
+        Items are ``(kind, payload)`` or ``(kind, payload, record_id)``, as
+        for :meth:`Store.append_batch`.
+        """
+        prepared = [(kind, *append_payload(kind, payload, rid)) for kind, payload, rid in batch_items(items)]
         with self._tx() as c:
             return [self._append_tx(c, investigation, kind, rid, payload, text) for kind, rid, payload, text in prepared]
 

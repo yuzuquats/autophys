@@ -187,6 +187,17 @@ pub(crate) fn check_batch(records: &[BatchRecord]) -> Result<Vec<Kind>> {
     Ok(kinds)
 }
 
+/// The record id a remote `attach_data` gives its `kind` record (`measurement`
+/// or `proposal`) for proposal `pid` of `investigation`: the SHA-256 of the
+/// canonical JSON `{"investigation", "kind", "proposal_id"}`. Python's
+/// `HttpStore.attach_data` derives the same ids, so both SDKs retry alike.
+pub(crate) fn attach_record_id(investigation: &str, pid: &str, kind: &str) -> String {
+    crate::sha256_hex([canonical(&serde_json::json!({
+        "investigation": investigation, "proposal_id": pid, "kind": kind
+    }))
+    .as_bytes()])
+}
+
 /// The attachment guarantee of the removed `…/attachment` route, kept for
 /// batches: a `data_attached` event at batch index `i` whose
 /// `measurement_version` points into the batch must name a measurement of
@@ -932,20 +943,22 @@ impl Investigation {
     /// measurement record's hash. Both records commit in one transaction
     /// ([`Investigation::append_batch`]). Returns the `data_attached` record.
     ///
-    /// Over HTTP the two record ids derive from the investigation, the
-    /// proposal and the kind, so a retry after a lost response replays the
-    /// committed pair, and a different observation for the same proposal is
-    /// `idempotency_conflict`.
+    /// Over HTTP the two record ids are [`attach_record_id`] of the
+    /// investigation, the proposal and the kind (`measurement`, `proposal`),
+    /// not of the observation, the same ids Python's `HttpStore.attach_data`
+    /// sends. A retry with the same observation after a lost response
+    /// replays the committed pair (`created = false`); a different
+    /// observation for the same proposal is `idempotency_conflict`, whichever
+    /// SDK attached first. Locally the ids are random and nothing is lost in
+    /// transit: a second call is refused by the proposal state machine
+    /// (`conflict`, the proposal is already `data_attached`).
     pub fn attach_data(&self, pid: &str, observation: Value) -> Result<Appended> {
         validate::check_id("payload.proposal_id", pid)?;
         let (measurement_id, event_id) = if self.wb.remote.is_some() {
-            let identity = |kind: &str| {
-                crate::sha256_hex([canonical(&serde_json::json!({
-                    "investigation": self.id, "proposal_id": pid, "kind": kind
-                }))
-                .as_bytes()])
-            };
-            (identity("measurement"), identity("proposal"))
+            (
+                attach_record_id(&self.id, pid, "measurement"),
+                attach_record_id(&self.id, pid, "proposal"),
+            )
         } else {
             (random_hex(16)?, random_hex(16)?)
         };
@@ -1061,4 +1074,25 @@ fn proposal_in(conn: &Connection, inv: &str, pid: &str) -> Result<Proposal> {
         .into_iter()
         .next()
         .ok_or(Error::NotFound("proposal"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::attach_record_id;
+
+    /// Pinned beside Python's `test_attach_data_ids_match_rust`: both SDKs
+    /// derive a remote attachment's record ids from investigation,
+    /// proposal and kind only.
+    #[test]
+    fn attach_record_ids_are_pinned() {
+        let inv = "inv_0123456789abcdef";
+        assert_eq!(
+            attach_record_id(inv, "p1", "measurement"),
+            "a3308062ff06ee2329516dc557d43df8e6b19c8af8d451ec75505b32f880e573"
+        );
+        assert_eq!(
+            attach_record_id(inv, "p1", "proposal"),
+            "7b756cec3893e8115c284be56da6d2b94645805fc160fd78e4bd9e9cb495e545"
+        );
+    }
 }
