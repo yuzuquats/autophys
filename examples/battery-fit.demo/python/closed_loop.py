@@ -158,8 +158,11 @@ def simulated(name: str, settings: dict, seed: int) -> ap.Observation:
 def measured(path: str, name: str, settings: dict, sigma: float, columns: str, split: str = "train") -> ap.Observation:
     """Read time,current,voltage; resample voltage onto the program's grid and check the current matches it."""
     tc, ic, vc = columns.split(",")
-    with open(path, newline="") as f:
-        rows = list(csv.DictReader(f))
+    try:
+        with open(path, newline="") as f:
+            rows = list(csv.DictReader(f))
+    except OSError as e:
+        sys.exit(f"{path}: cannot read: {e.strerror or e}")
     if not rows or any(c not in rows[0] for c in (tc, ic, vc)):
         sys.exit(f"{path}: need columns {tc},{ic},{vc}")
     t, i, v = (np.array([float(r[c]) for r in rows]) for c in (tc, ic, vc))

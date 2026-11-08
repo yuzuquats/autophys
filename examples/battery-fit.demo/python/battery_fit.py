@@ -62,8 +62,11 @@ def make_model(ocv_soc: np.ndarray, ocv_v: np.ndarray) -> ap.Simulator:
 
 
 def read_csv(path: str, columns: tuple[str, str, str]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    with open(path, newline="") as f:
-        rows = list(csv.DictReader(f))
+    try:
+        with open(path, newline="") as f:
+            rows = list(csv.DictReader(f))
+    except OSError as e:
+        sys.exit(f"{path}: cannot read: {e.strerror or e}")
     missing = [c for c in columns if rows and c not in rows[0]]
     if not rows or missing:
         sys.exit(f"{path}: need columns {columns}; missing {missing or 'all rows'}")
