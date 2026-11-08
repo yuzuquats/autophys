@@ -217,6 +217,7 @@ pub fn scope(api: Api) -> actix_web::Scope {
         .route("/investigations", web::get().to(investigations))
         .route("/investigations", web::post().to(create_investigation))
         .route("/investigations/{inv}/records", web::get().to(records))
+        .route("/investigations/{inv}/records", web::post().to(append_records))
         .route(
             "/investigations/{inv}/measurements",
             web::post().to(measurements),
@@ -226,7 +227,6 @@ pub fn scope(api: Api) -> actix_web::Scope {
         .route("/investigations/{inv}/outcome", web::post().to(outcome))
         .route("/investigations/{inv}/reveal", web::post().to(reveal))
         .route("/investigations/{inv}/proposals", web::post().to(proposals))
-        .route("/investigations/{inv}/proposals/{pid}/attachment", web::post().to(attachment))
         .route(
             "/investigations/{inv}/proposals/{pid}",
             web::get().to(proposal),
@@ -774,18 +774,80 @@ async fn ingest_value(
     Ok(created(out.created, json!(out)))
 }
 
-/// Additive all-or-none attachment; legacy single-record routes retain meaning.
-async fn attachment(_: Keyed, s: Data, path: web::Path<(String, String)>, b: web::Payload) -> Result<HttpResponse> {
-    let (inv, pid) = path.into_inner();
+/// `POST /investigations/{inv}/records`: append `{"records": [...]}` in
+/// order, all or none, in one transaction (CORE-01). Each element is a record
+/// envelope `{id, kind, payload}` plus an optional `hash_of` (payload fields
+/// filled with an earlier element's hash); each is checked as its
+/// single-record route would check it, replays by id, and any refusal writes
+/// nothing. Answers `{records: [{record, gseq, created}], gseq}`, 201 when
+/// any record is new, else 200. Idempotency is per record id, so the route
+/// takes no `Idempotency-Key`.
+async fn append_records(
+    _: Keyed,
+    s: Data,
+    inv: web::Path<String>,
+    r: HttpRequest,
+    b: web::Payload,
+) -> Result<HttpResponse> {
+    if idempotency_key(&r)?.is_some() {
+        return Err(ApiError::bad_request(
+            "a batch is idempotent by its record ids; send no Idempotency-Key",
+        ));
+    }
     let body = body_json(b).await?;
-    let measurement = Envelope::from_value(body["measurement"].clone())?;
-    let event_id = body["attachment_id"].as_str().ok_or_else(|| ApiError::invalid("attachment_id", "required string"))?.to_string();
-    let event = body.get("attachment_payload").filter(|v| !v.is_null()).cloned();
+    let records = batch_records(&body)?;
     let inv = investigation(&s, &inv).await?;
     let project = inv.workbook().id().to_string();
-    let out = blocking(move || Ok(inv.attach_records(&pid, measurement, &event_id, event)?)).await?;
-    if out.created { s.woke(&project); }
-    Ok(created(out.created, json!(out)))
+    let out = blocking(move || Ok(inv.append_batch(&records)?)).await?;
+    let any_created = out.iter().any(|a| a.created);
+    if any_created {
+        s.woke(&project);
+    }
+    let gseq = out.iter().map(|a| a.gseq).max();
+    let records: Vec<Value> = out
+        .into_iter()
+        .map(|a| json!({"record": a.record, "gseq": a.gseq, "created": a.created}))
+        .collect();
+    Ok(created(any_created, json!({"records": records, "gseq": gseq})))
+}
+
+/// The batch body's elements, each refusal naming `records[i].<field>`.
+fn batch_records(body: &Value) -> Result<Vec<autophys::BatchRecord>> {
+    let items = body
+        .get("records")
+        .and_then(Value::as_array)
+        .ok_or_else(|| ApiError::invalid("records", "required array of record envelopes"))?;
+    items
+        .iter()
+        .enumerate()
+        .map(|(i, item)| {
+            let text = |field: &str| {
+                item.get(field)
+                    .and_then(Value::as_str)
+                    .map(str::to_owned)
+                    .ok_or_else(|| ApiError::invalid(format!("records[{i}].{field}"), "required string"))
+            };
+            let mut hash_of = BTreeMap::new();
+            match item.get("hash_of") {
+                None | Some(Value::Null) => {}
+                Some(Value::Object(fields)) => {
+                    for (field, index) in fields {
+                        let index = index.as_u64().and_then(|n| usize::try_from(n).ok()).ok_or_else(|| {
+                            ApiError::invalid(format!("records[{i}].hash_of.{field}"), "required record index")
+                        })?;
+                        hash_of.insert(field.clone(), index);
+                    }
+                }
+                Some(_) => return Err(ApiError::invalid(format!("records[{i}].hash_of"), "must be an object")),
+            }
+            Ok(autophys::BatchRecord {
+                id: text("id")?,
+                kind: text("kind")?,
+                payload: item.get("payload").cloned().unwrap_or(Value::Null),
+                hash_of,
+            })
+        })
+        .collect()
 }
 
 async fn measurements(

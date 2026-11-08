@@ -67,6 +67,7 @@ projections, commit, broadcast.
 | `PUT /projects/{pid}/display`                         | key            | format 1 only, 256 KiB uploaded/canonical cap; 201 changed, 200 duplicate; returns {project_id, digest} |
 | `GET/POST /investigations`                              | key            | 409 unknown_config_version; Idempotency-Key replays to the same id |
 | `GET /investigations/{id}/records?kind=`                | key            | the SDK's 8 Record fields |
+| `POST /investigations/{id}/records`                     | key            | CORE-01 batch: `{records: [{id, kind, payload, hash_of?}]}` (1 to 64) appended in order, all or none, in one transaction; each checked as its single route would be and replayed by id; `hash_of` fills payload fields with an earlier record's hash; → `{records: [{record, gseq, created}], gseq}`, 201 if any is new; no Idempotency-Key. Replaces `…/proposals/{pid}/attachment` (removed, CORE-01a) |
 | `POST …/{measurements,runs,steps,outcome}`              | key            | append → `{record, gseq}`; 400 if the envelope kind is not the route's |
 | `POST …/reveal`                                         | key            | append opaque reveal after outcome; 409 outcome_required before, already_revealed for a second distinct reveal; retries replay |
 | `POST …/proposals`                                      | key            | event proposed or withdrawn |

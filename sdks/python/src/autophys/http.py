@@ -499,17 +499,36 @@ class HttpStore(Store):
         self._see(investigation, j)
         return _to_record(j["record"])
 
+    def append_batch(self, investigation: str, items: list[tuple[str, dict]]) -> list[Record]:
+        """Append ``(kind, payload)`` records all or none (``POST …/records``).
+
+        Each record gets a new random id, as :meth:`append` gives one; a
+        daemon without the batch route raises :class:`HttpError` and nothing
+        is written one record at a time.
+        """
+        return self._batch(investigation, [(uuid.uuid4().hex, kind, payload) for kind, payload in items])
+
     def attach_data(self, investigation: str, proposal_id: str, measurement: dict, attached: dict) -> Record:
-        """Commit the existing two record bodies atomically; old servers fail closed."""
+        """Commit the measurement and its ``data_attached`` event in one batch.
+
+        The record ids derive from their content, so a retry after a lost
+        response replays the committed pair. A daemon without the batch
+        route (before CORE-01) raises :class:`HttpError`; there is no
+        fallback to two separate appends.
+        """
         def identity(kind, payload):
             return hashlib.sha256(canonical({"investigation": investigation, "proposal_id": proposal_id,
                                              "kind": kind, "payload": payload}).encode()).hexdigest()
-        inv, pid = urllib.parse.quote(investigation, safe=""), urllib.parse.quote(proposal_id, safe="")
-        body = {"measurement": {"id": identity("measurement", measurement), "kind": "measurement", "payload": measurement},
-                "attachment_id": identity("proposal", attached), "attachment_payload": attached}
-        out = self._req("POST", f"/investigations/{inv}/proposals/{pid}/attachment", body)
+        records = self._batch(investigation, [(identity("measurement", measurement), "measurement", measurement),
+                                              (identity("proposal", attached), "proposal", attached)])
+        return records[-1]
+
+    def _batch(self, investigation: str, items: list[tuple[str, str, dict]]) -> list[Record]:
+        from .workbook import canonical_payload
+        body = {"records": [{"id": rid, "kind": kind, "payload": canonical_payload(payload)[0]} for rid, kind, payload in items]}
+        out = self._req("POST", f"/investigations/{urllib.parse.quote(investigation, safe='')}/records", body)
         self._see(investigation, out)
-        return _to_record(out["record"])
+        return [_to_record(item["record"]) for item in out["records"]]
 
     def records(self, investigation, kind=None):
         q = "?kind=" + urllib.parse.quote(kind) if kind else ""

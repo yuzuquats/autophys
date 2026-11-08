@@ -164,6 +164,40 @@ class FakeAutophys:
                 r = fake._append(inv, rid, kind, payload)
                 return self._send(201 if fake.gseq > before else 200, {"record": fake._wire(r), "gseq": r["gseq"]})
 
+            def _batch(self, inv, body):
+                """The daemon's CORE-01 batch: every record or none, replay by id."""
+                import copy
+                if self.headers.get("Idempotency-Key") is not None:
+                    return self._err(400, "invalid_request", "a batch is idempotent by its record ids")
+                items = body.get("records") if isinstance(body, dict) else None
+                if not isinstance(items, list) or not 1 <= len(items) <= 64:
+                    raise WorkbookError("invalid", "required array of 1 to 64 records", "records")
+                logs, gseq = copy.deepcopy(fake.records), fake.gseq
+                out = []
+                try:
+                    for i, item in enumerate(items):
+                        rid = check_id(f"records[{i}].id", item.get("id"))
+                        if any(o["id"] == rid for o, _ in out):
+                            raise WorkbookError("invalid", "repeats an earlier record id", f"records[{i}].id")
+                        payload = item.get("payload")
+                        for field, j in (item.get("hash_of") or {}).items():
+                            if not isinstance(payload, dict) or field in payload or not isinstance(j, int) or not 0 <= j < i:
+                                raise WorkbookError("invalid", "must name an earlier record", f"records[{i}].hash_of.{field}")
+                            payload = {**payload, field: out[j][0]["hash"]}
+                        kind = item.get("kind")
+                        if kind == "investigation":
+                            raise WorkbookError("invalid", "investigation records are created by create_investigation", f"records[{i}].kind")
+                        before = fake.gseq
+                        r = fake._append(inv, rid, kind, payload)
+                        out.append((r, fake.gseq > before))
+                except BaseException:
+                    fake.records, fake.gseq = logs, gseq
+                    raise
+                created = fake.gseq != gseq
+                return self._send(201 if created else 200, {
+                    "records": [{"record": fake._wire(r), "gseq": r["gseq"], "created": new} for r, new in out],
+                    "gseq": max(r["gseq"] for r, _ in out)})
+
             def _auth(self):
                 h = self.headers.get("Authorization", "")
                 if not h.startswith("Bearer ") or h[7:] not in fake.keys:
@@ -373,21 +407,8 @@ class FakeAutophys:
                     return self._record(inv, body, kinds[rest])
                 if rest == "proposals" and method == "POST":
                     return self._record(inv, body, "proposal", ("proposed", "withdrawn"))
-                atomic = re.fullmatch(r"proposals/([^/]+)/attachment", rest)
-                if atomic and method == "POST":
-                    import copy
-                    logs, gseq = copy.deepcopy(fake.records), fake.gseq
-                    try:
-                        m = body["measurement"]
-                        mr = fake._append(inv, m["id"], "measurement", m["payload"])
-                        payload = body.get("attachment_payload") or {"proposal_id": atomic.group(1), "event": "data_attached", "measurement_version": mr["hash"]}
-                        if payload["proposal_id"] != atomic.group(1) or payload["event"] != "data_attached":
-                            raise WorkbookError("invalid_payload", "wrong attachment proposal")
-                        event = fake._append(inv, body["attachment_id"], "proposal", payload)
-                    except BaseException:
-                        fake.records, fake.gseq = logs, gseq
-                        raise
-                    return self._send(201 if fake.gseq != gseq else 200, {"record": fake._wire(event), "gseq": event["gseq"]})
+                if rest == "records" and method == "POST":
+                    return self._batch(inv, body)
                 m2 = re.fullmatch(r"proposals/([^/]+)(?:/(approvals|data))?", rest)
                 if m2:
                     pid, sub = m2.group(1), m2.group(2)

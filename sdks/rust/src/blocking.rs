@@ -13,7 +13,7 @@
 //! Async code should use [`crate::remote::Remote`] directly instead.
 use crate::workbook::{ConfigVersion, Investigation, Snapshot, StoredDisplay, Workbook};
 use crate::{
-    Appended, Envelope, Error, InvestigationInfo, Logged, Project, Proposal, Record, Result,
+    Appended, BatchRecord, Error, InvestigationInfo, Logged, Project, Proposal, Record, Result,
 };
 use serde_json::Value;
 use std::{future::Future, sync::OnceLock, time::Duration};
@@ -149,20 +149,8 @@ impl Remote {
     }
 
     // Workbook adapters (crate::Workbook's remote half).
-    pub(crate) fn attach_data(&self, inv: &str, pid: &str, observation: Value) -> Result<Appended> {
-        run(self.inner.attach_data(inv, pid, observation))
-    }
-    pub(crate) fn attach_records(
-        &self,
-        inv: &str,
-        pid: &str,
-        measurement: Envelope,
-        event_id: &str,
-        event: Option<Value>,
-    ) -> Result<Appended> {
-        run(self
-            .inner
-            .attach_records(inv, pid, measurement, event_id, event))
+    pub(crate) fn append_batch(&self, inv: &str, records: &[BatchRecord]) -> Result<Vec<Appended>> {
+        run(self.inner.append_batch(inv, records))
     }
     pub(crate) fn config_versions(&self, pid: &str) -> Result<Vec<ConfigVersion>> {
         run(self.inner.config_versions(pid))

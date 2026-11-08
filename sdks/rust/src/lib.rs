@@ -56,7 +56,7 @@ pub use records::{Logged, Record};
 pub use schema::{APPLICATION_ID, VERSION as FORMAT_VERSION};
 pub use validate::{Envelope, Event, Kind, MAX_ID_LEN, MAX_PAYLOAD_BYTES};
 pub use workbook::{
-    Appended, ChainError, ConfigVersion, Head, Investigation, MAX_DISPLAY_BYTES, Project, Snapshot,
+    Appended, BatchRecord, ChainError, MAX_BATCH_RECORDS, ConfigVersion, Head, Investigation, MAX_DISPLAY_BYTES, Project, Snapshot,
     StoredDisplay, VerifyReport, Workbook,
 };
 

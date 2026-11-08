@@ -58,6 +58,34 @@ def test_http_store_contract(server):
         assert headers.get("Authorization") == f"Bearer {key}" or _path.startswith("/pair")
 
 
+def test_append_batch_and_attach_use_one_all_or_none_request(server):
+    """CORE-01: HttpStore batches post to POST …/records; a refusal writes nothing."""
+    store = HttpStore(server.url, server.issue_key())
+    pid = store.ensure_project("thermal")
+    cfg = {"name": "thermal"}
+    ver = store.put_config_version(pid, config_hash(cfg), cfg)
+    inv = store.create_investigation({"project_id": pid, "config_version": ver})
+    out = store.append_batch(inv, [("run", {"n": 1}), ("step", {"n": 2})])
+    assert [r.kind for r in out] == ["run", "step"] and out[1].prev_hash == out[0].hash
+    before = len(store.records(inv))
+    with pytest.raises(HttpError):
+        store.append_batch(inv, [("run", {"n": 3}), ("proposal", {"proposal_id": "nope", "event": "approved", "by": "x"})])
+    assert len(store.records(inv)) == before
+    store.append(inv, "proposal", {"proposal_id": "p1", "event": "proposed", "experiment": "e", "settings": {}})
+    server.approve_record(inv, "p1")
+    measurement = {"version": 1, "digest": "d", "observation": {"experiment": "e", "t": [0.0], "y": {"T": [1.0]}}}
+    attached = {"proposal_id": "p1", "event": "data_attached", "measurement_version": 1, "digest": "d"}
+    n = len(server.requests)
+    event = store.attach_data(inv, "p1", measurement, attached)
+    assert event.payload["event"] == "data_attached" and store.proposal(inv, "p1")["status"] == "data_attached"
+    posts = [path for method, path, _ in server.requests[n:] if method == "POST"]
+    assert posts == [f"/investigations/{inv}/records"]
+    count = len(store.records(inv))
+    assert store.attach_data(inv, "p1", measurement, attached).id == event.id  # retry replays
+    assert len(store.records(inv)) == count
+    assert store.cursors.get(inv, 0) > 0
+
+
 def test_http_store_rejects_bad_key_and_unpinned(server):
     with pytest.raises(HttpError) as e:
         HttpStore(server.url, "apk_wrong").ensure_project("x")

@@ -123,8 +123,12 @@ scoped to normalized server identity; local connections do not load HTTP keys.
 An explicitly supplied key selects the caller's intended destination.
 
 The paired attachment operation commits measurement and attachment-event
-records in one transaction, or neither. Remote attachment uses one endpoint;
-it does not fall back to two independent appends on an older daemon. Record
+records in one transaction, or neither: `attach_data` is an
+`Investigation::append_batch` of the two records, the event's
+`measurement_version` filled with the measurement's hash (`hash_of`). Over
+HTTP that is one `POST /investigations/{inv}/records`; it does not fall back
+to two independent appends on a daemon without the batch route (before
+CORE-01), which therefore cannot take attachments from this SDK. Record
 ids are globally unique in a workbook: the same id/envelope is replayable,
 while a changed envelope conflicts. Preserve the original attachment request
 ids when retrying after an ambiguous response. A second scientific

@@ -379,11 +379,39 @@ fn paired_target_normalization_before_effects() {
 
 #[test]
 fn old_daemon_atomic_attachment_does_not_fallback() {
- let server=Mock::new(|_,_|response(404,"application/json",r#"{"error":"not_found"}"#,""));
- let remote=Remote::new(&server.url,"key").unwrap();
- let e=remote.attach_data("inv_test","p_test",json!({"t":[0.],"y":{"x":[1.]}})).unwrap_err();
- assert_eq!(e.status(),404);
- let requests=server.requests.lock().unwrap();assert_eq!(requests.len(),1);assert!(requests[0].contains("/attachment"));
+    let server = Mock::new(|_, _| response(404, "application/json", r#"{"error":"not_found"}"#, ""));
+    let remote = Remote::new(&server.url, "key").unwrap();
+    let wb = crate::Workbook::from_remote(remote, Project { id: "prj_test".into(), name: "x".into() });
+    let e = wb
+        .remote_investigation("inv_test")
+        .attach_data("p_test", json!({"t":[0.],"y":{"x":[1.]}}))
+        .unwrap_err();
+    assert_eq!(e.status(), 404);
+    let requests = server.requests.lock().unwrap();
+    assert_eq!(requests.len(), 1);
+    assert!(requests[0].starts_with("POST /api/v1/investigations/inv_test/records "));
+}
+
+#[test]
+fn batch_is_checked_before_any_request() {
+    let server = Mock::new(|_, _| response(500, "application/json", "{}", ""));
+    let remote = Remote::new(&server.url, "key").unwrap();
+    let wb = crate::Workbook::from_remote(remote, Project { id: "prj_test".into(), name: "x".into() });
+    let inv = wb.remote_investigation("inv_test");
+    let run = |id: &str| crate::BatchRecord::new(id, crate::Kind::Run, json!({}));
+    for (batch, path) in [
+        (vec![], "records"),
+        (vec![run("a"), run("a")], "records[1].id"),
+        (vec![run("a").hash_of("x", 0)], "records[0].hash_of.x"),
+        (
+            vec![run("a"), crate::BatchRecord::new("b", crate::Kind::Run, json!({"x": 1})).hash_of("x", 0)],
+            "records[1].hash_of.x",
+        ),
+    ] {
+        let Error::Invalid { path: got, .. } = inv.append_batch(&batch).unwrap_err() else { panic!() };
+        assert_eq!(got, path);
+    }
+    assert!(server.requests.lock().unwrap().is_empty());
 }
 
 #[tokio::test(flavor = "current_thread")]

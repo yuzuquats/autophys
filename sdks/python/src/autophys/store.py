@@ -144,7 +144,8 @@ class Store(ABC):
         """Append ``(kind, payload)`` records in order, all or none where the store can.
 
         Local stores commit the batch together (WorkbookStore in one
-        transaction); this default, used over HTTP, appends one at a time.
+        transaction) and HttpStore posts it to the daemon's batch route;
+        this default appends one at a time.
         """
         return [self.append(investigation, kind, payload) for kind, payload in items]
 

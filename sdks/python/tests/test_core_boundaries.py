@@ -216,7 +216,7 @@ def test_old_daemon_atomic_attachment_fails_without_record_fallback(monkeypatch)
         obs=view.runner.run(inv.pending_experiment)
         request=inv.store._req; attempted=[]
         def old_server(method,path,body=None,**kw):
-            if path.endswith("/attachment"):
+            if method=="POST" and path.endswith("/records"):
                 attempted.append(path);raise HttpError(404,"not_found")
             return request(method,path,body,**kw)
         monkeypatch.setattr(inv.store,"_req",old_server)

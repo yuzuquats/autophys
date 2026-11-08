@@ -130,7 +130,7 @@ def test_real_atomic_second_insert_failure_and_response_loss_restart(daemon, mon
             def do_POST(self): self.forward()
             def forward(self):
                 body=self.rfile.read(int(self.headers.get("Content-Length",0)))
-                attachment=self.path.endswith("/attachment") and not dropped
+                attachment=self.command=="POST" and self.path.endswith("/records") and not dropped
                 if attachment: dropped.append(True)
                 if not attachment or after_commit:
                     conn=http.client.HTTPConnection(upstream.hostname,upstream.port,timeout=5)

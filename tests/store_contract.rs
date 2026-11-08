@@ -215,6 +215,7 @@ async fn every_keyed_route_refuses_missing_wrong_and_revoked_keys() {
         ("GET", "/investigations".into()),
         ("POST", "/investigations".into()),
         ("GET", format!("/investigations/{inv}/records")),
+        ("POST", format!("/investigations/{inv}/records")),
         ("POST", format!("/investigations/{inv}/measurements")),
         ("POST", format!("/investigations/{inv}/runs")),
         ("POST", format!("/investigations/{inv}/steps")),
@@ -242,7 +243,7 @@ async fn every_keyed_route_refuses_missing_wrong_and_revoked_keys() {
         }
     }
     // Browser headers do not open the SDK-only routes.
-    for (method, path) in &routes[..15] {
+    for (method, path) in &routes[..16] {
         let (s, _) = call(
             &app,
             browser(&f.api, request(method, path, None), true).to_request(),
@@ -1131,6 +1132,100 @@ async fn proposal_state_machine() {
         (422, Some("payload.event")),
         "/proposals does not take decisions"
     );
+}
+
+/// CORE-01: `POST /investigations/{inv}/records` appends a batch all or none.
+#[actix_web::test]
+async fn batch_appends_all_or_none_and_replays_by_record_id() {
+    let f = fixture();
+    let app = app!(f.api);
+    let (key, inv) = seeded(&app, &f.api).await;
+    let k = Some(key.as_str());
+    let batch = format!("/investigations/{inv}/records");
+    let listing = format!("/investigations/{inv}/records");
+    macro_rules! all {
+        ($app:expr) => {{
+            let (_, r) = call($app, get(&listing, k).to_request()).await;
+            r["records"].as_array().unwrap().len()
+        }};
+    }
+    let proposal = json!({"records": [
+        env("b-prop", "proposal", proposed("p1")),
+        env("b-ok", "proposal", json!({"proposal_id": "p1", "event": "approved", "by": "test"})),
+    ]});
+    let (s, out) = call(&app, post(&batch, k, &proposal).to_request()).await;
+    assert_eq!(s, 201, "{out}");
+    let items = out["records"].as_array().unwrap();
+    assert_eq!(items.len(), 2);
+    assert!(items.iter().all(|i| i["created"] == true));
+    assert_eq!(out["gseq"], items[1]["gseq"]);
+    assert_eq!(items[1]["record"]["prev_hash"], items[0]["record"]["hash"]);
+    let before = all!(&app);
+
+    // One refused record anywhere writes nothing: an unknown kind, a bad
+    // payload, a state-machine refusal (data for an unknown proposal).
+    let measurement = env("b-m", "measurement", json!({"observation": {"t": [0.0], "y": {"T": [1.0]}}}));
+    let attach = |pid: &str| {
+        let mut e = env("b-e", "proposal", json!({"proposal_id": pid, "event": "data_attached"}));
+        e["hash_of"] = json!({"measurement_version": 0});
+        e
+    };
+    for (body, status, code, path) in [
+        (json!({"records": [measurement.clone(), env("b-x", "bogus", json!({}))]}), 422, "invalid_payload", Some("records[1].kind")),
+        (json!({"records": [measurement.clone(), env("b-x", "run", json!(5))]}), 422, "invalid_payload", None),
+        (json!({"records": [measurement.clone(), attach("p404")]}), 404, "not_found", None),
+        (json!({"records": [measurement.clone(), measurement.clone()]}), 422, "invalid_payload", Some("records[1].id")),
+        (json!({"records": []}), 422, "invalid_payload", Some("records")),
+        (json!({"nope": []}), 422, "invalid_payload", Some("records")),
+    ] {
+        let (s, e) = call(&app, post(&batch, k, &body).to_request()).await;
+        assert_eq!((s, e["error"].as_str()), (status, Some(code)), "{body} -> {e}");
+        if let Some(path) = path {
+            assert_eq!(e["path"].as_str(), Some(path), "{e}");
+        }
+        assert_eq!(all!(&app), before, "a refused batch wrote records: {body}");
+    }
+
+    // The attachment pair: the event's measurement_version is the hash of
+    // the batch's measurement record, filled in by the store.
+    let pair = json!({"records": [measurement.clone(), attach("p1")]});
+    let (s, out) = call(&app, post(&batch, k, &pair).to_request()).await;
+    assert_eq!(s, 201, "{out}");
+    let m = &out["records"][0]["record"];
+    let e = &out["records"][1]["record"];
+    assert_eq!(e["payload"]["measurement_version"], m["hash"]);
+    let (_, p) = call(&app, get(&format!("/investigations/{inv}/proposals/p1"), k).to_request()).await;
+    assert_eq!(p["status"], "data_attached");
+    let after = all!(&app);
+    assert_eq!(after, before + 2);
+
+    // A retry of the committed batch replays both records (200, created false).
+    let (s, again) = call(&app, post(&batch, k, &pair).to_request()).await;
+    assert_eq!(s, 200, "{again}");
+    assert!(again["records"].as_array().unwrap().iter().all(|i| i["created"] == false));
+    assert_eq!(again["records"][1]["record"], *e);
+    assert_eq!(all!(&app), after);
+    // The same id with other content conflicts, and still writes nothing.
+    let mut changed = pair.clone();
+    changed["records"][0]["payload"]["observation"]["y"]["T"] = json!([2.0]);
+    let (s, c) = call(&app, post(&batch, k, &changed).to_request()).await;
+    assert_eq!((s, c["error"].as_str()), (409, Some("idempotency_conflict")));
+    assert_eq!(all!(&app), after);
+
+    // Idempotency is per record id; the header is refused.
+    let (s, _) = call(
+        &app,
+        post(&batch, k, &pair).insert_header(("Idempotency-Key", "b-m")).to_request(),
+    )
+    .await;
+    assert_eq!(s, 400);
+    // The dedicated attachment route is gone (CORE-01a).
+    let (s, _) = call(
+        &app,
+        post(&format!("/investigations/{inv}/proposals/p1/attachment"), k, &pair).to_request(),
+    )
+    .await;
+    assert_eq!(s, 404);
 }
 
 #[actix_web::test]

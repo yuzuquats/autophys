@@ -261,6 +261,7 @@ are `{error, message}`.
 | `POST /investigations/{id}/proposals/{pid}/approvals` | envelope, event `approved`, `edited` (with `settings`) or `rejected` | `{record}`; 409 unless `proposed` |
 | `POST /investigations/{id}/proposals/{pid}/data` | envelope, event `data_attached` with `measurement_version` | `{record}`; 409 unless approved or edited |
 | `GET /investigations/{id}/records?kind=` | | `{records}` |
+| `POST /investigations/{id}/records` | `{records: [{id, kind, payload, hash_of?}]}`, 1 to 64 envelopes | `{records: [{record, gseq, created}], gseq}`: all appended in one transaction or none; each replays by id. `HttpStore.attach_data` and `append_batch` use it |
 | `GET /stream?after={gseq}` | | `text/event-stream`: `id: <gseq>`, `event: record`, `data: <record>` |
 
 A record is `{id, investigation, seq, kind, ts, payload, prev_hash, hash}`;

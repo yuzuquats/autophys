@@ -116,6 +116,85 @@ fn idempotency_conflict(id: &str) -> Error {
     )
 }
 
+/// The most records one [`Investigation::append_batch`] call takes.
+pub const MAX_BATCH_RECORDS: usize = 64;
+
+/// One record of an [`Investigation::append_batch`] transaction; also the
+/// wire shape of `POST /investigations/{inv}/records` (`{"records": [...]}`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct BatchRecord {
+    /// The client's idempotency key, as for a single append.
+    pub id: String,
+    pub kind: String,
+    pub payload: Value,
+    /// Top-level payload fields to set to the `hash` of an earlier record of
+    /// the same batch (by index), before the record is checked and hashed:
+    /// `{"measurement_version": 0}` links a `data_attached` event to the
+    /// batch's first record. The fields must be absent from `payload`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub hash_of: BTreeMap<String, usize>,
+}
+
+impl BatchRecord {
+    pub fn new(id: impl Into<String>, kind: Kind, payload: Value) -> Self {
+        Self { id: id.into(), kind: kind.as_str().into(), payload, hash_of: BTreeMap::new() }
+    }
+    /// Set payload field `field` to the hash of batch record `index`.
+    pub fn hash_of(mut self, field: impl Into<String>, index: usize) -> Self {
+        self.hash_of.insert(field.into(), index);
+        self
+    }
+}
+
+/// Batch checks that need no database: count, ids, kinds and links.
+pub(crate) fn check_batch(records: &[BatchRecord]) -> Result<Vec<Kind>> {
+    if records.is_empty() || records.len() > MAX_BATCH_RECORDS {
+        return Err(Error::invalid(
+            "records",
+            format!("required array of 1 to {MAX_BATCH_RECORDS} records"),
+        ));
+    }
+    let mut kinds = Vec::with_capacity(records.len());
+    for (i, r) in records.iter().enumerate() {
+        let at = |e: Error| batch_error(i, e);
+        validate::check_id("id", &r.id).map_err(at)?;
+        if let Some(j) = records[..i].iter().position(|o| o.id == r.id) {
+            return Err(Error::invalid(format!("records[{i}].id"), format!("repeats records[{j}].id")));
+        }
+        let kind = Kind::parse(&r.kind)
+            .ok_or_else(|| Error::invalid(format!("records[{i}].kind"), format!("unknown kind {:?}", r.kind)))?;
+        if kind == Kind::Investigation {
+            return Err(Error::invalid(
+                format!("records[{i}].kind"),
+                "investigation records are created by create_investigation",
+            ));
+        }
+        for (field, &j) in &r.hash_of {
+            let path = format!("records[{i}].hash_of.{field}");
+            if j >= i {
+                return Err(Error::invalid(path, "must name an earlier record of the batch"));
+            }
+            match r.payload.as_object() {
+                None => return Err(Error::invalid(format!("records[{i}].payload"), "must be an object")),
+                Some(p) if p.contains_key(field) => {
+                    return Err(Error::invalid(path, "the field is also in the payload"));
+                }
+                _ => {}
+            }
+        }
+        kinds.push(kind);
+    }
+    Ok(kinds)
+}
+
+/// Point a refusal at batch record `i`: `payload.x` becomes `records[i].payload.x`.
+fn batch_error(i: usize, e: Error) -> Error {
+    match e {
+        Error::Invalid { path, message } => Error::Invalid { path: format!("records[{i}].{path}"), message },
+        other => other,
+    }
+}
+
 fn configure(conn: &Connection) -> Result<()> {
     conn.busy_timeout(Duration::from_secs(5))?;
     conn.pragma_update(None, "foreign_keys", "ON")?;
@@ -799,67 +878,89 @@ impl Investigation {
     /// Record the measurement taken for approved proposal `pid`: a
     /// `measurement` record `{observation}`, then the proposal's
     /// `data_attached` event, whose `measurement_version` is that
-    /// measurement record's hash. Both records commit in one transaction.
-    /// Returns the `data_attached` record.
+    /// measurement record's hash. Both records commit in one transaction
+    /// ([`Investigation::append_batch`]). Returns the `data_attached` record.
+    ///
+    /// Over HTTP the two record ids derive from the investigation, the
+    /// proposal and the kind, so a retry after a lost response replays the
+    /// committed pair, and a different observation for the same proposal is
+    /// `idempotency_conflict`.
     pub fn attach_data(&self, pid: &str, observation: Value) -> Result<Appended> {
-        if let Some(r) = &self.wb.remote { return r.attach_data(&self.id,pid,observation); }
-        self.attach_records(pid, Envelope {
-            id: random_hex(16)?, kind: Kind::Measurement,
-            payload: serde_json::json!({"observation":observation}),
-        }, &random_hex(16)?, None)
+        validate::check_id("payload.proposal_id", pid)?;
+        let (measurement_id, event_id) = if self.wb.remote.is_some() {
+            let identity = |kind: &str| {
+                crate::sha256_hex([canonical(&serde_json::json!({
+                    "investigation": self.id, "proposal_id": pid, "kind": kind
+                }))
+                .as_bytes()])
+            };
+            (identity("measurement"), identity("proposal"))
+        } else {
+            (random_hex(16)?, random_hex(16)?)
+        };
+        let batch = [
+            BatchRecord::new(
+                measurement_id,
+                Kind::Measurement,
+                serde_json::json!({"observation": observation}),
+            ),
+            BatchRecord::new(
+                event_id,
+                Kind::Proposal,
+                serde_json::json!({"proposal_id": pid, "event": "data_attached"}),
+            )
+            .hash_of("measurement_version", 0),
+        ];
+        let mut out = self.append_batch(&batch)?;
+        out.pop()
+            .ok_or_else(|| Error::Internal("empty batch result".into()))
     }
 
-    /// Authoritative attachment operation. Existing wire record bodies/IDs are
-    /// retained; approval, global replay/conflict and both projections commit
-    /// together. `None` derives the record-API hash linkage inside the transaction.
-    pub fn attach_records(&self, pid: &str, measurement: Envelope, event_id: &str, event: Option<Value>) -> Result<Appended> {
-        if let Some(r) = &self.wb.remote { return r.attach_records(&self.id, pid, measurement, event_id, event); }
-        validate::check_id("payload.proposal_id", pid)?;
-        validate::check_id("measurement.id", &measurement.id)?;
-        validate::check_id("attachment.id", event_id)?;
-        if measurement.kind != Kind::Measurement {
-            return Err(Error::invalid("measurement.kind", "must be measurement"));
+    /// Append `records` to this investigation in order, all or none, in one
+    /// `BEGIN IMMEDIATE` transaction (`POST /investigations/{inv}/records`
+    /// over HTTP). Each record is checked exactly as [`Investigation::append`]
+    /// checks one, against the state the earlier records of the batch leave:
+    /// a record whose id is stored with the same kind and payload replays
+    /// (`created = false`), the same id with other content is
+    /// `idempotency_conflict`, and the proposal state machine applies. Any
+    /// refusal writes nothing. A record's [`BatchRecord::hash_of`] fills
+    /// top-level payload fields with the hash of an earlier record of the
+    /// batch before it is checked. Returns one [`Appended`] per record.
+    pub fn append_batch(&self, records: &[BatchRecord]) -> Result<Vec<Appended>> {
+        if let Some(r) = &self.wb.remote {
+            return r.append_batch(&self.id, records);
         }
-        validate::payload_shape(Kind::Measurement, &measurement.payload)?;
-        let text = canonical(&measurement.payload);
-        if text.len() > validate::MAX_PAYLOAD_BYTES { return Err(Error::TooLarge(validate::MAX_PAYLOAD_BYTES)); }
+        let kinds = check_batch(records)?;
         let mut conn = self.wb.conn()?;
         let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let prior = replay(&tx, &measurement.id, &self.id, Kind::Measurement, &text)?;
-        // Replay is decided before transition checks, but only a complete pair
-        // can replay. Pre-existing single-record partial writes are not migrated.
-        if prior.is_none() {
-            let state = proposal_in(&tx, &self.id, pid)?.status;
-            if state != "approved" && state != "edited" {
-                return Err(Error::conflict("conflict", format!("proposal is {state}; data_attached is not allowed")));
+        if !projections::investigation_exists(&tx, &self.id)? {
+            return Err(Error::NotFound("investigation"));
+        }
+        let mut out: Vec<Appended> = Vec::with_capacity(records.len());
+        for (i, (r, kind)) in records.iter().zip(kinds).enumerate() {
+            let at = |e: Error| batch_error(i, e);
+            let mut payload = r.payload.clone();
+            if let Some(fields) = payload.as_object_mut() {
+                for (field, &j) in &r.hash_of {
+                    fields.insert(field.clone(), Value::String(out[j].record.hash.clone()));
+                }
             }
+            validate::payload_shape(kind, &payload).map_err(at)?;
+            let text = canonical(&payload);
+            if text.len() > validate::MAX_PAYLOAD_BYTES {
+                return Err(Error::TooLarge(validate::MAX_PAYLOAD_BYTES));
+            }
+            if let Some(replayed) = replay(&tx, &r.id, &self.id, kind, &text).map_err(at)? {
+                out.push(replayed);
+                continue;
+            }
+            let env = Envelope { id: r.id.clone(), kind, payload };
+            projections::check(&tx, &self.id, &env).map_err(at)?;
+            let logged = insert_record(&tx, &self.id, &env.id, kind, &text)?;
+            out.push(Appended { gseq: logged.gseq, record: logged.record, created: true });
         }
-        let m = if let Some(m) = &prior { m.record.clone() } else {
-            insert_record(&tx, &self.id, &measurement.id, Kind::Measurement, &text)?.record
-        };
-        let payload = event.unwrap_or_else(|| serde_json::json!({
-            "proposal_id":pid,"event":"data_attached","measurement_version":m.hash
-        }));
-        validate::payload_shape(Kind::Proposal, &payload)?;
-        if payload["proposal_id"] != pid || payload["event"] != "data_attached" {
-            return Err(Error::invalid("attachment.payload", "must attach the proposal in the path"));
-        }
-        let link = &payload["measurement_version"];
-        if link != &Value::String(m.hash.clone()) && (measurement.payload.get("version").is_none() || link != &measurement.payload["version"]) {
-            return Err(Error::invalid("attachment.payload.measurement_version", "must identify this measurement"));
-        }
-        let event_text = canonical(&payload);
-        if event_text.len() > validate::MAX_PAYLOAD_BYTES { return Err(Error::TooLarge(validate::MAX_PAYLOAD_BYTES)); }
-        if let Some(out) = replay(&tx, event_id, &self.id, Kind::Proposal, &event_text)? {
-            if prior.is_none() { return Err(Error::conflict("conflict", "attachment has no matching measurement")); }
-            return Ok(out);
-        }
-        if prior.is_some() { return Err(Error::conflict("conflict", "measurement has no matching atomic attachment")); }
-        let env = Envelope { id:event_id.into(), kind:Kind::Proposal, payload };
-        projections::check(&tx, &self.id, &env)?;
-        let logged = insert_record(&tx, &self.id, event_id, Kind::Proposal, &event_text)?;
         tx.commit()?;
-        Ok(Appended { record:logged.record, gseq:logged.gseq, created:true })
+        Ok(out)
     }
 
     /// Block until proposal `proposal_id` leaves `proposed`, whoever decides

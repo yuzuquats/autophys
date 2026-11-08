@@ -5,25 +5,37 @@ use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
 impl Remote {
-    pub(crate) async fn attach_data(&self, inv: &str, pid: &str, observation: Value) -> Result<Appended> {
-        crate::validate::check_id("payload.proposal_id", pid)?;
-        let payload = json!({"observation":observation});
-        crate::validate::payload_shape(Kind::Measurement, &payload)?;
-        let identity = |kind: &str| {
-            sha256_hex([canonical(&json!({
-                "investigation":inv,"proposal_id":pid,"kind":kind
-            }))
-            .as_bytes()])
-        };
-        self.attach_records(inv, pid, Envelope { id:identity("measurement"), kind:Kind::Measurement, payload }, &identity("proposal"), None).await
-    }
-
-    pub(crate) async fn attach_records(&self, inv: &str, pid: &str, measurement: Envelope, event_id: &str, event: Option<Value>) -> Result<Appended> {
-        let (status, mut out) = self.json("POST", &format!("/investigations/{}/proposals/{}/attachment", encode(inv), encode(pid)),
-            Some(&json!({"measurement":{"id":measurement.id,"kind":measurement.kind.as_str(),"payload":measurement.payload},"attachment_id":event_id,"attachment_payload":event})), None, self.timeout).await?;
-        let gseq = out["gseq"].as_i64().ok_or_else(|| Error::Io("invalid daemon gseq".into()))?;
-        self.see(inv, gseq);
-        Ok(Appended { record:decode(out["record"].take())?, gseq, created:status == 201 })
+    /// `POST /investigations/{inv}/records`: the batch in one transaction.
+    pub(crate) async fn append_batch(&self, inv: &str, records: &[BatchRecord]) -> Result<Vec<Appended>> {
+        crate::workbook::check_batch(records)?;
+        let (_, mut out) = self
+            .json(
+                "POST",
+                &format!("/investigations/{}/records", encode(inv)),
+                Some(&json!({"records": records})),
+                None,
+                self.timeout,
+            )
+            .await?;
+        let bad = || Error::Io("invalid daemon batch response".into());
+        let items = out["records"].as_array_mut().ok_or_else(bad)?;
+        if items.len() != records.len() {
+            return Err(bad());
+        }
+        let appended = items
+            .iter_mut()
+            .map(|item| {
+                Ok(Appended {
+                    record: decode(item["record"].take())?,
+                    gseq: item["gseq"].as_i64().ok_or_else(bad)?,
+                    created: item["created"].as_bool().ok_or_else(bad)?,
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        if let Some(gseq) = appended.iter().map(|a| a.gseq).max() {
+            self.see(inv, gseq);
+        }
+        Ok(appended)
     }
 
     pub(crate) async fn config_versions(&self, pid: &str) -> Result<Vec<ConfigVersion>> {
