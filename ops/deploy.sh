@@ -14,8 +14,8 @@ if ! [[ "$addr" =~ ^(127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|\[::1\]):[0-9]{1,5}
   echo "deploy: refusing non-loopback address $addr" >&2; exit 2
 fi
 export PATH="$HOME/.deno/bin:$HOME/.cargo/bin:$PATH"
-# Build output is configurable and stays outside the checkout.
-export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$HOME/.cache/autophys/target}
+# One build cache: the checkout's own (gitignored) target/, unless overridden.
+export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$repo/target}
 # A release bundles with the tento-web in vendor/, never one TENTO_WEB names.
 unset TENTO_WEB
 

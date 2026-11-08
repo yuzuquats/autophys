@@ -548,13 +548,10 @@ mod macos {
             !zip.to_string_lossy().contains(','),
             "macOS bundle path cannot contain commas"
         );
+        // The checkout's own target/, the one build cache cargo and ops/ use.
         let target = std::env::var_os("CARGO_TARGET_DIR")
             .map(PathBuf::from)
-            .or_else(|| {
-                std::env::var_os("HOME")
-                    .map(|home| PathBuf::from(home).join(".cache/autophys/target"))
-            })
-            .context("set CARGO_TARGET_DIR for macOS packaging")?;
+            .unwrap_or_else(|| root.join("target"));
         let status = std::process::Command::new("cargo")
             .current_dir(&root)
             .env("CARGO_TARGET_DIR", &target)

@@ -98,8 +98,8 @@ flowchart LR
   `autophys.service` with `ExecStart=… bin/autophys serve …`, and waits for
   healthz. `check-flow.ts` drives the whole flow in headless Chrome.
 
-Build output stays in `CARGO_TARGET_DIR=$HOME/.cache/autophys/target`; no
-checkout has a real `target/`.
+Build output goes to the checkout's gitignored `target/`, the one autophys
+build cache per host (decision BUILD-1); `CARGO_TARGET_DIR` still overrides.
 
 ## Batches
 

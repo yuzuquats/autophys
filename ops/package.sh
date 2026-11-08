@@ -18,7 +18,7 @@ if [ -n "$(git -C "$repo" status --porcelain)" ]; then
   echo "package: commit changes first so the executable identifies its source" >&2; exit 1
 fi
 commit=$(git -C "$repo" rev-parse HEAD)
-export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/autophys/target}
+export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$repo/target}
 # Always bundle the vendored compiler, independently of host environment overrides.
 unset TENTO_WEB
 (cd "$repo" && cargo test --workspace --locked && deno test --allow-read --config html/deno.json html/)

@@ -119,3 +119,10 @@ this record I81f7837f7c0ee007ff06.
 | ID | Decision | Source | State |
 | --- | --- | --- | --- |
 | UNC-1 | The recorded `analyze_sensitivity` step result gains `marginal_log_std` (per-parameter one-sigma log uncertainty; `null` for the report's `inf`), in both SDKs, and the workbench falls back to the recorded identified/not-identified verdict when no uncertainty is recorded. Before: the step recorded only the verdict and the UI ignored it on the finished summary, calling identified parameters "unbounded". Reason: the number already exists at record time and the change is additive, so old workbooks keep working. Strongest alternative: record the full report (singular values and vectors) so the daemon path matches the fixture path, which also fills the Identifiability card but grows every step record and the record contract further. Reversal: drop the key from both SDKs and `wire.ts`; nothing else reads it, and the verdict fallback stays useful on its own | **agent-chosen, pending operator review** | implemented |
+
+## Build cache, 2026-11-07
+
+| ID | Decision | Source | State |
+| --- | --- | --- | --- |
+| BUILD-1 | autophys keeps **one** build cache per host: the checkout's gitignored `target/`. `ops/deploy.sh`, `release.sh`, `package.sh` and the macOS `pack` relink default `CARGO_TARGET_DIR` to it instead of `~/.cache/autophys/target`; CONTRIBUTING no longer asks for separate external storage. Before: yuzuquats held three full caches (`~/.cache/autophys/target` 52 GB, `~/ssd-mount/cargo-target/autophys` 35 GB, `autophys/target` 1.6 GB) plus a 16 GB `~/.cache/autophys/review-target`, all on the boot disk at 98%. The extra trees were deleted (disk 98% to 86%). `CARGO_TARGET_DIR` still overrides; older pages that name `~/.cache/autophys/target` are historical. | operator, 2026-11-07 ("just keep the single canonical autophys/target") | implemented |
+

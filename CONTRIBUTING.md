@@ -39,13 +39,13 @@ must not be reported as verified.
 
 ## Daemon and browser
 
-Choose external build storage. On the operator fleet, follow the host's approved
-artifact location (SSD on multi-volume hosts); do not replace a target symlink
-or use a peer's real target tree. Outside that fleet, any directory you own
-outside the checkout works:
+Build into the checkout's gitignored `target/`, the cache plain `cargo` and the
+`ops/` scripts already use, so a host keeps one autophys build cache. Do not
+point builds at a second directory; set `CARGO_TARGET_DIR` here only so the
+commands below can name the binary:
 
 ```sh
-export CARGO_TARGET_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/autophys/target"
+export CARGO_TARGET_DIR="$PWD/target"
 cargo test --workspace --locked
 deno test --allow-read --config html/deno.json html/
 deno check --config html/deno.json html/routes/index.root.ts

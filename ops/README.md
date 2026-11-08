@@ -2,9 +2,9 @@
 
 `package.sh --out /absolute/path/to/new-autophys` builds a Linux single-file
 executable from a clean committed checkout, with no service installation.
-It uses Cargo/Deno on PATH, `strip`, and `CARGO_TARGET_DIR` (default
-`${XDG_CACHE_HOME:-$HOME/.cache}/autophys/target`). Use approved external build
-storage on managed hosts. Existing output is refused. The package contains
+It uses Cargo/Deno on PATH, `strip`, and `CARGO_TARGET_DIR` (default: the
+checkout's gitignored `target/`, the same cache a plain `cargo` run uses, so a
+host keeps one autophys build cache). Existing output is refused. The package contains
 the browser payload, so consumers do not need this source checkout, Deno or
 a sibling Tento installation to serve it. A source build still needs public
 registry/JSR/npm/esbuild dependencies or their caches.

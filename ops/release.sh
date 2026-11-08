@@ -15,7 +15,7 @@ if [ -n "$(git -C "$repo" status --porcelain)" ]; then
   echo "release: commit changes first so the executable identifies its source" >&2; exit 1
 fi
 export PATH="$HOME/.deno/bin:$HOME/.cargo/bin:$PATH"
-export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/autophys/target}
+export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$repo/target}
 commit=$(git -C "$repo" rev-parse HEAD)
 version=$(sed -n 's/^version = "\(.*\)"$/\1/p' "$repo/Cargo.toml" | head -1)
 target=$(rustc -vV | sed -n 's/^host: //p')
