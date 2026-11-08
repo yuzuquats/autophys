@@ -19,11 +19,13 @@ GRID = [0.02, 0.06, 0.11, 0.22, 0.56, 1.1]
 TRUTH = {"v": 200.0, "k": 0.06}
 
 
-@ap.simulator(params={"v": ("rate", 10.0, 500.0), "k": ("conc", 0.005, 1.0)},
-              experiments={"treated": {"kind": "measured", "t": GRID}}, outputs=("rate",))
-def kinetics(params, experiment):
+def _kinetics(params, experiment):
     t = np.asarray(experiment["t"], dtype=float)
     return {"t": t, "rate": params["v"] * t / (params["k"] + t)}
+
+
+kinetics = ap.simulator(params={"v": ("rate", 10.0, 500.0), "k": ("conc", 0.005, 1.0)},
+                        experiments={"treated": {"kind": "measured", "t": GRID}}, outputs=("rate",))(_kinetics)
 
 
 def _obs(settings, t, split):
@@ -141,3 +143,36 @@ def test_a_run_whose_simulator_always_fails_ends_with_an_outcome():
     assert "identifiability could not be checked at the final estimate: diverged" in out.reasons
     assert out.identified == []
     assert inv.store.records(out.investigation, "outcome")
+
+
+def test_a_claim_the_closing_check_could_not_test_says_it_was_not_checked():
+    # FINISH-WORDING: the rule never ran, so the outcome must not say it disagreed.
+    from autophys.agent import Decision
+    from autophys.project import AnalysisConfig
+    failing = {"on": False}
+
+    @ap.simulator(params={"v": ("rate", 10.0, 500.0), "k": ("conc", 0.005, 1.0)},
+                  experiments={"treated": {"kind": "measured", "t": GRID}}, outputs=("rate",))
+    def flaky(params, experiment):
+        if failing["on"]:
+            raise SimulationError("diverged")
+        return _kinetics(params, experiment)
+
+    class StopClaiming:
+        name = "stop"
+
+        def decide(self, facts):
+            return Decision("done", ["fit"], "stop", {"status": "validated", "identified": ["v", "k"],
+                                                     "summary": "claims both"}, "none"), {}
+
+    project = Project(name="flaky", simulator=flaky, budgets=Budgets(max_experiments=0),
+                      analysis=AnalysisConfig(identify_every_fit=False))
+    train = _obs(flaky.experiment("treated"), GRID, "train")
+    inv = Investigation(project, ap.Dataset([train]), ProposalRunner(), policy=StopClaiming(), store=MemoryStore())
+    inv.tool_optimize_parameters()
+    failing["on"] = True
+    out = inv.run()
+    assert out.status == "inconclusive" and out.identified == []
+    assert "identifiability could not be checked at the final estimate: diverged" in out.reasons
+    assert "guardrail: claimed identified but identifiability was not checked: v, k" in out.reasons
+    assert not any(r.startswith("not identified by the rule") or "disagrees" in r for r in out.reasons), out.reasons

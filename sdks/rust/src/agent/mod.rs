@@ -1100,19 +1100,28 @@ impl Investigation {
         t: Instant,
     ) -> crate::Result<Outcome> {
         self.wall += t.elapsed().as_secs_f64();
+        // The closing check was attempted and could not run (FINISH-WORDING).
+        let mut unchecked = false;
         if self.fit.is_some()
             && self.fit_model.as_ref() == Some(&self.model)
             && self.sens_fit != Some(self.fit_id)
         {
             match self.tool_analyze_sensitivity() {
                 Ok(_) => {}
-                Err(SimulationError::BudgetExceeded(_)) => reasons.push(
-                    "no simulations left to check identifiability at the final estimate".into(),
-                ),
+                Err(SimulationError::BudgetExceeded(_)) => {
+                    unchecked = true;
+                    reasons.push(
+                        "no simulations left to check identifiability at the final estimate"
+                            .into(),
+                    )
+                }
                 // G8-FINISH: still end with an outcome; it cannot claim identification.
-                Err(e) => reasons.push(format!(
-                    "identifiability could not be checked at the final estimate: {e}"
-                )),
+                Err(e) => {
+                    unchecked = true;
+                    reasons.push(format!(
+                        "identifiability could not be checked at the final estimate: {e}"
+                    ))
+                }
             }
         }
         let sens = self
@@ -1153,7 +1162,7 @@ impl Investigation {
             if !val_ok {
                 reasons.push("validation split not passed at the latest fit".into());
             }
-            if !non.is_empty() {
+            if !non.is_empty() && !unchecked {
                 reasons.push(format!("not identified by the rule: {}", non.join(", ")));
             }
             if !reasons.is_empty() {
@@ -1168,8 +1177,14 @@ impl Investigation {
             }
         }
         if !overrides.is_empty() {
+            // FINISH-WORDING: an unchecked rule has no verdict to disagree with.
+            let why = if unchecked {
+                "identifiability was not checked"
+            } else {
+                "the rule disagrees"
+            };
             reasons.push(format!(
-                "guardrail: claimed identified but the rule disagrees: {}",
+                "guardrail: claimed identified but {why}: {}",
                 overrides.join(", ")
             ));
         }

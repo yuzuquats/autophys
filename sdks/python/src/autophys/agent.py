@@ -1017,14 +1017,17 @@ class Investigation:
         self.wall += time.perf_counter() - t0
         reasons = list(reasons)
         sens = self.sens if self.sens_fit == self.fit_id else None
+        unchecked = False  # the closing check was attempted and could not run
         if self.fit is not None and self.fit_model == self.model and sens is None:
             try:
                 self.tool_analyze_sensitivity()
                 sens = self.sens
             except SimulationBudgetExceeded:
+                unchecked = True
                 reasons.append("no simulations left to check identifiability at the final estimate")
             except (SimulationError, BoundsError) as e:
                 # G8-FINISH: still end with an outcome; it cannot claim identification.
+                unchecked = True
                 reasons.append(f"identifiability could not be checked at the final estimate: {e}")
         rule_ids = list(sens.identified) if sens else []
         names = self.sim.param_names
@@ -1038,7 +1041,7 @@ class Investigation:
                 reasons.append("latest fit did not converge" if self.fit else "no fit")
             if not (self.validation and self.validation_fit == self.fit_id and self.validation.get("passed")):
                 reasons.append("validation split not passed at the latest fit")
-            if non_ids:
+            if non_ids and not unchecked:
                 reasons.append("not identified by the rule: " + ", ".join(non_ids))
             if reasons:
                 status = "inconclusive"
@@ -1048,7 +1051,9 @@ class Investigation:
             if not (self.validation and self.validation_fit == self.fit_id and self.validation.get("passed")):
                 reasons.append("validation split not passed at the latest fit")
         if overrides:
-            reasons.append("guardrail: claimed identified but the rule disagrees: " + ", ".join(overrides))
+            # FINISH-WORDING: an unchecked rule has no verdict to disagree with.
+            why = "identifiability was not checked" if unchecked else "the rule disagrees"
+            reasons.append(f"guardrail: claimed identified but {why}: " + ", ".join(overrides))
         out = Outcome(
             status=status,
             reasons=reasons,
