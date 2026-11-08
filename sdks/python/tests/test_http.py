@@ -135,6 +135,31 @@ def test_append_batch_takes_caller_ids_so_a_retry_replays(server):
     assert all(len(r.id) == 32 for r in mixed)
 
 
+def test_fake_batch_refuses_a_mislinked_python_pair_and_replays_stored_records(server):
+    """The fake applies the daemon's batch link rule: a Python-shaped pair whose
+    event names another dataset version than its measurement is refused and
+    writes nothing; a stored event retried unchanged replays, whatever precedes it."""
+    store, inv = _batch_investigation(server)
+    for pid in ("p1", "p2"):
+        store.append(inv, "proposal", {"proposal_id": pid, "event": "proposed", "experiment": "e", "settings": {}})
+        server.approve_record(inv, pid)
+    observation = {"experiment": "e", "t": [0.0], "y": {"T": [1.0]}}
+    measurement = lambda version: {"version": version, "digest": "d", "observation": observation}
+    attached = lambda pid, version: {"proposal_id": pid, "event": "data_attached", "measurement_version": version, "digest": "d"}
+    before = len(store.records(inv))
+    with pytest.raises(HttpError) as e:
+        store.append_batch(inv, [("measurement", measurement(1), "m-1"), ("proposal", attached("p1", 2), "e-1")])
+    assert (e.value.status, e.value.path) == (422, "records[1].payload.measurement_version")
+    assert len(store.records(inv)) == before
+    store.append_batch(inv, [("measurement", measurement(1), "m-1"), ("proposal", attached("p1", 1), "e-1")])
+    retry = store.append_batch(inv, [("measurement", measurement(7), "m-7"), ("proposal", attached("p1", 1), "e-1")])
+    assert [r.id for r in retry] == ["m-7", "e-1"] and len(store.records(inv)) == before + 3
+    with pytest.raises(HttpError) as e:  # a new event in the same place is still refused
+        store.append_batch(inv, [("measurement", measurement(8), "m-8"), ("proposal", attached("p2", 1), "e-2")])
+    assert (e.value.status, e.value.path) == (422, "records[1].payload.measurement_version")
+    assert len(store.records(inv)) == before + 3
+
+
 @pytest.mark.parametrize("kind", ["memory", "jsonl", "workbook"])
 def test_local_append_batch_takes_caller_ids(tmp_path, kind):
     from autophys.store import JsonlStore, MemoryStore

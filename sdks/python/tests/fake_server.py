@@ -29,6 +29,42 @@ from autophys.workbook import (WorkbookError, append_payload, check_id, check_tr
 PREFIX = "/api/v1"
 
 
+def _same_json(a, b) -> bool:
+    """JSON value equality as serde_json has it: 1, 1.0 and true differ."""
+    return type(a) is type(b) and a == b
+
+
+def _check_attachment_link(i: int, hash_of: dict, payload: dict, out: list) -> None:
+    """The daemon's batch link rule (``check_attachment_link`` in the Rust
+    SDK's workbook.rs) for a record the batch writes at index ``i``; ``out``
+    holds the ``(record, created)`` results of records ``0..i``.
+
+    A ``data_attached`` event whose ``measurement_version`` links into the
+    batch must name a measurement, and when a measurement precedes it in the
+    batch it must name one of those: by record hash (``hash_of`` or
+    literally) or by payload ``version``. Two events may name the same one.
+    """
+    if payload.get("event") != "data_attached":
+        return
+    kinds = [r["kind"] for r, _ in out]
+    if "measurement_version" in hash_of:
+        j = hash_of["measurement_version"]
+        if kinds[j] != "measurement":
+            raise WorkbookError("invalid", f"records[{j}] is a {kinds[j]}, not a measurement",
+                                f"records[{i}].hash_of.measurement_version")
+        return
+    link = payload.get("measurement_version")
+    path = f"records[{i}].payload.measurement_version"
+    for j, (r, _) in enumerate(out):
+        if (isinstance(link, str) and link == r["hash"]) or (
+                kinds[j] == "measurement" and "version" in r["payload"] and _same_json(r["payload"]["version"], link)):
+            if kinds[j] != "measurement":
+                raise WorkbookError("invalid", f"names records[{j}], a {kinds[j]}, not a measurement", path)
+            return
+    if "measurement" in kinds:
+        raise WorkbookError("invalid", "must identify a measurement of this batch", path)
+
+
 class FakeAutophys:
     def __init__(self, *, auto_approve_after: int | None = 2, deny: bool = False, stream: bool = True) -> None:
         self.lock = threading.Lock()
@@ -85,6 +121,12 @@ class FakeAutophys:
                        for r in log if r["gseq"] > after), key=lambda r: r["gseq"])
 
     # ------------------------------------------------------------------
+    def _stored(self, inv: str, rid: str, kind: str, payload: dict) -> bool:
+        """Whether ``_append`` would replay this record (same id and content)."""
+        return any(r["id"] == rid and r["investigation"] == inv and r["kind"] == kind
+                   and canonical(r["payload"]) == canonical(payload)
+                   for records in self.records.values() for r in records)
+
     def _append(self, inv: str, rid: str, kind: str, payload: dict) -> dict:
         if kind == "investigation":
             rid, payload, _ = investigation_payload(payload, rid)
@@ -187,6 +229,11 @@ class FakeAutophys:
                         kind = item.get("kind")
                         if kind == "investigation":
                             raise WorkbookError("invalid", "investigation records are created by create_investigation", f"records[{i}].kind")
+                        # As the daemon: shape, then replay, then the link
+                        # rule for records this batch writes only.
+                        _, clean, _ = append_payload(kind, payload, rid)
+                        if not fake._stored(inv, rid, kind, clean):
+                            _check_attachment_link(i, item.get("hash_of") or {}, clean, out)
                         before = fake.gseq
                         r = fake._append(inv, rid, kind, payload)
                         out.append((r, fake.gseq > before))
