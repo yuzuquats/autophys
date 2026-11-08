@@ -1,4 +1,8 @@
-//! Blocking HTTP transport for the daemon's /api/v1, matching Python HttpStore.
+//! Async HTTP transport for the daemon's /api/v1, matching Python HttpStore.
+//!
+//! This is the one transport (tokio, through `reqwest`). Synchronous callers
+//! (the CLI, the investigation loop, scripts, [`crate::Workbook`]) use the
+//! thin facade [`crate::blocking::Remote`], which drives these futures.
 pub mod auth;
 mod stream;
 mod workbook;
@@ -47,8 +51,10 @@ impl From<HttpError> for Error {
 }
 
 /// Cheap to clone; investigation cursors and diagnostic wait mode are shared.
+/// Methods are `async` and need a tokio runtime (I/O and time enabled).
 #[derive(Clone)]
 pub struct Remote {
+    client: reqwest::Client,
     base: String,
     key: Arc<String>,
     pub timeout: Duration,
@@ -82,7 +88,7 @@ pub(crate) fn normalize_server(server: &str) -> Result<String> {
     let scheme = scheme.to_ascii_lowercase();
     if !matches!(scheme.as_str(), "http" | "https") { return Err(bad()); }
     let text = format!("{scheme}://{rest}");
-    let uri: ureq::http::Uri = text.parse().map_err(|_| bad())?;
+    let uri: http::Uri = text.parse().map_err(|_| bad())?;
     let authority = uri.authority().ok_or_else(bad)?;
     if authority.as_str().contains('@') || !authority.as_str().is_ascii() { return Err(bad()); }
     let host = uri.host().filter(|s| !s.is_empty()).ok_or_else(bad)?.to_ascii_lowercase();
@@ -107,7 +113,15 @@ pub(crate) fn normalize_server(server: &str) -> Result<String> {
 impl Remote {
     pub fn new(server: &str, api_key: &str) -> Result<Self> {
         let server = normalize_server(server)?;
+        // No idle pool: each request gets its own connection, as the earlier
+        // per-request agent did, so a connection never outlives the runtime
+        // that opened it (the facade's runtime or a caller's own).
+        let client = reqwest::Client::builder()
+            .pool_max_idle_per_host(0)
+            .build()
+            .map_err(|_| Error::Io("cannot start HTTP client".into()))?;
         Ok(Self {
+            client,
             base: format!("{}{API_PREFIX}", server.trim_end_matches('/')),
             key: Arc::new(api_key.into()),
             timeout: Duration::from_secs(30),
@@ -130,12 +144,15 @@ impl Remote {
     pub fn last_wait(&self) -> Option<&'static str> {
         *self.last_wait.lock().unwrap_or_else(|e| e.into_inner())
     }
+    fn set_last_wait(&self, mode: &'static str) {
+        *self.last_wait.lock().unwrap_or_else(|e| e.into_inner()) = Some(mode);
+    }
     fn see(&self, inv: &str, gseq: i64) {
         let mut map = self.cursors.lock().unwrap_or_else(|e| e.into_inner());
         let entry = map.entry(inv.into()).or_default();
         *entry = (*entry).max(gseq);
     }
-    pub(crate) fn response(
+    pub(crate) async fn response(
         &self,
         method: &str,
         path: &str,
@@ -144,21 +161,14 @@ impl Remote {
         key: Option<&str>,
         timeout: Duration,
         stream: bool,
-    ) -> Result<ureq::http::Response<ureq::Body>> {
+    ) -> Result<reqwest::Response> {
+        let method = reqwest::Method::from_bytes(method.as_bytes())
+            .map_err(|_| Error::BadRequest("invalid HTTP request".into()))?;
         // One absolute budget also bounds keep-alives and trickling SSE frames.
-        let config = ureq::Agent::config_builder()
-            .http_status_as_error(false)
-            .timeout_global(Some(timeout))
-            .timeout_recv_body(Some(if stream {
-                self.stream_idle.min(timeout)
-            } else {
-                timeout
-            }))
-            .build();
-        let agent = ureq::Agent::new_with_config(config);
-        let mut req = ureq::http::Request::builder()
-            .method(method)
-            .uri(format!("{}{}", self.base, path))
+        let mut req = self
+            .client
+            .request(method, format!("{}{}", self.base, path))
+            .timeout(timeout)
             .header(
                 "Accept",
                 if stream {
@@ -174,14 +184,12 @@ impl Remote {
         if let Some(key) = key {
             req = req.header("Idempotency-Key", key);
         }
-        if body.is_some() {
-            req = req.header("Content-Type", content_type);
+        if let Some(body) = body {
+            req = req.header("Content-Type", content_type).body(body.to_vec());
         }
-        let request = req
-            .body(body.unwrap_or_default())
-            .map_err(|_| Error::BadRequest("invalid HTTP request".into()))?;
-        let mut resp = agent
-            .run(request)
+        let resp = req
+            .send()
+            .await
             .map_err(|_| Error::Io("daemon request failed".into()))?;
         if resp.status().as_u16() >= 400 {
             let status = resp.status().as_u16();
@@ -190,9 +198,8 @@ impl Remote {
                 .get("Retry-After")
                 .and_then(|v| v.to_str().ok())
                 .map(str::to_owned);
-            let j = resp
-                .body_mut()
-                .read_to_vec()
+            let j = read_limited(resp, 1024 * 1024)
+                .await
                 .ok()
                 .and_then(|v| serde_json::from_slice::<Value>(&v).ok())
                 .unwrap_or(Value::Null);
@@ -207,7 +214,7 @@ impl Remote {
         }
         Ok(resp)
     }
-    pub(crate) fn bytes(
+    pub(crate) async fn bytes(
         &self,
         method: &str,
         path: &str,
@@ -216,13 +223,12 @@ impl Remote {
         key: Option<&str>,
         timeout: Duration,
     ) -> Result<(u16, Value)> {
-        let mut resp = self.response(method, path, body, content_type, key, timeout, false)?;
+        let resp = self
+            .response(method, path, body, content_type, key, timeout, false)
+            .await?;
         let status = resp.status().as_u16();
-        let raw = resp
-            .body_mut()
-            .with_config()
-            .limit(64 * 1024 * 1024)
-            .read_to_vec()
+        let raw = read_limited(resp, 64 * 1024 * 1024)
+            .await
             .map_err(|_| Error::Io("cannot read daemon response".into()))?;
         Ok((
             status,
@@ -234,7 +240,7 @@ impl Remote {
             },
         ))
     }
-    pub(crate) fn json(
+    pub(crate) async fn json(
         &self,
         method: &str,
         path: &str,
@@ -251,37 +257,38 @@ impl Remote {
             key,
             timeout,
         )
+        .await
     }
-    pub fn projects(&self) -> Result<Vec<Project>> {
-        decode(self.json("GET", "/projects", None, None, self.timeout)?.1["projects"].take())
+    pub async fn projects(&self) -> Result<Vec<Project>> {
+        decode(self.json("GET", "/projects", None, None, self.timeout).await?.1["projects"].take())
     }
-    pub fn ensure_project(&self, name: &str) -> Result<(Project, bool)> {
+    pub async fn ensure_project(&self, name: &str) -> Result<(Project, bool)> {
         let (status, mut j) = self.json(
             "POST",
             "/projects",
             Some(&json!({"name":name})),
             None,
             self.timeout,
-        )?;
+        ).await?;
         Ok((decode(j["project"].take())?, status == 201))
     }
-    pub fn investigations(&self, project: Option<&str>) -> Result<Vec<InvestigationInfo>> {
+    pub async fn investigations(&self, project: Option<&str>) -> Result<Vec<InvestigationInfo>> {
         let path = project
             .map(|p| format!("/investigations?project={}", encode(p)))
             .unwrap_or_else(|| "/investigations".into());
-        decode(self.json("GET", &path, None, None, self.timeout)?.1["investigations"].take())
+        decode(self.json("GET", &path, None, None, self.timeout).await?.1["investigations"].take())
     }
-    pub fn records(&self, inv: &str, kind: Option<&str>) -> Result<Vec<Record>> {
+    pub async fn records(&self, inv: &str, kind: Option<&str>) -> Result<Vec<Record>> {
         let mut path = format!("/investigations/{}/records", encode(inv));
         if let Some(kind) = kind {
             path.push_str(&format!("?kind={}", encode(kind)));
         }
-        decode(self.json("GET", &path, None, None, self.timeout)?.1["records"].take())
+        decode(self.json("GET", &path, None, None, self.timeout).await?.1["records"].take())
     }
-    pub fn proposal(&self, inv: &str, pid: &str) -> Result<Proposal> {
-        self.proposal_with_timeout(inv, pid, self.timeout)
+    pub async fn proposal(&self, inv: &str, pid: &str) -> Result<Proposal> {
+        self.proposal_with_timeout(inv, pid, self.timeout).await
     }
-    fn proposal_with_timeout(&self, inv: &str, pid: &str, timeout: Duration) -> Result<Proposal> {
+    async fn proposal_with_timeout(&self, inv: &str, pid: &str, timeout: Duration) -> Result<Proposal> {
         decode(
             self.json(
                 "GET",
@@ -289,11 +296,11 @@ impl Remote {
                 None,
                 None,
                 timeout,
-            )?
+            ).await?
             .1,
         )
     }
-    pub fn append(
+    pub async fn append(
         &self,
         inv: &str,
         kind: &str,
@@ -335,7 +342,7 @@ impl Remote {
             Some(&json!({"id":id,"kind":kind,"payload":payload})),
             Some(&id),
             self.timeout,
-        )?;
+        ).await?;
         let gseq = j["gseq"]
             .as_i64()
             .ok_or_else(|| Error::Io("invalid daemon gseq".into()))?;
@@ -346,6 +353,21 @@ impl Remote {
             created: status == 201,
         })
     }
+}
+
+/// Read a whole body, refusing one larger than `limit` bytes.
+pub(crate) async fn read_limited(
+    mut resp: reqwest::Response,
+    limit: usize,
+) -> std::result::Result<Vec<u8>, ()> {
+    let mut out = Vec::new();
+    while let Some(chunk) = resp.chunk().await.map_err(|_| ())? {
+        if out.len() + chunk.len() > limit {
+            return Err(());
+        }
+        out.extend_from_slice(&chunk);
+    }
+    Ok(out)
 }
 
 #[cfg(test)]

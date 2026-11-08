@@ -6,7 +6,8 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 publish = false
 
-# No tento, actix or async runtime: this crate builds without vendor/.
+# No tento or actix: this crate builds without vendor/. The daemon transport
+# (src/remote) is async on tokio; src/blocking.rs is its synchronous facade.
 [dependencies]
 hex = "0.4.3"
 getrandom = "0.2"
@@ -28,7 +29,15 @@ indexmap = { version = "2", features = ["serde"] }
 nalgebra = "0.33"
 differential-equations = "0.7"
 trust-region-least-squares = "0.11"
+# Model providers (reasoner) and backtest downloads; not the daemon transport.
 ureq = { version = "3", features = ["json"] }
+# The daemon transport (src/remote): HTTP/1.1 with rustls (ring, webpki roots,
+# as ureq above), no system proxy lookup, charset or HTTP/2.
+reqwest = { version = "0.12.28", default-features = false, features = ["rustls-tls-webpki-roots"] }
+tokio = { version = "1.44.2", default-features = false, features = ["rt-multi-thread", "time"] }
+# URI parsing for daemon URLs (the crate ureq re-exported as ureq::http).
+http = "1"
 
 [dev-dependencies]
 tempfile = "3"
+tokio = { version = "1.44.2", features = ["macros", "rt", "rt-multi-thread", "time"] }

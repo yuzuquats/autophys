@@ -224,8 +224,10 @@ autophys/
   `reject` and `verify` are the SDK through `autophys::connect`, so they work
   on a local folder or a URL. The command tree is implemented with `tento_sh::Scripts` and `command!`.
 - `sdks/rust` depends on `rusqlite`, `serde_json`, `sha2` and, for Remote,
-  a blocking HTTP client. It does not depend on tento or actix, so it builds
-  without `vendor/`.
+  an async HTTP client (`reqwest` on tokio, RS-REMOTE-1, 2026-11-08; it was
+  blocking `ureq` before). `autophys::blocking` is the synchronous facade the
+  record API, the CLI and scripts use. It does not depend on tento or actix,
+  so it builds without `vendor/`.
 
 ## Moving today's code
 

@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
 impl Remote {
-    pub(crate) fn attach_data(&self, inv: &str, pid: &str, observation: Value) -> Result<Appended> {
+    pub(crate) async fn attach_data(&self, inv: &str, pid: &str, observation: Value) -> Result<Appended> {
         crate::validate::check_id("payload.proposal_id", pid)?;
         let payload = json!({"observation":observation});
         crate::validate::payload_shape(Kind::Measurement, &payload)?;
@@ -15,18 +15,18 @@ impl Remote {
             }))
             .as_bytes()])
         };
-        self.attach_records(inv, pid, Envelope { id:identity("measurement"), kind:Kind::Measurement, payload }, &identity("proposal"), None)
+        self.attach_records(inv, pid, Envelope { id:identity("measurement"), kind:Kind::Measurement, payload }, &identity("proposal"), None).await
     }
 
-    pub(crate) fn attach_records(&self, inv: &str, pid: &str, measurement: Envelope, event_id: &str, event: Option<Value>) -> Result<Appended> {
+    pub(crate) async fn attach_records(&self, inv: &str, pid: &str, measurement: Envelope, event_id: &str, event: Option<Value>) -> Result<Appended> {
         let (status, mut out) = self.json("POST", &format!("/investigations/{}/proposals/{}/attachment", encode(inv), encode(pid)),
-            Some(&json!({"measurement":{"id":measurement.id,"kind":measurement.kind.as_str(),"payload":measurement.payload},"attachment_id":event_id,"attachment_payload":event})), None, self.timeout)?;
+            Some(&json!({"measurement":{"id":measurement.id,"kind":measurement.kind.as_str(),"payload":measurement.payload},"attachment_id":event_id,"attachment_payload":event})), None, self.timeout).await?;
         let gseq = out["gseq"].as_i64().ok_or_else(|| Error::Io("invalid daemon gseq".into()))?;
         self.see(inv, gseq);
         Ok(Appended { record:decode(out["record"].take())?, gseq, created:status == 201 })
     }
 
-    pub(crate) fn config_versions(&self, pid: &str) -> Result<Vec<ConfigVersion>> {
+    pub(crate) async fn config_versions(&self, pid: &str) -> Result<Vec<ConfigVersion>> {
         decode(
             self.json(
                 "GET",
@@ -34,12 +34,12 @@ impl Remote {
                 None,
                 None,
                 self.timeout,
-            )?
+            ).await?
             .1["config_versions"]
                 .take(),
         )
     }
-    pub(crate) fn put_config_version(
+    pub(crate) async fn put_config_version(
         &self,
         pid: &str,
         version: &str,
@@ -56,15 +56,16 @@ impl Remote {
             "application/json",
             None,
             self.timeout,
-        )?;
+        ).await?;
         Ok(status == 201)
     }
-    pub(crate) fn create(
+    /// Create an investigation in project `project_id`; returns its id.
+    pub(crate) async fn create(
         &self,
-        wb: &Workbook,
+        project_id: &str,
         mut meta: Value,
         id: Option<&str>,
-    ) -> Result<(Investigation, bool)> {
+    ) -> Result<(String, bool)> {
         if meta.is_null() {
             meta = json!({});
         }
@@ -72,9 +73,9 @@ impl Remote {
             .as_object_mut()
             .ok_or_else(|| Error::invalid("meta", "must be an object"))?;
         if m.get("project_id").is_none_or(Value::is_null) {
-            m.insert("project_id".into(), json!(wb.id()));
+            m.insert("project_id".into(), json!(project_id));
         }
-        if m["project_id"].as_str() != Some(wb.id()) {
+        if m["project_id"].as_str() != Some(project_id) {
             return Err(Error::NotFound("project"));
         }
         if m.get("overrides").is_none_or(Value::is_null) {
@@ -91,23 +92,23 @@ impl Remote {
             Some(&body),
             Some(&key),
             self.timeout,
-        )?;
+        ).await?;
         let inv = j["id"]
             .as_str()
             .ok_or_else(|| Error::Io("invalid investigation response".into()))?;
         if let Some(g) = j["gseq"].as_i64() {
             self.see(inv, g);
         }
-        Ok((wb.remote_investigation(inv), status == 201))
+        Ok((inv.to_owned(), status == 201))
     }
-    pub(crate) fn snapshot(&self, pid: &str) -> Result<Snapshot> {
+    pub(crate) async fn snapshot(&self, pid: &str) -> Result<Snapshot> {
         let (_, mut j) = self.json(
             "GET",
             &format!("/workspace?project={}", encode(pid)),
             None,
             None,
             self.timeout,
-        )?;
+        ).await?;
         let project = j["projects"]
             .as_array_mut()
             .and_then(|a| a.first_mut())
@@ -134,7 +135,7 @@ impl Remote {
             records: decode(j["records"].take())?,
         })
     }
-    pub(crate) fn put_display(&self, pid: &str, body: &[u8]) -> Result<(StoredDisplay, bool)> {
+    pub(crate) async fn put_display(&self, pid: &str, body: &[u8]) -> Result<(StoredDisplay, bool)> {
         let (status, j) = self.bytes(
             "PUT",
             &format!("/projects/{}/display", encode(pid)),
@@ -142,7 +143,7 @@ impl Remote {
             "application/json",
             None,
             self.timeout,
-        )?;
+        ).await?;
         Ok((
             StoredDisplay {
                 digest: j["digest"]
@@ -156,7 +157,7 @@ impl Remote {
             status == 201,
         ))
     }
-    pub(crate) fn put_blob(&self, pid: &str, data: &[u8], media_type: &str) -> Result<String> {
+    pub(crate) async fn put_blob(&self, pid: &str, data: &[u8], media_type: &str) -> Result<String> {
         if data.len() > 16 * 1024 * 1024 {
             return Err(Error::BadRequest("blob exceeds 16 MiB limit".into()));
         }
@@ -171,7 +172,7 @@ impl Remote {
             media_type,
             None,
             self.timeout,
-        ) {
+        ).await {
             Ok(_) => Ok(format!("sha256:{hash}")),
             Err(Error::Http(e)) if e.status == 413 => {
                 Err(Error::BadRequest("blob exceeds 16 MiB limit".into()))
@@ -192,7 +193,7 @@ impl Remote {
             Err(e) => Err(e),
         }
     }
-    pub(crate) fn get_blob(&self, pid: &str, hash: &str) -> Result<(Vec<u8>, String)> {
+    pub(crate) async fn get_blob(&self, pid: &str, hash: &str) -> Result<(Vec<u8>, String)> {
         let hash = hash.strip_prefix("sha256:").unwrap_or(hash);
         if hash.len() != 64
             || !hash
@@ -201,7 +202,7 @@ impl Remote {
         {
             return Err(Error::BadRequest("invalid blob hash".into()));
         }
-        let mut resp = match self.response(
+        let resp = match self.response(
             "GET",
             &format!("/projects/{}/blobs/{hash}", encode(pid)),
             None,
@@ -209,7 +210,7 @@ impl Remote {
             None,
             self.timeout,
             false,
-        ) {
+        ).await {
             Err(Error::Http(e)) => {
                 return Err(super::HttpError::new(e.status, "blob_read_failed", "").into());
             }
@@ -221,16 +222,13 @@ impl Remote {
             .and_then(|v| v.to_str().ok())
             .unwrap_or("application/octet-stream")
             .into();
-        let data = resp
-            .body_mut()
-            .with_config()
-            .limit(16 * 1024 * 1024)
-            .read_to_vec()
+        let data = super::read_limited(resp, 16 * 1024 * 1024)
+            .await
             .map_err(|_| Error::Io("cannot read daemon blob".into()))?;
         Ok((data, media))
     }
     /// Exact gseq values from scoped SSE, bounded by a snapshot's last record.
-    pub(crate) fn records_after(
+    pub(crate) async fn records_after(
         &self,
         pid: &str,
         after: i64,
@@ -240,7 +238,7 @@ impl Remote {
         if limit <= 0 {
             return Ok(vec![]);
         }
-        let snap = self.snapshot(pid)?;
+        let snap = self.snapshot(pid).await?;
         if snap.cursor <= after {
             return Ok(vec![]);
         }
@@ -258,7 +256,8 @@ impl Remote {
             // No backlog can exist after the snapshot when this chain's
             // last record predates 'after'; its exact gseq is read via SSE
             // from zero so an empty selection cannot wait on a live tail.
-            for l in self.backlog_stream(&i.id, 0)? {
+            let mut backlog = self.backlog_stream(&i.id, 0).await?;
+            while let Some(l) = backlog.next().await {
                 let l = l?;
                 let done = l.record.id == last.id;
                 if l.gseq > after && l.gseq <= snap.cursor {

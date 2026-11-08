@@ -10,7 +10,7 @@
 use std::io::Write;
 use std::process::Command;
 
-use autophys::remote::auth;
+use autophys::blocking::auth;
 use autophys::{Error, HttpError};
 use serde_json::{Value, json};
 

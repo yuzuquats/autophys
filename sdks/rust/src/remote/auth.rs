@@ -1,4 +1,5 @@
-//! Python-compatible pairing credentials and device-code flow.
+//! Python-compatible pairing credentials and device-code flow. The pairing
+//! calls are async; [`crate::blocking::auth`] has their synchronous forms.
 use super::{HttpError, Remote};
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
@@ -179,7 +180,7 @@ impl std::fmt::Debug for PairingStart {
             .finish()
     }
 }
-pub fn pair_start(server: &str, device_name: &str) -> Result<PairingStart> {
+pub async fn pair_start(server: &str, device_name: &str) -> Result<PairingStart> {
     let remote = Remote::new(server, "")?;
     let (_, mut v) = remote.json(
         "POST",
@@ -187,7 +188,7 @@ pub fn pair_start(server: &str, device_name: &str) -> Result<PairingStart> {
         Some(&json!({"device_name":device_name,"client":super::USER_AGENT})),
         None,
         remote.timeout,
-    )?;
+    ).await?;
     if v.get("interval").is_none() {
         v["interval"] = json!(5);
     }
@@ -196,7 +197,7 @@ pub fn pair_start(server: &str, device_name: &str) -> Result<PairingStart> {
     }
     super::decode(v)
 }
-pub fn pair_poll(server: &str, start: &PairingStart, device_name: &str) -> Result<Credentials> {
+pub async fn pair_poll(server: &str, start: &PairingStart, device_name: &str) -> Result<Credentials> {
     let remote = Remote::new(server, "")?;
     if !start.interval.is_finite()
         || start.interval < 0.0
@@ -218,7 +219,7 @@ pub fn pair_poll(server: &str, start: &PairingStart, device_name: &str) -> Resul
             Some(&json!({"device_code":start.device_code})),
             None,
             remote.timeout,
-        ) {
+        ).await {
             Ok((_, v)) => {
                 return Ok(Credentials {
                     server: server.into(),
@@ -243,12 +244,13 @@ pub fn pair_poll(server: &str, start: &PairingStart, device_name: &str) -> Resul
             )
             .into());
         }
-        std::thread::sleep(Duration::from_secs_f64(interval));
+        tokio::time::sleep(Duration::from_secs_f64(interval)).await;
     }
 }
-pub fn whoami(creds: &Credentials) -> Result<serde_json::Value> {
+pub async fn whoami(creds: &Credentials) -> Result<serde_json::Value> {
     let r = Remote::new(&creds.server, &creds.api_key)?;
     r.json("GET", "/whoami", None, None, r.timeout)
+        .await
         .map(|(_, v)| v)
 }
 

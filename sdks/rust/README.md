@@ -110,7 +110,13 @@ cross-language inputs and readers.
 ## Effects and limits
 
 `connect` selects a backend; local project creation writes a `.ap-workbook`
-SQLite file. HTTP operations call `/api/v1`; the daemon owns persistent writes,
+SQLite file. HTTP operations call `/api/v1` through one async transport,
+`autophys::remote::Remote` (tokio); `Client`, `Workbook` and the investigation
+loop stay synchronous through `autophys::blocking`, a thin facade that waits on
+the same futures (like `reqwest::blocking`). Async programs can call
+`client.remote().unwrap().as_async()` or `autophys::remote::Remote::new`
+directly. A blocking call made inside a tokio runtime does not panic; it
+waits on a helper thread and blocks its caller meanwhile. The daemon owns persistent writes,
 while simulators and scientific calculations run in the SDK process. Explicit
 open/create calls make missing-project effects clear. Saved credentials are
 scoped to normalized server identity; local connections do not load HTTP keys.

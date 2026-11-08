@@ -98,7 +98,7 @@ struct Inner {
 #[derive(Clone)]
 pub struct Client {
     inner: Arc<Inner>,
-    remote: Option<crate::remote::Remote>,
+    remote: Option<crate::blocking::Remote>,
 }
 
 impl std::fmt::Debug for Client {
@@ -118,10 +118,11 @@ impl Client {
     /// Explicit-key connection, equivalent to Python connect(url, api_key=...).
     pub fn connect_remote(server: &str, api_key: &str) -> Result<Self> {
         let mut client = Self::local(PathBuf::new(), None);
-        client.remote = Some(crate::remote::Remote::new(server, api_key)?);
+        client.remote = Some(crate::blocking::Remote::new(server, api_key)?);
         Ok(client)
     }
-    pub fn remote(&self) -> Option<&crate::remote::Remote> { self.remote.as_ref() }
+    /// The daemon client of a remote collection (the blocking facade).
+    pub fn remote(&self) -> Option<&crate::blocking::Remote> { self.remote.as_ref() }
 
     fn local(root: PathBuf, only: Option<PathBuf>) -> Client {
         Client {

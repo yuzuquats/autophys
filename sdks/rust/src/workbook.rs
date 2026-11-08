@@ -132,7 +132,7 @@ struct Inner {
 #[derive(Clone)]
 pub struct Workbook {
     inner: Arc<Inner>,
-    remote: Option<crate::remote::Remote>,
+    remote: Option<crate::blocking::Remote>,
 }
 
 impl std::fmt::Debug for Workbook {
@@ -145,10 +145,11 @@ impl std::fmt::Debug for Workbook {
 }
 
 impl Workbook {
-    pub(crate) fn from_remote(remote: crate::remote::Remote, project: Project) -> Self {
+    pub(crate) fn from_remote(remote: crate::blocking::Remote, project: Project) -> Self {
         Self { inner: Arc::new(Inner { path: PathBuf::new(), project, conn: None }), remote: Some(remote) }
     }
-    pub fn remote(&self) -> Option<&crate::remote::Remote> { self.remote.as_ref() }
+    /// The daemon client of a remote workbook (the blocking facade).
+    pub fn remote(&self) -> Option<&crate::blocking::Remote> { self.remote.as_ref() }
     pub(crate) fn remote_investigation(&self, id: &str) -> Investigation {
         Investigation { wb:self.clone(), id:id.into() }
     }

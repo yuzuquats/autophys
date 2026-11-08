@@ -2,7 +2,7 @@
 use super::{Remote, decode, encode};
 use crate::{Error, Logged, Proposal, Result};
 use std::{
-    io::{BufRead, BufReader},
+    io::BufRead,
     time::{Duration, Instant},
 };
 
@@ -13,21 +13,71 @@ pub struct StreamEvent {
     pub data: String,
 }
 
-/// WHATWG line framing: CRLF, multiline data, persistent id, comments as keep-alives.
-pub struct Sse<R> {
-    reader: R,
+/// The largest frame line or data block accepted from an untrusted stream.
+const FRAME_LIMIT: usize = crate::MAX_PAYLOAD_BYTES + 65536;
+
+/// WHATWG line framing shared by the blocking [`Sse`] reader and the async
+/// [`RecordStream`]: multiline data, persistent id, comments as keep-alives.
+#[derive(Default)]
+struct Frames {
     id: String,
     event: String,
     data: Vec<String>,
+}
+impl Frames {
+    /// One line without its terminator. Returns a finished event, a
+    /// keep-alive for a comment, or an error for an oversized data block.
+    fn line(&mut self, line: &str) -> Option<Result<StreamEvent>> {
+        if line.is_empty() {
+            let event = std::mem::take(&mut self.event);
+            if self.data.is_empty() {
+                return None;
+            }
+            return Some(Ok(StreamEvent {
+                event: if event.is_empty() {
+                    "message".into()
+                } else {
+                    event
+                },
+                id: self.id.clone(),
+                data: std::mem::take(&mut self.data).join("\n"),
+            }));
+        }
+        if line.starts_with(':') {
+            return Some(Ok(StreamEvent {
+                event: "keep-alive".into(),
+                id: self.id.clone(),
+                data: String::new(),
+            }));
+        }
+        let (name, value) = line.split_once(':').unwrap_or((line, ""));
+        let value = value.strip_prefix(' ').unwrap_or(value);
+        match name {
+            "id" if !value.contains('\0') => self.id = value.into(),
+            "event" => self.event = value.into(),
+            "data" => {
+                if self.data.iter().map(String::len).sum::<usize>() + value.len() > FRAME_LIMIT {
+                    return Some(Err(Error::Io("daemon stream frame too large".into())));
+                }
+                self.data.push(value.into());
+            }
+            _ => {}
+        }
+        None
+    }
+}
+
+/// A blocking SSE reader over any `BufRead` (CRLF or LF line endings).
+pub struct Sse<R> {
+    reader: R,
+    frames: Frames,
     done: bool,
 }
 impl<R: BufRead> Sse<R> {
     pub fn new(reader: R) -> Self {
         Self {
             reader,
-            id: String::new(),
-            event: String::new(),
-            data: vec![],
+            frames: Frames::default(),
             done: false,
         }
     }
@@ -42,8 +92,7 @@ impl<R: BufRead> Iterator for Sse<R> {
             let mut line = String::new();
             // Bound a frame line; an untrusted stream must not allocate without limit.
             let read =
-                std::io::Read::take(&mut self.reader, (crate::MAX_PAYLOAD_BYTES + 65536) as u64)
-                    .read_line(&mut line);
+                std::io::Read::take(&mut self.reader, FRAME_LIMIT as u64).read_line(&mut line);
             match read {
                 Ok(0) => {
                     self.done = true;
@@ -53,56 +102,83 @@ impl<R: BufRead> Iterator for Sse<R> {
                     self.done = true;
                     return Some(Err(Error::Io("daemon stream disconnected".into())));
                 }
-                Ok(_)
-                    if !line.ends_with('\n') && line.len() >= crate::MAX_PAYLOAD_BYTES + 65536 =>
-                {
+                Ok(_) if !line.ends_with('\n') && line.len() >= FRAME_LIMIT => {
                     self.done = true;
                     return Some(Err(Error::Io("daemon stream frame too large".into())));
                 }
                 _ => {}
             }
-            let line = line.trim_end_matches(['\r', '\n']);
-            if line.is_empty() {
-                self.event = if self.event.is_empty() {
-                    "message".into()
-                } else {
-                    std::mem::take(&mut self.event)
-                };
-                let event = std::mem::take(&mut self.event);
-                if !self.data.is_empty() {
-                    return Some(Ok(StreamEvent {
-                        event,
-                        id: self.id.clone(),
-                        data: std::mem::take(&mut self.data).join("\n"),
-                    }));
-                }
-                continue;
-            }
-            if line.starts_with(':') {
-                return Some(Ok(StreamEvent {
-                    event: "keep-alive".into(),
-                    id: self.id.clone(),
-                    data: String::new(),
-                }));
-            }
-            let (name, value) = line.split_once(':').unwrap_or((line, ""));
-            let value = value.strip_prefix(' ').unwrap_or(value);
-            match name {
-                "id" if !value.contains('\0') => self.id = value.into(),
-                "event" => self.event = value.into(),
-                "data" => {
-                    if self.data.iter().map(String::len).sum::<usize>() + value.len()
-                        > crate::MAX_PAYLOAD_BYTES + 65536
-                    {
-                        self.done = true;
-                        return Some(Err(Error::Io("daemon stream frame too large".into())));
-                    }
-                    self.data.push(value.into());
-                }
-                _ => {}
+            if let Some(item) = self.frames.line(line.trim_end_matches(['\r', '\n'])) {
+                self.done = item.is_err();
+                return Some(item);
             }
         }
     }
+}
+
+/// The async SSE reader over a daemon response body.
+struct Events {
+    response: reqwest::Response,
+    buf: Vec<u8>,
+    frames: Frames,
+    done: bool,
+}
+impl Events {
+    fn new(response: reqwest::Response) -> Self {
+        Self {
+            response,
+            buf: Vec::new(),
+            frames: Frames::default(),
+            done: false,
+        }
+    }
+    /// The next line, its terminator removed; `None` at the end of the body.
+    async fn line(&mut self) -> Result<Option<String>> {
+        loop {
+            if let Some(n) = self.buf.iter().position(|&b| b == b'\n') {
+                let rest = self.buf.split_off(n + 1);
+                let line = std::mem::replace(&mut self.buf, rest);
+                return text(line).map(Some);
+            }
+            if self.buf.len() >= FRAME_LIMIT {
+                return Err(Error::Io("daemon stream frame too large".into()));
+            }
+            match self.response.chunk().await {
+                Ok(Some(chunk)) => self.buf.extend_from_slice(&chunk),
+                // A final line without a terminator still counts, as BufRead's.
+                Ok(None) if !self.buf.is_empty() => {
+                    return text(std::mem::take(&mut self.buf)).map(Some);
+                }
+                Ok(None) => return Ok(None),
+                Err(_) => return Err(Error::Io("daemon stream disconnected".into())),
+            }
+        }
+    }
+    async fn next(&mut self) -> Option<Result<StreamEvent>> {
+        if self.done {
+            return None;
+        }
+        loop {
+            let line = match self.line().await {
+                Ok(Some(line)) => line,
+                Ok(None) => {
+                    self.done = true;
+                    return None;
+                }
+                Err(e) => {
+                    self.done = true;
+                    return Some(Err(e));
+                }
+            };
+            if let Some(item) = self.frames.line(line.trim_end_matches(['\r', '\n'])) {
+                self.done = item.is_err();
+                return Some(item);
+            }
+        }
+    }
+}
+fn text(line: Vec<u8>) -> Result<String> {
+    String::from_utf8(line).map_err(|_| Error::Io("daemon stream disconnected".into()))
 }
 
 /// Open scoped stream. Dropping it closes its response body.
@@ -110,13 +186,13 @@ pub struct RecordStream {
     remote: Remote,
     investigation: String,
     advance_cursor: bool,
-    events: Sse<BufReader<ureq::BodyReader<'static>>>,
+    events: Events,
 }
-impl Iterator for RecordStream {
-    type Item = Result<Logged>;
-    fn next(&mut self) -> Option<Self::Item> {
+impl RecordStream {
+    /// The next record of this investigation; `None` when the daemon ends the stream.
+    pub async fn next(&mut self) -> Option<Result<Logged>> {
         loop {
-            let ev = match self.events.next()? {
+            let ev = match self.events.next().await? {
                 Ok(ev) => ev,
                 Err(e) => return Some(Err(e)),
             };
@@ -144,17 +220,15 @@ fn transient(e: &Error) -> bool {
         || matches!(e,Error::Http(h) if matches!(h.status,429|500|502|503|504))
 }
 impl Remote {
-    fn events(
-        &self,
-        inv: &str,
-        after: i64,
-        timeout: Duration,
-    ) -> Result<Sse<BufReader<ureq::BodyReader<'static>>>> {
+    async fn events(&self, inv: &str, after: i64, timeout: Duration) -> Result<Events> {
         // Bound connection and headers as well as the body; a silent peer
         // must not consume the whole approval deadline before a state check.
         let timeout = timeout.min(self.timeout).min(self.stream_idle);
         let path = format!("/stream?investigation={}&after={after}", encode(inv));
-        let response = match self.response("GET", &path, None, "", None, timeout, true) {
+        let response = match self
+            .response("GET", &path, None, "", None, timeout, true)
+            .await
+        {
             Err(Error::Http(e)) if !matches!(e.status, 401 | 403) => {
                 return Err(Error::StreamUnavailable(e.to_string()));
             }
@@ -171,7 +245,7 @@ impl Remote {
                 if ct.is_empty() { "no content type" } else { ct }
             )));
         }
-        Ok(Sse::new(BufReader::new(response.into_body().into_reader())))
+        Ok(Events::new(response))
     }
     fn logged_event(&self, inv: &str, ev: StreamEvent) -> Result<Option<Logged>> {
         if !matches!(ev.event.as_str(), "message" | "record") {
@@ -190,25 +264,37 @@ impl Remote {
         }
         Ok(Some(Logged { gseq, record }))
     }
-    pub fn stream(&self, inv: &str, after: Option<i64>) -> Result<RecordStream> {
+    pub async fn stream(&self, inv: &str, after: Option<i64>) -> Result<RecordStream> {
         self.open_stream(inv, after.unwrap_or_else(|| self.cursor(inv)), true)
+            .await
     }
-    pub(crate) fn backlog_stream(&self, inv: &str, after: i64) -> Result<RecordStream> {
-        self.open_stream(inv, after, false)
+    pub(crate) async fn backlog_stream(&self, inv: &str, after: i64) -> Result<RecordStream> {
+        self.open_stream(inv, after, false).await
     }
-    fn open_stream(&self, inv: &str, after: i64, advance_cursor: bool) -> Result<RecordStream> {
+    async fn open_stream(
+        &self,
+        inv: &str,
+        after: i64,
+        advance_cursor: bool,
+    ) -> Result<RecordStream> {
         Ok(RecordStream {
             remote: self.clone(),
             investigation: inv.into(),
             advance_cursor,
-            events: self.events(inv, after, self.timeout)?,
+            events: self.events(inv, after, self.timeout).await?,
         })
     }
-    pub fn wait_for_approval(&self, inv: &str, pid: &str, timeout: Duration) -> Result<Proposal> {
+    pub async fn wait_for_approval(
+        &self,
+        inv: &str,
+        pid: &str,
+        timeout: Duration,
+    ) -> Result<Proposal> {
         self.wait_for_approval_with(inv, pid, timeout, Duration::from_secs(5), true)
+            .await
     }
     /// Python's stream=False/interval controls, without changing Investigation's API.
-    pub fn wait_for_approval_with(
+    pub async fn wait_for_approval_with(
         &self,
         inv: &str,
         pid: &str,
@@ -220,23 +306,22 @@ impl Remote {
             .checked_add(timeout)
             .ok_or_else(|| Error::BadRequest("approval timeout too large".into()))?;
         if stream {
-            match self.wait_streaming(inv, pid, deadline) {
+            match self.wait_streaming(inv, pid, deadline).await {
                 Ok(p) => {
-                    *self.last_wait.lock().unwrap_or_else(|e| e.into_inner()) = Some("stream");
+                    self.set_last_wait("stream");
                     return Ok(p);
                 }
                 Err(Error::StreamUnavailable(_)) => {}
                 Err(e) => return Err(e),
             }
         }
-        *self.last_wait.lock().unwrap_or_else(|e| e.into_inner()) = Some("poll");
+        self.set_last_wait("poll");
         let mut attempt = 0u32;
         loop {
-            let delay = match self.proposal_with_timeout(
-                inv,
-                pid,
-                self.timeout.min(remaining(deadline, pid)?),
-            ) {
+            let delay = match self
+                .proposal_with_timeout(inv, pid, self.timeout.min(remaining(deadline, pid)?))
+                .await
+            {
                 Ok(p) if p.status != "proposed" => return Ok(p),
                 Ok(_) => {
                     attempt = 0;
@@ -249,53 +334,60 @@ impl Remote {
                 }
                 Err(e) => return Err(e),
             };
-            std::thread::sleep(delay.min(remaining(deadline, pid)?));
+            tokio::time::sleep(delay.min(remaining(deadline, pid)?)).await;
         }
     }
-    fn wait_streaming(&self, inv: &str, pid: &str, deadline: Instant) -> Result<Proposal> {
-        let mut attempt = 0u32;
-        loop {
-            let result = (|| {
-                // Opening first closes the decision/check race. The response's
-                // absolute timeout cannot be extended by incoming comments.
-                let mut events = self.events(inv, self.cursor(inv), remaining(deadline, pid)?)?;
-                let p = self.proposal_with_timeout(
-                    inv,
-                    pid,
-                    self.timeout.min(remaining(deadline, pid)?),
-                )?;
-                if p.status != "proposed" {
-                    return Ok(Some(p));
-                }
-                for ev in &mut events {
-                    remaining(deadline, pid)?;
-                    if let Some(l) = self.logged_event(inv, ev?)? {
-                        self.see(inv, l.gseq);
-                        let payload = l.record.payload;
-                        if l.record.kind == "proposal"
-                            && payload["proposal_id"] == pid
-                            && payload["event"] != "proposed"
-                        {
-                            let p = self.proposal_with_timeout(
-                                inv,
-                                pid,
-                                self.timeout.min(remaining(deadline, pid)?),
-                            )?;
-                            if p.status != "proposed" {
-                                return Ok(Some(p));
-                            }
-                        }
+    async fn stream_attempt(
+        &self,
+        inv: &str,
+        pid: &str,
+        deadline: Instant,
+    ) -> Result<Option<Proposal>> {
+        // Opening first closes the decision/check race. The response's
+        // absolute timeout cannot be extended by incoming comments.
+        let mut events = self
+            .events(inv, self.cursor(inv), remaining(deadline, pid)?)
+            .await?;
+        let p = self
+            .proposal_with_timeout(inv, pid, self.timeout.min(remaining(deadline, pid)?))
+            .await?;
+        if p.status != "proposed" {
+            return Ok(Some(p));
+        }
+        while let Some(ev) = events.next().await {
+            remaining(deadline, pid)?;
+            if let Some(l) = self.logged_event(inv, ev?)? {
+                self.see(inv, l.gseq);
+                let payload = l.record.payload;
+                if l.record.kind == "proposal"
+                    && payload["proposal_id"] == pid
+                    && payload["event"] != "proposed"
+                {
+                    let p = self
+                        .proposal_with_timeout(
+                            inv,
+                            pid,
+                            self.timeout.min(remaining(deadline, pid)?),
+                        )
+                        .await?;
+                    if p.status != "proposed" {
+                        return Ok(Some(p));
                     }
                 }
-                Ok(None)
-            })();
-            match result {
+            }
+        }
+        Ok(None)
+    }
+    async fn wait_streaming(&self, inv: &str, pid: &str, deadline: Instant) -> Result<Proposal> {
+        let mut attempt = 0u32;
+        loop {
+            match self.stream_attempt(inv, pid, deadline).await {
                 Ok(Some(p)) => return Ok(p),
                 Ok(None) => attempt = 0,
                 Err(e) if transient(&e) => {}
                 Err(e) => return Err(e),
             }
-            std::thread::sleep(backoff(attempt).min(remaining(deadline, pid)?));
+            tokio::time::sleep(backoff(attempt).min(remaining(deadline, pid)?)).await;
             attempt = attempt.saturating_add(1);
         }
     }

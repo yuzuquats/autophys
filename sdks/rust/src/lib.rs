@@ -31,7 +31,12 @@
 //!
 //! The crate has no web framework or tento dependency; the daemon maps its
 //! `/api/v1` record routes to this library. Direct numeric calls run locally.
+//!
+//! The daemon transport is async ([`remote::Remote`], tokio). The record API
+//! ([`Client`], [`Workbook`], [`Investigation`]) stays synchronous through
+//! the [`blocking`] facade, which drives that one transport.
 
+pub mod blocking;
 pub mod canonical;
 mod client;
 pub mod remote;

@@ -1,6 +1,6 @@
 //! Conformance through the real autophys-cli binary built by this workspace.
 //! No fake daemon, provider call, installed service or shared data is used.
-use autophys::{Client, Error, Workbook, canonical, remote::auth};
+use autophys::{Client, Error, Workbook, blocking::auth, canonical};
 use autophys_cli::keys::KeyStore;
 use serde_json::json;
 use std::{

@@ -1,4 +1,7 @@
+//! Transport tests through the blocking facade (what every SDK caller uses),
+//! plus the async client directly and the facade inside a tokio runtime.
 use super::*;
+use crate::blocking::Remote;
 use std::{
     io::{Read, Write},
     net::TcpListener,
@@ -319,8 +322,8 @@ fn stalled_stream_headers_retry_within_attempt_budget() {
         }
     });
     let mut remote = Remote::new(&server.url, "key").unwrap();
-    remote.timeout = Duration::from_millis(40);
-    remote.stream_idle = Duration::from_millis(40);
+    remote.set_timeout(Duration::from_millis(40));
+    remote.set_stream_idle(Duration::from_millis(40));
     let started = std::time::Instant::now();
     assert_eq!(
         remote
@@ -381,4 +384,58 @@ fn old_daemon_atomic_attachment_does_not_fallback() {
  let e=remote.attach_data("inv_test","p_test",json!({"t":[0.],"y":{"x":[1.]}})).unwrap_err();
  assert_eq!(e.status(),404);
  let requests=server.requests.lock().unwrap();assert_eq!(requests.len(),1);assert!(requests[0].contains("/attachment"));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn async_client_runs_on_the_callers_runtime() {
+    let server = Mock::new(|_, _| {
+        response(200, "application/json", r#"{"projects":[{"id":"prj_a","name":"a"}]}"#, "")
+    });
+    let remote = super::Remote::new(&server.url, "key").unwrap();
+    let projects = remote.projects().await.unwrap();
+    assert_eq!(projects[0].id, "prj_a");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn blocking_facade_inside_a_runtime_does_not_panic() {
+    // A #[tokio::main] CLI or an async test calls the synchronous record
+    // API; block_on would panic here, so the facade waits on a helper thread.
+    let server = Mock::new(|_, _| {
+        response(200, "application/json", &proposal("approved"), "")
+    });
+    let remote = Remote::new(&server.url, "key").unwrap();
+    assert_eq!(remote.proposal("inv_test", "p1").unwrap().status, "approved");
+    assert_eq!(
+        remote
+            .wait_for_approval("inv_test", "p1", Duration::from_secs(1))
+            .unwrap()
+            .status,
+        "approved"
+    );
+    drop(remote); // dropping inside the runtime is fine too
+}
+
+#[test]
+fn blocking_stream_iterates_records_and_advances_cursor() {
+    let server = Mock::new(|request, _| {
+        assert!(request.contains("/stream?investigation=inv_test&after=0"));
+        let record = |n: i64| json!({"id":format!("r{n}"),"investigation":"inv_test","seq":n,"kind":"step","ts":1.0,
+            "payload":{},"prev_hash":"","hash":""});
+        let other = json!({"id":"x","investigation":"inv_other","seq":0,"kind":"step","ts":1.0,"payload":{},"prev_hash":"","hash":""});
+        response(
+            200,
+            "text/event-stream",
+            // CRLF framing, a comment, another investigation's record, then LF.
+            &format!(": hi\r\n\r\nid: 3\r\nevent: record\r\ndata: {}\r\n\r\nid: 4\ndata: {other}\n\nid: 5\ndata: {}\n\n", record(0), record(1)),
+            "",
+        )
+    });
+    let remote = Remote::new(&server.url, "key").unwrap();
+    let got: Vec<_> = remote
+        .stream("inv_test", None)
+        .unwrap()
+        .map(|l| l.unwrap().gseq)
+        .collect();
+    assert_eq!(got, vec![3, 5]);
+    assert_eq!(remote.cursor("inv_test"), 5);
 }
