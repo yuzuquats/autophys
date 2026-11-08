@@ -75,7 +75,8 @@ Receipt: `yuzuquats:~/.local/state/tento/reviews/autophys/examples-v0.1.2-202611
   loop; `--seeds N` on a recorded case repeats identical replays; `bias` and
   `missing` are ignored for recorded cases; a wheel built with current
   setuptools has not been checked for the backtest package data.
-- EX-11 (fixed truth by default) is agent-chosen, pending operator review.
+- EX-11 (fixed truth by default) is deferred by the operator (2026-11-08)
+  until the first fine-tune evaluation or real research-loop run.
 - The Linux binary needs glibc 2.39 or later; the macOS executable is ad-hoc
   signed, not notarized.
 

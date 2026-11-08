@@ -6,8 +6,8 @@ commit "Draw backtest truth per seed, replay recorded runs and score models").
 Every choice EX-1..EX-10 is an operator decision (2026-11-07; EX-4..EX-8
 answered in the /open-questions walkthrough that day). EX-7 and EX-8 differ
 from the agent's recommendation; see the table. Where the draft format
-below differs from what was built, "Implemented" is current. One open
-agent choice, EX-11 (below), awaits operator review.
+below differs from what was built, "Implemented" is current. EX-11 (below)
+is deferred by the operator (2026-11-08) until a trigger it names.
 
 ## Implemented
 
@@ -288,8 +288,8 @@ Step 3:
   ranges that pass (tests use 48 seeds). The battery short-pulse answer is a
   noise-level threshold, so its ranges are narrow (about +/-12%); +/-40%
   ranges flipped it in 9 of 16 seeds.
-- **EX-11 (agent-chosen, pending operator review): fixed truth stays the
-  default.** EX-4 says random truth per seed with one fixed seed as the CI
+- **EX-11 (operator, 2026-11-08: deferred with a trigger): fixed truth
+  stays the default for now.** EX-4 says random truth per seed with one fixed seed as the CI
   baseline. Drawing by default would change the data of every built-in
   case at every seed, which breaks the recorded reasoner cassettes, the
   committed training data (`train/sft/data`) and comparisons with stored
@@ -298,6 +298,16 @@ Step 3:
   alternative: draw by default for seeds other than 0 and re-record the
   cassettes and training data. Reversal: change the default in `bench` and
   `run_case`; small, plus the re-recording.
+  Operator decision (2026-11-08, option D of four): keep fixed truth
+  everywhere for now, because nothing learns from these cases yet. Trigger:
+  before the first fine-tuned model is evaluated with `train eval` or the
+  `train loop` held-out check, or before the research loop's first real
+  run, switch to option C: `train eval`, the `train loop` held-out check
+  and research-loop scoring use drawn truth on the held-out seeds, while
+  `bench`, CI and the training data stay fixed; re-record any held-out
+  replay files. Rejected for now: B (draw by default for seeds other than
+  0 in every command; re-records all cassettes and training data) and
+  doing C immediately (no learner exists to misjudge yet).
 - **Recorded runs (EX-5).** `[[dataset]]` tables (public ones in
   `example.toml`, held-out ones in `hidden/cases.toml`) give `name`,
   `settings` (the program the run used), `file` (folders on disk only) or
@@ -464,7 +474,7 @@ autophys bench --example ./my-cell.backtest#cell-a17 --policy reason --model …
 | EX-5 | In a dataset case the model's experiment menu is exactly the recorded runs; the score is held-out prediction error, plus parameter error only when truth is known | operator, 2026-11-07 (recommended option) | offer the full menu and refuse unrecorded requests (realistic, but mostly measures refusal handling) | change the runner's catalogue; small |
 | EX-6 | Phased: phase 1 backtests use only the built-in simulators (`battery_ecm`, `oscillator`, `thermal`), so both SDKs run every case; phase 3 adds a backtest's own Python simulator through the `autophys.worker` that `mcp` uses | operator, 2026-11-07 (recommended option) | built-in only; or own simulator first | resequence the plan; small |
 | EX-7 | Backtest datasets are always downloaded by URL and sha256 into the data dir, never embedded; demos keep bundled data; CI uses a cache | operator, 2026-11-07 (agent recommended embedding files under 1 MB) | embed small files; embed everything | allow embedding again; small |
-| EX-11 | Fixed truth stays the default; `--truth drawn` draws per seed (EX-4), and results record which | agent-chosen, pending operator review (implemented) | draw by default for seeds other than 0 and re-record the reasoner cassettes and committed training data | change the default in `bench` and `run_case`, then re-record; small plus the re-recording |
+| EX-11 | Fixed truth stays the default for now; `--truth drawn` draws per seed (EX-4), and results record which. Before the first fine-tune evaluation or real research-loop run, held-out evaluation and research scoring switch to drawn truth (option C) | operator, 2026-11-08 (deferred with that trigger; agent recommended deferring) | draw by default for seeds other than 0 everywhere and re-record the cassettes and training data (B); or C now | implement C at the trigger: small code change plus re-recording held-out replays |
 | EX-10 | `--example` takes `[SCHEME:]SOURCE[#CASE]`: `builtin:` (bare names) and `path:` (`./`, `../`, `/`, `~`) now, `github:`/`https:` later; `#` separates the case, replacing EX-9's `/`, which would collide with path segments in remote sources | operator, 2026-11-07 (recommended option) | schemes with `/` for cases; no schemes (EX-9 as first recorded) | change the separator or drop the prefixes; small until references appear in stored results and docs |
 | EX-9 | `bench`, `research` and `train eval` drop `--case` for one repeatable `--example TARGET` (`example`, `example/case` — separator superseded by EX-10's `#` — or a `.backtest` path with an optional case); case names become local (`battery#full`, …); old `--case` names, replay files and results map through a table | operator, 2026-11-07 (agent recommended a positional `TARGET`; operator chose the flag, matching `new --example`) | positional `bench [TARGET...]`; or keeping `--example` and `--case` as two levels | rename the flag; small while `bench` is a developer tool |
 | EX-12 | A recorded case keeps running every seed (the seed still moves the fitter's start points, and a live model's choices vary), and `bench`, `bench --summary` and `train eval` show a `truth` column (`recorded`, `fixed`, `drawn`) plus a note that a recorded case's seeds are repeats on the same runs; `bias` and `missing` are refused for recorded cases instead of being ignored | operator, 2026-11-07 (recommended option; the operator chose a column over a label in the seeds cell) | run recorded cases once offline, or always once (changes how much the recorded case weighs when `train loop` accepts a model) | drop the column; trivial |
@@ -485,5 +495,6 @@ autophys bench --example ./my-cell.backtest#cell-a17 --policy reason --model …
   license) would replace or join `battery-recorded`'s synthesized runs.
   Hosting is the repository itself for now (raw GitHub urls, pinned by
   sha256); release assets remain an alternative.
-- **EX-11** (above): keep fixed truth as the default, or draw by default
-  and re-record the cassettes and training data.
+- **EX-11 trigger** (above): switch held-out evaluation and research
+  scoring to drawn truth before the first fine-tune evaluation or real
+  research-loop run.
