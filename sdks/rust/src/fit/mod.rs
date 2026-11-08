@@ -73,16 +73,24 @@ pub fn residuals(
 ) -> Result<Vec<f64>> {
     for o in obs { o.validate()?; }
     let mut r = vec![];
-    for o in obs {
+    for (i, o) in obs.iter().enumerate() {
         let pred = sim.simulate(p, &o.settings, options)?;
         for (ch, y) in &o.y {
             let py = pred
                 .get(ch)
                 .ok_or_else(|| SimulationError::Simulation(format!("missing channel {ch}")))?;
             if py.len() != y.len() {
-                return Err(SimulationError::Simulation(
-                    "prediction does not match observation time grid".into(),
-                ));
+                return Err(SimulationError::GridMismatch(format!(
+                    "{} observation {} of {} (experiment {:?}): the prediction for {ch:?} has {} \
+                     samples but the observation has {}; give this observation settings whose \
+                     grid matches its own samples (e.g. its own 't')",
+                    o.split,
+                    i + 1,
+                    obs.len(),
+                    o.experiment,
+                    py.len(),
+                    y.len()
+                )));
             }
             for (y, f) in y.iter().zip(py) {
                 if y.is_finite() {
@@ -257,6 +265,41 @@ mod tests {
             assert!(r.success);
             assert_eq!(r.at_bounds, vec!["a"]);
             assert!((r.params["a"] - 3.).abs() < 1e-6);
+        }
+    }
+
+    #[test]
+    fn a_training_grid_mismatch_stops_the_fit_naming_the_observation() {
+        let s = simulator(
+            "line",
+            vec![ParamSpec::new("a", "", -1., 3.).unwrap()],
+            IndexMap::new(),
+            vec!["y".into()],
+            "line",
+            |p, e, _| {
+                let t = time_grid(e)?;
+                Ok([("y".into(), vec![p["a"]; t.len()]), ("t".into(), t)]
+                    .into_iter()
+                    .collect())
+            },
+        )
+        .unwrap();
+        // Settings describe two samples; the observation has three.
+        let o = Observation::new(
+            "e",
+            json!({"kind":"custom","t":[0.,1.]}),
+            vec![0., 1., 2.],
+            [("y".into(), vec![5.; 3])].into_iter().collect(),
+            [("y".into(), 1.)].into_iter().collect(),
+        )
+        .unwrap();
+        let opts = FitOptions { n_starts: 1, ..Default::default() };
+        match fit(&s, &[o], &opts) {
+            Err(SimulationError::GridMismatch(m)) => assert!(
+                m.starts_with("train observation 1 of 1 (experiment \"e\"): the prediction for \"y\" has 2 samples but the observation has 3"),
+                "{m}"
+            ),
+            other => panic!("expected a grid mismatch, got {other:?}"),
         }
     }
 }

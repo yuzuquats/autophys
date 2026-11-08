@@ -19,7 +19,8 @@ from scipy.optimize import least_squares
 from scipy.stats import qmc
 
 from .data import Observation
-from .simulator import FIT_OPTIONS, SimOptions, SimulationError, Simulator, aligned_prediction, describe_observation
+from .simulator import (FIT_OPTIONS, GridMismatchError, SimOptions, SimulationError, Simulator, aligned_prediction,
+                        describe_observation)
 
 #: Residual assigned to every sample when the simulator fails at a trial point.
 FAILED_RESIDUAL = 1e6
@@ -128,6 +129,10 @@ def fit(
     def fun(x):
         try:
             return residuals(sim, sim.from_x(x), observations, options)
+        except GridMismatchError:
+            # The data, not these parameters: no other trial point can fix it
+            # (G8-TRAIN), so stop with the observation named.
+            raise
         except SimulationError:
             return np.full(n, FAILED_RESIDUAL)
 

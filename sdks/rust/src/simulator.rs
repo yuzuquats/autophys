@@ -16,6 +16,11 @@ pub enum SimulationError {
     Bounds(String),
     #[error("{0}")]
     Simulation(String),
+    /// A prediction is not on an observation's own samples: its settings
+    /// describe another grid. A data error, so a fit stops on it rather than
+    /// trying other parameters (G8-TRAIN).
+    #[error("{0}")]
+    GridMismatch(String),
     #[error("simulation budget of {0} calls is spent")]
     BudgetExceeded(usize),
     #[error("{0}")]

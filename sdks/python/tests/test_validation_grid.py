@@ -72,8 +72,15 @@ def test_training_residuals_name_the_misaligned_observation():
     with pytest.raises(GridMismatchError, match=r"^train observation 2 of 2 \(experiment 'treated'\): "
                                                 r"the prediction for 'rate' has 6 samples but the observation has 3"):
         residuals(kinetics, TRUTH, [good, bad])
-    # Still a SimulationError: a fit treats it as a failed trial point, as before.
     assert issubclass(GridMismatchError, SimulationError)
+
+
+def test_a_fit_stops_on_a_training_grid_mismatch():
+    # G8-TRAIN: a data error, not a failed trial point, so no fit result.
+    good = _obs(kinetics.experiment("treated"), GRID, "train")
+    bad = _obs(kinetics.experiment("treated"), [0.5, 1.0, 2.0], "train")
+    with pytest.raises(GridMismatchError, match=r"^train observation 2 of 2 \(experiment 'treated'\)"):
+        ap.fit(kinetics, [good, bad], n_starts=1)
 
 
 def test_a_same_size_wrong_shape_prediction_names_both_shapes():
