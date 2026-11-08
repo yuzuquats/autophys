@@ -43,7 +43,7 @@ from .playbook import Playbook, load_playbook
 from .usage import normalize_usage, price_for, usage_total
 from .sensitivity import SensitivityReport, identification, jacobian, report_from_jacobian
 from .project import Project, policy_from_config
-from .simulator import (CallBudget, GridMismatchError, SimulationBudgetExceeded, SimulationError, Simulator,
+from .simulator import (BoundsError, CallBudget, SimulationBudgetExceeded, SimulationError, Simulator,
                         aligned_prediction, describe_observation)
 from .store import MemoryStore, Store, StoreError
 
@@ -973,9 +973,10 @@ class Investigation:
                     result = self._dispatch(decision)
                     self.last_error = ""
                     self.history.append(f"{decision.action}: ok")
-                except (ToolError, GridMismatchError) as e:
-                    # A grid mismatch is the data's fault: record it as this step's
-                    # result and let the policy react, as the Rust loop does (G8-LOOP).
+                except (ToolError, SimulationError, BoundsError) as e:
+                    # A tool's failure, including a grid mismatch (the data's fault), is
+                    # this step's result and the policy reacts, as in the Rust loop
+                    # (G8-LOOP, LOOP-PARITY).
                     result = {"error": str(e)}
                     self.last_error = f"{decision.action}: {e}"
                     self.history.append(f"{decision.action}: error {e}")
@@ -1021,6 +1022,9 @@ class Investigation:
                 sens = self.sens
             except SimulationBudgetExceeded:
                 reasons.append("no simulations left to check identifiability at the final estimate")
+            except (SimulationError, BoundsError) as e:
+                # G8-FINISH: still end with an outcome; it cannot claim identification.
+                reasons.append(f"identifiability could not be checked at the final estimate: {e}")
         rule_ids = list(sens.identified) if sens else []
         names = self.sim.param_names
         non_ids = [p for p in names if p not in rule_ids]

@@ -1109,7 +1109,10 @@ impl Investigation {
                 Err(SimulationError::BudgetExceeded(_)) => reasons.push(
                     "no simulations left to check identifiability at the final estimate".into(),
                 ),
-                Err(e) => return Err(err(e)),
+                // G8-FINISH: still end with an outcome; it cannot claim identification.
+                Err(e) => reasons.push(format!(
+                    "identifiability could not be checked at the final estimate: {e}"
+                )),
             }
         }
         let sens = self

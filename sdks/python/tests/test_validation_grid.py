@@ -121,3 +121,23 @@ def test_a_same_size_wrong_shape_prediction_names_both_shapes():
                          y={"rate": [1.0, 2.0]}, sigma={"rate": 1.0})
     with pytest.raises(GridMismatchError, match=r"has shape \(2, 1\) but the observation's samples have shape \(2,\)"):
         aligned_prediction({"rate": np.zeros((2, 1))}, obs, "rate", "train observation 1 of 1")
+
+
+def test_a_run_whose_simulator_always_fails_ends_with_an_outcome():
+    # LOOP-PARITY and G8-FINISH: a plain SimulationError from a tool step is the
+    # step's result, and the closing identifiability check names it as a reason.
+    @ap.simulator(params={"v": ("rate", 10.0, 500.0), "k": ("conc", 0.005, 1.0)},
+                  experiments={"treated": {"kind": "measured", "t": GRID}}, outputs=("rate",))
+    def fails(params, experiment):
+        raise SimulationError("diverged")
+
+    project = Project(name="fails", simulator=fails, budgets=Budgets(max_experiments=0, max_steps=6))
+    train = _obs(fails.experiment("treated"), GRID, "train")
+    inv = Investigation(project, ap.Dataset([train]), ProposalRunner(), policy=ScriptedPolicy(), store=MemoryStore())
+    out = inv.run()
+    assert out.status == "budget_exhausted"
+    errors = _step_errors(inv, out, "analyze_sensitivity")
+    assert errors and set(errors) == {"diverged"}
+    assert "identifiability could not be checked at the final estimate: diverged" in out.reasons
+    assert out.identified == []
+    assert inv.store.records(out.investigation, "outcome")
