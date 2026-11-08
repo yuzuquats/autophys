@@ -1,5 +1,61 @@
 # GitHub releases
 
+## v0.1.3, 2026-11-08
+
+Published at https://github.com/yuzuquats/autophys/releases/tag/v0.1.3 (marked
+latest). Patch release (operator, 2026-11-08: "cut a new patch and deploy").
+The tag (lightweight, created by `gh release`) points at `d7a7db8`, the
+version bump pushed above `9e07fab`. It carries the 2026-11-08 review
+decisions ([review-20261108-implementation.md](review-20261108-implementation.md)):
+workbook format 2, the batch records endpoint replacing the attachment route,
+`project(name)` opening only, the async Rust transport with its blocking
+facade and connection reuse, the typed `Trajectory` without output indexing,
+measurement hashes in `data_attached`, and self-hashing built-in models.
+
+**Breaking:** SDK 0.1.x clients cannot attach data to a 0.1.3 daemon, and
+0.1.x tools cannot open a format 2 workbook. A direct `HttpStore.attach_data`
+retry of a pair first written by an older Python SDK returns
+`idempotency_conflict`; `Investigation.attach_data` is unaffected. Projects
+using the oscillator or thermal built-ins see a one-time config change.
+
+| Commit | Change | Change-Id |
+| --- | --- | --- |
+| `d7a7db8` | Version autophys 0.1.3 | `I0d5b8e2a7c4f19063d5b8e1a7c4f2e96` |
+
+| Asset | sha256 |
+| --- | --- |
+| `autophys-v0.1.3-x86_64-unknown-linux-gnu.tar.gz` | `c2073f0757b65c1a26ae92f708757038cbf735bd16dc836155323f73ef5acdec` |
+| `autophys-v0.1.3-aarch64-apple-darwin.tar.gz` | `8ab8cb36dcdd8eab7f33bbca97a39e649440150a829749cd48d98d989ae8682f` |
+
+### Review and validation
+
+- The changes were reviewed in two agent rounds before the `0cfc49d..9e07fab`
+  push (ready), and the bump in a third (ready, base `9e07fab`). Agent
+  review, not an operator verdict.
+- Each archive was built by `ops/release.sh` from a fresh GitHub clone at
+  `d7a7db8` (full cargo and Deno suites and the packed smoke test): Linux on
+  yuzuquats, macOS on rwc-01 with its build tree on the SSD (deleted after).
+- Downloaded back from the draft and checked on macOS with isolated homes:
+  sha256, `codesign -v`, `--version` names `d7a7db8`, `autophys new --lang
+  python` pinned the SDK to the commit, the local walkthrough (validated,
+  held-out chi2/N 1.04, verify ok), `serve` from the packed file (healthz,
+  `/app` 200), device pairing and `whoami`, and the walkthrough over HTTP
+  (validated; the `data_attached` record names its measurement by record
+  hash). After publishing, anonymous `curl` downloads of both assets matched
+  their sha256, the macOS executable carried no quarantine attribute, and
+  both report `0.1.3 (d7a7db8)`.
+- Deployed: `autophys.service` on yuzuquats runs `d7a7db8` (0.1.3) from
+  `ops/deploy.sh` in the same clean clone; healthz, `/app` and
+  `https://autophys.lona.so/api/healthz` answer 200.
+
+### Caveats
+
+- No headless browser check of `/app` this release; only HTTP status.
+- The pooled-client idle time (4 s) leaves about 0.5 s of margin against a
+  directly connected daemon's 5 s keep-alive (review of `9e07fab`).
+- The Linux binary needs glibc 2.39 or later; the macOS executable is ad-hoc
+  signed, not notarized.
+
 ## v0.1.2, 2026-11-07
 
 Published at https://github.com/yuzuquats/autophys/releases/tag/v0.1.2 (marked
