@@ -67,7 +67,7 @@ export function identificationTable(c: ProjectConfig, fit: Fit): TableRow[] {
     const k = certaintyOf(fit, name), label = { text: name, unit: unitOf(c, name) };
     if (k.kind === "ridge") return { dim: true, cells: [label, { text: "", tag: { text: "not identified", tone: "warn" as const } }, { text: "", end: true }] };
     if (k.kind === "identified") return { cells: [label, { text: "", tag: { text: "identified", tone: "ok" as const } }, { text: k.std == null ? "± not recorded" : plusMinus(c, name, k.std), end: true }] };
-    return { cells: [label, { text: "not recorded" }, { text: "", end: true }] };
+    return { cells: [label, { text: "", tag: { text: "not recorded", tone: "muted" as const } }, { text: "", end: true }] };
   });
 }
 

@@ -185,11 +185,16 @@ Deno.test("identifiability card and report list each parameter's recorded identi
   assertStringIncludes(card, plusMinus(c, a, 0.007));
   assertStringIncludes(card, "not identified");
   assert(!card.includes("Identified: "), "per-parameter rows replace the one-line list");
+  assert(!card.includes("Not recorded yet"), "the missing singular values are a muted note, not a missing-data block");
+  const other = fit.free[2];
+  assert(other, "the fixture fit has a third free parameter, left out of both lists");
+  assertStringIncludes(card, `{"text":"","tag":{"text":"not recorded","tone":"muted"}}`);
   const report = reportText({ source: "fixture", gseq: 7 } as Parameters<typeof reportText>[0], project, inv);
   assertStringIncludes(report, `Fit #${fit.n}:`);
   assertStringIncludes(report, `${plusMinus(c, a, 0.007)} (identified)`);
   assertStringIncludes(report, `- ${b}: not identified`);
   assertStringIncludes(report, "Condition 2.98");
+  assert(report.split("\n").some(l => l.startsWith(`- ${other} = `) && l.endsWith("(identification not recorded)")), "a parameter in neither list says so");
   delete fit.identification.marginal;
   assertStringIncludes(reportText({ source: "fixture", gseq: 7 } as Parameters<typeof reportText>[0], project, inv), "(identified; uncertainty not recorded)");
 });

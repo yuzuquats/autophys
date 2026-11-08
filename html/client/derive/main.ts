@@ -240,7 +240,7 @@ export function investigationPage(s: State, project: Project, sel: Exclude<Sel, 
       caption: f.sensitivity ? `Rank ${rankOf(f.sensitivity)} of ${f.sensitivity.names.length} · ${at}`
         : f.identification ? `${f.free.filter(n => f.identification!.identified.includes(n)).length} of ${f.free.length} identified · ${at}` : at,
       blocks: f.sensitivity ? [] : f.identification
-        ? [{ kind: "table", rows: identificationTable(c, f) }, gap("Singular values and directions are not recorded for this fit.")]
+        ? [{ kind: "table", rows: identificationTable(c, f) }, { kind: "text", tone: "muted", text: "Singular values and directions are not recorded for this fit." }]
         : [gap("No singular values or directions recorded for this fit.")],
       panels: [
         { charts: [], blocks: [{ kind: "facts", rows: [{ label: "Condition", value:

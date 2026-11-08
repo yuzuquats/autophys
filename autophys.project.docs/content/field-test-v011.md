@@ -56,6 +56,10 @@ one-line "Identified: … Not identified: …" text with a per-parameter table
 Checked on a fresh simulated battery loop served by a scratch daemon: round 1
 shows C1 and R1 not identified, round 2 all three identified with C1 ±0.84%,
 R0 ±0.39%, R1 ±0.67%. `deno test` over `html/`: 131 passed.
+A free parameter in neither recorded list (a step attached to a fit with a
+different free set, or a hand-written record) reads "identification not
+recorded" in the Report and gets a grey "not recorded" tag in the card; the
+note about missing singular values is a muted line, not a missing-data block.
 
 Remaining: G1, G3–G6 above. The Identifiability card still has no singular
 values or directions for daemon fits; recording them is a separate choice.

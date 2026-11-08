@@ -287,7 +287,7 @@ export function reportText(
             ? `- ${value} (identified; uncertainty not recorded)`
             : `- ${value} ${plusMinus(c, name, k.std)} (identified)`,
         );
-      } else lines.push(`- ${value}`);
+      } else lines.push(`- ${value} (identification not recorded)`);
     }
     if (s.condition != null) {
       lines.push(
