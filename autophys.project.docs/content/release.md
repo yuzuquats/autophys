@@ -390,3 +390,17 @@ console error or "already registered".
 - Measured on autophys.lona.so: the switcher opens on the landing and in the
   app with 11 tiles, and its card is a std-round at (28, 6), 373 by 344.
 - Unpushed.
+
+## Refreshed switcher icons deployed (2026-11-09)
+
+4756336 copies the family tiles again from tento's GENERATED_TILES
+(manifest b5502700…). Autotrade (dot on its path) and Brand (swatch pair)
+changed. The release also carries 5266733 (no brand focus ring, a 30px
+profile control).
+
+- Dev: `autophys-dev/4756336-web-20261109042351`.
+- Production: `services/autophys/1d5d193-web-4756336-20261109`, native
+  1d5d193 with an identical prefix, web_id a1197da3…. Rehearsed on 4793.
+  Unit backup: `autophys.service.before-1d5d193-web-4756336-20261109`.
+- Checked by opening the switcher on autophys.lona.so: the new icons show and
+  the page logs no errors.
