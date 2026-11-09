@@ -8,6 +8,8 @@ import { bootstrapContext, readContext, type AppContext } from "./context.ts";
 import { Cookbook } from "@tento-cookbook/lib.ts";
 import { daemon } from "../client/api.ts";
 import { selectionAddress } from "./selection-address.ts";
+import { type OpenAddress, openSelection, withoutOpen } from "./open-address.ts";
+import { followOpenLink } from "./open-link.ts";
 import { Controller } from "../client/controller.ts";
 import { Store } from "../client/store.ts";
 import { hydrateComponents } from "../ui/components.ts";
@@ -33,7 +35,12 @@ let pendingSignInError = takeSignInError();
 
 // The drawer normalizes history before mounting the app. Keep the original address.
 let requestedLocation: { search: string; hash: string } | null = { search: location.search, hash: location.hash };
+const startupSearch = location.search;
 let context = bootstrapContext();
+// A `/open/...` deep link arrives as ?open= (open-address.ts). It is selected only once its
+// account step (open-link.ts) has settled, in the workspace that step leaves open.
+let pendingOpen: OpenAddress | null = null;
+let selectPendingOpen: (() => void) | undefined;
 const identity = () => context?.principal?.email ?? context?.principal?.displayName ?? "browser";
 // The page's own origin is the daemon URL a device passes to `autophys connect` (New project).
 const environment = () => ({ user: identity(), now: clock, daemonOrigin: location.origin, capabilities: context?.capabilities });
@@ -110,6 +117,24 @@ const app: Cookbook.App = {
     if (startupLocation) {
       history.replaceState(history.state, "", location.pathname + startupLocation.search + startupLocation.hash);
     }
+    // After the account step: switch to the linked workbook and select it, then address the
+    // selection as #id, as a click would. A workbook this workspace lacks is dropped quietly.
+    selectPendingOpen = () => {
+      const snapshot = ctl.store.snapshot();
+      if (!pendingOpen || !snapshot) return;
+      const target = openSelection(snapshot.workspace.projects, pendingOpen);
+      // The link replaces any #id address the page started with.
+      pendingOpen = null; pendingAddress = null;
+      const search = withoutOpen(location.search);
+      if (!target) {
+        console.info("Autophys: this workspace has no workbook for the link");
+        history.replaceState(history.state, "", location.pathname + search + location.hash);
+        return;
+      }
+      ctl.handle({ kind: "switch", value: target.projectId });
+      ctl.handle({ kind: "select", id: target.id });
+      history.replaceState(history.state, "", location.pathname + search + "#" + encodeURIComponent(target.id));
+    };
     const addressChanged = () => {
       pendingAddress = selectionAddress(location.search, location.hash);
       if (pendingAddress && ctl.store.snapshot()) {
@@ -166,6 +191,7 @@ const app: Cookbook.App = {
         const id = pendingAddress; pendingAddress = null;
         ctl.handle({ kind: "select", id });
       }
+      if (pendingOpen) selectPendingOpen?.();
       const view = renderedView = ctl.view();
       const panels = shell.slots.main.closest<HTMLElement>(".ck-panels");
       const setupOnly = view.main.body.kind === "project-setup" && view.sidebar.selectedId !== "devices";
@@ -242,7 +268,7 @@ const app: Cookbook.App = {
       guided?.dispose(); clearInterval(poll); poll = undefined;
       ctl.reset(makeStore(), environment());
       guided = mountGuidedTour({ controller: ctl, signedIn: () => !SIGNED_OUT, redraw });
-      pendingAddress = null;
+      pendingAddress = null; pendingOpen = null;
       if (SIGNED_OUT) stopSignIn = signInInPlace(onContextChanged);
       else start();
       redraw();
@@ -250,7 +276,7 @@ const app: Cookbook.App = {
     if (SIGNED_OUT) stopSignIn = signInInPlace(onContextChanged);
     else if (context) start();
     else void readContext().then(next => { context = next; SIGNED_OUT = !next.principal; resumeSession?.(); }).catch(error => { ctl.store.error = error.message; redraw(); });
-    teardown = () => { focusWorkspaceSignIn = undefined; resumeSession = undefined; document.removeEventListener("keydown", down, { capture: true }); window.removeEventListener("hashchange", addressChanged); guided?.dispose(); guided = undefined; stopSignIn?.(); clearInterval(poll); unsubscribe(); views.forEach((v) => v.dispose()); removeStyles(); };
+    teardown = () => { selectPendingOpen = undefined; focusWorkspaceSignIn = undefined; resumeSession = undefined; document.removeEventListener("keydown", down, { capture: true }); window.removeEventListener("hashchange", addressChanged); guided?.dispose(); guided = undefined; stopSignIn?.(); clearInterval(poll); unsubscribe(); views.forEach((v) => v.dispose()); removeStyles(); };
   },
   unmount() {
     teardown?.();
@@ -270,7 +296,16 @@ function onContextChanged(next: AppContext): void {
   if (resumeSession) resumeSession();
   else ctl.reset(makeStore(), environment());
 }
-mountAccount(onContextChanged, pending => { signingOut = pending; }, () => focusWorkspaceSignIn?.() ?? false);
+const setSigningOut = (pending: boolean) => { signingOut = pending; };
+mountAccount(onContextChanged, setSigningOut, () => focusWorkspaceSignIn?.() ?? false);
+void followOpenLink(startupSearch, context, setSigningOut).then(step => {
+  if (step?.kind === "select") { pendingOpen = step.address; selectPendingOpen?.(); }
+  else if (step?.kind === "drop") {
+    // Before the app mounts, its saved startup address must lose the link too.
+    if (requestedLocation) requestedLocation.search = withoutOpen(requestedLocation.search);
+    history.replaceState(history.state, "", location.pathname + withoutOpen(location.search) + location.hash);
+  }
+});
 docs.mount();
 studies.mount();
 

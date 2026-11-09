@@ -10,6 +10,11 @@
  * Each study is a feature row: a small drawing from studies-visuals.ts, then its status, title and
  * question, then its result or needs. Only the discovery drawing plots recorded data; the others
  * are schematics, and their captions say so.
+ *
+ * A run study may name its demo workbook as a deep link (decisions.md DL-1). After mount the page
+ * probes each link with HEAD and adds "Open in workbench" only when the daemon answers 2xx, so a
+ * workbook that is not in the demo collection yet, or an install without one, shows no button.
+ * The button is the row's last item, so its arrival never moves the row's text.
  */
 import type { Cookbook } from "@tento-cookbook/lib.ts";
 import { hideOffLanding } from "./docs.ts";
@@ -24,6 +29,8 @@ type Study = {
   candidate?: boolean;
   question: string;
   rows: [string, string][];
+  /** A `/open/...` deep link (src/open.rs) to the study's demo workbook. */
+  link?: string;
 };
 
 const RUN: Study[] = [
@@ -36,6 +43,7 @@ const RUN: Study[] = [
       ["Result", "Muse Spark 1.3 and Muse Wonder 1.0 each passed 8 of 8 live runs; the offline scripted policy passed 8 of 8 too. On the recorded cell each asked for the 1 A discharge; worst parameter error 1.07%."],
       ["Caveat", "The recorded runs are synthesized from the model, not measured. Scripted did as well as the models."],
     ],
+    link: "/open/demo/workbook/battery_cycler_demo",
   },
   {
     visual: "disc",
@@ -56,6 +64,7 @@ const RUN: Study[] = [
       ["Result", "Runs in the offline benchmark with the scripted and fake-reasoner policies, three seeds each."],
       ["Not run", "Live model runs."],
     ],
+    link: "/open/demo/workbook/mass_spring_damper_demo",
   },
   {
     visual: "th",
@@ -66,6 +75,7 @@ const RUN: Study[] = [
       ["Result", "Runs in the offline benchmark with the scripted and fake-reasoner policies, three seeds each."],
       ["Not run", "Live model runs."],
     ],
+    link: "/open/demo/workbook/thermal_rc_demo",
   },
 ];
 
@@ -132,10 +142,19 @@ const CSS = `
 .ap-study dl { display: grid; gap: 10px; margin: 0; }
 .ap-study dt { font-size: 12px; line-height: 16px; font-weight: 500; color: var(--ck-n500, #8a8a8a); }
 .ap-study dd { margin: 2px 0 0; font-size: 14px; line-height: 20px; }
+.ap-study-open { grid-column: 2 / -1; justify-self: start; display: inline-flex; align-items: center; gap: 6px;
+  min-height: 32px; margin-top: -8px; padding: 6px 12px; border-radius: 8px; font-size: 13px; line-height: 20px; font-weight: 500;
+  color: var(--ck-ink, #141414); text-decoration: none; box-shadow: inset 0 0 0 1px var(--ck-line, #d9d9d9); }
+.ap-study-open[hidden] { display: none; }
+.ap-study-open:hover { background: var(--ck-n100, #f5f5f5); }
+.ap-study-open:focus-visible { outline: 2px solid var(--ck-ink, #141414); outline-offset: 2px; }
+.ap-study-open svg { flex: none; }
+@media (pointer: coarse) { .ap-study-open { min-height: 44px; } }
 @media (max-width: 719px) {
   .ap-study { grid-template-columns: minmax(0, 1fr); gap: 14px; }
   .ap-study-visual .ap-narrow { display: none; }
   .ap-study-visual .ap-wide { display: block; width: 100%; height: auto; }
+  .ap-study-open { grid-column: 1; margin-top: -2px; }
 }
 `;
 
@@ -166,7 +185,26 @@ function row(study: Study): HTMLElement {
     details.append(pair);
   }
   item.append(visual, text, details);
+  if (study.link) {
+    // Shown by probe() once the daemon says the workbook can be opened.
+    const open = el("a", "ap-study-open", "Open in workbench");
+    open.href = study.link;
+    open.hidden = true;
+    open.setAttribute("aria-label", `Open ${study.title} in the workbench`);
+    open.insertAdjacentHTML("beforeend", `<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false"><path d="M4.5 2.5 8 6l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`);
+    item.append(open);
+  }
   return item;
+}
+
+/** Reveal each deep-link button whose HEAD answers 2xx; anything else leaves it hidden. */
+function probe(section: HTMLElement): void {
+  for (const open of section.querySelectorAll<HTMLAnchorElement>("a.ap-study-open")) {
+    void fetch(open.href, { method: "HEAD", credentials: "same-origin", cache: "no-store", redirect: "manual",
+      signal: AbortSignal.timeout(10_000) })
+      .then(response => { if (response.ok) open.hidden = false; })
+      .catch(() => { /* No daemon or no network: no button. */ });
+  }
 }
 
 function group(title: string, lede: string, studies: Study[]): HTMLElement {
@@ -200,6 +238,7 @@ export function landingStudies(): { onStage(stage: Cookbook.Stage): void; mount(
       const footer = document.querySelector(".ck-footer");
       if (footer) footer.before(section);
       else document.body.append(section);
+      probe(section);
     },
   };
 }

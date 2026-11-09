@@ -129,6 +129,8 @@ Open the workbench from the top of this page. The sidebar lists projects and the
 
 The Fit view overlays the recorded initial and fitted model curves on the measurements, with normalized residuals beneath; older records without curves say "fit curve not recorded". New project walks through bringing your own simulator: \`autophys new\` creates the project, \`autophys connect\` pairs its machine with this daemon (approve it in place), and the project's first investigation opens as soon as its program records it.
 
+A link of the form \`/open/<user>/workbook/<name>\` opens the workbook \`<name>.ap-workbook\` in the workbench, at its most recent validated investigation (else its config). \`<user>\` is \`demo\` for the demo account's collection, which anyone may open (signing in as the demo, after asking first when you are signed in to your own workspace), \`me\` for your own, and \`local\` for the collection of a daemon started without \`--login\`. A \`HEAD\` request answers 200 when you can open the link and 404 otherwise, including for a workbook you may not see.
+
 ## Repository map
 
 | Path | What it is |
