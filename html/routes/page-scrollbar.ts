@@ -8,15 +8,9 @@
  * the top of the deck, appears once the page has scrolled, and its thumb can be
  * dragged or its track clicked.
  *
- * It mounts only on Lona's hosted sites (SCROLLBAR_HOSTS: autophys.lona.so
- * and its dev-- preview), not in a clone or on a local daemon, and runs only
- * on the landing stage, not in the tour or the app.
+ * It mounts wherever the page is served and shows only on the landing stage,
+ * not in the tour or the app.
  */
-export const SCROLLBAR_HOSTS: ReadonlySet<string> = new Set(["autophys.lona.so", "dev--autophys.lona.so"]);
-
-export function pageScrollbarEnabled(hostname: string): boolean {
-  return SCROLLBAR_HOSTS.has(hostname.toLowerCase().replace(/\.$/, ""));
-}
 
 /** Thumb length and offset (px) for a track of `track` px over a page of `scrollHeight` px. */
 export function thumbGeometry(
@@ -45,8 +39,8 @@ html:not([data-ck-stage="landing"]) .ap-page-scrollbar { display: none; }
 @media (pointer: coarse) { .ap-page-scrollbar[data-visible] { pointer-events: none; } }
 `;
 
-export function mountPageScrollbar(hostname: string): (() => void) | null {
-  if (!pageScrollbarEnabled(hostname)) return null;
+/** Mounts the scrollbar on the page; the returned function removes it. */
+export function mountPageScrollbar(): () => void {
   const style = document.createElement("style");
   style.textContent = CSS;
   const bar = document.createElement("div");

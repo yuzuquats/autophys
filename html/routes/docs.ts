@@ -819,7 +819,7 @@ export function landingDocs(): { onStage(stage: Cookbook.Stage): void; mount(): 
       const inlineCode = new CSSStyleSheet();
       inlineCode.replaceSync(INLINE_CODE_CSS);
       doc.addStyle("ap-inline-code", inlineCode);
-      const badge = hostedBadge(location.hostname);
+      const badge = hostedBadge();
       if (badge) section.append(badge);
       section.append(doc);
       const footer = document.querySelector(".ck-footer");

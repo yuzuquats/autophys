@@ -3,6 +3,7 @@ import * as esbuild from "https://deno.land/x/esbuild@v0.24.0/mod.js";
 import { expandGlob } from "jsr:@std/fs";
 import { AppSwitcherPlugin } from "../../../tento-web-js/build-plugins/app-switcher.deno.ts";
 import { BuildStampPlugin } from "../../../tento-web-js/build-plugins/build-stamp.deno.ts";
+import { BuildSwitchPlugin } from "../../../tento-web-js/build-plugins/build-switch.deno.ts";
 import { CssMinifyPlugin } from "../../../tento-web-js/build-plugins/css-minify.deno.ts";
 import { SvgLoaderPlugin } from "../../../tento-web-js/build-plugins/svg-loader.deno.ts";
 import { frontendTsconfig } from "./frontend-tsconfig.deno.ts";
@@ -64,7 +65,12 @@ export async function getEsbuildContext({
     sourcemap: "linked",
     // The inputs list is the dev watcher's watch set — see bundler-rpc.
     metafile: true,
-    plugins: [new SvgLoaderPlugin(), new BuildStampPlugin(), new AppSwitcherPlugin(routesPath)],
+    plugins: [
+      new SvgLoaderPlugin(),
+      new BuildStampPlugin(),
+      new AppSwitcherPlugin(routesPath),
+      new BuildSwitchPlugin(routesPath),
+    ],
   });
   CACHED_CONTEXT.set(routesPath, {
     context,
@@ -96,6 +102,7 @@ export async function build({
   plugins.push(new SvgLoaderPlugin());
   plugins.push(new BuildStampPlugin());
   plugins.push(new AppSwitcherPlugin(routesPath));
+  plugins.push(new BuildSwitchPlugin(routesPath));
   if (minifyCss) {
     plugins.push(new CssMinifyPlugin());
   }

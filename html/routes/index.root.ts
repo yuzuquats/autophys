@@ -309,7 +309,7 @@ void followOpenLink(startupSearch, context, setSigningOut).then(step => {
 });
 docs.mount();
 studies.mount();
-mountPageScrollbar(location.hostname); // hosted sites only (page-scrollbar.ts)
+mountPageScrollbar(); // shows on the landing stage only (page-scrollbar.ts)
 
 // Remove the unused hard-coded shell control before the first app open too.
 document.querySelector(".ck-header .ck-export")?.remove();

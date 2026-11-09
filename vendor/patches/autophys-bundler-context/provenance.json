@@ -99,6 +99,14 @@
       "manifest_sha256": "484419178d76bfab29c12b7e957706a00e1a3f8f86601312177d43e1bbaf588d",
       "files": 2441,
       "description": "Every tracked vendor/tento file at the parent commit, with tento-brand-js/kit/app-switcher.ts re-vendored from upstream tento e8758d2cff (2026-11-09): the footer link sets letter-spacing: normal itself, so a host header's tracking no longer narrows it."
+    },
+    {
+      "name": "repin-20261109e",
+      "file": "pinned-20261109e.json",
+      "commit": "4dd07e3d25864acc4dc139b2f1d4506b001a0bd8",
+      "manifest_sha256": "c26f42529c5726f45ccf2bbf5966d20a83cf75a97f9cc471bff5341c22bde160",
+      "files": 2443,
+      "description": "Every tracked vendor/tento file at the parent commit, with tento-web/src/client/bundler.deno.ts re-vendored and tento-web-js/build-plugins/build-switch.deno.ts and its test added from upstream tento dc0cc8b825 (2026-11-09): BuildSwitchPlugin bundles a *.switched.ts module as written only when the switch its first line names is on in html/.env or the environment, and null otherwise."
     }
   ]
 }

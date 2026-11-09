@@ -1,13 +1,12 @@
 import { assert, assertEquals, assertFalse } from "jsr:@std/assert@1";
-import { pageScrollbarEnabled, thumbGeometry } from "./page-scrollbar.ts";
+import { mountPageScrollbar, thumbGeometry } from "./page-scrollbar.ts";
 
-Deno.test("the page scrollbar mounts only on Lona's hosted sites", () => {
-  assert(pageScrollbarEnabled("autophys.lona.so"));
-  assert(pageScrollbarEnabled("dev--autophys.lona.so"));
-  assert(pageScrollbarEnabled("DEV--autophys.lona.so."));
-  for (const host of ["localhost", "127.0.0.1", "x.dev--autophys.lona.so", "autophys.lona.so.evil.example", ""]) {
-    assertFalse(pageScrollbarEnabled(host), host);
-  }
+Deno.test("the page scrollbar mounts on every host: no host gate, mounted unconditionally at startup", async () => {
+  assertEquals(mountPageScrollbar.length, 0); // takes no hostname
+  const module = await Deno.readTextFile(new URL("./page-scrollbar.ts", import.meta.url));
+  assertFalse(/hostname/.test(module), "page-scrollbar.ts checks a host");
+  const root = await Deno.readTextFile(new URL("./index.root.ts", import.meta.url));
+  assert(/^mountPageScrollbar\(\);/m.test(root), "index.root.ts does not mount the scrollbar at top level");
 });
 
 Deno.test("the thumb is sized by the visible fraction and placed by scroll progress", () => {

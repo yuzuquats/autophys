@@ -1,30 +1,25 @@
+import PACKAGED_COPY from "./hosted-badge.switched.ts";
+
 /**
  * A small pill above the landing's docs saying Autophys was built for Meta
- * Global Hacks. It is shown only where Lona hosts the public site
- * (autophys.lona.so and its dev-- preview), never in a clone of the
- * repository or on a local daemon, which serve the same bundle from other
- * hosts.
+ * Global Hacks. It is a packaging choice, not part of the source: the copy
+ * lives in hosted-badge.switched.ts, which the build bundles only when
+ * `AUTOPHYS_HOSTED_BADGE=on` (html/.env.example). A clone of the repository
+ * builds without it, and the pill renders nowhere.
  */
-export const HOSTED_BADGE_TEXT = "Built for Meta Global Hacks";
-export const HOSTED_BADGE_URL = "https://dev.meta.ai/events/global-hackathon";
+export type HostedBadgeCopy = { readonly text: string; readonly href: string };
 
-/** Whether `hostname` is Lona's public Autophys site or its dev-- preview. */
-export function isLonaHosted(hostname: string): boolean {
-  const host = hostname.toLowerCase().replace(/\.$/, "");
-  return host === "autophys.lona.so" || host === "dev--autophys.lona.so";
-}
-
-/** The pill for `hostname`, or null off the hosted site. */
-export function hostedBadge(hostname: string): HTMLElement | null {
-  if (!isLonaHosted(hostname)) return null;
+/** The pill for `copy` (the packaged copy by default), or null when the build left it out. */
+export function hostedBadge(copy: HostedBadgeCopy | null = PACKAGED_COPY): HTMLElement | null {
+  if (copy == null) return null;
   const row = document.createElement("div");
   row.className = "ap-hosted-badge";
   const pill = document.createElement("a");
   pill.className = "ap-hosted-badge-pill";
-  pill.href = HOSTED_BADGE_URL;
+  pill.href = copy.href;
   pill.target = "_blank";
   pill.rel = "noopener noreferrer";
-  pill.textContent = HOSTED_BADGE_TEXT;
+  pill.textContent = copy.text;
   row.append(pill);
   return row;
 }
