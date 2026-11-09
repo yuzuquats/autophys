@@ -270,3 +270,14 @@ isolated HOME and only the release directory on PATH:
   The macOS executable is ad-hoc signed, not notarized.
 - The vendor patch verifier was already failing before this release
   (vendor/README.md).
+
+## Lona-hosted builds turn on the app switcher
+
+The Lona family app switcher is off in any build of the repository as
+checked out (operator, 2026-11-08; decision AS-2). Lona's hosted builds,
+autophys.lona.so and dev--autophys.lona.so, turn it on: copy the host's
+untracked `html/.env` (`TENTO_APP_SWITCHER=on`, see `html/.env.example`)
+into the `git archive` export before `build-web`, or run `build-web` with
+`TENTO_APP_SWITCHER=on`. Check the bundle carries it: `routes/index.root.js`
+contains `autotrade.lona.so`. A release built without the switch ships no
+switcher, which is correct for builds made outside Lona.
