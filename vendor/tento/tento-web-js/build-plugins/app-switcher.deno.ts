@@ -1,6 +1,6 @@
 import * as esbuild from "https://deno.land/x/esbuild@v0.24.0/mod.js";
 
-import { dirname, isAbsolute, join, relative, resolve } from "jsr:@std/path";
+import { dirname, isAbsolute, join, relative, resolve, SEPARATOR as SEP } from "jsr:@std/path";
 
 /**
  * # App switcher packaging: the switcher's apps are chosen when a site is built
@@ -37,9 +37,13 @@ import { dirname, isAbsolute, join, relative, resolve } from "jsr:@std/path";
  * A malformed manifest, an unknown switch value or a missing icon fails the
  * build with a message naming the file. The env file is read here, not
  * through `@std/dotenv/load`, because that loads the bundler worker's own
- * directory, not the site's. Like `BuildStampPlugin`, this is an `onLoad`
- * hook, so a watch rebuild re-reads both files. The per-file (`?fe=unbundled`)
- * emitter does not run plugins and serves the on-disk `undefined`.
+ * directory, not the site's. Both files live in the HTML root, which
+ * tento-web's bundle-reuse stamp walks whole, so a build after either changes
+ * (or appears) rebuilds; the env variable is in the stamp's `ENV_NAMES`. The
+ * dev watcher rebuilds only on the bundle's own inputs, so an edit to these
+ * files during `serve` takes effect at the next rebuild or restart. The
+ * per-file (`?fe=unbundled`) emitter does not run plugins and serves the
+ * on-disk `undefined`.
  */
 export class AppSwitcherPlugin implements esbuild.Plugin {
   name: string = "app-switcher";
@@ -108,19 +112,22 @@ export async function packageAppSwitcher(
   const manifest = parseManifest(manifestText, manifestPath);
   const icons: string[] = [];
   for (const app of manifest.apps) {
-    const icon = resolve(configDir, app.icon);
-    const inside = relative(configDir, icon);
-    if (inside.startsWith("..") || isAbsolute(inside)) {
-      throw new Error(`${manifestPath}: app ${JSON.stringify(app.id)}: icon ${JSON.stringify(app.icon)} is outside ${configDir}`);
-    }
+    const at = `${manifestPath}: app ${JSON.stringify(app.id)}: icon ${JSON.stringify(app.icon)}`;
+    const outside = (dir: string, path: string): boolean => {
+      const inside = relative(dir, path);
+      return inside === ".." || inside.startsWith(`..${SEP}`) || isAbsolute(inside);
+    };
+    if (outside(configDir, resolve(configDir, app.icon))) throw new Error(`${at} is outside ${configDir}`);
+    let icon: string;
     try {
+      icon = await Deno.realPath(resolve(configDir, app.icon));
       if (!(await Deno.stat(icon)).isFile) throw new Deno.errors.NotFound(icon);
     } catch (error) {
-      if (error instanceof Deno.errors.NotFound) {
-        throw new Error(`${manifestPath}: app ${JSON.stringify(app.id)}: icon ${JSON.stringify(app.icon)} does not exist`);
-      }
+      if (error instanceof Deno.errors.NotFound) throw new Error(`${at} does not exist`);
       throw error;
     }
+    // Real paths too, so a symlink cannot inline a file from outside the site.
+    if (outside(await Deno.realPath(configDir), icon)) throw new Error(`${at} is outside ${configDir}`);
     icons.push(icon);
   }
   const imports = icons.map((icon, i) => `import icon${i} from ${JSON.stringify(icon)};`);
@@ -208,7 +215,8 @@ export function parseManifest(text: string, source: string): Manifest {
     if (url == null || (url.protocol !== "https:" && url.protocol !== "http:")) {
       fail(`${at}: href ${JSON.stringify(href)} must be an absolute http(s) URL`);
     }
-    if (!icon.toLowerCase().endsWith(".svg")) fail(`${at}: icon ${JSON.stringify(icon)} must be an .svg file`);
+    // Lowercase only: the SVG loader matches `.svg` exactly.
+    if (!icon.endsWith(".svg")) fail(`${at}: icon ${JSON.stringify(icon)} must be an .svg file`);
     return { id, name, href, icon };
   });
   return { ...(record.label != null ? { label: record.label as string } : {}), apps };
@@ -227,7 +235,7 @@ function envSwitch(): string | undefined {
   try {
     return Deno.env.get(APP_SWITCHER_ENV);
   } catch {
-    // No --allow-env: only the checked-in file decides.
+    // No --allow-env: only the site's .env decides.
     return undefined;
   }
 }

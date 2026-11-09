@@ -68,6 +68,7 @@ Deno.test("parseManifest rejects duplicate ids, unsafe links, non-svg icons and 
   assertThrows(() => parseManifest(JSON.stringify({ apps: [app, app] }), "m"), Error, "duplicate id");
   assertThrows(() => parseManifest(JSON.stringify({ apps: [{ ...app, href: "javascript:alert(1)" }] }), "m"), Error, "http(s)");
   assertThrows(() => parseManifest(JSON.stringify({ apps: [{ ...app, icon: "a.png" }] }), "m"), Error, ".svg");
+  assertThrows(() => parseManifest(JSON.stringify({ apps: [{ ...app, icon: "a.SVG" }] }), "m"), Error, ".svg");
   assertThrows(() => parseManifest(JSON.stringify({ apps: [{ ...app, color: "red" }] }), "m"), Error, "unknown key");
   assertThrows(() => parseManifest("{", "m.json"), Error, "m.json: not JSON");
 });
@@ -109,7 +110,7 @@ Deno.test("switch off bundles no link or icon", async () => {
   assert(!text.includes("<svg"), "an icon was bundled");
 });
 
-Deno.test("the process environment overrides the checked-in switch; absent both, it is off", async () => {
+Deno.test("the process environment overrides the .env switch; absent both, it is off", async () => {
   const root = await site({
     "html/app-switcher.json": MANIFEST,
     "html/.env": "TENTO_APP_SWITCHER=on\n",
@@ -132,6 +133,22 @@ Deno.test("a missing or escaping icon fails the build, naming the manifest", asy
     JSON.stringify({ apps: [{ id: "x", name: "X", href: "https://x.example", icon: "../../etc/x.svg" }] }),
   );
   await assertRejects(() => packageAppSwitcher(html, "on"), Error, "outside");
+  // A symlink inside the site that points outside it is outside too.
+  const elsewhere = await Deno.makeTempFile({ suffix: ".svg" });
+  await Deno.writeTextFile(elsewhere, ICON);
+  await Deno.symlink(elsewhere, join(html, "app-switcher", "link.svg"));
+  await Deno.writeTextFile(
+    join(html, "app-switcher.json"),
+    JSON.stringify({ apps: [{ id: "x", name: "X", href: "https://x.example", icon: "app-switcher/link.svg" }] }),
+  );
+  await assertRejects(() => packageAppSwitcher(html, "on"), Error, "outside");
+  // A name that merely starts with two dots is inside.
+  await Deno.writeTextFile(join(html, "..dots.svg"), ICON);
+  await Deno.writeTextFile(
+    join(html, "app-switcher.json"),
+    JSON.stringify({ apps: [{ id: "x", name: "X", href: "https://x.example", icon: "..dots.svg" }] }),
+  );
+  assertStringIncludes((await packageAppSwitcher(html, "on"))!.contents, "icon0");
 });
 
 Deno.test({

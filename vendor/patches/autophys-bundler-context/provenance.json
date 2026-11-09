@@ -59,6 +59,14 @@
       "files": 2441,
       "description": "Every tracked vendor/tento file at the commit that last updated this entry, with the cookbook re-vendored from upstream tento (2026-11-08). Vendored libraries are not edited directly; a change lands upstream, is re-vendored, and is re-pinned here in the same commit.",
       "cookbook_upstream": "tento 54edca64ef: vendor/tento/tento-cookbook-js equals upstream tento-cookbook-js except checks/check-footer.js"
+    },
+    {
+      "name": "repin-20261108b",
+      "file": "pinned-20261108b.json",
+      "commit": "a337ff88bdc6c5f1a7fd2d48a767811d0cf0445e",
+      "manifest_sha256": "de5f1491b18a5152e90b7f0ad3c82fb271adb2b62cee27a1df5370e8efe9a2ae",
+      "files": 2441,
+      "description": "Every tracked vendor/tento file at the parent commit, with tento-web-js/build-plugins/app-switcher.deno.ts and its test re-vendored from upstream tento 37640e76ac (2026-11-08)."
     }
   ]
 }
