@@ -47,6 +47,12 @@ grows to fit its step.
   is unchanged). `https://autophys.lona.so/api/healthz` reports 0.1.4, and a
   headless browser on production confirmed every tour step keeps Next 12px
   above the viewport bottom at 1280x800 and the sidebar fills 717px.
+- Redeployed the same day at 18:27 as a web-only release on this binary:
+  `fe522fb-web-818aa7f-20261108` (the case studies and pitch deck work,
+  `fe522fb..818aa7f`), packed by `autophys pack` with the native prefix
+  byte-identical to `fe522fb-20261108`, rehearsed on 127.0.0.1:4793, unit
+  preimage `autophys.service.pre-web-818aa7f-20261108`. healthz still reports
+  0.1.4 (`fe522fb`) with web_id `09d582e0…`.
 
 ### Caveats
 

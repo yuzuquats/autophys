@@ -232,7 +232,17 @@ Spark's three adopts were refused and the root fit stood; plus copy fixes), all 
 818aa7f; round 2 returned ready on 818aa7f. Checks on an export of 818aa7f: deno check,
 141 html tests, 22 cookbook tests. Open: no unit test for the `cases` body;
 `vendor/patches/autophys-bundler-context/verify.py` already fails at fe522fb because the
-vendored cookbook no longer matches either pinned manifest; production is not deployed.
+vendored cookbook no longer matches either pinned manifest.
+
+**Production, 2026-11-08.** `818aa7f`'s web was deployed at 18:27 as a web-only release on
+the v0.1.4 binary (`fe522fb-web-818aa7f-20261108`, healthz web_id `09d582e0…`; see
+[release.md](release.md)). An independent agent review of `fe522fb..818aa7f` before that
+deploy found two blockers, fixed in forward commits: the slide 6 note and the discovery
+study said "five invalid adopts and one unproven stop", where the Spark seed 0 record shows
+11 refused adopts and more than one demoted stop (copy now: "refused 11 invalid adopts and
+demoted the stops the data did not support"); and the `cases` chart overflowed phones, so
+below 640px it now stacks each case's name and outcome above its rail with the
+calibration-alone outcome below. Those fixes reach production with the next deploy.
 
 ## Case study deep links (operator decisions, /open-questions 2026-11-08)
 
