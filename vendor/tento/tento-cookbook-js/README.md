@@ -30,8 +30,8 @@ takes `deck(app)`, `tutorial` steps, `appPath` (default `/app`), `status`
 start from.
 
 The flow has three stops. The deck fills the screen. **Open app**, ArrowDown
-or a URL under `appPath` lowers the deck to a 200px peek carrying the
-tutorial, while the sidebar and details slide in. **Done**, the close button,
+or a URL under `appPath` lowers the deck to a peek carrying the tutorial
+(200px, taller when a step needs it), while the sidebar and details slide in. **Done**, the close button,
 Escape or ArrowDown lower the peek away. The wordmark, Back or ArrowUp go
 back. Opening and closing push history (`/` and `appPath`), so the server
 must answer both with `index.html`.

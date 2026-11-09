@@ -58,9 +58,53 @@ export function installDrawer(parts: {
   let animation: Animation | null = null;
   let trigger: HTMLElement | null = null;
   let landingScroll = 0;
-  const peek = () => Math.max(0, Math.min(200, innerHeight - 80));
-  const transformFor = (s: Stage) =>
-    s === "landing" ? "translateY(0px)" : `translateY(${s === "tour" ? innerHeight - peek() : innerHeight}px)`;
+  let fitting: Animation | null = null;
+  // The peek is 200px, or taller when a step needs it: a long body, a preview
+  // column or a narrow window can wrap a step past 200px, and the bottom of the
+  // peek would cut off Back and Next. Within one tour it does not shrink back,
+  // so stepping through does not bounce the app above it.
+  let fitted = 0;
+  const natural = () => {
+    const style = tutorial.el.style;
+    style.height = "auto";
+    const px = Math.ceil(tutorial.el.getBoundingClientRect().height);
+    style.height = "";
+    return px;
+  };
+  const peek = () => {
+    fitted = Math.max(fitted, natural());
+    return Math.max(0, Math.min(Math.max(200, fitted), innerHeight - 80));
+  };
+  /** Size the peek for the current stage; returns its height, 0 off the tour. */
+  const applyPeek = () => {
+    const px = stage === "tour" ? peek() : 0;
+    if (px) tour.style.height = `${px}px`;
+    panels.setPeek(px);
+    return px;
+  };
+  const transformFor = (s: Stage, px: number) =>
+    s === "landing" ? "translateY(0px)" : `translateY(${s === "tour" ? innerHeight - px : innerHeight}px)`;
+
+  /** Grow the peek to a step that rendered taller. A stage move in flight refits when it lands. */
+  function refit(): void {
+    if (stage !== "tour" || animation) return;
+    const before = parseFloat(tour.style.height) || 0;
+    const px = applyPeek();
+    if (px === before) return;
+    const from = new DOMMatrixReadOnly(getComputedStyle(landing).transform).m42;
+    const to = transformFor("tour", px);
+    fitting?.cancel();
+    landing.style.transform = to;
+    fitting = reducedMotion() ? null : landing.animate([{ transform: `translateY(${from}px)` }, { transform: to }], {
+      duration: 240,
+      easing: ease,
+    });
+  }
+  let refitFrame = 0;
+  new MutationObserver(() => {
+    cancelAnimationFrame(refitFrame);
+    refitFrame = requestAnimationFrame(refit);
+  }).observe(tutorial.el, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["data-preview"] });
 
   async function setStage(next: Stage): Promise<void> {
     if (next === stage) return;
@@ -71,6 +115,8 @@ export function installDrawer(parts: {
     const previousScroll = scrollY;
     if (previous === "landing") landingScroll = previousScroll;
     animation?.cancel();
+    fitting?.cancel();
+    fitting = null;
     const open = next !== "landing";
     // Measure the header before locking away the landing's scroll offset.
     if (open) header.setAppState(true);
@@ -81,7 +127,8 @@ export function installDrawer(parts: {
     // Closing moves the cover, not the workbench beneath it. Keep its current
     // layout and visibility until the landing has actually covered the app.
     if (open) panels.setOpen(true);
-    panels.setPeek(next === "tour" ? peek() : 0);
+    if (next !== "tour") fitted = 0;
+    const peekPx = applyPeek();
     landing.toggleAttribute("data-lowered", open);
     // Keep the footer out of the app's tab order and scroll range. Restore it
     // before restoring scroll, so an offset at the page bottom is not clamped.
@@ -107,7 +154,7 @@ export function installDrawer(parts: {
     if (own !== revision) return;
     parts.onStage?.(next);
 
-    const to = transformFor(next);
+    const to = transformFor(next, peekPx);
     landing.style.transform = to;
     const long = previous === "landing" || next === "landing";
     const duration = reducedMotion() ? 0 : long ? 700 : 380;
@@ -118,6 +165,7 @@ export function installDrawer(parts: {
     await animation.finished.catch(() => {});
     if (own !== revision) return;
     animation = null;
+    if (next === "tour") refit();
     if (open) panels.setReady(true);
     else {
       tutorial.clear();
@@ -197,8 +245,10 @@ export function installDrawer(parts: {
 
   addEventListener("resize", () => {
     if (animation) return;
-    landing.style.transform = transformFor(stage);
-    panels.setPeek(stage === "tour" ? peek() : 0);
+    fitting?.cancel();
+    fitting = null;
+    fitted = 0;
+    landing.style.transform = transformFor(stage, applyPeek());
   });
 
   document.documentElement.dataset.ckStage = "landing";
