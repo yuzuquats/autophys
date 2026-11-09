@@ -30,7 +30,7 @@ queueMicrotask(() => {
     .ck-landing[data-lowered] { position: relative; inset: auto; }
     ${surfaceFinishStyles}
     ${appSwitcherStyles}
-    .ck-header { --ck-gutter: 28px; }
+    .ck-header, .ck-header[data-app] { --ck-gutter: 24px; }
     .ck-header .ck-nav-links { gap: 16px; }
     .ck-header :is(.ap-section-link, .ap-github-link) { display: inline-flex; align-items: center;
       min-height: 44px; color: var(--ck-ink); text-decoration: none; white-space: nowrap; }
@@ -49,16 +49,30 @@ queueMicrotask(() => {
     html #ap-account .ap-acct-btn { width: 30px; height: 30px; }
     html #ap-account .ap-acct-avatar { width: 26px; height: 26px; font-size: 12px; }
     html #ap-account svg { width: 17px; height: 17px; }
-    .ck-header .ck-brand { padding-left: 28px; }
+    /* The Lona family header's geometry (operator, 2026-11-09, superseding
+       BR-11's 80px bar): a 64px bar, the 28px mark at x 40, y 18, the title
+       12px after it at x 80, so switching apps shifts nothing. One 8px margin
+       holds the layout together: the app's header card (the menubar, 16px
+       outside the nav) sits 8px from the top and sides and is 48px tall, and
+       the panels start 8px under it, 8px from the edges and from each other.
+       The 24px gutter and the brand's 16px pad put the mark at x 40 on the
+       landing and in the app alike; the back arrow sits in front of it at
+       x 14, inside the card. The landing's slides move up with the bar. */
+    .ck-header { height: calc(64px + var(--ck-safe-top)); }
+    .ck-header .ck-nav { height: 48px; }
+    .ck-header .ck-brand, .ck-header[data-app] .ck-brand { padding-left: 16px; }
+    .ck-header .ck-brand-back { left: -10px; }
+    .ck-panels { --ck-gap: 8px; top: calc(64px + var(--ck-safe-top)); }
+    .ck-deck-page { padding-top: calc(64px + var(--ck-safe-top)); }
     /* The slide is only for opening and closing the app. This sheet arrives
        after the first paint, so the transition waits for data-ap-brand-ready
        (set below once the starting padding is applied); otherwise every load
        would slide the logo in from 0. */
     .ck-header[data-ap-brand-ready] .ck-brand { transition: padding-left 700ms var(--ck-ease); }
-    /* Phones: the landing logo sits flush with the slide text (24px); the
-       arrow's room opens only in the app, sliding the logo over. */
+    /* Phones: the landing mark sits at the family's 20px inset; the arrow's
+       room opens only in the app, sliding the mark over to x 40. */
     @media (max-width: 639px) {
-      .ck-header { --ck-gutter: 24px; }
+      .ck-header:not([data-app]) { --ck-gutter: 20px; }
       .ck-header:not([data-app]) .ck-brand { padding-left: 0; }
     }
     /* GitHub is a landing link. Opening the app fades it out while its width
@@ -76,7 +90,7 @@ queueMicrotask(() => {
     @media (max-width: 479px) { .ck-header .ap-github-link { display: none; } }
     @media (max-width: 369px) { .ck-header .ap-studies-link { display: none; } }
     @media (max-width: 359px) {
-      .ck-header, .ck-header[data-app] { --ck-gutter: 16px; }
+      .ck-header:not([data-app]) { --ck-gutter: 16px; }
       .ck-header .ck-nav { gap: 12px; }
     }
   `;
@@ -162,8 +176,8 @@ queueMicrotask(() => {
   if (
     wordmark && !wordmark.parentElement?.querySelector("[data-autophys-mark]")
   ) {
-    const image = mark(32);
-    image.style.marginRight = "4px";
+    const image = mark(28);
+    image.style.marginRight = "12px";
     wordmark.before(image);
   }
   const brand = document.querySelector<HTMLAnchorElement>(".ck-header .ck-brand");

@@ -12,7 +12,7 @@ import { PACKAGED_APP_SWITCHER } from "@tento-brand/kit/app-switcher.packaged";
  *
  * The brand link stays the link it was (home on the landing, back to the
  * deck in the app): the switcher only wraps it. The card's margins are
- * measured from the 32px mark, as in the Lona family header, and its colours
+ * measured from the 28px mark, as in the Lona family header, and its colours
  * are that header's light variant (Autophys is light only).
  */
 export function mountAppSwitcher(brand: HTMLAnchorElement, mark: () => Element | null): AppSwitcher | null {
