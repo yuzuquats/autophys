@@ -48,8 +48,10 @@ queueMicrotask(() => {
       visibility: hidden; pointer-events: none;
       transition: opacity 180ms ease, visibility 0s linear 180ms, max-width 700ms var(--ck-ease),
         margin-left 700ms var(--ck-ease); }
-    /* Phones keep Try now and Docs; the wordmark needs the room. */
+    /* Phones keep Try now and Docs; the wordmark needs the room. Studies goes
+       below 420px, where it would push Try now into the wordmark. */
     @media (max-width: 479px) { .ck-header .ap-github-link { display: none; } }
+    @media (max-width: 419px) { .ck-header .ap-section-link[href="/#studies"] { display: none; } }
     @media (max-width: 359px) {
       .ck-header, .ck-header[data-app] { --ck-gutter: 16px; }
       .ck-header .ck-nav { gap: 12px; }
