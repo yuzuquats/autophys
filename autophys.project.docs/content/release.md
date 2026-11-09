@@ -370,3 +370,23 @@ byte-identical prefix (26531408 bytes), web_id 7a9f77f5…. It was rehearsed on
 Measured on autophys.lona.so at 1280 and 390 wide: the header is 64px, the
 mark is at (40, 18) (x 20 on the phone landing), the menubar is at (8, 8) and
 48px tall, the panels start at y 64, and the switcher is present. Unpushed.
+
+## App switcher drawn with std-round, deployed (2026-11-09)
+
+Bringing every Lona site to the current switcher (handoff from
+family-of-apps/header). a1b900e re-vendors tento 6d3ad0bed1's
+kit/app-switcher.ts (std-round card, plus 46a7e3faa4 and b15334333a) and
+re-pins the manifest (repin-20261109). Hazard checked: std-round is defined
+once. The switcher, the cookbook and the workbench all import
+@tento-ui/components/round through the html import map, and one bundle
+(routes/index.root.js) carries it. Neither dev nor production logs any
+console error or "already registered".
+
+- Dev: `autophys-dev/a1b900e-web-20261109041543`.
+- Production: `services/autophys/1d5d193-web-a1b900e-20261109`, native
+  1d5d193 with a byte-identical prefix (26531408 bytes), web_id 1016e51f….
+  Rehearsed on 4793. Unit backup:
+  `autophys.service.before-1d5d193-web-a1b900e-20261109`.
+- Measured on autophys.lona.so: the switcher opens on the landing and in the
+  app with 11 tiles, and its card is a std-round at (28, 6), 373 by 344.
+- Unpushed.
