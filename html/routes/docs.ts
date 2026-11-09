@@ -823,8 +823,13 @@ export function landingDocs(): { onStage(stage: Cookbook.Stage): void; mount(): 
       void doc.bind({ markdown: DOCS_MARKDOWN, nodeViews: NODE_VIEWS, inlineCodeLanguage: "autophys-inline" }).then(() => {
         // A fresh /#docs load can reach the anchor while the section is still
         // empty, clamping the scroll to the short document's temporary end.
-        if (location.hash === "#docs" && document.documentElement.dataset.ckStage === "landing") {
-          section.scrollIntoView({ block: "start", behavior: "instant" });
+        // The case studies sit below the docs, so a /#studies load lands too
+        // high for the same reason; settle both once the docs have their height.
+        const target = location.hash === "#docs" || location.hash === "#studies"
+          ? document.getElementById(location.hash.slice(1))
+          : null;
+        if (target && document.documentElement.dataset.ckStage === "landing") {
+          target.scrollIntoView({ block: "start", behavior: "instant" });
         }
       });
       museSectionPeek(section, doc);

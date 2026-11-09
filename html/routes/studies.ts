@@ -106,7 +106,7 @@ const CANDIDATES: Study[] = [
 ];
 
 const CSS = `
-.ap-landing-studies { padding: 96px 20px 112px; background: #fff; border-top: 1px solid var(--ck-ink, #141414);
+.ap-landing-studies { padding: 96px 20px 112px; background: #fff; border-top: 1px solid var(--ck-line, #d9d9d9);
   font-family: var(--ck-font, system-ui, sans-serif); color: var(--ck-ink, #141414); }
 @media (min-width: 640px) { .ap-landing-studies { padding-inline: 24px; } }
 .ap-studies { margin: 0 auto; max-width: 800px; }
