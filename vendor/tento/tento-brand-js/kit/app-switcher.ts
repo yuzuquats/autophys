@@ -969,6 +969,8 @@ export class AppSwitcher extends LonaWebComponent {
         font-size: 12.5px;
         font-weight: 500;
         line-height: 16px;
+        /* Its own type, not the hosts: a headers tracked title must not narrow it. */
+        letter-spacing: normal;
         text-decoration: none;
         outline: none;
       }

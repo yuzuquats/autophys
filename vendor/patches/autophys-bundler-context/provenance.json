@@ -91,6 +91,14 @@
       "manifest_sha256": "8828a98e2adc2b43edc9e6c9658c2df310be481e3f744eb3eac90193d1145bdb",
       "files": 2441,
       "description": "Every tracked vendor/tento file at the parent commit, with tento-brand-js/kit/app-switcher.ts, kit/app-switcher.packaged.ts, tento-web-js/build-plugins/app-switcher.deno.ts and its test re-vendored from upstream tento c31a3a2d12 (2026-11-09): the switcher's footer and tokens props and a manifest that may carry inline svg icons, a footer and light/dark tokens, so a site can copy the generated Lona preset."
+    },
+    {
+      "name": "repin-20261109d",
+      "file": "pinned-20261109d.json",
+      "commit": "81636813c838f0d50e96a3dde7f6be2819fc9b79",
+      "manifest_sha256": "484419178d76bfab29c12b7e957706a00e1a3f8f86601312177d43e1bbaf588d",
+      "files": 2441,
+      "description": "Every tracked vendor/tento file at the parent commit, with tento-brand-js/kit/app-switcher.ts re-vendored from upstream tento e8758d2cff (2026-11-09): the footer link sets letter-spacing: normal itself, so a host header's tracking no longer narrows it."
     }
   ]
 }

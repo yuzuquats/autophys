@@ -49,10 +49,11 @@ queueMicrotask(() => {
     html #ap-account .ap-acct-btn { width: 30px; height: 30px; }
     html #ap-account .ap-acct-avatar { width: 26px; height: 26px; font-size: 12px; }
     html #ap-account svg { width: 17px; height: 17px; }
-    /* The Lona family header's geometry (operator, 2026-11-09, superseding
-       BR-11's 80px bar): a 64px bar, the 28px mark at x 40, y 18, the title
-       12px after it at x 80, so switching apps shifts nothing. One 8px margin
-       holds the layout together: the app's header card (the menubar, 16px
+    /* The header's geometry (operator, 2026-11-09, superseding BR-11's
+       80px bar): a 64px bar, the 28px mark at x 40, y 18, the title 12px
+       after it at x 80, the same geometry as the other apps' headers, so
+       switching apps shifts nothing. One 8px margin holds the layout
+       together: the app's header card (the menubar, 16px
        outside the nav) sits 8px from the top and sides and is 48px tall, and
        the panels start 8px under it, 8px from the edges and from each other.
        The 24px gutter and the brand's 16px pad put the mark at x 40 on the

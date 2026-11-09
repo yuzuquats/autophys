@@ -19,10 +19,10 @@ vendor/tento/target/
 /proposals/
 
 # The packager's own build switches (html/.env.example lists them); never
-# tracked, so a clone builds without the Lona family app switcher.
+# tracked, so a clone builds without the app switcher.
 /html/.env
-# The switcher's manifest: Lona's hosts copy it from tento's generated preset
-# (tento-brand-lona-js/family/lona-switcher.json); a clone has none.
+# The app switcher's manifest (tento-web's AppSwitcherPlugin format), supplied
+# by a host that packages a switcher; a clone has none.
 /html/app-switcher.json
 # tento-web's bundler worker also loads a .env from its own directory.
 /vendor/tento/tento-web/src/client/.env
