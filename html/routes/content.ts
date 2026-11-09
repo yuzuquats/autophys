@@ -71,8 +71,6 @@ export function deck(app: Cookbook.App, appPath = "/app"): Cookbook.Deck.Slide[]
         kind: "actions",
         primary: open,
         stats: [
-          // examples.md, live model runs: Spark and Wonder each passed 8 of 8 (scripted did too).
-          { value: "8 / 8", label: "live runs passed by Muse Spark 1.3, and by Muse Wonder 1.0" },
           { value: "±10% at 1σ", label: "bar for “identified”, from sensitivity analysis" },
           { value: "every test", label: "approved by a person in the workbench" },
         ],
