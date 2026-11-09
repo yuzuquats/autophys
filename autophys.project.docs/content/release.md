@@ -484,3 +484,25 @@ The provenance.json repin `commit` fields still name local SHAs (a337ff88,
 b8c0435e); verify.py checks only the hashes. Two read-only agent reviews
 returned ready. Receipt:
 `fleet/evidence/autophys-header-switcher-sink-20261109/receipt.md`.
+
+## studio.lona.so switcher footer deployed (2026-11-09)
+
+02f874d re-vendors tento-brand-js/kit/app-switcher.ts from upstream tento
+823e73ac19 (the card's footer slot, re-pinned as repin-20261109b), and
+9671892 fills that slot: "Product design and engineering" with a muted
+"studio.lona.so ↗", target _blank rel noopener, styled as the family
+header's light row (tinted, 10px 12px, cell radius, 12.5px/500 with an
+11.5px/400 #6a6e66 address that wraps under the label on narrow cards). The
+values are copied from tento-brand-lona-js family/products.ts
+LONA_STUDIO_LINK. Studio has no tile.
+
+- Dev: `services/autophys-dev/9671892-web-20261108204706`.
+- Production: `services/autophys/1d5d193-web-9671892-20261108`, web_id
+  7332ffcf…, built from 9671892 with `html/.env`. Since the previous release's
+  web source 7d3c8d7, the only web changes are this one and a comment. The
+  native prefix is identical (26531408 bytes), and it was rehearsed on 4793.
+  Unit backup: `autophys.service.before-1d5d193-web-9671892-20261108`.
+  Rollback: `1d5d193-web-7d3c8d7-20261108`.
+- Checked headless on both hosts at 1280 and 340 px: the footer shows below
+  the 11 tiles, href/target/rel are correct, there are no page or console
+  errors, std-round is defined once, and "Lona Studio" appears nowhere.
