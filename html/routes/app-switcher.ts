@@ -34,6 +34,8 @@ export function mountAppSwitcher(brand: HTMLAnchorElement, mark: () => Element |
 /** The Lona family header's light switcher colours (tento-brand-lona-js family-header.ts). */
 export const appSwitcherStyles = `
   .ap-app-switcher {
+    /* It replaces .ck-brand as the flex item, so it keeps .ck-brand's no-shrink. */
+    flex-shrink: 0;
     --brand-app-switcher-margin: 12px;
     --brand-app-switcher-sheet: #fff;
     --brand-app-switcher-border: #e4e6df;

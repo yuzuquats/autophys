@@ -21,3 +21,5 @@ vendor/tento/target/
 # The packager's own build switches (html/.env.example lists them); never
 # tracked, so a clone builds without the Lona family app switcher.
 /html/.env
+# tento-web's bundler worker also loads a .env from its own directory.
+/vendor/tento/tento-web/src/client/.env
