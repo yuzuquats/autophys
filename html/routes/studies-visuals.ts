@@ -1,6 +1,9 @@
 // The drawings for the landing's case-study rows (studies.ts). Only disc plots recorded data:
-// the Muse Spark 1.3 discovery pass, seed 0, held-out RMSE (the deck's evidence slide). The rest
-// are schematics of each case's identifiability story, captioned as such.
+// the Muse Spark 1.3 discovery pass, seed 0, held-out RMSE (the deck's evidence slide). Most of
+// the rest are schematics of each case's identifiability story, captioned as such. Two rows are
+// illustrations of the planned test rather than plots: slm draws a short factual sentence with a
+// per-token logit-margin span under each token, and nrg draws the same lattice world twice,
+// under a short sunlight pulse and a long step. Neither shows an outcome.
 //
 // Small schematic visuals for the Autophys "Case studies and experiments" rows.
 // Dependency-free. Each function returns inner SVG markup for a w×h box
@@ -11,7 +14,8 @@
 //   grey #b8b8b8, 1.5px = the easy test / the alternative
 //   hairline #d9d9d9 baseline, #ebebeb guides; labels #8a8a8a, 9–10px system-ui,
 //   haloed in white so they never fight a line. No numeric axes except on the
-//   one recorded chart (disc).
+//   one recorded chart (disc). Set text (slm) is #424242 at 10–11px, each token
+//   pinned to its measured slot with textLength so a wider font cannot overflow.
 
 export type StudyId = "bat" | "disc" | "osc" | "th" | "lfp" | "bld" | "kin" | "slm" | "nrg";
 
@@ -58,9 +62,13 @@ function path(pts: Pt[], color: string, width: number, extra = ""): string {
 const ink = (pts: Pt[]) => path(pts, INK, 2);
 const grey = (pts: Pt[]) => path(pts, GREY, 1.5);
 
-function line(x1: number, y1: number, x2: number, y2: number, color = RULE, width = 1): string {
-  return `<line x1="${f1(x1)}" y1="${f1(y1)}" x2="${f1(x2)}" y2="${f1(y2)}" stroke="${color}" stroke-width="${width}"/>`;
+function line(x1: number, y1: number, x2: number, y2: number, color = RULE, width = 1, extra = ""): string {
+  return `<line x1="${f1(x1)}" y1="${f1(y1)}" x2="${f1(x2)}" y2="${f1(y2)}" stroke="${color}" stroke-width="${width}"${extra}/>`;
 }
+const ROUND = ` stroke-linecap="round"`;
+
+const dot = (x: number, y: number, r: number, fill: string) =>
+  `<circle cx="${f1(x)}" cy="${f1(y)}" r="${f1(r)}" fill="${fill}"/>`;
 
 function text(
   x: number, y: number, s: string, h: number,
@@ -211,44 +219,121 @@ function kin(w: number, h: number): string {
 }
 
 // ---------------------------------------------------- model self-monitoring
+// A short factual sentence set as real text. Under each token, a grey span runs as far as that
+// token's logit margin (top choice over the runner-up), so the gaps between spans mark token
+// boundaries. The one low-margin token is the year; it alone carries a faint full-width track
+// with its short margin in ink. Each token's advance is estimated from Helvetica-like widths and
+// pinned with textLength, so a wider or narrower system font cannot overflow the box or drift
+// off its span.
+
+const TEXT_FONT = "system-ui,-apple-system,'Segoe UI',Roboto,'Noto Sans',Helvetica,Arial,sans-serif";
+const DARK = "#424242";
+const EM: Record<string, number> = { f: 0.3, i: 0.24, j: 0.24, l: 0.24, r: 0.35, t: 0.3, m: 0.84, w: 0.74, ".": 0.28 };
+const em = (c: string) => EM[c] ?? (/[A-Z]/.test(c) ? (c === "W" ? 0.94 : c === "I" ? 0.28 : 0.68) : 0.56);
+
+type Tok = { s: string; x: number; w: number };
+
+/** Lay tokens out on one line centred on cx; a token that starts with punctuation attaches
+ * to the previous one. */
+function layout(raw: string[], size: number, cx: number): Tok[] {
+  const ws = raw.map((s) => [...s].reduce((a, c) => a + em(c), 0) * size);
+  const sp = raw.map((s, i) => (i === 0 ? 0 : /^[.,]/.test(s) ? 0.1 * size : 0.32 * size));
+  let x = cx - (ws.reduce((a, b) => a + b, 0) + sp.reduce((a, b) => a + b, 0)) / 2;
+  return raw.map((s, i) => {
+    x += sp[i];
+    const t = { s, x, w: ws[i] };
+    x += ws[i];
+    return t;
+  });
+}
+
+const SLM_TOKENS: Record<"short" | "long", [string, number][]> = {
+  short: [["The", 0.92], ["Eiffel", 0.95], ["Tower", 0.9], ["opened", 0.78], ["in", 0.9], ["1889", 0.24], [".", 0]],
+  long: [
+    ["The", 0.92], ["Eiffel", 0.95], ["Tower", 0.9], ["in", 0.88], ["Paris", 0.93],
+    ["opened", 0.78], ["in", 0.9], ["1889", 0.24], [".", 0],
+  ],
+};
 
 function slm(w: number, h: number): string {
-  const s = fs(h);
-  const F = frame(w, h, s + 5, s + 7, s + 7, PAD);
-  const a = 0.3, b = 0.48;
-  const diff = (t: number) => 0.06 + 0.78 / (1 + Math.exp(-(t - 0.55) * 9));
-  const sig = (t: number) => diff(t) + 0.26 * Math.exp(-(((t - (a + b) / 2) / 0.13) ** 2));
-  const band = `<rect x="${f1(F.x(a))}" y="${f1(F.y0)}" width="${f1(F.x(b) - F.x(a))}" height="${f1(F.y1 - F.y0)}" fill="#f4f4f4"/>`;
-  const axes = line(F.x0, F.y1 + 0.5, F.x1, F.y1 + 0.5) + line(F.x0 - 0.5, F.y0, F.x0 - 0.5, F.y1);
-  const ylab = `<text transform="translate(${f1(F.x0 - 5)} ${f1(F.y1)}) rotate(-90)" font-size="${s}" font-family="system-ui,-apple-system,sans-serif" fill="${LABEL}">error</text>`;
-  return band + axes + ylab +
-    grey(trace(F, [[0, 1, diff]], 120)) + ink(trace(F, [[0, 1, sig]], 120)) +
-    text(F.x((a + b) / 2), F.y0 - 3, "matched", h, "middle") +
-    text(F.x(a) - 4, F.y(0.42), "+ signal", h, "end") +
-    text(F.x1, F.y(0.2), "difficulty only", h, "end") +
-    text(F.x1, h - PAD - 2, "difficulty", h, "end");
+  const size = h >= 90 ? 11 : 10;
+  const toks = SLM_TOKENS[w >= 300 ? "long" : "short"];
+  const t = layout(toks.map(([s]) => s), size, w / 2);
+  const focus = toks.findIndex(([s]) => s === "1889");
+  const y = h / 2 + size * 0.3, uy = y + 5;
+  let out = t.map((k) =>
+    `<text x="${f1(k.x)}" y="${f1(y)}" font-size="${size}" font-family="${TEXT_FONT}" fill="${DARK}" textLength="${f1(k.w)}" lengthAdjust="spacingAndGlyphs">${k.s}</text>`
+  ).join("");
+  t.forEach((k, i) => {
+    if (/^[.,]/.test(k.s)) return;
+    const x0 = k.x + 0.75, x1 = k.x + k.w - 0.75, len = Math.max(2, (x1 - x0) * toks[i][1]);
+    out += i === focus
+      ? line(x0, uy, x1, uy, GUIDE, 2, ROUND) + line(x0, uy, x0 + len, uy, INK, 2, ROUND)
+      : line(x0, uy, x0 + len, uy, GREY, 1.5, ROUND);
+  });
+  return out;
 }
 
 // ------------------------------------------------------ particle world energy
+// The same lattice world twice, side by side: grey field sites and two creatures, each drawing
+// on the same neighbouring sites (equal inflow in both panels, so nothing reads as a result).
+// Above each lattice a hairline baseline carries the sunlight forcing as a raised segment, as
+// bat and lfp draw a test: a short grey pulse on the left, a long ink step on the right.
+
+/** Small open chevron pointing along angle a, tip at (x, y). */
+function chevron(x: number, y: number, a: number, color: string, width: number, size: number): string {
+  const p = (da: number) => `${f1(x - size * Math.cos(a + da))},${f1(y - size * Math.sin(a + da))}`;
+  return `<path d="M${p(0.65)}L${f1(x)},${f1(y)}L${p(-0.65)}" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round"/>`;
+}
 
 function nrg(w: number, h: number): string {
-  const lab = fs(h) + 5;
-  const F = frame(w, h, lab + 4, PAD + 1);
-  const amb = 0.06, on = 0.12, pOff = 0.22;
-  const field = (t: number) => amb + 0.62 * ex(t - on, 0.025) - 0.24 * ex(t - on, 0.28);
-  const t1 = 0.22, t2 = 0.05;
-  const creatures = (t: number) => {
-    const u = t - on;
-    return amb + 0.66 * (1 - (t1 * Math.exp(-u / t1) - t2 * Math.exp(-u / t2)) / (t1 - t2));
+  const big = w >= 300;
+  const sp = big ? 15 : 12, gap = big ? 24 : 14, half = w / 2;
+  const cr = big ? 2.5 : 2.2, lift = 3.5;
+  const yRaised = PAD + 1.5, yBase = yRaised + lift, top = yBase + 5, bottom = h - PAD - 2;
+  const rows = Math.floor((bottom - top) / sp) + 1;
+  const oy = top + (bottom - top - (rows - 1) * sp) / 2;
+
+  const panel = (x0: number, x1: number, end: number, color: string, width: number) => {
+    const cols = Math.floor((x1 - x0) / sp) + 1;
+    const ox = (x0 + x1 - (cols - 1) * sp) / 2;
+    const at = (c: number, r: number): Pt => [ox + c * sp, oy + r * sp];
+    // Two creatures, each fed from two sites in one half-plane (opposite halves, so the strokes
+    // never line up through a creature and there is no global direction).
+    const creatures: [number, number, [number, number][]][] = [
+      [Math.round((cols - 1) * 0.25), 1, [[-1, 0], [-1, -1]]],
+      [Math.round((cols - 1) * 0.72), rows - 2, [[1, 0], [1, 1]]],
+    ];
+    const taken = new Set<string>();
+    let marks = "";
+    for (const [c, r, from] of creatures) {
+      taken.add(`${c},${r}`);
+      const [cx, cy] = at(c, r);
+      for (const [dc, dr] of from) {
+        taken.add(`${c + dc},${r + dr}`);
+        const [x, y] = at(c + dc, r + dr);
+        const d = Math.hypot(cx - x, cy - y), ux = (cx - x) / d, uy = (cy - y) / d, stop = d - cr - 2.5;
+        marks += line(x, y, x + ux * stop, y + uy * stop, GREY, 1.2, ROUND) +
+          chevron(x + ux * stop, y + uy * stop, Math.atan2(uy, ux), GREY, 1.2, 2.5);
+      }
+      marks += dot(cx, cy, cr, GREY);
+    }
+    let field = "";
+    for (let c = 0; c < cols; c++) {
+      for (let r = 0; r < rows; r++) if (!taken.has(`${c},${r}`)) field += dot(...at(c, r), 0.9, GREY);
+    }
+    const bx0 = ox - 2, bx1 = ox + (cols - 1) * sp + 2, bw = bx1 - bx0;
+    const xa = bx0 + bw * 0.2, xb = bx0 + bw * end;
+    const forcing = line(bx0, yBase, bx1, yBase) +
+      `<path d="M${f1(xa)},${f1(yBase)}V${f1(yRaised)}H${f1(xb)}V${f1(yBase)}" fill="none" stroke="${color}" stroke-width="${width}" stroke-linejoin="round" stroke-linecap="round"/>`;
+    return { forcing, body: field + marks };
   };
-  const sun = line(F.x(on), F.y0, F.x(on), F.y1, RULE);
-  return baseline(F) + sun +
-    grey(trace(F, [[0, on, () => amb], [on, 1, field]], 120)) +
-    ink(trace(F, [[0, on, () => amb], [on, 1, creatures]], 120)) +
-    text(F.x(on) - 4, F.y(0.45), "sun", h, "end") +
-    text(F.x(0.3), F.y(0.14), "creatures", h) +
-    text(F.x1, F.y(field(1)) + fs(h) + 3, "field", h, "end") +
-    pair(F, h, lab, on, pOff, "pulse: decay", pOff + 0.04, "step: harvest, upkeep");
+
+  const pw = (half - gap / 2) - (PAD + 4);
+  const pulseEnd = 0.2 + (big ? 10 : 7) / (pw + 4);
+  const left = panel(PAD + 4, half - gap / 2, pulseEnd, GREY, 1.5);
+  const right = panel(half + gap / 2, w - PAD - 4, 0.8, INK, 2);
+  return left.forcing + right.forcing + left.body + right.body;
 }
 
 // --------------------------------------------------------------- discovery
@@ -304,6 +389,6 @@ export const CAPTIONS: Record<StudyId, string> = {
   lfp: "schematic, planned test",
   bld: "schematic, planned test",
   kin: "schematic, planned test",
-  slm: "schematic, planned test",
-  nrg: "schematic, planned test",
+  slm: "illustration, planned test",
+  nrg: "illustration, planned test",
 };
