@@ -73,7 +73,7 @@ queueMicrotask(() => {
        would slide the logo in from 0. */
     .ck-header[data-ap-brand-ready] .ck-brand { transition: padding-left 700ms var(--ck-ease); }
     /* Phones: the landing mark sits at the family's 20px inset; the arrow's
-       room opens only in the app, sliding the mark over to x 40. */
+       room opens only in the app, sliding the mark over to x 56. */
     @media (max-width: 639px) {
       .ck-header:not([data-app]) { --ck-gutter: 20px; }
       .ck-header:not([data-app]) .ck-brand { padding-left: 0; }
