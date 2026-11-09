@@ -380,6 +380,21 @@ Measured on autophys.lona.so at 1280 and 390 wide: the header is 64px, the
 mark is at (40, 18) (x 20 on the phone landing), the menubar is at (8, 8) and
 48px tall, the panels start at y 64, and the switcher is present. Unpushed.
 
+## Hosted pill, header slide fix and page scrollbar published (2026-11-09)
+
+Pushed autophys 725f629..ef771dd:
+- the "Built for Meta Global Hacks" pill above the docs, linking the event page;
+- the fix for the header logo sliding in on load;
+- the overlay page scrollbar. On touch screens it is an indicator only.
+
+The pill and the scrollbar mount only on autophys.lona.so and dev--autophys.lona.so. The scrollbar is no longer a dev-only prototype: the operator approved it for production. Production already serves this web, as release `1d5d193-web-dcccbb2-20261109` (web from local dcccbb2, which also carries the family header change). Its earlier SOURCE note calls the scrollbar dev-only, which is no longer true.
+
+Two read-only agent reviews returned ready. Their non-blocking notes:
+- a touchscreen laptop still routes touches on the 14px strip to the bar;
+- the hosted-host check is duplicated in hosted-badge.ts and page-scrollbar.ts.
+
+The deck-fixes section above says production was not deployed. That was true when it was written; production now has those changes.
+
 ## App switcher drawn with std-round, deployed (2026-11-09)
 
 Bringing every Lona site to the current switcher (handoff from
