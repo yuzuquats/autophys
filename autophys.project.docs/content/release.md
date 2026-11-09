@@ -463,3 +463,24 @@ L5) from judged variants in `~/.cache/autophys-dev-build/illus-v3/round4/`.
 - Checked on autophys.lona.so: both captions read "illustration, planned
   test", the Eiffel sentence renders, the three "Open in workbench" buttons
   remain, `/open/demo/workbook/thermal_rc_demo` answers 200.
+
+## Header, switcher and icons published (2026-11-09)
+
+Pushed origin/master 5266733..1a7daa1 (10 commits, sunk below 8 local peer
+drafts that stay local). The release notes above cite the commits by their
+pre-sink SHAs; their Change-Ids map them to the published commits:
+
+- I1049bf4eecfb97a8 7b23d0f: the family header with one 8px margin.
+- I0a7d5c3e9f1b6284 53bf2d3 and I4d2b9e6f0a8c1375 1a7daa1: the back arrow's
+  room and its phone comment.
+- I5c2e8b7a1d4f9036 443a389: the std-round switcher re-vendor and
+  repin-20261109. It sits on the peer re-vendor Ib9ea420dc0b7c4ad (dee9ecc),
+  which is included as its dependency.
+- I3b8f0d6a2c9e7154 b5d0177: the refreshed icons.
+- I7f3c9a1e5b2d8046, I9d1a6e3c7b5f2804, I6e4c2a9f1b7d3058 and
+  I8c3f1e7a5d9b2460: the deploy records.
+
+The provenance.json repin `commit` fields still name local SHAs (a337ff88,
+b8c0435e); verify.py checks only the hashes. Two read-only agent reviews
+returned ready. Receipt:
+`fleet/evidence/autophys-header-switcher-sink-20261109/receipt.md`.
