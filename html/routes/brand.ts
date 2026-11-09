@@ -32,13 +32,16 @@ queueMicrotask(() => {
     .ck-header .ck-nav-links { gap: 16px; }
     .ck-header :is(.ap-docs-link, .ap-github-link) { display: inline-flex; align-items: center;
       min-height: 44px; color: var(--ck-ink); text-decoration: none; white-space: nowrap; }
-    .ck-header :is(.ap-docs-link, .ap-github-link):hover { text-decoration: underline; text-underline-offset: 4px; }
+    .ck-header .ap-docs-link:hover { text-decoration: underline; text-underline-offset: 4px; }
+    .ck-header .ap-github-link { justify-content: center; width: 32px; }
+    .ck-header .ap-github-link svg { display: block; flex: none; }
+    .ck-header .ap-github-link:hover { color: var(--ck-secondary); }
     .ck-header :is(.ap-docs-link, .ap-github-link):focus-visible { outline: 2px solid var(--ck-ink); outline-offset: 3px; }
     .ck-header .ck-brand { padding-left: 28px; }
     /* GitHub is a landing link. Opening the app fades it out while its width
        (and the gap before it) closes, so Docs slides over beside the profile;
        closing reverses it. A transition, not a FLIP, so reversals never snap. */
-    .ck-header .ap-github-link { max-width: var(--ap-github-width, 6em); overflow: hidden;
+    .ck-header .ap-github-link { max-width: 32px; overflow: hidden;
       transition: opacity 240ms ease 200ms, visibility 0s, max-width 700ms var(--ck-ease),
         margin-left 700ms var(--ck-ease); }
     .ck-header[data-app] .ap-github-link { max-width: 0; margin-left: -16px; opacity: 0;
@@ -110,20 +113,10 @@ queueMicrotask(() => {
     const github = document.createElement("a");
     github.className = "ap-github-link";
     github.href = "https://github.com/yuzuquats/autophys";
-    github.textContent = "GitHub";
+    github.setAttribute("aria-label", "Autophys on GitHub");
+    github.title = "Autophys on GitHub";
+    github.innerHTML = `<svg viewBox="0 0 16 16" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.2 0 .87-.01 1.57-.01 2.13 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>`;
     docs.after(github);
-    // The collapse animates max-width; start it from the real width so Docs
-    // moves from the first frame instead of after an invisible 6em shrink.
-    // Applied without a transition, so a remeasure never animates on its own.
-    const measureGithub = () => {
-      if (!github.offsetWidth) return; // Hidden on phones.
-      github.style.transition = "none";
-      github.style.setProperty("--ap-github-width", `${github.scrollWidth}px`);
-      void github.offsetWidth;
-      github.style.transition = "";
-    };
-    measureGithub();
-    document.fonts.ready.then(measureGithub);
   }
 
   const wordmark = document.querySelector(".ck-brand .ck-wordmark");
