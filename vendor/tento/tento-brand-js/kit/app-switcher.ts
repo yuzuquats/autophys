@@ -1,6 +1,12 @@
 import { html, LonaWebComponent } from "@tento-ui/component";
 import { component } from "@tento-ui/component-decorators";
 import { css } from "@tento-ui/component-styles";
+// Side-effect import, and it must stay: `Round` is otherwise referenced only as
+// a TYPE (`this.hydrate<Round>("surface")`), so the bundler elides the import,
+// the `@component` decorator never runs, `std-round` is never defined, and
+// `#surface` stays an un-upgraded element whose `bind` does not exist.
+import "@tento-ui/components/round";
+import type { Round } from "@tento-ui/components/round";
 
 import { NativeUi } from "@tento-brand/src/native-ui";
 
@@ -9,8 +15,20 @@ import { NativeUi } from "@tento-brand/src/native-ui";
 // --brand-app-switcher-* custom property the design sets; the fallbacks are
 // the UA's system colours, so an unstyled switcher is legible but plain.
 //
-// The geometry is measured, not offset in CSS. The sheet's inner (padding)
-// edge sits exactly one margin above and left of an ANCHOR rect -- by default
+// The sheet's surface -- fill, hairline border and drop shadow -- is a
+// `std-round` (#surface): a continuous-corner squircle, not a CSS
+// border-radius (operator, 2026-11-09: "let's use a std-round for our
+// app-switcher bg"). The title row and grid sit inside it and are clipped to
+// the same squircle. Its colours are var() references to the design's
+// --brand-app-switcher-sheet and -border, so a variant switch repaints them
+// through the cascade; the numbers a Round takes as plain values (border
+// width, radius, the shadow as drop-shadow filters) are read off a hidden
+// probe that the same custom properties style, on open, on resize and when
+// the host's attributes change (a host's data-variant, say). See
+// `paintSurface()`.
+//
+// The geometry is measured, not offset in CSS. The sheet's inner edge (inside
+// the surface's border) sits exactly one margin above and left of an ANCHOR rect -- by default
 // the slotted trigger's box; a host whose trigger art has its own inset (a
 // lockup whose tile sits inside a shadow margin) supplies the rect through
 // `anchor`. The title row is margin + anchor height + margin, then a
@@ -23,8 +41,8 @@ import { NativeUi } from "@tento-brand/src/native-ui";
 // hit-testable and hidden from assistive tech; opening fades it in (opacity
 // 0 to 1 with a slight scale from the anchor's corner) and closing fades it
 // out before it is hidden again. `rest="outline"` adds a resting affordance:
-// a hairline drawn exactly on the anchor rect that fades out as the sheet
-// fades in, and back as it closes.
+// a hairline drawn exactly on the anchor rect. It stays drawn while the
+// sheet is open, so the current app keeps its outline (operator, 2026-11-09).
 //
 // Function declarations, not namespace members, for anything a lifecycle
 // calls: `@component` upgrades matching elements at class-definition time,
@@ -35,8 +53,7 @@ const CLOSE_DELAY_MS = 300;
 /**
  * The sheet's fade in and out. Long enough to read as a fade rather than a
  * pop, with a symmetric ease so the opacity ramp is visible from the first
- * frames; the close is a little quicker than the open. The rest outline
- * cross-fades on the open timing.
+ * frames; the close is a little quicker than the open.
  */
 const FADE_IN_MS = 240;
 const FADE_OUT_MS = 200;
@@ -44,10 +61,62 @@ const FADE_EASING = "cubic-bezier(0.4, 0, 0.2, 1)";
 const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
 /** The most columns the grid uses; fewer when the viewport is narrow or there are fewer apps. */
 const MAX_COLUMNS = 4;
+/**
+ * The squircle radius per CSS border-radius pixel. A continuous corner of
+ * radius r (side curvature 0.6) cuts its 45-degree apex 0.25r in from the box
+ * corner; a circular radius R cuts it 0.29R in. 1.17 would match the apex
+ * exactly; 1.25 matches it with the slightly softer, longer run-in that makes
+ * a squircle read as one. The Lona header's 16px card draws at radius 20.
+ */
+const SQUIRCLE_RADIUS_SCALE = 1.25;
 
 function px(value: string): number {
   const n = Number.parseFloat(value);
   return Number.isFinite(n) ? n : 0;
+}
+
+/** Split `value` on `separator` outside parentheses (colour functions carry their own commas and spaces). */
+function splitTopLevel(value: string, separator: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < value.length; i++) {
+    const c = value[i];
+    if (c === "(") depth++;
+    else if (c === ")") depth--;
+    else if (c === separator && depth === 0) {
+      parts.push(value.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(value.slice(start));
+  return parts.map((part) => part.trim()).filter((part) => part !== "");
+}
+
+/**
+ * A computed box-shadow list as drop-shadow() filters, which follow the
+ * squircle's silhouette instead of its box. Computed values are normalised
+ * (a colour, then x, y, blur and spread in px, then `inset`). drop-shadow()
+ * takes one shadow and no spread: an inset shadow has no filter equivalent and
+ * is skipped, and the spread is folded into the blur so the shadow keeps its
+ * reach (a -10px spread under a 40px blur draws as a 30px blur). The filters
+ * chain tightest first, so each wider shadow is cast mostly by the card.
+ */
+function dropShadows(boxShadow: string): string {
+  if (boxShadow.trim() === "none") return "none";
+  const shadows = splitTopLevel(boxShadow, ",").flatMap((shadow) => {
+    const tokens = splitTopLevel(shadow, " ");
+    if (tokens.includes("inset")) return [];
+    const lengths = tokens.filter((token) => /^-?[\d.]+(px)?$/.test(token)).map(px);
+    const colour = tokens.find((token) => !/^-?[\d.]+(px)?$/.test(token)) ?? "currentColor";
+    const [x = 0, y = 0, blur = 0, spread = 0] = lengths;
+    return [{ colour, x, y, blur: Math.max(0, blur + spread) }];
+  });
+  if (shadows.length === 0) return "none";
+  return shadows
+    .sort((a, b) => a.blur - b.blur)
+    .map((s) => `drop-shadow(${s.colour} ${s.x}px ${s.y}px ${s.blur}px)`)
+    .join(" ");
 }
 
 function prefersReducedMotion(): boolean {
@@ -65,7 +134,7 @@ function prefersReducedMotion(): boolean {
  * chevron and sheet (one region), Escape (focus returns to the chevron), Tab
  * out, a click outside, or a second click on the chevron. Arrow keys, Home
  * and End move between apps. Under `prefers-reduced-motion` the sheet
- * appears and disappears without its fade, and the outline does not fade.
+ * appears and disappears without its fade.
  * Where the pointer can hover, the chevron keeps its space but stays
  * invisible until the switcher is hovered, holds focus or is open; touch
  * screens always show it.
@@ -74,10 +143,16 @@ function prefersReducedMotion(): boolean {
  * gets `aria-current="page"`), `label` (the chevron's accessible name,
  * default "Switch app"), `disabled` (no chevron, never opens), and `open`
  * (reflected; setting it before connection opens the sheet once laid out) and
- * `rest` (`outline` draws a hairline exactly on the anchor rect while the
- * sheet is closed; it fades out as the sheet fades in. Absent, or any other
+ * `rest` (`outline` draws a hairline exactly on the anchor rect, kept while
+ * the sheet is open. Absent, or any other
  * value: nothing is drawn at rest).
  * Properties: `apps` and `anchor` (see `AppSwitcher.Props`).
+ *
+ * The sheet's surface is a `std-round` squircle (part `surface`): `-sheet` is
+ * its fill, `-border` and `-border-width` its hairline, `-radius` its corner
+ * (scaled by SQUIRCLE_RADIUS_SCALE) and `-shadow` its shadow, drawn as
+ * drop-shadow filters. Custom properties set on the host or above it are read
+ * when the sheet opens, on resize and when the host's attributes change.
  *
  * Custom properties (all optional): `--brand-app-switcher-margin` (12px),
  * `-sheet`, `-text`, `-border`, `-border-width` (1px), `-hover`, `-current`,
@@ -86,7 +161,7 @@ function prefersReducedMotion(): boolean {
  * `-font-size` (12px), `-chevron` (the chevron colour, currentColor),
  * `-outline` (the rest outline's colour, GrayText), `-outline-width` (1px),
  * `-outline-radius` (0).
- * Parts: `root`, `trigger`, `chevron`, `outline`, `sheet`, `title`,
+ * Parts: `root`, `trigger`, `chevron`, `outline`, `sheet`, `surface`, `title`,
  * `separator`, `grid`, `item`, `icon`, `name`.
  */
 @component({ name: "std-app-switcher" })
@@ -97,6 +172,8 @@ export class AppSwitcher extends LonaWebComponent {
   private $trigger = this.$("trigger");
   private $chevron = this.$<HTMLButtonElement>("chevron");
   private $sheet = this.$("sheet");
+  private $surface: Round = this.hydrate<Round>("surface");
+  private $metrics = this.$("metrics");
   private $title = this.$("title");
   private $outline = this.$("outline");
   private $grid = this.$("grid");
@@ -114,6 +191,8 @@ export class AppSwitcher extends LonaWebComponent {
   private reflecting = false;
   /** Re-places the rest outline when the trigger's layout changes. */
   private resizeObserver: Option<ResizeObserver> = null;
+  /** Repaints an open sheet when the host's attributes change: a host's `data-variant` swaps the design's tokens. */
+  private attributeObserver: Option<MutationObserver> = null;
 
   static makeWith(props: AppSwitcher.Props): AppSwitcher {
     return (AppSwitcher.make() as AppSwitcher).bind(props);
@@ -161,6 +240,10 @@ export class AppSwitcher extends LonaWebComponent {
       this.resizeObserver ??= new ResizeObserver(() => this.placeOutline());
       this.resizeObserver.observe(this.$root);
     }
+    if (typeof MutationObserver === "function") {
+      this.attributeObserver ??= new MutationObserver(() => this.position());
+      this.attributeObserver.observe(this, { attributes: true });
+    }
     this.placeOutline();
     requestAnimationFrame(() => this.placeOutline());
     if (this.hasAttribute("open") && !this.isOpen) {
@@ -179,6 +262,7 @@ export class AppSwitcher extends LonaWebComponent {
     this.$grid.removeEventListener("keydown", this.onGridKey);
     this.removeEventListener("focusout", this.onFocusOut);
     this.resizeObserver?.disconnect();
+    this.attributeObserver?.disconnect();
     this.hide();
     this.finishClose();
   }
@@ -235,13 +319,19 @@ export class AppSwitcher extends LonaWebComponent {
     this.animateClose();
   }
 
-  /** Re-measure the anchor and place the sheet. Called on open, on resize and when the apps change. */
+  /**
+   * Repaint the surface from the design's tokens and place the sheet against
+   * the re-measured anchor. Called on open, on resize, when the apps change
+   * and when the host's attributes change.
+   */
   position(): void {
     if (!this.isOpen) return;
-    const sheetStyle = getComputedStyle(this.$sheet);
-    const borderLeft = px(sheetStyle.borderLeftWidth);
-    const borderTop = px(sheetStyle.borderTopWidth);
-    const borderRight = px(sheetStyle.borderRightWidth);
+    // The surface's hairline is a stroke centred on the squircle's edge, so
+    // the Round sits half a border inside the sheet's box (the sheet's
+    // padding) and the content half a border inside the Round (#content's
+    // padding): the stroke's outer edge is the sheet's edge, and its inner
+    // edge is where the content starts -- one border in, as a CSS border was.
+    const border = this.paintSurface();
     const gridStyle = getComputedStyle(this.$grid);
     const margin = px(gridStyle.paddingTop);
     const gap = px(gridStyle.columnGap);
@@ -249,13 +339,13 @@ export class AppSwitcher extends LonaWebComponent {
 
     const root = this.$root.getBoundingClientRect();
     const anchor = this.anchorRect();
-    const left = anchor.left - margin - borderLeft;
-    const top = anchor.top - margin - borderTop;
+    const left = anchor.left - margin - border;
+    const top = anchor.top - margin - border;
 
     // Columns: as many as fit between the sheet's left edge and one margin
     // short of the viewport's right edge, at most MAX_COLUMNS.
     const viewport = document.documentElement.clientWidth;
-    const room = viewport - left - margin - borderLeft - borderRight - 2 * margin;
+    const room = viewport - left - margin - 2 * border - 2 * margin;
     const fit = cell > 0 ? Math.floor((room + gap) / (cell + gap)) : MAX_COLUMNS;
     this.columns = Math.max(1, Math.min(MAX_COLUMNS, this._apps.length, fit));
     this.$grid.style.setProperty("--app-switcher-columns", String(this.columns));
@@ -265,9 +355,29 @@ export class AppSwitcher extends LonaWebComponent {
     this.$title.style.height = `${2 * margin + anchor.height}px`;
     // The title row must also hold the chevron, which sits after the trigger.
     const chevron = this.$chevron.getBoundingClientRect();
-    this.$sheet.style.minWidth = `${chevron.right + margin - left + borderRight}px`;
-    this.$sheet.style.transformOrigin = `${margin + borderLeft}px ${margin + borderTop}px`;
+    this.$sheet.style.minWidth = `${chevron.right + margin - left + border}px`;
+    this.$sheet.style.transformOrigin = `${margin + border}px ${margin + border}px`;
     this.placeOutline();
+  }
+
+  /**
+   * Hand the surface the design's current border width, radius and shadow
+   * (resolved by the #metrics probe, which those custom properties style) and
+   * return the border width. The fill and stroke colours need no reading: the
+   * Round's `bg` and `border` are var() references that the cascade keeps
+   * current.
+   */
+  private paintSurface(): number {
+    const metrics = getComputedStyle(this.$metrics);
+    const border = px(metrics.borderTopWidth);
+    this.$sheet.style.setProperty("--app-switcher-stroke", `${border}px`);
+    this.$surface.bind({
+      borderWidth: border,
+      radius: px(metrics.borderTopLeftRadius) * SQUIRCLE_RADIUS_SCALE,
+      clip: true,
+    });
+    this.$surface.style.filter = dropShadows(metrics.boxShadow);
+    return border;
   }
 
   /** Lay the rest outline (`rest="outline"`) exactly over the anchor rect. */
@@ -484,10 +594,16 @@ export class AppSwitcher extends LonaWebComponent {
         </svg>
       </button>
       <div id="outline" part="outline" aria-hidden="true"></div>
+      <div id="metrics" aria-hidden="true"></div>
       <div id="sheet" part="sheet" role="menu" hidden>
-        <div id="title" part="title" role="none"></div>
-        <div id="separator" part="separator" role="none"></div>
-        <div id="grid" part="grid" role="none"></div>
+        <std-round id="surface" part="surface" role="none" clip
+          bg="var(--brand-app-switcher-sheet, Canvas)" border="var(--brand-app-switcher-border, GrayText)">
+          <div id="content" role="none">
+            <div id="title" part="title" role="none"></div>
+            <div id="separator" part="separator" role="none"></div>
+            <div id="grid" part="grid" role="none"></div>
+          </div>
+        </std-round>
       </div>
     </div>
   `;
@@ -592,12 +708,27 @@ export class AppSwitcher extends LonaWebComponent {
         display: block;
       }
 
-      :host([open]) #outline {
-        opacity: 0;
+      /* The design's sheet tokens, resolved by the browser: paintSurface()
+        reads the border width, radius and shadow off this invisible box and
+        hands them to the surface, which takes them as numbers and filters. */
+      #metrics {
+        position: absolute;
+        width: 0;
+        height: 0;
+        visibility: hidden;
+        pointer-events: none;
+        border-style: solid none none;
+        border-top-width: var(--brand-app-switcher-border-width, 1px);
+        border-top-left-radius: var(--brand-app-switcher-radius, 0);
+        box-shadow: var(--brand-app-switcher-shadow, none);
       }
 
       /* While rendered, the sheet rests at opacity 0 unless open; the open
-        and close fades (animateOpen/animateClose) run over that. */
+        and close fades (animateOpen/animateClose) run over that. The sheet
+        paints nothing itself: the surface (#surface) draws the card. Its
+        padding is half the surface's border (--app-switcher-stroke, set by
+        paintSurface), so the stroke, centred on the squircle's edge, ends
+        exactly on the sheet's edge. */
       #sheet {
         position: absolute;
         z-index: 1;
@@ -606,12 +737,23 @@ export class AppSwitcher extends LonaWebComponent {
         opacity: 0;
         box-sizing: border-box;
         width: max-content;
-        background: var(--brand-app-switcher-sheet, Canvas);
+        padding: calc(var(--app-switcher-stroke, 1px) / 2);
         color: var(--brand-app-switcher-text, CanvasText);
-        border: var(--brand-app-switcher-border-width, 1px) solid var(--brand-app-switcher-border, GrayText);
-        border-radius: var(--brand-app-switcher-radius, 0);
-        box-shadow: var(--brand-app-switcher-shadow, none);
         line-height: normal;
+      }
+
+      /* A column, so the clipped content box stretches to the sheet's width;
+        no transition, so a resize or variant switch is not animated. */
+      #surface {
+        flex-direction: column;
+        transition: none;
+      }
+
+      /* Inside the stroke: the content starts at the stroke's inner edge, one
+        border in from the sheet's edge, and is clipped to the squircle. */
+      #content {
+        display: block;
+        padding: calc(var(--app-switcher-stroke, 1px) / 2);
       }
 
       :host([open]) #sheet {
@@ -646,6 +788,12 @@ export class AppSwitcher extends LonaWebComponent {
         align-items: center;
         gap: 4px;
         min-width: 0;
+        /* The base typography sheet every component adopts trims cap height
+          from links with negative block margins, sized by the page's
+          --cap-height/--baseline tokens. On a page that sets them (Brand
+          Acme) that pulled each row of tiles over the next; a tile is a
+          box, not a run of text. */
+        margin: 0;
         padding: 8px 4px 10px;
         border-radius: var(--brand-app-switcher-cell-radius, 0);
         color: inherit;

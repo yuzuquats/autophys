@@ -67,6 +67,14 @@
       "manifest_sha256": "de5f1491b18a5152e90b7f0ad3c82fb271adb2b62cee27a1df5370e8efe9a2ae",
       "files": 2441,
       "description": "Every tracked vendor/tento file at the parent commit, with tento-web-js/build-plugins/app-switcher.deno.ts and its test re-vendored from upstream tento 37640e76ac (2026-11-08)."
+    },
+    {
+      "name": "repin-20261109",
+      "file": "pinned-20261109.json",
+      "commit": "b8c0435e60c991f8e0b7461d3e704af7f3f68f0d",
+      "manifest_sha256": "8281afc86d8723ce368e1d0bb1ce12cdae9ef7af093dbd47cf74613bba4c50b9",
+      "files": 2441,
+      "description": "Every tracked vendor/tento file at the parent commit, with tento-brand-js/kit/app-switcher.ts re-vendored from upstream tento 6d3ad0bed1 (2026-11-09): the switcher card drawn by a std-round, plus 46a7e3faa4 (current app's outline) and b15334333a (tiles out of page typography trim)."
     }
   ]
 }
