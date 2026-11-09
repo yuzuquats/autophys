@@ -506,3 +506,27 @@ LONA_STUDIO_LINK. Studio has no tile.
 - Checked headless on both hosts at 1280 and 340 px: the footer shows below
   the 11 tiles, href/target/rel are correct, there are no page or console
   errors, std-round is defined once, and "Lona Studio" appears nowhere.
+
+## Sink and push of the 15-commit stack (2026-11-09)
+
+The 15 local commits above origin `1a7daa1` were sunk as a plain
+fast-forward (no rebase needed; origin had not moved) and pushed to
+`origin/master` at `5ba5c3f` (`5ba5c3f2034423b19a36934cac8ac0f4b4b8a105`).
+The range covers the app switcher arc (02f874d..4dd07e3), the case-study
+illustrations (2e6d5c6), the guided-tour ring (bdf706c), the /open
+framed-load hardening (d25e1a9) and the hosted-badge/scrollbar build
+switch (5ba5c3f), plus their deploy/publication records. Every commit
+carries `Project: autophys` and one Change-Id.
+
+Independent agent review (GLM-5.3, read-only) returned READY with no
+blocking findings. Validations at the pushed tip: verify.py
+VENDOR_PATCH_PASS (2,443 files, repin-20261109e); `deno test -A` in
+html/ 150 passed (also on a clean git-archive export);
+`deno check routes/index.root.ts` passes; vendored plugin tests 23/23;
+`cargo test --test open` 2/2.
+
+Notes from the review: the live prod/dev web bundles already serve a
+5ba5c3f web build with both build switches on, which this record now
+covers; the d25e1a9 native change still needs a native deploy to take
+effect. AS-6 (scrollbar on every host) remains agent-chosen, pending
+operator review.
