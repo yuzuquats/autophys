@@ -6,11 +6,18 @@
  * decisions.md (POS-4: the candidates are an agent proposal, pending operator review).
  * A run study states only what its record shows; a candidate states why it suits autophys and
  * what is missing before it can run, and claims no result.
+ *
+ * Each study is a feature row: a small drawing from studies-visuals.ts, then its status, title and
+ * question, then its result or needs. Only the discovery drawing plots recorded data; the others
+ * are schematics, and their captions say so.
  */
 import type { Cookbook } from "@tento-cookbook/lib.ts";
 import { hideOffLanding } from "./docs.ts";
+import { CAPTIONS, type StudyId, VISUALS } from "./studies-visuals.ts";
 
 type Study = {
+  /** Which drawing in studies-visuals.ts illustrates it. */
+  visual: StudyId;
   title: string;
   status: string;
   /** Well suited to autophys and not run yet: drawn highlighted. */
@@ -21,6 +28,7 @@ type Study = {
 
 const RUN: Study[] = [
   {
+    visual: "bat",
     title: "Battery cell, 1RC",
     status: "Run · live models",
     question: "A short pulse fits the voltage curve but cannot separate R1 from C1. Does the loop notice, and ask for the test that can?",
@@ -30,6 +38,7 @@ const RUN: Study[] = [
     ],
   },
   {
+    visual: "disc",
     title: "Model discovery, six hidden cases",
     status: "Experimental · one seed",
     question: "When the model itself is wrong, can an agent refine its structure without claiming what the data cannot support?",
@@ -39,6 +48,7 @@ const RUN: Study[] = [
     ],
   },
   {
+    visual: "osc",
     title: "Mass-spring-damper",
     status: "Run · offline",
     question: "A free response fixes only c/m and k/m. Does the loop ask for a forced test to separate the mass?",
@@ -48,6 +58,7 @@ const RUN: Study[] = [
     ],
   },
   {
+    visual: "th",
     title: "Thermal RC",
     status: "Run · offline",
     question: "A short heating step pins down heat capacity but barely the thermal resistance. Does the loop ask for a longer one?",
@@ -60,6 +71,7 @@ const RUN: Study[] = [
 
 const CANDIDATES: Study[] = [
   {
+    visual: "lfp",
     title: "Lithium-iron cells across temperature",
     status: "Not run · good fit",
     candidate: true,
@@ -70,6 +82,7 @@ const CANDIDATES: Study[] = [
     ],
   },
   {
+    visual: "bld",
     title: "Building thermal envelope",
     status: "Not run · good fit",
     candidate: true,
@@ -80,6 +93,7 @@ const CANDIDATES: Study[] = [
     ],
   },
   {
+    visual: "kin",
     title: "Reaction kinetics",
     status: "Not run · good fit",
     candidate: true,
@@ -101,17 +115,28 @@ const CSS = `
 .ap-studies-group { margin-top: 56px; }
 .ap-studies-group h3 { margin: 0; font-size: 16px; line-height: 24px; font-weight: 500; }
 .ap-studies-group > p { margin: 4px 0 0; max-width: 62ch; font-size: 14px; line-height: 20px; color: var(--ck-n600, #5c5c5c); }
-.ap-studies-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 16px; margin: 20px 0 0; padding: 0; list-style: none; }
-.ap-study { display: flex; flex-direction: column; gap: 12px; padding: 20px; border-radius: 12px; box-shadow: inset 0 0 0 1px var(--ck-line, #d9d9d9); }
-.ap-study.ap-candidate { box-shadow: inset 0 0 0 1.5px var(--ck-ink, #141414); }
-.ap-study-status { align-self: flex-start; padding: 2px 8px; border-radius: 999px; font-size: 12px; line-height: 16px;
+.ap-studies-rows { margin: 16px 0 0; padding: 0; list-style: none; }
+.ap-study { display: grid; grid-template-columns: 176px minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start;
+  padding: 24px 0; border-top: 1px solid var(--ck-n200, #ebebeb); }
+.ap-study:first-child { border-top: 0; }
+.ap-study.ap-candidate { margin-left: -19px; padding-left: 16px; border-left: 3px solid var(--ck-ink, #141414); }
+.ap-study-visual { margin: 0; }
+.ap-study-visual svg { display: block; overflow: visible; }
+.ap-study-visual .ap-wide { display: none; }
+.ap-study-visual figcaption { margin-top: 6px; font-size: 11px; line-height: 14px; color: var(--ck-n500, #8a8a8a); }
+.ap-study-status { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; line-height: 16px; white-space: nowrap;
   color: var(--ck-secondary, #424242); box-shadow: inset 0 0 0 1px var(--ck-line, #d9d9d9); }
 .ap-candidate .ap-study-status { background: var(--ck-ink, #141414); color: #fff; box-shadow: none; }
-.ap-study h4 { margin: 0; font-size: 16px; line-height: 22px; font-weight: 500; letter-spacing: -.01em; }
-.ap-study-question { margin: -4px 0 0; font-size: 14px; line-height: 20px; color: var(--ck-secondary, #424242); }
-.ap-study dl { display: grid; gap: 10px; margin: 4px 0 0; padding-top: 12px; border-top: 1px solid var(--ck-n200, #ebebeb); }
+.ap-study h4 { margin: 8px 0 0; font-size: 16px; line-height: 22px; font-weight: 500; letter-spacing: -.01em; }
+.ap-study-question { margin: 4px 0 0; font-size: 14px; line-height: 20px; color: var(--ck-secondary, #424242); }
+.ap-study dl { display: grid; gap: 10px; margin: 0; }
 .ap-study dt { font-size: 12px; line-height: 16px; font-weight: 500; color: var(--ck-n500, #8a8a8a); }
 .ap-study dd { margin: 2px 0 0; font-size: 14px; line-height: 20px; }
+@media (max-width: 719px) {
+  .ap-study { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .ap-study-visual .ap-narrow { display: none; }
+  .ap-study-visual .ap-wide { display: block; width: 100%; height: auto; }
+}
 `;
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text = ""): HTMLElementTagNameMap[K] {
@@ -121,23 +146,34 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, te
   return node;
 }
 
-function card(study: Study): HTMLElement {
+/** One drawing at a fixed size. The markup is this module's own constant output, not user data. */
+function drawing(study: Study, w: number, h: number, className: string): string {
+  return `<svg class="${className}" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true" focusable="false">${VISUALS[study.visual](w, h)}</svg>`;
+}
+
+function row(study: Study): HTMLElement {
   const item = el("li", study.candidate ? "ap-study ap-candidate" : "ap-study");
-  const rows = el("dl", "");
+  // The narrow drawing sits in the visual column; the wide one replaces it when the row stacks.
+  const visual = el("figure", "ap-study-visual");
+  visual.innerHTML = drawing(study, 176, 72, "ap-narrow") + drawing(study, 340, 96, "ap-wide");
+  visual.append(el("figcaption", "", CAPTIONS[study.visual]));
+  const text = el("div", "");
+  text.append(el("span", "ap-study-status", study.status), el("h4", "", study.title), el("p", "ap-study-question", study.question));
+  const details = el("dl", "");
   for (const [term, detail] of study.rows) {
-    const row = el("div", "");
-    row.append(el("dt", "", term), el("dd", "", detail));
-    rows.append(row);
+    const pair = el("div", "");
+    pair.append(el("dt", "", term), el("dd", "", detail));
+    details.append(pair);
   }
-  item.append(el("span", "ap-study-status", study.status), el("h4", "", study.title), el("p", "ap-study-question", study.question), rows);
+  item.append(visual, text, details);
   return item;
 }
 
 function group(title: string, lede: string, studies: Study[]): HTMLElement {
   const block = el("div", "ap-studies-group");
-  const grid = el("ul", "ap-studies-grid");
-  grid.append(...studies.map(card));
-  block.append(el("h3", "", title), el("p", "", lede), grid);
+  const rows = el("ul", "ap-studies-rows");
+  rows.append(...studies.map(row));
+  block.append(el("h3", "", title), el("p", "", lede), rows);
   return block;
 }
 
