@@ -530,3 +530,18 @@ Notes from the review: the live prod/dev web bundles already serve a
 covers; the d25e1a9 native change still needs a native deploy to take
 effect. AS-6 (scrollbar on every host) remains agent-chosen, pending
 operator review.
+
+## Dev deploy of 2152806 (2026-11-09)
+
+Web-only release `services/autophys-dev/2152806-web-20261109041051`
+built from HEAD 2152806 (git archive export with the host's untracked
+html/.env and html/app-switcher.json copied in; binary copied from
+5ba5c3f-web-20261109112246). The only change over 5ba5c3f is this
+file, so the web is unchanged in content. Bundle checks: switcher
+(autotrade.lona.so) and the hosted badge are bundled, no host-gate
+literal remains. autophys-dev.service restarted on 127.0.0.1:4796;
+healthz ok (native commit 1d5d193 unchanged). The bundle served at
+dev--autophys.lona.so/index.root.js is byte-identical to the staged
+release (sha256 5164e2cd61cd425fbd72d67be2e589ac4a44ca833042c605a90ac0290a6a324f).
+Rollback: point services/autophys-dev/current back to
+5ba5c3f-web-20261109112246 and restart autophys-dev.service.
