@@ -6,6 +6,7 @@
  * hosts.
  */
 export const HOSTED_BADGE_TEXT = "Built for Meta Global Hacks";
+export const HOSTED_BADGE_URL = "https://dev.meta.ai/events/global-hackathon";
 
 /** Whether `hostname` is Lona's public Autophys site or its dev-- preview. */
 export function isLonaHosted(hostname: string): boolean {
@@ -18,8 +19,11 @@ export function hostedBadge(hostname: string): HTMLElement | null {
   if (!isLonaHosted(hostname)) return null;
   const row = document.createElement("div");
   row.className = "ap-hosted-badge";
-  const pill = document.createElement("span");
+  const pill = document.createElement("a");
   pill.className = "ap-hosted-badge-pill";
+  pill.href = HOSTED_BADGE_URL;
+  pill.target = "_blank";
+  pill.rel = "noopener noreferrer";
   pill.textContent = HOSTED_BADGE_TEXT;
   row.append(pill);
   return row;
@@ -36,5 +40,8 @@ export const HOSTED_BADGE_CSS = `
   border: 1px solid var(--ck-line, #d9d9d9); border-radius: 999px;
   background: var(--ck-n100, #f7f7f7); color: var(--ck-secondary, #424242);
   font: 500 12px/16px var(--ck-font, system-ui, sans-serif); white-space: nowrap;
+  text-decoration: none; transition: border-color 120ms ease, color 120ms ease;
 }
+.ap-hosted-badge-pill:hover { border-color: var(--ck-n600, #5c5c5c); color: var(--ck-ink, #141414); }
+.ap-hosted-badge-pill:focus-visible { outline: 2px solid var(--ck-ink, #141414); outline-offset: 2px; }
 `;
