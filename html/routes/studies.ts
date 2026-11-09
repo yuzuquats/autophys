@@ -33,7 +33,7 @@ const RUN: Study[] = [
     status: "Run · live models",
     question: "A short pulse fits the voltage curve but cannot separate R1 from C1. Does the loop notice, and ask for the test that can?",
     rows: [
-      ["Result", "Scripted, Muse Spark 1.3 and Muse Wonder 1.0 each passed 8 of 8 live runs. On the recorded cell each asked for the 1 A discharge; worst parameter error 1.07%."],
+      ["Result", "Muse Spark 1.3 and Muse Wonder 1.0 each passed 8 of 8 live runs; the offline scripted policy passed 8 of 8 too. On the recorded cell each asked for the 1 A discharge; worst parameter error 1.07%."],
       ["Caveat", "The recorded runs are synthesized from the model, not measured. Scripted did as well as the models."],
     ],
   },
@@ -43,7 +43,7 @@ const RUN: Study[] = [
     status: "Experimental · one seed",
     question: "When the model itself is wrong, can an agent refine its structure without claiming what the data cannot support?",
     rows: [
-      ["Result", "Muse Spark 1.3 found the planted lag and made no wrong claim; calibration alone made one. The code refused two invalid adopts and one unproven stop."],
+      ["Result", "Muse Spark 1.3 found the planted lag and made no wrong claim; calibration alone made one. The code refused five invalid adopts and one unproven stop."],
       ["Caveat", "One seed, not a benchmark, and the discovery package is not in a release yet."],
     ],
   },
@@ -53,7 +53,7 @@ const RUN: Study[] = [
     status: "Run · offline",
     question: "A free response fixes only c/m and k/m. Does the loop ask for a forced test to separate the mass?",
     rows: [
-      ["Result", "Runs in the offline benchmark with the scripted and heuristic policies, three seeds each."],
+      ["Result", "Runs in the offline benchmark with the scripted and fake-reasoner policies, three seeds each."],
       ["Not run", "Live model runs."],
     ],
   },
@@ -63,7 +63,7 @@ const RUN: Study[] = [
     status: "Run · offline",
     question: "A short heating step pins down heat capacity but barely the thermal resistance. Does the loop ask for a longer one?",
     rows: [
-      ["Result", "Runs in the offline benchmark with the scripted and heuristic policies, three seeds each."],
+      ["Result", "Runs in the offline benchmark with the scripted and fake-reasoner policies, three seeds each."],
       ["Not run", "Live model runs."],
     ],
   },

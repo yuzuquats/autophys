@@ -54,10 +54,10 @@ queueMicrotask(() => {
       visibility: hidden; pointer-events: none;
       transition: opacity 180ms ease, visibility 0s linear 180ms, max-width 700ms var(--ck-ease),
         margin-left 700ms var(--ck-ease); }
-    /* Phones keep Try now and Docs; the wordmark needs the room. Studies goes
-       below 370px, where it would push Try now into the wordmark. */
+    /* Phones drop GitHub and keep Try now, Docs and Studies; Studies goes below
+       370px, where it would push Try now into the wordmark. */
     @media (max-width: 479px) { .ck-header .ap-github-link { display: none; } }
-    @media (max-width: 369px) { .ck-header .ap-section-link[href="/#studies"] { display: none; } }
+    @media (max-width: 369px) { .ck-header .ap-studies-link { display: none; } }
     @media (max-width: 359px) {
       .ck-header, .ck-header[data-app] { --ck-gutter: 16px; }
       .ck-header .ck-nav { gap: 12px; }
@@ -74,7 +74,7 @@ queueMicrotask(() => {
     // there; from the app it closes the workbench first and lands on the section.
     const sectionLink = (id: string, label: string): HTMLAnchorElement => {
       const link = document.createElement("a");
-      link.className = "ap-section-link";
+      link.className = `ap-section-link ap-${id}-link`;
       link.href = `/#${id}`;
       link.textContent = label;
       link.addEventListener("click", event => {

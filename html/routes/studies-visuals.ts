@@ -69,13 +69,6 @@ function text(
   return `<text x="${f1(x)}" y="${f1(y)}" font-size="${fs(h)}" font-family="system-ui,-apple-system,sans-serif" fill="${color}" text-anchor="${anchor}" stroke="#fff" stroke-width="3" stroke-linejoin="round" paint-order="stroke">${s}</text>`;
 }
 
-/** Short legend key: a 10px line in the series style, then its label. */
-function key(x: number, y: number, s: string, h: number, color: string): string {
-  const wdt = color === INK ? 2 : 1.5;
-  return line(x, y - 3, x + 9, y - 3, color, wdt).replace("/>", ` stroke-linecap="round"/>`) +
-    text(x + 12, y, s, h);
-}
-
 /** Rough rendered width of a label (system-ui, ~0.56em per glyph). */
 const tw = (s: string, h: number) => s.length * fs(h) * 0.56;
 
@@ -220,13 +213,13 @@ function kin(w: number, h: number): string {
 // --------------------------------------------------------------- discovery
 // Recorded held-out RMSE, one seed. Calibration alone (grey) → Spark + Autophys (ink).
 
-const DISC: [string, number, number, boolean][] = [
-  ["lag", 0.57, 0.05, false],
-  ["delay", 0.35, 0.07, false],
-  ["quantized", 0.32, 0.25, false],
-  ["null twin", 0.05, 0.05, false],
-  ["off-grammar", 0.29, 0.39, false],
-  ["offset", 0.3, 7.08, true], // stale fit record
+const DISC: [string, number, number][] = [
+  ["lag", 0.57, 0.05],
+  ["delay", 0.35, 0.07],
+  ["quantized", 0.32, 0.25],
+  ["null twin", 0.05, 0.05],
+  ["off-grammar", 0.29, 0.39],
+  ["offset", 0.3, 7.08],
 ];
 
 function disc(w: number, h: number): string {
@@ -240,16 +233,13 @@ function disc(w: number, h: number): string {
   let out = "";
   for (const t of [0.1, 1]) out += line(x(t), F.y0, x(t), F.y1, GUIDE);
   out += line(F.x0, F.y1 + 0.5, F.x1, F.y1 + 0.5);
-  DISC.forEach(([name, before, after, stale], i) => {
+  DISC.forEach(([name, before, after], i) => {
     const y = F.y0 + rowH * (i + 0.5);
     const r = rowH >= 11 ? 3.5 : 3;
     out += text(nameW - 5, y + s * 0.35, name, h, "end");
     out += line(x(before), y, x(after), y, RULE, 1.5);
     out += `<circle cx="${f1(x(before))}" cy="${f1(y)}" r="${r}" fill="${GREY}" stroke="#fff" stroke-width="1"/>`;
-    out += stale
-      ? `<circle cx="${f1(x(after))}" cy="${f1(y)}" r="${r - 0.5}" fill="#fff" stroke="${INK}" stroke-width="1.5"/>` +
-        text(x(after) - r - 3, y + s * 0.35, "stale", h, "end")
-      : `<circle cx="${f1(x(after))}" cy="${f1(y)}" r="${r}" fill="${INK}" stroke="#fff" stroke-width="1"/>`;
+    out += `<circle cx="${f1(x(after))}" cy="${f1(y)}" r="${r}" fill="${INK}" stroke="#fff" stroke-width="1"/>`;
   });
   const ty = h - PAD - 2;
   out += text(x(0.1), ty, "0.1", h, "middle") + text(x(1), ty, "1", h, "middle") + text(x(10) + 2, ty, "10", h, "end");

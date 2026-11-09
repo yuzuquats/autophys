@@ -65,7 +65,7 @@ export function deck(app: Cookbook.App, appPath = "/app"): Cookbook.Deck.Slide[]
     {
       eyebrow: { icon: "mark" },
       title: `Muse Spark plans the experiment. ${app.title} checks the claim.`,
-      description: `Spark proposes the next test, ranked by what it would separate. Code checks every claim; a person approves every test.
+      description: `Spark proposes the next test, ranked by what it would separate. Code checks every claim; in the workbench, a person approves every test.
       (Product charts: ${MOCK}; experiment results are labeled separately.)`,
       body: {
         kind: "actions",
@@ -74,7 +74,7 @@ export function deck(app: Cookbook.App, appPath = "/app"): Cookbook.Deck.Slide[]
           // examples.md, live model runs: Spark and Wonder each passed 8 of 8 (scripted did too).
           { value: "8 / 8", label: "live runs passed by Muse Spark 1.3, and by Muse Wonder 1.0" },
           { value: "±10% at 1σ", label: "bar for “identified”, from sensitivity analysis" },
-          { value: "every test", label: "approved by a person before it runs" },
+          { value: "every test", label: "approved by a person in the workbench" },
         ],
       },
     },
@@ -125,7 +125,7 @@ export function deck(app: Cookbook.App, appPath = "/app"): Cookbook.Deck.Slide[]
       },
     },
     {
-      eyebrow: { label: "The evidence · Muse Spark 1.3, live, one seed" },
+      eyebrow: { label: "Experimental · Muse Spark 1.3, live, one seed" },
       title: "What Muse Spark found, and what it could not claim.",
       description: `Six hidden test cases, calibration alone versus Muse Spark driving ${app.title}. Code decides what counts as a claim.`,
       // Recorded run, not mock: discovery-harness.md, Muse Spark 1.3 pass, seed 0
@@ -140,9 +140,9 @@ export function deck(app: Cookbook.App, appPath = "/app"): Cookbook.Deck.Slide[]
           { label: "Quantized offset", base: 0.32, value: 0.25, outcome: "Inconclusive", baseOutcome: "alone: validated" },
           { label: "Null twin", base: 0.05, value: 0.05, outcome: "Inconclusive", baseOutcome: "alone: validated, correct" },
           { label: "Out of grammar", base: 0.29, value: 0.39, outcome: "Inconclusive", baseOutcome: "alone: inconclusive" },
-          { label: "Planted offset", base: 0.30, value: 7.08, outcome: "Inconclusive, no wrong claim", baseOutcome: "alone: wrong claim", baseEmphasis: true, caveat: "stale fit" },
+          { label: "Planted offset", base: 0.30, value: 7.08, outcome: "Inconclusive, no wrong claim", baseOutcome: "alone: wrong claim", baseEmphasis: true },
         ],
-        note: `One seed, six cases; not a benchmark. Mean RMSE favours calibration alone (0.31 vs 1.31), mostly from one stale fit record. ${app.title} refused two invalid adopts and one unproven stop.`,
+        note: `One seed, six cases; not a benchmark. Mean RMSE favours calibration alone (0.31 vs 1.31), mostly from planted offset, where the code refused Spark's adopts and the short-data root fit stood. ${app.title} refused five invalid adopts and one unproven stop. Discovery is in development and not in this release.`,
       },
     },
     {
