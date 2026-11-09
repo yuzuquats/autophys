@@ -28,6 +28,7 @@ import { tomlTokenizer } from "@tento-ui/components/code/languages/toml";
 import { rustTokenizer } from "./rust-tokenizer.ts";
 import { inlineCodeTokenizer } from "./inline-code.ts";
 import { MUSE_PEEK_CSS, museSectionPeek } from "./muse-peek.ts";
+import { HOSTED_BADGE_CSS, hostedBadge } from "./hosted-badge.ts";
 import { LispExampleView } from "@tento-ui/components/lisp-example/lisp-example-view";
 import { ReviewFence } from "@tento-ui/components/review-notes/review-fence";
 import { LOOPS_FENCE, LoopsFigureView } from "./loops-figure.ts";
@@ -812,12 +813,14 @@ export function landingDocs(): { onStage(stage: Cookbook.Stage): void; mount(): 
     mount() {
       if (!InstanceUrl.hasStaticBase()) InstanceUrl.setStaticBase("");
       const style = document.createElement("style");
-      style.textContent = CSS + MUSE_PEEK_CSS;
+      style.textContent = CSS + MUSE_PEEK_CSS + HOSTED_BADGE_CSS;
       document.head.append(style);
       const doc = Documentation.make();
       const inlineCode = new CSSStyleSheet();
       inlineCode.replaceSync(INLINE_CODE_CSS);
       doc.addStyle("ap-inline-code", inlineCode);
+      const badge = hostedBadge(location.hostname);
+      if (badge) section.append(badge);
       section.append(doc);
       const footer = document.querySelector(".ck-footer");
       if (footer) footer.before(section);
