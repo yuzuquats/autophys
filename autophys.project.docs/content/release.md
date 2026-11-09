@@ -355,3 +355,18 @@ receipt: `fleet/evidence/autophys-cookbook-sink-20261108/receipt.md`.
 Production is not deployed with these changes; dev--autophys.lona.so has them.
 The html boundary test fails on origin since the app switcher added
 `html/app-switcher/`; that is open for its owner.
+
+## Family header deployed to production (2026-11-09)
+
+Operator chose option B from the header mocks and said to deploy directly
+when finished. 659b8c9 gives Autophys the Lona family header with one 8px
+margin: the 64px bar, the 28px mark at (40, 18), the app's header card 8px
+from the top and sides and 48px tall, the panels 8px under it and 8px apart.
+The release is web-only, built from dcccbb2 (it also carries the approved
+page scrollbar 23ddcf7 and dcccbb2):
+`services/autophys/1d5d193-web-dcccbb2-20261109`, native 1d5d193 with a
+byte-identical prefix (26531408 bytes), web_id 7a9f77f5…. It was rehearsed on
+4793, and the unit backup is `autophys.service.before-1d5d193-web-dcccbb2-20261109`.
+Measured on autophys.lona.so at 1280 and 390 wide: the header is 64px, the
+mark is at (40, 18) (x 20 on the phone landing), the menubar is at (8, 8) and
+48px tall, the panels start at y 64, and the switcher is present. Unpushed.
