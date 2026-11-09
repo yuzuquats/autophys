@@ -404,3 +404,17 @@ profile control).
   Unit backup: `autophys.service.before-1d5d193-web-4756336-20261109`.
 - Checked by opening the switcher on autophys.lona.so: the new icons show and
   the page logs no errors.
+
+## Back arrow room deployed (2026-11-09)
+
+283bfc0: in the app the mark slides to x 56, and the back arrow sits at
+x 24, 16px inside the header card (at x 14 it had been 6px from the edge).
+The landing keeps x 40. The release also carries ce1476e (the guided tour's
+ring).
+
+- Dev: `autophys-dev/283bfc0-web-20261109042739`.
+- Production: `services/autophys/1d5d193-web-283bfc0-20261109`, web_id
+  5e44fe66…, identical native prefix, rehearsed on 4793. Unit backup:
+  `autophys.service.before-1d5d193-web-283bfc0-20261109`.
+- Measured on autophys.lona.so at 1280 and 390 wide: in the app the arrow is
+  at x 24 and the mark at x 56.
