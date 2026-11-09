@@ -50,5 +50,15 @@
       }
     ],
     "manifest_sha256": "f3735d777e63c976d9a02441bcea02d1f1e2d702c7c259cd1b85685d32e021dd"
-  }
+  },
+  "repins": [
+    {
+      "name": "repin-20261108",
+      "file": "pinned-20261108.json",
+      "commit": "a444c019904ac74663e80594521ae91d9cea6327",
+      "manifest_sha256": "a087ace00a269efb96dc66c6b3960517aa42a75964dcfc302db0da29d8578210",
+      "files": 2441,
+      "description": "Every tracked vendor/tento file at the commit, re-pinned on the operator's direction (2026-11-08) after cookbook, tento-lisp-cmd, tento-web and tento-brand-js edits made in place. Vendored libraries are not edited directly; a change lands upstream and is re-vendored, then re-pinned here."
+    }
+  ]
 }

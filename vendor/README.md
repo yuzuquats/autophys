@@ -40,15 +40,22 @@ licensed **MIT OR Apache-2.0** (root `LICENSE-MIT`, `LICENSE-APACHE` and
 `NOTICE`). The root and Rust SDK manifests and the Python SDK declare that
 expression. As copyright holder, the operator licensed this `vendor/tento`
 copy under the same terms; the grant lives in the root `NOTICE`, so the
-vendored bytes are unchanged. (The pinned manifest that
-`vendor/patches/autophys-bundler-context/verify.py` checks already predates
-the 2026-11-05 vendor commits de82de9, 6e71f05 and 139bcd8, so the check
-fails on 95bccea too; re-pinning it is separate work.) Crates there that already declare MIT keep that declaration. The
+vendored bytes are unchanged. Crates there that already declare MIT keep that declaration. The
 patched crates under `vendor/tento/vendor/` and the prebuilt editor bundles
 in `html/routes/js/` keep their own licenses (`licenses/web-editors.txt`).
 Release archives add `THIRD-PARTY-LICENSES.txt` for every compiled crate.
 Broader extraction/pruning of upstream libraries is a separate design change;
 it must retain their actual transitive closure and existing notices.
+
+## Vendored libraries are not edited in place
+
+Operator direction, 2026-11-08: do not edit the vendored tento libraries
+(the cookbook included) directly. A change lands upstream in tento, is
+re-vendored here, and the bundler-context manifest is re-pinned in the same
+commit. `verify.py` fails on any other vendor byte change. It was re-pinned
+on 2026-11-08 (`repin-20261108`, all 2,441 tracked `vendor/tento` files),
+after cookbook, tento-lisp-cmd, tento-web and tento-brand-js edits that had
+been made in place since 2026-11-05.
 
 ## App-owned CLI failure patch (G4)
 

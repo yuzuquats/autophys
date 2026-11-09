@@ -35,10 +35,16 @@ assert len(overrides) == len(variant["overrides"]), "duplicate publication overr
 assert overrides.keys() <= {row["path"] for row in rows}, "unknown publication path"
 publication = [overrides.get(row["path"], row) for row in rows]
 assert hashlib.sha256(canonical(publication)).hexdigest() == variant["manifest_sha256"], "publication manifest"
-actual = {row["path"]: sha(root / row["path"]) for row in rows}
-matching = [name for name, manifest in [("retained", rows), ("publication", publication)]
-            if all(actual[row["path"]] == row["sha256"] for row in manifest)]
-assert matching, "vendor bytes do not match either complete pinned manifest"
+manifests = [("retained", rows), ("publication", publication)]
+# Later re-pins: each is every tracked vendor/tento file at a recorded commit.
+for pin in meta.get("repins", []):
+    pinned = json.loads((here / pin["file"]).read_text())
+    assert hashlib.sha256(canonical(pinned)).hexdigest() == pin["manifest_sha256"], pin["name"] + " manifest"
+    manifests.append((pin["name"], pinned))
+digest = lambda path: sha(root / path) if (root / path).is_file() else None
+matching = [(name, len(manifest)) for name, manifest in manifests
+            if all(digest(row["path"]) == row["sha256"] for row in manifest)]
+assert matching, "vendor bytes do not match any complete pinned manifest"
 for reverse, source, out, expected in [
     (True, root / meta["file"], work / "preimage.rs", meta["preimage_sha256"]),
     (False, work / "preimage.rs", work / "postimage.rs", meta["postimage_sha256"]),
@@ -46,4 +52,4 @@ for reverse, source, out, expected in [
     subprocess.run(["patch", "--batch", "--silent", "--reverse" if reverse else "--forward",
                     "--output", str(out), str(source), str(here / "context.patch")], check=True)
     assert sha(out) == expected, str(out)
-print(f"VENDOR_PATCH_PASS reverse+forward; {len(rows)} vendor files verified ({matching[0]}); inherited upstream delta NOT regenerated")
+print(f"VENDOR_PATCH_PASS reverse+forward; {matching[-1][1]} vendor files verified ({matching[-1][0]}); inherited upstream delta NOT regenerated")
