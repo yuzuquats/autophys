@@ -84,6 +84,11 @@ fn get_page(uri: &str, login: Option<&str>) -> test::TestRequest {
     as_caller(test::TestRequest::get().uri(uri), login)
 }
 
+/// The same request as the daemon's own browser would send it.
+fn local(req: test::TestRequest) -> test::TestRequest {
+    req.insert_header(("host", "127.0.0.1:4794"))
+}
+
 fn as_caller(req: test::TestRequest, login: Option<&str>) -> test::TestRequest {
     let req = req
         .insert_header(("host", "autophys.example.org"))
@@ -237,11 +242,15 @@ async fn a_login_off_install_opens_its_local_collection() {
     let app = app!(f.api);
     for user in ["local", "me"] {
         let uri = format!("/open/{user}/workbook/{BOOK}");
-        assert_eq!(send(&app, head(&uri, None)).await.0, 200, "{uri}");
-        let (s, to, _, _) = send(&app, get_page(&uri, None)).await;
+        // Another Host (DNS rebinding) or a remote peer learns nothing.
+        assert_eq!(send(&app, head(&uri, None)).await.0, 404, "{uri} via a foreign Host");
+        let remote = local(head(&uri, None)).peer_addr("10.0.0.5:50000".parse().unwrap());
+        assert_eq!(send(&app, remote).await.0, 404, "{uri} from a remote peer");
+        assert_eq!(send(&app, local(head(&uri, None))).await.0, 200, "{uri}");
+        let (s, to, _, _) = send(&app, local(get_page(&uri, None))).await;
         assert_eq!((s, to), (302, format!("/app?open={user}/workbook/{BOOK}")));
         let missing = format!("/open/{user}/workbook/missing");
-        assert_eq!(send(&app, head(&missing, None)).await.0, 404, "{missing}");
+        assert_eq!(send(&app, local(head(&missing, None))).await.0, 404, "{missing}");
     }
     // There is no demo account without --login.
     f.api.keys.users_set_demo("demo@lab.org", true).unwrap();

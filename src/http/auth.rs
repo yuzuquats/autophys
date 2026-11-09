@@ -221,6 +221,17 @@ impl FromRequest for KeyOrBrowser {
     }
 }
 
+/// A login-off daemon's own browser: a loopback peer naming a local host
+/// (the DNS-rebinding guard), without requiring the document session.
+pub(crate) fn local_browser(req: &HttpRequest, api: &Api) -> bool {
+    req.peer_addr().is_none_or(|peer| peer.ip().is_loopback())
+        && req
+            .headers()
+            .get(header::HOST)
+            .and_then(|h| h.to_str().ok())
+            .is_some_and(|h| local_host(host_name(h), api.options()))
+}
+
 /// Admit a browser session; O-3 is checked before a state-changing request.
 pub fn browser(req: &HttpRequest, api: &Api) -> Result<(), ApiError> {
     if req.peer_addr().is_some_and(|peer| !peer.ip().is_loopback()) {

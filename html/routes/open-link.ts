@@ -78,6 +78,15 @@ function confirmSwitch(): Promise<boolean> {
   });
 }
 
+/** Whether the server would open this address for the current caller. */
+async function reachable(address: OpenAddress): Promise<boolean> {
+  const path = `/open/${address.user}/${address.kind}/${encodeURIComponent(address.name)}`;
+  try {
+    const r = await fetch(path, { method: "HEAD", credentials: "same-origin", redirect: "manual", signal: AbortSignal.timeout(10_000) });
+    return r.ok;
+  } catch { return false; }
+}
+
 async function signOut(): Promise<boolean> {
   try {
     const response = await fetch("/api/auth/logout", { method: "POST", body: new URLSearchParams(),
@@ -108,6 +117,8 @@ export async function followOpenLink(search: string, context: AppContext | null,
     case "sign-in-demo":
       return signInAsDemo(search) ? { kind: "away" } : { kind: "drop" };
     case "confirm-switch": {
+      // Never sign someone out for a link the server would refuse.
+      if (!await reachable(address)) return { kind: "drop" };
       if (!await confirmSwitch()) return { kind: "drop" };
       onSigningOut(true);
       if (!await signOut()) { onSigningOut(false); return { kind: "drop" }; }

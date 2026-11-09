@@ -212,7 +212,7 @@ function row(study: Study): HTMLElement {
     const open = el("a", "ap-study-open", "Open in workbench");
     open.href = study.link;
     open.hidden = true;
-    open.setAttribute("aria-label", `Open ${study.title} in the workbench`);
+    open.setAttribute("aria-label", `Open in workbench: ${study.title}`);
     open.insertAdjacentHTML("beforeend", `<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false"><path d="M4.5 2.5 8 6l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`);
     item.append(open);
   }

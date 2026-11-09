@@ -114,6 +114,10 @@ async fn allowed(api: &Api, req: &HttpRequest, path: &(String, String, String)) 
         return Ok(false);
     }
     let login = api.options().login;
+    // A login-off daemon answers only its own local browser (loopback, local Host).
+    if !login && !crate::http::auth::local_browser(req, api) {
+        return Ok(false);
+    }
     let caller = if login {
         signed_in(api, req).await?
     } else {
