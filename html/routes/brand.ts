@@ -30,11 +30,13 @@ queueMicrotask(() => {
     ${surfaceFinishStyles}
     .ck-header { --ck-gutter: 28px; }
     .ck-header .ck-nav-links { gap: 16px; }
-    .ck-header .ap-docs-link { display: inline-flex; align-items: center; min-height: 44px;
-      color: var(--ck-ink); text-decoration: none; white-space: nowrap; }
-    .ck-header .ap-docs-link:hover { text-decoration: underline; text-underline-offset: 4px; }
-    .ck-header .ap-docs-link:focus-visible { outline: 2px solid var(--ck-ink); outline-offset: 3px; }
+    .ck-header :is(.ap-docs-link, .ap-github-link) { display: inline-flex; align-items: center;
+      min-height: 44px; color: var(--ck-ink); text-decoration: none; white-space: nowrap; }
+    .ck-header :is(.ap-docs-link, .ap-github-link):hover { text-decoration: underline; text-underline-offset: 4px; }
+    .ck-header :is(.ap-docs-link, .ap-github-link):focus-visible { outline: 2px solid var(--ck-ink); outline-offset: 3px; }
     .ck-header .ck-brand { padding-left: 28px; }
+    /* Phones keep Try now and Docs; the wordmark needs the room. */
+    @media (max-width: 479px) { .ck-header .ap-github-link { display: none; } }
     @media (max-width: 359px) {
       .ck-header, .ck-header[data-app] { --ck-gutter: 16px; }
       .ck-header .ck-nav { gap: 12px; }
@@ -94,6 +96,12 @@ queueMicrotask(() => {
       });
     });
     tryNow.after(docs);
+
+    const github = document.createElement("a");
+    github.className = "ap-github-link";
+    github.href = "https://github.com/yuzuquats/autophys";
+    github.textContent = "GitHub";
+    docs.after(github);
   }
 
   const wordmark = document.querySelector(".ck-brand .ck-wordmark");
