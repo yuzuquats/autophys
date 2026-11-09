@@ -37,13 +37,13 @@ import type { Cookbook } from "@tento-cookbook/lib.ts";
 
 export const DOCS_MARKDOWN = `# How autophys works
 
-autophys fits a physical model to your measurements, then tells you which parameters those measurements actually pin down, and which experiment to run next.
+autophys fits a physical model to your measurements, then tells you which parameters those measurements actually pin down, and which experiment to run next. It won't report a parameter as known unless the data pins it down, and an agent driving it can propose tests but never approve them.
 
 ## Overview
 
 By default, a parameter counts as **identified** when the data determines it to within about ±10% at one standard deviation, and it is not tied to an unresolved combination of other parameters. That verdict comes from a sensitivity analysis (an SVD of the noise-weighted Jacobian in log coordinates), not from how good the fit looks.
 
-When parameters are tied together, autophys ranks the candidate experiments by Fisher information and proposes the one that would separate them. An agent (Muse Spark, or a scripted policy) can drive that loop, and a person approves each experiment in this workbench before it runs.
+When parameters are tied together, autophys ranks the candidate experiments by Fisher information and proposes the one that would separate them. Muse Spark drives that loop by default (a scripted policy also can), and Muse Wonder improves Spark's playbook between runs. A person approves each experiment in this workbench before it runs.
 
 ## Quick start: fit a battery cell
 
@@ -170,7 +170,7 @@ Inside each evaluation, an investigation is not a fixed cycle. At every step the
 
 Live model calls are off by default. The \`reason\` policy and the \`api\` and \`muse\` researchers each need a recorded replay, or \`AUTOPHYS_ALLOW_LIVE_REASON=1\`; the \`scripted\` and \`fake-reasoner\` policies and the \`scripted\` and \`heuristic\` researchers run offline. With the defaults (every built-in case, three train seeds and two held-out seeds), a research run evaluates three investigations per case for the baseline and for each valid edit, and four per case on the held-out seeds at the end (two seeds, for the starting and the final playbook).
 
-\`autoloop\` records each edit's hypothesis, diff, scores and decision in a journal, feeds recent history back to the researcher, and can accept an edit by a paired bootstrap test. A planted sensor-bias case, \`battery-biased\`, exercises a playbook fix offline. Not built yet, and under discussion in the design notes: procedurally sampled and misspecified cases, and model discovery, where the agent proposes rival model structures when validation fails.
+\`autoloop\` records each edit's hypothesis, diff, scores and decision in a journal, feeds recent history back to the researcher, and can accept an edit by a paired bootstrap test. A planted sensor-bias case, \`battery-biased\`, exercises a playbook fix offline. Procedurally sampled and misspecified cases are not built yet. An experimental \`autophys.discovery\` package in the Python SDK tests refinements of a model's structure, and refuses any new structure that has not passed a test on data it never saw.
 
 ## Examples
 

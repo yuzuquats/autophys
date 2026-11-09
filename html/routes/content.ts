@@ -12,13 +12,6 @@ const MOCK = "mock data";
 
 /** The calibration pitch: hero, user, costly task, alternative, demo, advantage,
  * workflow, other applications, then the team and the recorded experiments. */
-const decay = (a: number, tau: number, floor: number, until = 40) =>
-  Array.from({ length: 81 }, (_, i) => i * until / 80).map((t) => [t, a * Math.exp(-t / tau) + floor] as [number, number]);
-const cross = (a: number, tau: number, floor: number, at = 10) => tau * Math.log(a / (at - floor));
-const series = (label: string, a: number, tau: number, floor: number, emphasis = false) => {
-  const t = cross(a, tau, floor);
-  return { label, points: decay(a, tau, floor), emphasis, marker: { at: [t, 10] as [number, number], label: `${t.toFixed(1)} h` } };
-};
 const g = (q: number, m: number, w: number) => Math.exp(-(((q - m) / w) ** 2));
 const info = Array.from({ length: 101 }, (_, i) => Math.min(1, 0.12 + 0.88 * g(i, 12, 7) + 0.55 * g(i, 88, 8) + 0.3 * g(i, 50, 10)));
 
@@ -71,16 +64,17 @@ export function deck(app: Cookbook.App, appPath = "/app"): Cookbook.Deck.Slide[]
   return [
     {
       eyebrow: { icon: "mark" },
-      title: `${app.title}: Intelligent Physical Modeling from Minimal Data`,
-      description: `Runs only the tests that pin down your physical model. Muse Spark directs it, and code checks every claim.
+      title: `Muse Spark plans the experiment. ${app.title} checks the claim.`,
+      description: `Spark proposes the next test, ranked by what it would separate. Code checks every claim; a person approves every test.
       (Product charts: ${MOCK}; experiment results are labeled separately.)`,
       body: {
         kind: "actions",
         primary: open,
         stats: [
-          { value: "6.3×", label: "fewer test hours to a validated model" },
-          { value: "12", label: "held-out cells in the benchmark" },
-          { value: "±10%", label: "bar for “identified”, enforced in code" },
+          // examples.md, live model runs: Spark and Wonder each passed 8 of 8 (scripted did too).
+          { value: "8 / 8", label: "live runs passed by Muse Spark 1.3, and by Muse Wonder 1.0" },
+          { value: "±10% at 1σ", label: "bar for “identified”, from sensitivity analysis" },
+          { value: "every test", label: "approved by a person before it runs" },
         ],
       },
     },
@@ -131,20 +125,24 @@ export function deck(app: Cookbook.App, appPath = "/app"): Cookbook.Deck.Slide[]
       },
     },
     {
-      eyebrow: { label: `The advantage · ${MOCK}` },
-      title: "Fewer experimental hours to the same parameter certainty.",
-      description: "Four approaches face the same held-out systems, with ground truth hidden from the agent. Success means every target parameter is within ±10%.",
+      eyebrow: { label: "The evidence · Muse Spark 1.3, live, one seed" },
+      title: "What Muse Spark found, and what it could not claim.",
+      description: `Six hidden test cases, calibration alone versus Muse Spark driving ${app.title}. Code decides what counts as a claim.`,
+      // Recorded run, not mock: discovery-harness.md, Muse Spark 1.3 pass, seed 0
+      // (2026-11-08), held-out RMSE and outcome per case, bare arm versus full arm.
       body: {
-        kind: "lines",
-        x: { label: "Test hours", min: 0, max: 40, ticks: [0, 10, 20, 30, 40], unit: " h" },
-        y: { label: "Worst parameter error", min: 0, max: 60 },
-        threshold: { value: 10, label: "±10%: identified" },
-        series: [
-          series("Full HPPC grid", 55, 19.7, 2),
-          series("Scripted numerics", 55, 11.5, 2),
-          series("Muse Spark, base skill", 55, 5.2, 2),
-          series("Muse Spark, tuned skill", 55, 3.1, 2, true),
+        kind: "cases",
+        axis: { label: "Held-out RMSE, log scale (lower is better)", min: 0.03, max: 10, ticks: [0.03, 0.1, 0.3, 1, 3, 10], log: true },
+        legend: ["Calibration alone", `Muse Spark + ${app.title}`],
+        rows: [
+          { label: "Planted lag", base: 0.57, value: 0.05, outcome: "Supported claim", baseOutcome: "alone: inconclusive", emphasis: true },
+          { label: "Transport delay", base: 0.35, value: 0.07, outcome: "Stop demoted: τ not identified", baseOutcome: "alone: ran out of steps", emphasis: true },
+          { label: "Quantized offset", base: 0.32, value: 0.25, outcome: "Inconclusive", baseOutcome: "alone: validated" },
+          { label: "Null twin", base: 0.05, value: 0.05, outcome: "Inconclusive", baseOutcome: "alone: validated, correct" },
+          { label: "Out of grammar", base: 0.29, value: 0.39, outcome: "Inconclusive", baseOutcome: "alone: inconclusive" },
+          { label: "Planted offset", base: 0.30, value: 7.08, outcome: "Inconclusive, no wrong claim", baseOutcome: "alone: wrong claim", baseEmphasis: true, caveat: "stale fit" },
         ],
+        note: `One seed, six cases; not a benchmark. Mean RMSE favours calibration alone (0.31 vs 1.31), mostly from one stale fit record. ${app.title} refused two invalid adopts and one unproven stop.`,
       },
     },
     {

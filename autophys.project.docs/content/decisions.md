@@ -197,3 +197,16 @@ All eight were built on 2026-11-08; see
 [review-20261108-implementation.md](review-20261108-implementation.md). Commits
 are named there by Change-Id, since local history may be restacked before it
 is pushed.
+
+## Positioning copy, 2026-11-08
+
+Review: `fleet/evidence/autophys-positioning-review-20261108/` on rwc-01
+(`review.md`, Muse Wonder's `muse-review.md`; a Claude subagent graded the
+slide-6 chart). The operator asked to highlight Muse Spark and Muse Wonder and
+said "go ahead" on the shown before/after.
+
+| ID | Decision | Source | State |
+| --- | --- | --- | --- |
+| POS-1 | The hero leads with the agent and the check: "Muse Spark plans the experiment. Autophys checks the claim." Its stats are real or guaranteed (8 / 8 live runs by Spark 1.3 and by Wonder 1.0, ±10% at 1σ, every test approved by a person) instead of the mock "6.3× fewer test hours" and "12 held-out cells". The docs name Spark as the default driver and Wonder as the playbook improver. | operator, 2026-11-08 ("we should highlight muse or wonder specifically", "go ahead") | implemented |
+| POS-2 | Slide 6 replaces the mock test-hours chart with the recorded Spark 1.3 discovery pass (seed 0, six cases), drawn by a new `cases` deck body in `vendor/tento/tento-cookbook-js`. The pass comes from the experimental `autophys.discovery` package, so the slide is only as public as that package. Strongest alternative: three stat tiles (0 false claims, 1 wrong claim alone, 1 recovered structure), which read faster but drop the per-case error. Reversal: restore the `lines` slide or swap the body; the `cases` kind can stay unused (minutes). | **agent-chosen, pending operator review** (the form; updating the chart was the operator's request) | implemented |
+| POS-3 | The product name stays "Autophys" (header, page title, `app.title`); the review's "AutoPhys" spelling is not adopted, so the deck and header agree. Reversal: change `index.root.ts` `title` and the README (minutes). | **agent-chosen, pending operator review** | implemented |
