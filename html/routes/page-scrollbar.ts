@@ -40,6 +40,9 @@ const CSS = `
 .ap-page-scrollbar:hover .ap-page-scrollbar-thumb, .ap-page-scrollbar[data-dragging] .ap-page-scrollbar-thumb {
   width: 9px; background: rgb(20 20 20 / 0.45); }
 html:not([data-ck-stage="landing"]) .ap-page-scrollbar { display: none; }
+/* Touch screens: an indicator only. A swipe that starts at the right edge
+   must scroll the page, not land on the track and jump a viewport. */
+@media (pointer: coarse) { .ap-page-scrollbar[data-visible] { pointer-events: none; } }
 `;
 
 export function mountPageScrollbar(hostname: string): (() => void) | null {
