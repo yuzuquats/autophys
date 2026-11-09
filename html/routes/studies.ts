@@ -43,7 +43,7 @@ const RUN: Study[] = [
     status: "Experimental · one seed",
     question: "When the model itself is wrong, can an agent refine its structure without claiming what the data cannot support?",
     rows: [
-      ["Result", "Muse Spark 1.3 found the planted lag and made no wrong claim; calibration alone made one. The code refused five invalid adopts and one unproven stop."],
+      ["Result", "Muse Spark 1.3 found the planted lag and made no wrong claim; calibration alone made one. The code refused 11 invalid adopts and demoted the stops the data did not support."],
       ["Caveat", "One seed, not a benchmark, and the discovery package is not in a release yet."],
     ],
   },

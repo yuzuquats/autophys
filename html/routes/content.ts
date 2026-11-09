@@ -142,7 +142,7 @@ export function deck(app: Cookbook.App, appPath = "/app"): Cookbook.Deck.Slide[]
           { label: "Out of grammar", base: 0.29, value: 0.39, outcome: "Inconclusive", baseOutcome: "alone: inconclusive" },
           { label: "Planted offset", base: 0.30, value: 7.08, outcome: "Inconclusive, no wrong claim", baseOutcome: "alone: wrong claim", baseEmphasis: true },
         ],
-        note: `One seed, six cases; not a benchmark. Mean RMSE favours calibration alone (0.31 vs 1.31), mostly from planted offset, where the code refused Spark's adopts and the short-data root fit stood. ${app.title} refused five invalid adopts and one unproven stop. Discovery is in development and not in this release.`,
+        note: `One seed, six cases; not a benchmark. Mean RMSE favours calibration alone (0.31 vs 1.31), mostly from planted offset, where the code refused Spark's adopts and the short-data root fit stood. ${app.title} refused 11 invalid adopts and demoted the stops the data did not support. Discovery is in development and not in this release.`,
       },
     },
     {
