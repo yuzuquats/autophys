@@ -278,3 +278,17 @@ reuse stamp. Here that is a Rust change and would need a native build;
 `build-web` always writes a fresh folder, so only `serve`'s in-place rebuild
 could reuse a tree built with the other switch value. Take it with the next
 native vendor refresh.
+
+Publication, 2026-11-09: the four app switcher commits were sunk to the
+bottom of the local stack and pushed to `origin/master` as a fast-forward
+`818aa7f..7059330` (Change-Ids I39ffdbbd329592f7, I4a844d6fb629bb94,
+I210788a70c4aa891, I84ae536380a6217a). Agent review only, not an operator
+verdict: three Opus rounds, the last "ready" (round 2 caught other sessions'
+decisions.md edits leaking into the first commit during the sink; fixed
+before the push). Checks on the pushed tree: `deno check`, plugin tests 9/9,
+and `build-web` from an export, 0 switcher links in a clone build and 11 apps
+with the host's `html/.env`. Still local: the re-vendored, hardened plugin
+with its re-pin (it needs the unpublished vendor re-pin commits beneath it)
+and the tento side (tento 6704015634, 6ac37afcce, 6c832e1518, 37640e76ac on
+yuzuquats, which depend on the unpublished fleet-brand-rollout family header
+commits). Production is not redeployed.
