@@ -17,3 +17,7 @@ vendor/tento/target/
 
 # Local experiment proposals (field-testing programme; not tracked).
 /proposals/
+
+# The packager's own build switches (html/.env.example lists them); never
+# tracked, so a clone builds without the Lona family app switcher.
+/html/.env

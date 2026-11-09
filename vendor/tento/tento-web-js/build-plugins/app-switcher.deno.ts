@@ -8,17 +8,18 @@ import { dirname, isAbsolute, join, relative, resolve } from "jsr:@std/path";
  * An app switcher (`std-app-switcher`, tento-brand-js kit) shows a card of
  * sibling apps: their names, links and icons. Which apps a site lists, and
  * whether it lists any, is a packaging decision of that site, not something
- * the component or a shared library hard-codes. A site declares it in two
- * checked-in files beside its routes directory (`html/` for `html/routes`):
+ * the component or a shared library hard-codes. Two files beside the site's
+ * routes directory (`html/` for `html/routes`) decide it:
  *
- * - `app-switcher.json` — the data model: an optional `label` (the chevron's
+ * - `app-switcher.json` (checked in) — the data model: an optional `label` (the chevron's
  *   accessible name) and the `apps` in grid order, each with an `id`, a
  *   `name`, an `http(s)` `href` and an `icon` (an `.svg` file, relative to
  *   the manifest and inside its directory).
- * - `app-switcher.env` — the switch: `TENTO_APP_SWITCHER=on` bundles the
- *   apps' links and icons; `off` bundles none of them. The process
- *   environment's `TENTO_APP_SWITCHER` overrides the file, so a packager can
- *   build either way from the same tree. With neither, the switcher is off.
+ * - `.env` (the packager's own, gitignored, never checked in) — the switch:
+ *   `TENTO_APP_SWITCHER=on` bundles the apps' links and icons; `off` bundles
+ *   none of them. The process environment's `TENTO_APP_SWITCHER` overrides
+ *   the file. With neither, the switcher is off, so a fresh clone of a site
+ *   builds without it; only a host that opts in gets the switcher.
  *
  * This plugin replaces any module whose path ends in `app-switcher.packaged.ts`
  * (on disk, `tento-brand-js/kit/app-switcher.packaged.ts`, which exports
@@ -65,7 +66,7 @@ export class AppSwitcherPlugin implements esbuild.Plugin {
 
 export const APP_SWITCHER_ENV = "TENTO_APP_SWITCHER";
 export const APP_SWITCHER_MANIFEST = "app-switcher.json";
-export const APP_SWITCHER_ENV_FILE = "app-switcher.env";
+export const APP_SWITCHER_ENV_FILE = ".env";
 
 /** One app as the manifest declares it. */
 export interface ManifestApp {

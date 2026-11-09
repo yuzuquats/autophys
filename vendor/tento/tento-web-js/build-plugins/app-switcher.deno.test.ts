@@ -81,7 +81,7 @@ Deno.test("no manifest leaves the on-disk module", async () => {
 Deno.test("switch on bundles the manifest's apps with their icons", async () => {
   const root = await site({
     "html/app-switcher.json": MANIFEST,
-    "html/app-switcher.env": "TENTO_APP_SWITCHER=on\n",
+    "html/.env": "TENTO_APP_SWITCHER=on\n",
     "html/app-switcher/calendar.svg": ICON,
     "html/app-switcher/autophys.svg": ICON.replace("rect", "circle"),
   });
@@ -98,7 +98,7 @@ Deno.test("switch on bundles the manifest's apps with their icons", async () => 
 Deno.test("switch off bundles no link or icon", async () => {
   const root = await site({
     "html/app-switcher.json": MANIFEST,
-    "html/app-switcher.env": "TENTO_APP_SWITCHER=off\n",
+    "html/.env": "TENTO_APP_SWITCHER=off\n",
     "html/app-switcher/calendar.svg": ICON,
     "html/app-switcher/autophys.svg": ICON,
   });
@@ -112,13 +112,13 @@ Deno.test("switch off bundles no link or icon", async () => {
 Deno.test("the process environment overrides the checked-in switch; absent both, it is off", async () => {
   const root = await site({
     "html/app-switcher.json": MANIFEST,
-    "html/app-switcher.env": "TENTO_APP_SWITCHER=on\n",
+    "html/.env": "TENTO_APP_SWITCHER=on\n",
     "html/app-switcher/calendar.svg": ICON,
     "html/app-switcher/autophys.svg": ICON,
   });
   const html = join(root, "html");
   assertStringIncludes((await packageAppSwitcher(html, "off"))!.contents, "= null");
-  await Deno.remove(join(html, "app-switcher.env"));
+  await Deno.remove(join(html, ".env"));
   assertStringIncludes((await packageAppSwitcher(html, undefined))!.contents, "= null");
   assertStringIncludes((await packageAppSwitcher(html, "on"))!.contents, "icon0");
 });

@@ -229,15 +229,15 @@ in development, because `autophys.discovery` is not on this master.
 The header's brand link now carries the Lona family app switcher (operator
 request, 2026-11-08: "add this in for autophys as well … configured during
 packaging … checked in .json and .env"). Files: `html/app-switcher.json`,
-`html/app-switcher.env`, `html/app-switcher/`, `html/routes/app-switcher.ts`;
+`html/.env.example`, `html/app-switcher/`, `html/routes/app-switcher.ts`;
 tento commits `6704015634` and `6ac37afcce` on yuzuquats tento master
 (project fleet-brand-rollout), vendored here.
 
 ```review-table
 | Id | Choice | Recommendation and reason | Strongest alternative | Reverse |
 | -- | ------ | ------------------------- | --------------------- | ------- |
-| AS-1 | The switcher's apps are packaged by an esbuild `onLoad` plugin in tento-web (`AppSwitcherPlugin`) that replaces `@tento-brand/kit/app-switcher.packaged` from `app-switcher.json` + `app-switcher.env` | A build-time module, like `BuildStampPlugin`: when off, no link or icon is in the bundle at all, and it needs no Rust change, so a web-only release can ship it | A runtime `/app-switcher.json` the page fetches: simpler, but the data is a separate request and the off state is a missing file rather than a build input | Delete the plugin line in `bundler.deno.ts` and the mount; cheap |
-| AS-2 | The checked-in switch is `TENTO_APP_SWITCHER=on`; the build's environment overrides it; absent both, off | autophys.lona.so and dev are Lona-hosted, so the repo's default build matches what is deployed; an OSS packager builds with `TENTO_APP_SWITCHER=off` | Check in `off` and turn it on in the deploy recipe: safer for third-party builds, but the default build would not match production | Flip the line in `html/app-switcher.env`; free |
+| AS-1 | The switcher's apps are packaged by an esbuild `onLoad` plugin in tento-web (`AppSwitcherPlugin`) that replaces `@tento-brand/kit/app-switcher.packaged` from `app-switcher.json` and the `TENTO_APP_SWITCHER` switch | A build-time module, like `BuildStampPlugin`: when off, no link or icon is in the bundle at all, and it needs no Rust change, so a web-only release can ship it | A runtime `/app-switcher.json` the page fetches: simpler, but the data is a separate request and the off state is a missing file rather than a build input | Delete the plugin line in `bundler.deno.ts` and the mount; cheap |
+| AS-2 | **Operator ruling, 2026-11-08** ("a user who pulls the github does not get this app-switcher. it should be gated by some .env"): off by default. Only `TENTO_APP_SWITCHER=on` in the gitignored `html/.env` or the build's environment bundles it; nothing tracked turns it on. Superseded the agent's first choice, a checked-in `html/app-switcher.env` set to `on` | A clone of the repository builds with no switcher, links or icons | — | Lona's hosts keep an untracked `html/.env` with `TENTO_APP_SWITCHER=on`; the dev/prod web-only recipe copies it into the `git archive` export before `build-web` |
 | AS-3 | The icons are the family tiles copied into `html/app-switcher/icons/` (not generated at build time from tento) | autophys vendors its dependencies and must build without a tento checkout | Vendor `tento-brand-lona-js/family` (228 KB of lockups and font-outline wordmarks) and derive the list from `LONA_FAMILY_APPS` | Recopy from `GENERATED_TILES` when the artwork changes; cheap |
 | AS-4 | The switcher stays on in the workbench, wrapping the brand link that reads "Back to the deck" there | One brand position everywhere (BR-11); the card is how to reach the other apps from either page | Disable it while `data-app` is set | One attribute toggle in `brand.ts` |
 ```

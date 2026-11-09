@@ -1,5 +1,5 @@
 {
-  "$comment": "The Lona family app switcher, packaged by tento-web (vendor/tento/tento-web-js/build-plugins/app-switcher.deno.ts). Icons are the family tiles from tento-brand-lona-js/family/assets.generated.ts; html/app-switcher/README.md says how to refresh them. html/app-switcher.env turns the whole set on or off.",
+  "$comment": "The Lona family app switcher, packaged by tento-web (vendor/tento/tento-web-js/build-plugins/app-switcher.deno.ts). Icons are the family tiles from tento-brand-lona-js/family/assets.generated.ts; html/app-switcher/README.md says how to refresh them. It is bundled only when TENTO_APP_SWITCHER=on, set in the untracked html/.env or the build's environment; off by default.",
   "label": "Switch Lona app",
   "apps": [
     {

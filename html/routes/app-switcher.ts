@@ -5,9 +5,10 @@ import { PACKAGED_APP_SWITCHER } from "@tento-brand/kit/app-switcher.packaged";
  * The Lona family app switcher on the header's brand link: a chevron after
  * the wordmark opens a card of the family's apps, with Autophys current.
  * The apps are the ones `autophys build-web` packaged from
- * html/app-switcher.json; with html/app-switcher.env (or the build's
- * environment) set to TENTO_APP_SWITCHER=off nothing is packaged and this
- * mounts nothing (html/app-switcher/README.md).
+ * html/app-switcher.json, which it does only when TENTO_APP_SWITCHER=on is
+ * set in the untracked html/.env or the build's environment. Otherwise,
+ * as in any clone of the repository, nothing is packaged and this mounts
+ * nothing (html/app-switcher/README.md).
  *
  * The brand link stays the link it was (home on the landing, back to the
  * deck in the app): the switcher only wraps it. The card's margins are
