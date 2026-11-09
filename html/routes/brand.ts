@@ -35,6 +35,16 @@ queueMicrotask(() => {
     .ck-header :is(.ap-docs-link, .ap-github-link):hover { text-decoration: underline; text-underline-offset: 4px; }
     .ck-header :is(.ap-docs-link, .ap-github-link):focus-visible { outline: 2px solid var(--ck-ink); outline-offset: 3px; }
     .ck-header .ck-brand { padding-left: 28px; }
+    /* GitHub is a landing link. Opening the app fades it out while its width
+       (and the gap before it) closes, so Docs slides over beside the profile;
+       closing reverses it. A transition, not a FLIP, so reversals never snap. */
+    .ck-header .ap-github-link { max-width: var(--ap-github-width, 6em); overflow: hidden;
+      transition: opacity 240ms ease 200ms, visibility 0s, max-width 700ms var(--ck-ease),
+        margin-left 700ms var(--ck-ease); }
+    .ck-header[data-app] .ap-github-link { max-width: 0; margin-left: -16px; opacity: 0;
+      visibility: hidden; pointer-events: none;
+      transition: opacity 180ms ease, visibility 0s linear 180ms, max-width 700ms var(--ck-ease),
+        margin-left 700ms var(--ck-ease); }
     /* Phones keep Try now and Docs; the wordmark needs the room. */
     @media (max-width: 479px) { .ck-header .ap-github-link { display: none; } }
     @media (max-width: 359px) {
@@ -67,7 +77,7 @@ queueMicrotask(() => {
         // header now, before scrolling, rather than playing the drawer return.
         home.click();
         history.replaceState(history.state, "", docs.href);
-        for (const element of document.querySelectorAll(".ck-landing, .ck-header .ck-wordmark")) {
+        for (const element of document.querySelectorAll(".ck-landing, .ck-header .ck-wordmark, .ck-header .ap-github-link")) {
           for (const animation of element.getAnimations()) animation.finish();
         }
         section.scrollIntoView({ block: "start", behavior: "instant" });
@@ -102,6 +112,18 @@ queueMicrotask(() => {
     github.href = "https://github.com/yuzuquats/autophys";
     github.textContent = "GitHub";
     docs.after(github);
+    // The collapse animates max-width; start it from the real width so Docs
+    // moves from the first frame instead of after an invisible 6em shrink.
+    // Applied without a transition, so a remeasure never animates on its own.
+    const measureGithub = () => {
+      if (!github.offsetWidth) return; // Hidden on phones.
+      github.style.transition = "none";
+      github.style.setProperty("--ap-github-width", `${github.scrollWidth}px`);
+      void github.offsetWidth;
+      github.style.transition = "";
+    };
+    measureGithub();
+    document.fonts.ready.then(measureGithub);
   }
 
   const wordmark = document.querySelector(".ck-brand .ck-wordmark");
