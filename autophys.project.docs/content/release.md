@@ -53,6 +53,15 @@ grows to fit its step.
   byte-identical to `fe522fb-20261108`, rehearsed on 127.0.0.1:4793, unit
   preimage `autophys.service.pre-web-818aa7f-20261108`. healthz still reports
   0.1.4 (`fe522fb`) with web_id `09d582e0…`.
+- Redeployed 2026-11-08 19:22 as a web-only release on this binary:
+  `fe522fb-web-7059330-20261109` (the Lona app switcher, `818aa7f..7059330`),
+  built from a `git archive` of origin/master `7059330` plus the host's
+  untracked `html/.env` (`TENTO_APP_SWITCHER=on`). The native prefix (26,443,358
+  bytes) is byte-identical to the previous release; rehearsed on
+  127.0.0.1:4793; unit preimage
+  `autophys.service.before-fe522fb-web-7059330-20261109`. healthz reports 0.1.4
+  (`fe522fb`) with web_id `846c4a95…`. A headless browser from rwc-01 opened
+  the switcher on production: 11 apps, Autophys current, no console errors.
 
 ### Caveats
 
