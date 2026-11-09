@@ -442,3 +442,24 @@ ring).
   `autophys.service.before-1d5d193-web-283bfc0-20261109`.
 - Measured on autophys.lona.so at 1280 and 390 wide: in the app the arrow is
   at x 24 and the mark at x 56.
+
+## Case-study illustrations deployed (2026-11-09)
+
+7d3c8d7: the "Small language model self-monitoring" row now shows a set
+sentence ("The Eiffel Tower opened in 1889.") with a span under each token
+whose length stands for its logit margin, the short one, under the year, in
+ink. The "Energy budget of an evolving particle world" row shows the same
+lattice world twice, a short grey sunlight pulse over one and a long ink step
+over the other, with equal inflow into the creatures in both. Both are
+captioned "illustration, planned test". The operator picked them (slm D, nrg
+L5) from judged variants in `~/.cache/autophys-dev-build/illus-v3/round4/`.
+
+- Production: `services/autophys/1d5d193-web-7d3c8d7-20261108`, web_id
+  96419fce…, built from 7d3c8d7 (= 283bfc0, the previous release's web
+  source, plus this change and a docs note) with `html/.env`; identical
+  native prefix, rehearsed on 4793. Unit backup:
+  `autophys.service.before-1d5d193-web-7d3c8d7-20261108`. Rollback:
+  `1d5d193-web-283bfc0-20261109`.
+- Checked on autophys.lona.so: both captions read "illustration, planned
+  test", the Eiffel sentence renders, the three "Open in workbench" buttons
+  remain, `/open/demo/workbook/thermal_rc_demo` answers 200.
