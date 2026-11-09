@@ -1,5 +1,5 @@
 /**
- * Chart bodies for the pitch deck: lines, profile and uncertainty. Like the
+ * Chart bodies for the pitch deck: lines, profile, uncertainty and cases. Like the
  * other body kinds they carry no content of their own, use the deck greys
  * with one near-black emphasis, and fit the shared body height.
  *
@@ -7,7 +7,7 @@
  * strokes) so it fills any width; every label, value and marker is HTML
  * placed by percentage, so text never scales with the chart.
  */
-import type { DeckLines, DeckProfile, DeckUncertainty } from "./deck-data.ts";
+import type { DeckCases, DeckLines, DeckProfile, DeckUncertainty } from "./deck-data.ts";
 import { h } from "./dom.ts";
 
 const NS = "http://www.w3.org/2000/svg";
@@ -124,4 +124,46 @@ export function renderUncertainty(body: DeckUncertainty): HTMLElement {
   pin(area, 1, 0.5, "ck-axis-x", body.axes[0]);
   pin(area, 0.5, 0, "ck-axis-y", body.axes[1]);
   return h("div", "ck-uncertainty-wrap", null, root, legend(body.regions));
+}
+
+/** The plot band of a cases chart, as fractions of the width: case names sit
+ * to its left, and outcomes start at CASE_OUTCOME_X. */
+const CASE_PLOT: [number, number] = [0.19, 0.62];
+const CASE_OUTCOME_X = 0.66;
+
+export function renderCases(body: DeckCases): HTMLElement {
+  const { root, area, canvas } = plot("ck-cases");
+  const [x0, x1] = CASE_PLOT, axis = body.axis;
+  const f = (v: number) => (axis.log ? Math.log10(Math.max(v, Number.MIN_VALUE)) : v);
+  const lo = f(axis.min), hi = f(axis.max);
+  const sx = (v: number) => x0 + (x1 - x0) * clamp01((f(v) - lo) / (hi - lo || 1));
+  const sy = (i: number) => (i + 0.5) / Math.max(1, body.rows.length);
+  const ticks = h("div", "ck-ticks");
+  ticks.style.left = pct(x0);
+  ticks.style.right = pct(1 - x1);
+  for (const t of axis.ticks ?? []) {
+    canvas.append(svg("line", { x1: sx(t), x2: sx(t), y1: 0, y2: 1, class: "ck-grid" }));
+    pin(ticks, (sx(t) - x0) / (x1 - x0), 0, "ck-tick", `${t}${axis.unit ?? ""}`);
+  }
+  area.append(ticks);
+  pin(area, x0, 0, "ck-axis-label", axis.label);
+  body.rows.forEach((row, i) => {
+    const y = sy(i), bx = sx(row.base), vx = sx(row.value);
+    canvas.append(svg("line", { x1: bx, x2: vx, y1: y, y2: y, class: "ck-rail" }));
+    pin(area, 0, y, "ck-case-label", row.label);
+    pin(area, bx, y, "ck-dot");
+    if (row.caveat) {
+      pin(area, vx, y, "ck-dot ck-hollow");
+      pin(area, vx, y, "ck-dot-label ck-end", row.caveat);
+    } else {
+      pin(area, vx, y, "ck-dot ck-emphasis");
+    }
+    pin(area, CASE_OUTCOME_X, y, "ck-case-outcome" + (row.emphasis ? " ck-emphasis" : ""), row.outcome);
+    if (row.baseOutcome) {
+      pin(area, CASE_OUTCOME_X, y, "ck-case-base" + (row.baseEmphasis ? " ck-emphasis" : ""), row.baseOutcome);
+    }
+  });
+  const parts: HTMLElement[] = [root, legend([{ label: body.legend[0] }, { label: body.legend[1], emphasis: true }])];
+  if (body.note) parts.push(h("p", "ck-chart-note", null, body.note));
+  return h("div", "", null, ...parts);
 }

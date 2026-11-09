@@ -26,6 +26,7 @@ export type DeckBody =
   | DeckLines
   | DeckProfile
   | DeckUncertainty
+  | DeckCases
   | DeckTerminal
   | DeckChat
   | DeckBrowser
@@ -64,6 +65,30 @@ export type DeckProfile = {
   curve: { label: string; values: number[] };
   fixed: { label: string; at: number[] };
   picks: { label: string; at: number[] };
+};
+/** One row per case: a base value and an emphasised value on one shared axis
+ * (log scale when `axis.log`), with the case's outcome beside them. The
+ * emphasised value is drawn hollow, labelled with `caveat`, when it is not a
+ * real measurement. */
+export type DeckCases = {
+  kind: "cases";
+  axis: DeckAxis & { log?: boolean };
+  /** Legend labels for the base and the emphasised value. */
+  legend: [string, string];
+  rows: DeckCase[];
+  /** A short caveat under the legend. */
+  note?: string;
+};
+export type DeckCase = {
+  label: string;
+  base: number;
+  value: number;
+  outcome: string;
+  /** The base's own outcome, under the row's outcome. */
+  baseOutcome?: string;
+  emphasis?: boolean;
+  baseEmphasis?: boolean;
+  caveat?: string;
 };
 /** Joint uncertainty of two quantities as ellipses around the estimate,
  * inside a target box. Sizes are fractions of the square plot (0..1); angle in degrees. */

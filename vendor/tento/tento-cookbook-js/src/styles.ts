@@ -201,6 +201,12 @@ html[data-ck-stage="tour"] .ck-tour-peek { opacity: 1; transition-duration: 300m
 .ck-legend .ck-emphasis i { background: var(--ck-n900); }
 .ck-legend .ck-dashed i { height: 0; border-top: 1.5px dashed var(--ck-n500); border-radius: 0; background: none; }
 @media (max-width: 639px) { .ck-plot .ck-dot-label:not(.ck-emphasis) { display: none; } }
+.ck-plot.ck-cases { height: calc(var(--ck-body-h) - 30px); margin-top: 28px; }
+.ck-cases .ck-case-label { transform: translateY(-50%); color: var(--ck-n900); }
+.ck-cases .ck-case-outcome { transform: translateY(-100%); color: var(--ck-n900); }
+.ck-plot .ck-dot.ck-hollow { background: #fff; box-shadow: inset 0 0 0 2px var(--ck-n500); }
+.ck-chart-note { margin: 6px 0 0; font-size: 12px; line-height: 16px; color: var(--ck-n500); }
+@media (max-width: 639px) { .ck-cases .ck-case-base { display: none; } }
 /* conversation bodies (deck-convo.ts): a terminal card and an iOS-style chat */
 .ck-term { border-radius: 12px; overflow: hidden; background: #141414; }
 .ck-term-bar { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid #262626; }

@@ -7,7 +7,7 @@ import {
   type DeckStat,
   stepTarget,
 } from "./deck-data.ts";
-import { renderLines, renderProfile, renderUncertainty } from "./deck-charts.ts";
+import { renderCases, renderLines, renderProfile, renderUncertainty } from "./deck-charts.ts";
 import { renderBrowser, renderChat, renderTerminal } from "./deck-convo.ts";
 import { renderUses } from "./deck-uses.ts";
 import { renderFeedback, renderLoops } from "./deck-loops.ts";
@@ -587,6 +587,8 @@ function renderBody(body: DeckBody): HTMLElement {
       return frame(renderProfile(body));
     case "uncertainty":
       return frame(renderUncertainty(body));
+    case "cases":
+      return frame(renderCases(body));
     case "terminal":
       return frame(renderTerminal(body));
     case "chat":
