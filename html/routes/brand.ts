@@ -39,6 +39,16 @@ queueMicrotask(() => {
     .ck-header .ap-github-link svg { display: block; flex: none; }
     .ck-header .ap-github-link:hover { color: var(--ck-secondary); }
     .ck-header :is(.ap-section-link, .ap-github-link):focus-visible { outline: 2px solid var(--ck-ink); outline-offset: 3px; }
+    /* No focus ring on the brand (operator, 2026-11-09): the cookbook's blue
+       :focus-visible box showed around the mark and title whenever focus came
+       back to the link, e.g. after closing the app or the switcher. */
+    .ck-header .ck-brand:focus-visible, .ck-header .ap-app-switcher:focus-visible { outline: none; }
+    /* A smaller profile control (operator, 2026-11-09): 30px, down from the
+       36px src/login.rs serves, with the avatar keeping its 2px inset. The
+       html prefix outranks that sheet, which loads later in the body. */
+    html #ap-account .ap-acct-btn { width: 30px; height: 30px; }
+    html #ap-account .ap-acct-avatar { width: 26px; height: 26px; font-size: 12px; }
+    html #ap-account svg { width: 17px; height: 17px; }
     .ck-header .ck-brand { padding-left: 28px; }
     /* The slide is only for opening and closing the app. This sheet arrives
        after the first paint, so the transition waits for data-ap-brand-ready
