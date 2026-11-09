@@ -129,6 +129,12 @@ The header now orders Try now, Docs, then the profile. Docs from the mounted app
 
 These browser changes remain undeployed under the existing disk reserve hold. Package the maintained header source together with the pending initial-anchor and same-page scrolling fixes; the older inactive package is incomplete.
 
+## GitHub link in the header
+
+The header now reads Try now, Docs, the GitHub mark, then the profile. The mark (20 px in a 32 × 44 px target, labelled “Autophys on GitHub”) links to https://github.com/yuzuquats/autophys and hovers to the secondary ink. Below 480 px it is hidden: with it, Try now ran into the wordmark at 390 px and narrower. Opening the app fades it out while its width and the gap before it close over 700 ms on the shell's ease, so Docs slides beside the profile; closing reverses it, Docs from the workbench settles it with the cover and wordmark, and reduced motion switches the transition off. Source: `html/routes/brand.ts` only.
+
+Deno checked the header module. Browser checks on the live page with the maintained CSS injected confirmed the order, 32 px target, hover color, hidden at 479 px and shown at 480 px, the collapse timeline (Docs moving from the first frame, 0 px at about 700 ms) and its reversal. The release served at dev--autophys.lona.so (yuzuquats `autophys-dev`, master's web over the production binary, isolated demo data) confirmed the mark, the collapse on Try now, demo sign-in and no console errors. On an export of the published prefix, Deno checked the entry modules and the web suite passed (141 tests).
+
 ## Pending sign-in surface consolidation
 
 The standalone login renderer is removed. GET `/login` is a compatibility redirect to `/app`, preserving only a safe workspace `next` address. The header keeps its existing lona-js Dialog/Overlay; signed-out workspaces keep their shared inline credential fields. Sign-out returns to `/app`, the anonymous badge falls back to `/app`, and session expiry reloads the current workspace address to refresh its signed-out context. No client navigation sends a user to `/login`.
