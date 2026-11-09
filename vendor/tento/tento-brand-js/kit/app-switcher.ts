@@ -44,6 +44,14 @@ import { NativeUi } from "@tento-brand/src/native-ui";
 // a hairline drawn exactly on the anchor rect. It stays drawn while the
 // sheet is open, so the current app keeps its outline (operator, 2026-11-09).
 //
+// A host may slot a footer (`slot="footer"`) under the grid, inside the
+// clipped surface: one grid margin in from the left, right and bottom edges,
+// directly under the grid's own bottom margin. The footer takes the card's
+// width and never widens it (the grid sizes the card), and an empty slot
+// renders nothing. Its links follow the last app in Tab order, so a pinned
+// sheet stays open while focus moves there; arrow keys move between apps
+// only. A click on a footer link closes the sheet, as a click on an app does.
+//
 // Function declarations, not namespace members, for anything a lifecycle
 // calls: `@component` upgrades matching elements at class-definition time,
 // before a namespace's IIFE has run (see src/app-shell.ts).
@@ -139,6 +147,13 @@ function prefersReducedMotion(): boolean {
  * invisible until the switcher is hovered, holds focus or is open; touch
  * screens always show it.
  *
+ * Slots: the default slot is the trigger; `footer` (optional) is a row under
+ * the grid, inside the clipped surface, inset by `--brand-app-switcher-margin`
+ * on the left, right and bottom. It takes the card's width without widening
+ * it, and an empty slot takes no space. Tab moves from the apps to the
+ * footer's links (the sheet stays open), Escape there closes and returns
+ * focus to the chevron, and a click on a footer link closes the sheet.
+ *
  * Attributes: `current` (the id of the app this page belongs to; its item
  * gets `aria-current="page"`), `label` (the chevron's accessible name,
  * default "Switch app"), `disabled` (no chevron, never opens), and `open`
@@ -162,7 +177,7 @@ function prefersReducedMotion(): boolean {
  * `-outline` (the rest outline's colour, GrayText), `-outline-width` (1px),
  * `-outline-radius` (0).
  * Parts: `root`, `trigger`, `chevron`, `outline`, `sheet`, `surface`, `title`,
- * `separator`, `grid`, `item`, `icon`, `name`.
+ * `separator`, `grid`, `item`, `icon`, `name`, `footer`.
  */
 @component({ name: "std-app-switcher" })
 export class AppSwitcher extends LonaWebComponent {
@@ -177,6 +192,8 @@ export class AppSwitcher extends LonaWebComponent {
   private $title = this.$("title");
   private $outline = this.$("outline");
   private $grid = this.$("grid");
+  private $footer = this.$("footer");
+  private $footerSlot = this.$<HTMLSlotElement>("footer-slot");
 
   private _apps: readonly AppSwitcher.App[] = [];
   /** The host's anchor rect, in viewport coordinates; `null` measures the trigger's box. */
@@ -234,7 +251,11 @@ export class AppSwitcher extends LonaWebComponent {
     this.$chevron.addEventListener("click", this.onChevronClick);
     this.$chevron.addEventListener("keydown", this.onChevronKey);
     this.$grid.addEventListener("keydown", this.onGridKey);
+    this.$footer.addEventListener("keydown", this.onFooterKey);
+    this.$footer.addEventListener("click", this.onFooterClick);
+    this.$footerSlot.addEventListener("slotchange", this.onFooterSlot);
     this.addEventListener("focusout", this.onFocusOut);
+    this.onFooterSlot();
     this.renderChrome();
     if (typeof ResizeObserver === "function") {
       this.resizeObserver ??= new ResizeObserver(() => this.placeOutline());
@@ -260,6 +281,9 @@ export class AppSwitcher extends LonaWebComponent {
     this.$chevron.removeEventListener("click", this.onChevronClick);
     this.$chevron.removeEventListener("keydown", this.onChevronKey);
     this.$grid.removeEventListener("keydown", this.onGridKey);
+    this.$footer.removeEventListener("keydown", this.onFooterKey);
+    this.$footer.removeEventListener("click", this.onFooterClick);
+    this.$footerSlot.removeEventListener("slotchange", this.onFooterSlot);
     this.removeEventListener("focusout", this.onFocusOut);
     this.resizeObserver?.disconnect();
     this.attributeObserver?.disconnect();
@@ -532,6 +556,24 @@ export class AppSwitcher extends LonaWebComponent {
     this.focusItem(to);
   };
 
+  /** The footer row renders only while something is slotted into it. */
+  private onFooterSlot = (): void => {
+    this.$footer.hidden = this.$footerSlot.assignedNodes().length === 0;
+  };
+
+  /** Escape from a footer link closes the sheet, as it does from an app; Tab and arrows keep their defaults. */
+  private onFooterKey = (event: KeyboardEvent): void => {
+    if (event.key !== "Escape" || !this.isOpen) return;
+    event.preventDefault();
+    this.hide({ restoreFocus: true });
+  };
+
+  /** A click on a footer link closes the sheet; the link itself is not intercepted. */
+  private onFooterClick = (event: MouseEvent): void => {
+    const link = event.composedPath().find((n) => n instanceof HTMLAnchorElement && n.hasAttribute("href"));
+    if (link != null) this.hide();
+  };
+
   private onFocusOut = (event: FocusEvent): void => {
     if (!this.isOpen) return;
     const next = event.relatedTarget as Option<Node>;
@@ -602,6 +644,7 @@ export class AppSwitcher extends LonaWebComponent {
             <div id="title" part="title" role="none"></div>
             <div id="separator" part="separator" role="none"></div>
             <div id="grid" part="grid" role="none"></div>
+            <div id="footer" part="footer" role="none" hidden><slot name="footer" id="footer-slot"></slot></div>
           </div>
         </std-round>
       </div>
@@ -779,6 +822,20 @@ export class AppSwitcher extends LonaWebComponent {
         grid-template-columns: repeat(var(--app-switcher-columns, 4), var(--brand-app-switcher-cell-width, 84px));
         gap: var(--brand-app-switcher-gap, 4px);
         padding: var(--brand-app-switcher-margin, 12px);
+      }
+
+      /* The footer row: under the grid, whose bottom padding is the gap above
+        it, and one grid margin in from the left, right and bottom. Inline-size
+        containment keeps its content from widening the card: the grid sizes
+        the card and the footer takes its width. */
+      #footer {
+        display: block;
+        contain: inline-size;
+        padding: 0 var(--brand-app-switcher-margin, 12px) var(--brand-app-switcher-margin, 12px);
+      }
+
+      #footer[hidden] {
+        display: none;
       }
 
       a[part~="item"] {
