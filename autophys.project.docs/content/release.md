@@ -343,3 +343,15 @@ into the `git archive` export before `build-web`, or run `build-web` with
 `TENTO_APP_SWITCHER=on`. Check the bundle carries it: `routes/index.root.js`
 contains `autotrade.lona.so`. A release built without the switch ships no
 switcher, which is correct for builds made outside Lona.
+
+## Deck fixes and cookbook re-vendor published (2026-11-08)
+
+Pushed autophys 7059330..a43ed9b: the simplified cases slide, the short-phone
+deck layout with header and footer fade bands, hero stats as rows on phones,
+the 8/8 stat removed, and the vendor re-pin. The cookbook changes went
+upstream first (tento 54edca64ef, project tento-cookbook), and a43ed9b
+re-vendors them from there. Two read-only agent reviews returned ready;
+receipt: `fleet/evidence/autophys-cookbook-sink-20261108/receipt.md`.
+Production is not deployed with these changes; dev--autophys.lona.so has them.
+The html boundary test fails on origin since the app switcher added
+`html/app-switcher/`; that is open for its owner.
