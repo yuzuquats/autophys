@@ -11,10 +11,17 @@ import { dirname, isAbsolute, join, relative, resolve, SEPARATOR as SEP } from "
  * the component or a shared library hard-codes. Two files beside the site's
  * routes directory (`html/` for `html/routes`) decide it:
  *
- * - `app-switcher.json` (checked in) — the data model: an optional `label` (the chevron's
- *   accessible name) and the `apps` in grid order, each with an `id`, a
- *   `name`, an `http(s)` `href` and an `icon` (an `.svg` file, relative to
- *   the manifest and inside its directory).
+ * - `app-switcher.json` — the data model: an optional `label` (the chevron's
+ *   accessible name), the `apps` in grid order, each with an `id`, a `name`,
+ *   an `http(s)` `href` and either an `icon` (an `.svg` file, relative to the
+ *   manifest and inside its directory) or an `svg` (the icon's markup
+ *   inline, so a generated manifest is one self-contained file); an optional
+ *   `footer` (`{ href, label, detail? }`, an `http(s)` link the switcher
+ *   renders under its apps) and optional `tokens` (`{ light?, dark? }`, each
+ *   a map from a token name such as `sheet` to its value, which the host
+ *   applies as `--brand-app-switcher-<name>` for the variant on screen).
+ *   A site may check it in or copy it from a shared preset (tento's Lona
+ *   preset is `tento-brand-lona-js/family/lona-switcher.json`).
  * - `.env` (the packager's own, gitignored, never checked in) — the switch:
  *   `TENTO_APP_SWITCHER=on` bundles the apps' links and icons; `off` bundles
  *   none of them. The process environment's `TENTO_APP_SWITCHER` overrides
@@ -30,9 +37,11 @@ import { dirname, isAbsolute, join, relative, resolve, SEPARATOR as SEP } from "
  *   own default);
  * - a manifest and the switch off: `null` (no switcher; nothing from the
  *   manifest is bundled);
- * - a manifest and the switch on: `{ label, apps }`, with every icon imported
- *   as text through the SVG loader, so the manifest and icons are inputs of
- *   the build like any other source file.
+ * - a manifest and the switch on: `{ label, apps, footer, tokens }` (`null`
+ *   for an absent footer or tokens), with every icon file imported as text
+ *   through the SVG loader, so the manifest and icons are inputs of the
+ *   build like any other source file; inline `svg` icons are bundled as
+ *   they are.
  *
  * A malformed manifest, an unknown switch value or a missing icon fails the
  * build with a message naming the file. The env file is read here, not
@@ -72,18 +81,34 @@ export const APP_SWITCHER_ENV = "TENTO_APP_SWITCHER";
 export const APP_SWITCHER_MANIFEST = "app-switcher.json";
 export const APP_SWITCHER_ENV_FILE = ".env";
 
-/** One app as the manifest declares it. */
-export interface ManifestApp {
-  readonly id: string;
-  readonly name: string;
+/** One app as the manifest declares it: exactly one of `icon` and `svg`. */
+export type ManifestApp =
+  & { readonly id: string; readonly name: string; readonly href: string }
+  & (
+    /** An `.svg` file, relative to the manifest. */
+    | { readonly icon: string; readonly svg?: undefined }
+    /** The icon's SVG markup, inline. */
+    | { readonly svg: string; readonly icon?: undefined }
+  );
+
+/** The footer link under the apps. */
+export interface ManifestFooter {
   readonly href: string;
-  /** An `.svg` file, relative to the manifest. */
-  readonly icon: string;
+  readonly label: string;
+  readonly detail?: string;
+}
+
+/** Token values by name (`sheet`, `hover`, ...), per variant. */
+export interface ManifestTokens {
+  readonly light?: Readonly<Record<string, string>>;
+  readonly dark?: Readonly<Record<string, string>>;
 }
 
 export interface Manifest {
   readonly label?: string;
   readonly apps: readonly ManifestApp[];
+  readonly footer?: ManifestFooter;
+  readonly tokens?: ManifestTokens;
 }
 
 /**
@@ -111,7 +136,13 @@ export async function packageAppSwitcher(
   }
   const manifest = parseManifest(manifestText, manifestPath);
   const icons: string[] = [];
+  /** Per app: the import binding of its icon file, or its inline markup as a literal. */
+  const iconExprs: string[] = [];
   for (const app of manifest.apps) {
+    if (app.icon == null) {
+      iconExprs.push(JSON.stringify(app.svg));
+      continue;
+    }
     const at = `${manifestPath}: app ${JSON.stringify(app.id)}: icon ${JSON.stringify(app.icon)}`;
     const outside = (dir: string, path: string): boolean => {
       const inside = relative(dir, path);
@@ -128,12 +159,21 @@ export async function packageAppSwitcher(
     }
     // Real paths too, so a symlink cannot inline a file from outside the site.
     if (outside(await Deno.realPath(configDir), icon)) throw new Error(`${at} is outside ${configDir}`);
+    iconExprs.push(`icon${icons.length} as string`);
     icons.push(icon);
   }
   const imports = icons.map((icon, i) => `import icon${i} from ${JSON.stringify(icon)};`);
   const apps = manifest.apps.map((app, i) =>
-    `  Object.freeze({ id: ${JSON.stringify(app.id)}, name: ${JSON.stringify(app.name)}, href: ${JSON.stringify(app.href)}, icon: icon${i} as string }),`
+    `  Object.freeze({ id: ${JSON.stringify(app.id)}, name: ${JSON.stringify(app.name)}, href: ${
+      JSON.stringify(app.href)
+    }, icon: ${iconExprs[i]} }),`
   );
+  const frozen = (record: Readonly<Record<string, string>> | undefined): string =>
+    record == null ? "undefined" : `Object.freeze(${JSON.stringify(record)})`;
+  const footer = manifest.footer == null ? "null" : frozen({ ...manifest.footer });
+  const tokens = manifest.tokens == null
+    ? "null"
+    : `Object.freeze({ light: ${frozen(manifest.tokens.light)}, dark: ${frozen(manifest.tokens.dark)} })`;
   const contents = [
     `// Packaged by AppSwitcherPlugin from ${APP_SWITCHER_MANIFEST}: ${APP_SWITCHER_ENV}=on.`,
     ...imports,
@@ -142,6 +182,8 @@ export async function packageAppSwitcher(
     `  apps: Object.freeze([`,
     ...apps.map((line) => `  ${line}`),
     `  ]),`,
+    `  footer: ${footer},`,
+    `  tokens: ${tokens},`,
     `});`,
     ``,
   ].join("\n");
@@ -172,7 +214,11 @@ export function parseEnvFile(text: string, source: string): Record<string, strin
   return out;
 }
 
-/** Validates the manifest's shape: unique ids, non-empty names, `http(s)` links and `.svg` icons. */
+/**
+ * Validates the manifest's shape: unique ids, non-empty names, `http(s)`
+ * links, `.svg` icon files or inline `<svg>` markup, a well-formed footer and
+ * tokens whose names are lowercase words joined by dashes.
+ */
 export function parseManifest(text: string, source: string): Manifest {
   let value: unknown;
   try {
@@ -186,26 +232,28 @@ export function parseManifest(text: string, source: string): Manifest {
   if (typeof value !== "object" || value == null || Array.isArray(value)) fail("expected an object");
   const record = value as Record<string, unknown>;
   for (const key of Object.keys(record)) {
-    if (key !== "label" && key !== "apps" && key !== "$comment") fail(`unknown key ${JSON.stringify(key)}`);
+    if (!["label", "apps", "footer", "tokens", "$comment"].includes(key)) fail(`unknown key ${JSON.stringify(key)}`);
   }
   if (record.label != null && (typeof record.label !== "string" || record.label.trim() === "")) {
     fail("label must be a non-empty string");
   }
   if (!Array.isArray(record.apps)) fail("apps must be an array");
-  const ids = new Set<string>();
-  const apps = (record.apps as unknown[]).map((entry, i): ManifestApp => {
-    const at = `apps[${i}]`;
-    if (typeof entry !== "object" || entry == null || Array.isArray(entry)) fail(`${at}: expected an object`);
-    const app = entry as Record<string, unknown>;
-    for (const key of Object.keys(app)) {
-      if (!["id", "name", "href", "icon"].includes(key)) fail(`${at}: unknown key ${JSON.stringify(key)}`);
+  const object = (v: unknown, at: string): Record<string, unknown> => {
+    if (typeof v !== "object" || v == null || Array.isArray(v)) fail(`${at}: expected an object`);
+    return v as Record<string, unknown>;
+  };
+  const onlyKeys = (o: Record<string, unknown>, keys: readonly string[], at: string): void => {
+    for (const key of Object.keys(o)) {
+      if (!keys.includes(key)) fail(`${at}: unknown key ${JSON.stringify(key)}`);
     }
-    for (const key of ["id", "name", "href", "icon"]) {
-      if (typeof app[key] !== "string" || (app[key] as string).trim() === "") fail(`${at}: ${key} must be a non-empty string`);
+  };
+  const nonEmpty = (o: Record<string, unknown>, key: string, at: string): string => {
+    if (typeof o[key] !== "string" || (o[key] as string).trim() === "") {
+      fail(`${at}: ${key} must be a non-empty string`);
     }
-    const { id, name, href, icon } = app as unknown as ManifestApp;
-    if (ids.has(id)) fail(`${at}: duplicate id ${JSON.stringify(id)}`);
-    ids.add(id);
+    return o[key] as string;
+  };
+  const httpLink = (href: string, at: string): void => {
     let url: URL | null = null;
     try {
       url = new URL(href);
@@ -215,11 +263,71 @@ export function parseManifest(text: string, source: string): Manifest {
     if (url == null || (url.protocol !== "https:" && url.protocol !== "http:")) {
       fail(`${at}: href ${JSON.stringify(href)} must be an absolute http(s) URL`);
     }
+  };
+  const ids = new Set<string>();
+  const apps = (record.apps as unknown[]).map((entry, i): ManifestApp => {
+    const at = `apps[${i}]`;
+    const app = object(entry, at);
+    onlyKeys(app, ["id", "name", "href", "icon", "svg"], at);
+    const id = nonEmpty(app, "id", at);
+    const name = nonEmpty(app, "name", at);
+    const href = nonEmpty(app, "href", at);
+    if (ids.has(id)) fail(`${at}: duplicate id ${JSON.stringify(id)}`);
+    ids.add(id);
+    httpLink(href, at);
+    if ((app.icon == null) === (app.svg == null)) fail(`${at}: expected exactly one of icon and svg`);
+    if (app.svg != null) {
+      const svg = nonEmpty(app, "svg", at);
+      const trimmed = svg.trim();
+      if (!/^<svg[\s>]/.test(trimmed) || !trimmed.endsWith("</svg>")) {
+        fail(`${at}: svg must be one <svg>...</svg> element`);
+      }
+      return { id, name, href, svg };
+    }
+    const icon = nonEmpty(app, "icon", at);
     // Lowercase only: the SVG loader matches `.svg` exactly.
     if (!icon.endsWith(".svg")) fail(`${at}: icon ${JSON.stringify(icon)} must be an .svg file`);
     return { id, name, href, icon };
   });
-  return { ...(record.label != null ? { label: record.label as string } : {}), apps };
+  let footer: ManifestFooter | undefined;
+  if (record.footer != null) {
+    const f = object(record.footer, "footer");
+    onlyKeys(f, ["href", "label", "detail"], "footer");
+    const href = nonEmpty(f, "href", "footer");
+    httpLink(href, "footer");
+    const label = nonEmpty(f, "label", "footer");
+    footer = f.detail != null ? { href, label, detail: nonEmpty(f, "detail", "footer") } : { href, label };
+  }
+  let tokens: ManifestTokens | undefined;
+  if (record.tokens != null) {
+    const t = object(record.tokens, "tokens");
+    onlyKeys(t, ["light", "dark"], "tokens");
+    const variant = (name: "light" | "dark"): Record<string, string> | undefined => {
+      if (t[name] == null) return undefined;
+      const at = `tokens.${name}`;
+      const v = object(t[name], at);
+      const out: Record<string, string> = {};
+      for (const key of Object.keys(v)) {
+        if (!/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/.test(key)) {
+          fail(`${at}: token name ${JSON.stringify(key)} must be lowercase words joined by dashes`);
+        }
+        const value = nonEmpty(v, key, at);
+        // A value is one declaration's value: it cannot end the declaration or the rule.
+        if (/[;{}]/.test(value)) fail(`${at}: ${key} must not contain ; { or }`);
+        out[key] = value;
+      }
+      return out;
+    };
+    const light = variant("light");
+    const dark = variant("dark");
+    tokens = { ...(light != null ? { light } : {}), ...(dark != null ? { dark } : {}) };
+  }
+  return {
+    ...(record.label != null ? { label: record.label as string } : {}),
+    apps,
+    ...(footer != null ? { footer } : {}),
+    ...(tokens != null ? { tokens } : {}),
+  };
 }
 
 async function readOptional(path: string): Promise<string | null> {

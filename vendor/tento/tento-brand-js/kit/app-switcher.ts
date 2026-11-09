@@ -44,13 +44,21 @@ import { NativeUi } from "@tento-brand/src/native-ui";
 // a hairline drawn exactly on the anchor rect. It stays drawn while the
 // sheet is open, so the current app keeps its outline (operator, 2026-11-09).
 //
-// A host may slot a footer (`slot="footer"`) under the grid, inside the
-// clipped surface: one grid margin in from the left, right and bottom edges,
-// directly under the grid's own bottom margin. The footer takes the card's
-// width and never widens it (the grid sizes the card), and an empty slot
-// renders nothing. Its links follow the last app in Tab order, so a pinned
-// sheet stays open while focus moves there; arrow keys move between apps
-// only. A click on a footer link closes the sheet, as a click on an app does.
+// The card may end in a footer under the grid, inside the clipped surface:
+// one grid margin in from the left, right and bottom edges, directly under
+// the grid's own bottom margin. It is either data -- the `footer` prop, one
+// link the switcher renders itself (part `footer-link`) -- or a host's own
+// content slotted as `slot="footer"`, which wins over the prop. The footer
+// takes the card's width and never widens it (the grid sizes the card), and
+// with neither it renders nothing. Its links follow the last app in Tab
+// order, so a pinned sheet stays open while focus moves there; arrow keys
+// move between apps only. A click on a footer link closes the sheet, as a
+// click on an app does.
+//
+// A design's look is data too: `tokens` sets each key as an inline
+// --brand-app-switcher-<key> custom property on the host, so a preset (a
+// JSON manifest, say) can carry its colours without any CSS. The kit still
+// declares no value; it only applies the ones it is handed.
 //
 // Function declarations, not namespace members, for anything a lifecycle
 // calls: `@component` upgrades matching elements at class-definition time,
@@ -74,7 +82,7 @@ const MAX_COLUMNS = 4;
  * radius r (side curvature 0.6) cuts its 45-degree apex 0.25r in from the box
  * corner; a circular radius R cuts it 0.29R in. 1.17 would match the apex
  * exactly; 1.25 matches it with the slightly softer, longer run-in that makes
- * a squircle read as one. The Lona header's 16px card draws at radius 20.
+ * a squircle read as one. A 16px design radius draws as a radius-20 squircle.
  */
 const SQUIRCLE_RADIUS_SCALE = 1.25;
 
@@ -150,9 +158,30 @@ function prefersReducedMotion(): boolean {
  * Slots: the default slot is the trigger; `footer` (optional) is a row under
  * the grid, inside the clipped surface, inset by `--brand-app-switcher-margin`
  * on the left, right and bottom. It takes the card's width without widening
- * it, and an empty slot takes no space. Tab moves from the apps to the
- * footer's links (the sheet stays open), Escape there closes and returns
- * focus to the chevron, and a click on a footer link closes the sheet.
+ * it, and an empty slot takes no space. Slotted content wins over the
+ * `footer` prop. Tab moves from the apps to the footer's links (the sheet
+ * stays open), Escape there closes and returns focus to the chevron, and a
+ * click on a footer link closes the sheet.
+ *
+ * The `footer` prop (`{ href, label, detail? }`) renders one link in the
+ * footer row (part `footer-link`, opening in a new tab, `rel=noopener`): the
+ * label (part `footer-label`) at the start and the detail (part
+ * `footer-detail`) followed by an aria-hidden " ↗" at the end, wrapping
+ * under the label only when the card is too narrow for one line. It is a
+ * row padded 10px 12px with `-cell-radius` corners in the `-hover` tint;
+ * hovered or focused it takes the `-current` tint, and focused the cells'
+ * inset ring. The label is 12.5px/16px at 500, the detail 11.5px at 400 in
+ * `-muted` (GrayText).
+ *
+ * The `tokens` prop sets each `key: value` as the inline custom property
+ * `--brand-app-switcher-<key>` on the host (`{ sheet: "#fff" }` is
+ * `--brand-app-switcher-sheet: #fff`); binding new tokens removes the ones
+ * it set before and no longer names. An inline token overrides the same
+ * property set by a stylesheet.
+ *
+ * Events: `toggle` (a `ToggleEvent` where the browser has one, otherwise an
+ * Event carrying the same fields) when the sheet opens and when it closes,
+ * with `oldState` and `newState` of `"open"` / `"closed"`. It does not bubble.
  *
  * Attributes: `current` (the id of the app this page belongs to; its item
  * gets `aria-current="page"`), `label` (the chevron's accessible name,
@@ -161,7 +190,7 @@ function prefersReducedMotion(): boolean {
  * `rest` (`outline` draws a hairline exactly on the anchor rect, kept while
  * the sheet is open. Absent, or any other
  * value: nothing is drawn at rest).
- * Properties: `apps` and `anchor` (see `AppSwitcher.Props`).
+ * Properties: `apps`, `anchor`, `footer` and `tokens` (see `AppSwitcher.Props`).
  *
  * The sheet's surface is a `std-round` squircle (part `surface`): `-sheet` is
  * its fill, `-border` and `-border-width` its hairline, `-radius` its corner
@@ -175,9 +204,10 @@ function prefersReducedMotion(): boolean {
  * open, 100), `-cell-width` (84px), `-gap` (4px), `-icon-size` (48px),
  * `-font-size` (12px), `-chevron` (the chevron colour, currentColor),
  * `-outline` (the rest outline's colour, GrayText), `-outline-width` (1px),
- * `-outline-radius` (0).
+ * `-outline-radius` (0), `-muted` (the footer link's detail, GrayText).
  * Parts: `root`, `trigger`, `chevron`, `outline`, `sheet`, `surface`, `title`,
- * `separator`, `grid`, `item`, `icon`, `name`, `footer`.
+ * `separator`, `grid`, `item`, `icon`, `name`, `footer`, `footer-link`,
+ * `footer-label`, `footer-detail`.
  */
 @component({ name: "std-app-switcher" })
 export class AppSwitcher extends LonaWebComponent {
@@ -194,8 +224,13 @@ export class AppSwitcher extends LonaWebComponent {
   private $grid = this.$("grid");
   private $footer = this.$("footer");
   private $footerSlot = this.$<HTMLSlotElement>("footer-slot");
+  private $footerLink = this.$<HTMLAnchorElement>("footer-link");
 
   private _apps: readonly AppSwitcher.App[] = [];
+  private _footer: Option<AppSwitcher.Footer> = null;
+  private _tokens: Option<AppSwitcher.Tokens> = null;
+  /** The custom properties `tokens` set on the host, so the next binding can remove the ones it drops. */
+  private appliedTokens: readonly string[] = [];
   /** The host's anchor rect, in viewport coordinates; `null` measures the trigger's box. */
   anchor: Option<() => DOMRectReadOnly> = null;
 
@@ -222,7 +257,40 @@ export class AppSwitcher extends LonaWebComponent {
     if (props.label != null) this.setAttribute("label", props.label);
     else this.removeAttribute("label");
     this.anchor = props.anchor ?? null;
+    this.footer = props.footer ?? null;
+    this.tokens = props.tokens ?? null;
     return this;
+  }
+
+  /** The footer link, or `null` for none; content slotted as `footer` wins over it. */
+  get footer(): Option<AppSwitcher.Footer> {
+    return this._footer;
+  }
+
+  set footer(footer: Option<AppSwitcher.Footer>) {
+    if (footer === this._footer) return;
+    this._footer = footer;
+    this.renderFooter();
+    if (this.isOpen) this.position();
+  }
+
+  /** The design's tokens, applied as inline `--brand-app-switcher-<key>` properties on the host. */
+  get tokens(): Option<AppSwitcher.Tokens> {
+    return this._tokens;
+  }
+
+  set tokens(tokens: Option<AppSwitcher.Tokens>) {
+    if (tokens === this._tokens) return;
+    this._tokens = tokens;
+    const names = Object.keys(tokens ?? {}).map((key) => `--brand-app-switcher-${key}`);
+    for (const name of this.appliedTokens) {
+      if (!names.includes(name)) this.style.removeProperty(name);
+    }
+    for (const [key, value] of Object.entries(tokens ?? {})) {
+      this.style.setProperty(`--brand-app-switcher-${key}`, value);
+    }
+    this.appliedTokens = names;
+    // An open sheet repaints through the attribute observer (the style attribute changed).
   }
 
   get apps(): readonly AppSwitcher.App[] {
@@ -307,12 +375,31 @@ export class AppSwitcher extends LonaWebComponent {
     if (name === "disabled" && this.hasAttribute("disabled")) this.hide();
   }
 
-  /** Open the sheet. `focus` moves focus to the first item; `mode` defaults to `pinned`. */
-  show(options: { readonly focus?: boolean; readonly mode?: "hover" | "pinned" } = {}): void {
+  /** Open the sheet until an explicit close (a click outside, Escape, Tab out). `focus` moves focus to the first item. */
+  show(options: { readonly focus?: boolean } = {}): void {
+    this.open("pinned", options.focus === true);
+  }
+
+  /** Close the sheet; `restoreFocus` moves focus back to the chevron. */
+  hide(options: { readonly restoreFocus?: boolean } = {}): void {
+    this.clearTimers();
+    if (!this.isOpen) return;
+    this.mode = null;
+    this.reflect(false);
+    this.$chevron.setAttribute("aria-expanded", "false");
+    removeEventListener("resize", this.onResize);
+    document.removeEventListener("pointerdown", this.onOutsidePointer, true);
+    if (options.restoreFocus) this.$chevron.focus();
+    this.animateClose();
+    this.dispatchToggle("open", "closed");
+  }
+
+  /** `hover` (hover intent) closes when the pointer leaves; `pinned` waits for an explicit close. */
+  private open(mode: "hover" | "pinned", focus: boolean): void {
     this.clearTimers();
     if (this.hasAttribute("disabled") || this._apps.length === 0) return;
     const wasOpen = this.isOpen;
-    this.mode = options.mode ?? "pinned";
+    this.mode = mode;
     if (!wasOpen) {
       // A sheet still fading out fades back in from where it is.
       const from = this.$sheet.hidden ? 0 : Number.parseFloat(getComputedStyle(this.$sheet).opacity) || 0;
@@ -327,20 +414,16 @@ export class AppSwitcher extends LonaWebComponent {
       addEventListener("resize", this.onResize);
       document.addEventListener("pointerdown", this.onOutsidePointer, true);
     }
-    if (options.focus) this.focusItem(0);
+    if (focus) this.focusItem(0);
+    if (!wasOpen) this.dispatchToggle("closed", "open");
   }
 
-  /** Close the sheet; `restoreFocus` moves focus back to the chevron. */
-  hide(options: { readonly restoreFocus?: boolean } = {}): void {
-    this.clearTimers();
-    if (!this.isOpen) return;
-    this.mode = null;
-    this.reflect(false);
-    this.$chevron.setAttribute("aria-expanded", "false");
-    removeEventListener("resize", this.onResize);
-    document.removeEventListener("pointerdown", this.onOutsidePointer, true);
-    if (options.restoreFocus) this.$chevron.focus();
-    this.animateClose();
+  /** A `toggle` event, as a popover fires one: a ToggleEvent where the browser has it. */
+  private dispatchToggle(oldState: "open" | "closed", newState: "open" | "closed"): void {
+    const event: Event = typeof ToggleEvent === "function"
+      ? new ToggleEvent("toggle", { oldState, newState })
+      : Object.assign(new CustomEvent("toggle", { detail: { oldState, newState } }), { oldState, newState });
+    this.dispatchEvent(event);
   }
 
   /**
@@ -405,7 +488,7 @@ export class AppSwitcher extends LonaWebComponent {
   }
 
   /** Lay the rest outline (`rest="outline"`) exactly over the anchor rect. */
-  placeOutline(): void {
+  private placeOutline(): void {
     if (this.getAttribute("rest") !== "outline" || !this.isConnected) return;
     const root = this.$root.getBoundingClientRect();
     const anchor = this.anchorRect();
@@ -417,7 +500,7 @@ export class AppSwitcher extends LonaWebComponent {
   }
 
   /** The anchor rect in viewport coordinates. */
-  anchorRect(): DOMRectReadOnly {
+  private anchorRect(): DOMRectReadOnly {
     if (this.anchor != null) return this.anchor();
     const slot = this.$trigger.querySelector("slot");
     const target = slot?.assignedElements()[0] ?? this.$trigger;
@@ -492,7 +575,7 @@ export class AppSwitcher extends LonaWebComponent {
     if (this.isOpen || this.openTimer != null) return;
     this.openTimer = setTimeout(() => {
       this.openTimer = null;
-      this.show({ mode: "hover" });
+      this.open("hover", false);
     }, OPEN_DELAY_MS);
   };
 
@@ -517,13 +600,13 @@ export class AppSwitcher extends LonaWebComponent {
       return;
     }
     // detail 0: the click came from Enter or Space.
-    this.show({ mode: "pinned", focus: event.detail === 0 });
+    this.open("pinned", event.detail === 0);
   };
 
   private onChevronKey = (event: KeyboardEvent): void => {
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      this.show({ mode: "pinned", focus: true });
+      this.open("pinned", true);
     } else if (event.key === "Escape" && this.isOpen) {
       event.preventDefault();
       this.hide({ restoreFocus: true });
@@ -556,10 +639,37 @@ export class AppSwitcher extends LonaWebComponent {
     this.focusItem(to);
   };
 
-  /** The footer row renders only while something is slotted into it. */
+  /** The footer row renders only while something is slotted into it or the `footer` prop names a link. */
   private onFooterSlot = (): void => {
-    this.$footer.hidden = this.$footerSlot.assignedNodes().length === 0;
+    this.$footer.hidden = this.$footerSlot.assignedNodes().length === 0 && this._footer == null;
   };
+
+  /** The `footer` prop's link: the slot's fallback content, so slotted content replaces it. */
+  private renderFooter(): void {
+    const footer = this._footer;
+    this.$footerLink.hidden = footer == null;
+    if (footer == null) {
+      this.$footerLink.removeAttribute("href");
+      this.$footerLink.replaceChildren();
+    } else {
+      this.$footerLink.href = footer.href;
+      const label = document.createElement("span");
+      label.part.add("footer-label");
+      label.textContent = footer.label;
+      const children: Node[] = [label];
+      if (footer.detail != null && footer.detail !== "") {
+        const detail = document.createElement("span");
+        detail.part.add("footer-detail");
+        const arrow = document.createElement("span");
+        arrow.setAttribute("aria-hidden", "true");
+        arrow.textContent = " \u2197";
+        detail.append(footer.detail, arrow);
+        children.push(detail);
+      }
+      this.$footerLink.replaceChildren(...children);
+    }
+    this.onFooterSlot();
+  }
 
   /** Escape from a footer link closes the sheet, as it does from an app; Tab and arrows keep their defaults. */
   private onFooterKey = (event: KeyboardEvent): void => {
@@ -644,7 +754,10 @@ export class AppSwitcher extends LonaWebComponent {
             <div id="title" part="title" role="none"></div>
             <div id="separator" part="separator" role="none"></div>
             <div id="grid" part="grid" role="none"></div>
-            <div id="footer" part="footer" role="none" hidden><slot name="footer" id="footer-slot"></slot></div>
+            <div id="footer" part="footer" role="none" hidden
+            ><slot name="footer" id="footer-slot"
+                ><a id="footer-link" part="footer-link" target="_blank" rel="noopener" hidden></a></slot
+              ></div>
           </div>
         </std-round>
       </div>
@@ -838,6 +951,48 @@ export class AppSwitcher extends LonaWebComponent {
         display: none;
       }
 
+      /* The footer prop's link: a row in the hover tint with the cells'
+        radius, inset by the footer row. The detail wraps under the label
+        only when the card is too narrow for one line. */
+      #footer-link {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 2px 12px;
+        /* The base typography sheet trims cap height from links; this is a box. */
+        margin: 0;
+        padding: 10px 12px;
+        border-radius: var(--brand-app-switcher-cell-radius, 0);
+        background: var(--brand-app-switcher-hover, transparent);
+        color: inherit;
+        font-size: 12.5px;
+        font-weight: 500;
+        line-height: 16px;
+        text-decoration: none;
+        outline: none;
+      }
+
+      #footer-link[hidden] {
+        display: none;
+      }
+
+      #footer-link:hover,
+      #footer-link:focus-visible {
+        background: var(--brand-app-switcher-current, transparent);
+      }
+
+      #footer-link:focus-visible {
+        box-shadow: inset 0 0 0 2px currentColor;
+      }
+
+      span[part~="footer-detail"] {
+        font-size: 11.5px;
+        font-weight: 400;
+        color: var(--brand-app-switcher-muted, GrayText);
+        white-space: nowrap;
+      }
+
       a[part~="item"] {
         position: relative;
         display: flex;
@@ -924,12 +1079,26 @@ export namespace AppSwitcher {
     /** Trusted SVG markup (the host's own artwork), or a factory for the icon element. */
     readonly icon: string | (() => Element);
   };
+  /** The footer prop: one link under the grid. */
+  export type Footer = {
+    readonly href: string;
+    /** The link's text, at the start of the row. */
+    readonly label: string;
+    /** Smaller, muted text at the end of the row (an address, say), followed by an arrow. */
+    readonly detail?: Option<string>;
+  };
+  /** Design tokens by name without the prefix: `{ sheet: "#fff" }` sets `--brand-app-switcher-sheet`. */
+  export type Tokens = Readonly<Record<string, string>>;
   export type Props = {
     readonly apps: readonly App[];
     readonly current?: Option<string>;
     readonly label?: Option<string>;
     /** The rect the sheet's margins are measured from, in viewport coordinates; default the trigger's box. */
     readonly anchor?: Option<() => DOMRectReadOnly>;
+    /** A link rendered in the footer row; content slotted as `footer` wins over it. */
+    readonly footer?: Option<Footer>;
+    /** Inline `--brand-app-switcher-<key>` custom properties on the host. */
+    readonly tokens?: Option<Tokens>;
   };
 }
 

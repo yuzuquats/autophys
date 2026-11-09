@@ -83,6 +83,14 @@
       "manifest_sha256": "3652fcb0f3f01aa78b12ea4c87109ce9cb817c4ebc105c72939e06816d58ff10",
       "files": 2441,
       "description": "Every tracked vendor/tento file at the parent commit, with tento-brand-js/kit/app-switcher.ts re-vendored from upstream tento 823e73ac19 (2026-11-09): the card's footer slot and part, empty unless the page fills it."
+    },
+    {
+      "name": "repin-20261109c",
+      "file": "pinned-20261109c.json",
+      "commit": "6437c946e7b73969d9120deaa2e2593879ce2dd8",
+      "manifest_sha256": "8828a98e2adc2b43edc9e6c9658c2df310be481e3f744eb3eac90193d1145bdb",
+      "files": 2441,
+      "description": "Every tracked vendor/tento file at the parent commit, with tento-brand-js/kit/app-switcher.ts, kit/app-switcher.packaged.ts, tento-web-js/build-plugins/app-switcher.deno.ts and its test re-vendored from upstream tento c31a3a2d12 (2026-11-09): the switcher's footer and tokens props and a manifest that may carry inline svg icons, a footer and light/dark tokens, so a site can copy the generated Lona preset."
     }
   ]
 }

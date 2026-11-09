@@ -151,6 +151,82 @@ Deno.test("a missing or escaping icon fails the build, naming the manifest", asy
   assertStringIncludes((await packageAppSwitcher(html, "on"))!.contents, "icon0");
 });
 
+Deno.test("parseManifest accepts inline svg icons, a footer and per-variant tokens", () => {
+  const svg = { id: "a", name: "A", href: "https://a.example", svg: ICON };
+  const footer = { href: "https://studio.example/", label: "Studio", detail: "studio.example" };
+  const tokens = { light: { sheet: "#fff", "cell-radius": "10px" }, dark: { sheet: "#20231f" } };
+  assertEquals(parseManifest(JSON.stringify({ apps: [svg], footer, tokens }), "m"), { apps: [svg], footer, tokens });
+  assertEquals(parseManifest(JSON.stringify({ apps: [], footer: { href: "https://x.example", label: "X" } }), "m").footer, {
+    href: "https://x.example",
+    label: "X",
+  });
+  const both = { ...svg, icon: "a.svg" };
+  assertThrows(() => parseManifest(JSON.stringify({ apps: [both] }), "m"), Error, "exactly one of icon and svg");
+  assertThrows(() => parseManifest(JSON.stringify({ apps: [{ id: "a", name: "A", href: "https://a.example" }] }), "m"), Error, "exactly one");
+  assertThrows(() => parseManifest(JSON.stringify({ apps: [{ ...svg, svg: "<img>" }] }), "m"), Error, "<svg>");
+  assertThrows(() => parseManifest(JSON.stringify({ apps: [], footer: { ...footer, href: "javascript:x" } }), "m"), Error, "footer: href");
+  assertThrows(() => parseManifest(JSON.stringify({ apps: [], footer: { ...footer, extra: 1 } }), "m"), Error, "footer: unknown key");
+  assertThrows(() => parseManifest(JSON.stringify({ apps: [], tokens: { sepia: {} } }), "m"), Error, "tokens: unknown key");
+  assertThrows(() => parseManifest(JSON.stringify({ apps: [], tokens: { light: { Sheet: "#fff" } } }), "m"), Error, "token name");
+  assertThrows(() => parseManifest(JSON.stringify({ apps: [], tokens: { light: { sheet: "red; x: y" } } }), "m"), Error, "must not contain");
+  assertThrows(() => parseManifest(JSON.stringify({ apps: [], tokens: { dark: { sheet: 1 } } }), "m"), Error, "non-empty string");
+});
+
+Deno.test("a self-contained manifest bundles inline svg icons, its footer and tokens; file icons still work beside them", async () => {
+  const root = await site({
+    "html/app-switcher.json": JSON.stringify({
+      $comment: "generated",
+      label: "Switch Lona app",
+      apps: [
+        { id: "calendar", name: "Calendar", href: "https://dev.lona.so", svg: ICON },
+        { id: "autophys", name: "Autophys", href: "https://autophys.lona.so", icon: "app-switcher/autophys.svg" },
+      ],
+      footer: { href: "https://studio.lona.so/", label: "Product design and engineering", detail: "studio.lona.so" },
+      tokens: { light: { sheet: "#fff", muted: "#6a6e66" }, dark: { sheet: "#20231f" } },
+    }),
+    "html/.env": "TENTO_APP_SWITCHER=on\n",
+    "html/app-switcher/autophys.svg": ICON.replace("rect", "circle"),
+  });
+  Deno.env.delete("TENTO_APP_SWITCHER");
+  const { out } = await bundle(root);
+  const packaged = out as {
+    apps: { id: string; icon: string }[];
+    footer: Record<string, string>;
+    tokens: { light: Record<string, string>; dark: Record<string, string> };
+  };
+  assertEquals(packaged.apps.map((a) => a.icon), [ICON, ICON.replace("rect", "circle")]);
+  assertEquals(packaged.footer, {
+    href: "https://studio.lona.so/",
+    label: "Product design and engineering",
+    detail: "studio.lona.so",
+  });
+  assertEquals(packaged.tokens, { light: { sheet: "#fff", muted: "#6a6e66" }, dark: { sheet: "#20231f" } });
+  assert(Object.isFrozen(packaged.footer) && Object.isFrozen(packaged.tokens) && Object.isFrozen(packaged.tokens.light));
+});
+
+Deno.test("a manifest without footer or tokens packages them as null", async () => {
+  const root = await site({
+    "html/app-switcher.json": MANIFEST,
+    "html/app-switcher/calendar.svg": ICON,
+    "html/app-switcher/autophys.svg": ICON,
+  });
+  const { contents } = (await packageAppSwitcher(join(root, "html"), "on"))!;
+  assertStringIncludes(contents, "footer: null,");
+  assertStringIncludes(contents, "tokens: null,");
+});
+
+Deno.test("switch off bundles no footer or token from a self-contained manifest", async () => {
+  const root = await site({
+    "html/app-switcher.json": JSON.stringify({
+      apps: [{ id: "a", name: "A", href: "https://a.example", svg: ICON }],
+      footer: { href: "https://studio.lona.so/", label: "Studio" },
+      tokens: { light: { sheet: "#123456" } },
+    }),
+  });
+  const { contents } = (await packageAppSwitcher(join(root, "html"), "off"))!;
+  for (const leak of ["studio.lona.so", "#123456", "<svg"]) assert(!contents.includes(leak), `${leak} was bundled`);
+});
+
 Deno.test({
   name: "stop esbuild",
   fn: async () => {
