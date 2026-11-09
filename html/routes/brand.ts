@@ -39,7 +39,12 @@ queueMicrotask(() => {
     .ck-header .ap-github-link svg { display: block; flex: none; }
     .ck-header .ap-github-link:hover { color: var(--ck-secondary); }
     .ck-header :is(.ap-section-link, .ap-github-link):focus-visible { outline: 2px solid var(--ck-ink); outline-offset: 3px; }
-    .ck-header .ck-brand { padding-left: 28px; transition: padding-left 700ms var(--ck-ease); }
+    .ck-header .ck-brand { padding-left: 28px; }
+    /* The slide is only for opening and closing the app. This sheet arrives
+       after the first paint, so the transition waits for data-ap-brand-ready
+       (set below once the starting padding is applied); otherwise every load
+       would slide the logo in from 0. */
+    .ck-header[data-ap-brand-ready] .ck-brand { transition: padding-left 700ms var(--ck-ease); }
     /* Phones: the landing logo sits flush with the slide text (24px); the
        arrow's room opens only in the app, sliding the logo over. */
     @media (max-width: 639px) {
@@ -66,6 +71,13 @@ queueMicrotask(() => {
     }
   `;
   document.head.append(navigationStyle);
+  const header = document.querySelector<HTMLElement>(".ck-header");
+  const brandLink = header?.querySelector<HTMLElement>(".ck-brand");
+  if (header && brandLink) {
+    // Reading the padding applies the sheet without a transition; the slide is then enabled.
+    void getComputedStyle(brandLink).paddingLeft;
+    header.dataset.apBrandReady = "";
+  }
   const landing = document.querySelector<HTMLElement>(".ck-landing");
   if (landing) installSurfaceFinish(landing);
 
