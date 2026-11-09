@@ -1,5 +1,61 @@
 # GitHub releases
 
+## v0.1.4, 2026-11-08
+
+Published at https://github.com/yuzuquats/autophys/releases/tag/v0.1.4 (marked
+latest). Patch release (operator, 2026-11-08: "cut a new patch and deploy").
+The tag (lightweight, created by `gh release`) points at `fe522fb`, the
+version bump pushed in `cc04adb..fe522fb` (see the table). Nothing breaks 0.1.3
+clients and the workbook format is unchanged. Since 0.1.3: one-line CLI errors
+with a `--help` hint (G4), `AUTOPHYS_HOME` refused when it is a workbook file
+or a `*.ap-workbook` folder (G3-FILE), a trailing slash naming the workbook
+file in the CLI and the Rust SDK (HOME-SLASH), the unchecked-identifiability
+wording in both SDKs (FINISH-WORDING), the full-tile favicon, the GitHub
+header link, the account button kept out of the first paint, the full-width
+sidebar below the shell's 760px narrow breakpoint, and a tutorial peek that
+grows to fit its step.
+
+| Commit | Change | Change-Id |
+| --- | --- | --- |
+| `b5cc6eb` | Grow the tour peek to fit its step | `I246a8997fae83902c64108da75c9c344` |
+| `fe522fb` | Version autophys 0.1.4 | `I7f6348e6cb8999848946609ca1a78d62` |
+
+| Asset | sha256 |
+| --- | --- |
+| `autophys-v0.1.4-x86_64-unknown-linux-gnu.tar.gz` | `a1fd97a486823bf29021dfb268d0ab6066d5bcd6cbf6c2440aa07846d46e453b` |
+| `autophys-v0.1.4-aarch64-apple-darwin.tar.gz` | `d77b4dbc58206df5fa7201d61423991c0e715a34a5c20f198714d9de85518f70` |
+
+### Review and validation
+
+- The tour fix and the bump were reviewed in two agent rounds (round 1:
+  tour fix ready, bump message changes required for an incorrect "no SDK
+  change" claim; round 2 ready on the pushed SHAs). Agent review, not an
+  operator verdict. The narrow-sidebar fix `cc04adb` was reviewed (ready) and
+  pushed before it.
+- Each archive was built by `ops/release.sh` from a fresh GitHub clone at
+  `fe522fb` (full cargo and Deno suites and the packed smoke test): Linux on
+  yuzuquats reusing the checkout's cargo cache, macOS on rwc-01 with its build
+  tree on the SSD (deleted after; receipt in rwc-01
+  `fleet/evidence/fleet-disk-policy/20261108/autophys-v0.1.4-macos/`).
+- Downloaded back from the draft on rwc-01: both sha256 match, `codesign -v`
+  passes, `--version` names `fe522fb`, and `serve` from the packed file with
+  an empty HOME answers healthz (0.1.4) and `/app` 200. After publishing,
+  anonymous downloads of both assets matched their sha256.
+- Deployed: `autophys.service` on yuzuquats runs `fe522fb` (0.1.4) from
+  `ops/deploy.sh` in the same clean clone (release `fe522fb-20261108`; unit
+  preimage `autophys.service.pre-v0.1.4-20261108`; the `public.conf` drop-in
+  is unchanged). `https://autophys.lona.so/api/healthz` reports 0.1.4, and a
+  headless browser on production confirmed every tour step keeps Next 12px
+  above the viewport bottom at 1280x800 and the sidebar fills 717px.
+
+### Caveats
+
+- `vendor/patches/autophys-bundler-context/verify.py` fails at this tag, as it
+  already did at v0.1.3: the in-place cookbook edits no longer match either
+  pinned manifest.
+- The Linux binary needs glibc 2.39 or later; the macOS executable is ad-hoc
+  signed, not notarized.
+
 ## v0.1.3, 2026-11-08
 
 Published at https://github.com/yuzuquats/autophys/releases/tag/v0.1.3 (marked
