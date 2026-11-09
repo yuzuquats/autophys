@@ -207,7 +207,7 @@ said "go ahead" on the shown before/after.
 
 | ID | Decision | Source | State |
 | --- | --- | --- | --- |
-| POS-1 | The hero leads with the agent and the check: "Muse Spark plans the experiment. Autophys checks the claim." Its stats are real or guaranteed (8 / 8 live runs by Spark 1.3 and by Wonder 1.0, ±10% at 1σ, every test approved by a person) instead of the mock "6.3× fewer test hours" and "12 held-out cells". The docs name Spark as the default driver and Wonder as the playbook improver. | operator, 2026-11-08 ("we should highlight muse or wonder specifically", "go ahead") | implemented |
+| POS-1 | The hero leads with the agent and the check: "Muse Spark plans the experiment. Autophys checks the claim." Its stats are real or guaranteed (8 / 8 live runs by Spark 1.3 and by Wonder 1.0, ±10% at 1σ, every test approved by a person in the workbench) instead of the mock "6.3× fewer test hours" and "12 held-out cells". The docs name Spark as the default driver and Wonder as the playbook improver. | operator, 2026-11-08 ("we should highlight muse or wonder specifically", "go ahead") | implemented |
 | POS-2 | Slide 6 replaces the mock test-hours chart with the recorded Spark 1.3 discovery pass (seed 0, six cases), drawn by a new `cases` deck body in `vendor/tento/tento-cookbook-js`. The pass comes from the experimental `autophys.discovery` package, so the slide is only as public as that package. Strongest alternative: three stat tiles (0 false claims, 1 wrong claim alone, 1 recovered structure), which read faster but drop the per-case error. Reversal: restore the `lines` slide or swap the body; the `cases` kind can stay unused (minutes). | **agent-chosen, pending operator review** (the form; updating the chart was the operator's request) | implemented |
 | POS-3 | The product name stays "Autophys" (header, page title, `app.title`); the review's "AutoPhys" spelling is not adopted, so the deck and header agree. Reversal: change `index.root.ts` `title` and the README (minutes). | **agent-chosen, pending operator review** | implemented |
 
@@ -223,6 +223,16 @@ which avoids any appearance of a claim but hides where the product is meant to g
 Candidates claim no results. Reverse by dropping `html/routes/studies.ts` and its two
 lines in `index.root.ts` (minutes). The docs' discovery sentence now says the package is
 in development, because `autophys.discovery` is not on this master.
+
+**Publication, 2026-11-08.** POS-1..4 were pushed to `origin/master` as a fast-forward
+`fe522fb..818aa7f` (Change-Ids I594f8b25, If71c04a1, I40405426, I014f1892, If84e22a3,
+I29f80ed3, Iae228d8b, Idc370c31, Id27f5b23). Agent review only, not an operator verdict:
+round 1 asked for changes (planted offset was mislabelled a stale fit; the record shows
+Spark's three adopts were refused and the root fit stood; plus copy fixes), all fixed in
+818aa7f; round 2 returned ready on 818aa7f. Checks on an export of 818aa7f: deno check,
+141 html tests, 22 cookbook tests. Open: no unit test for the `cases` body;
+`vendor/patches/autophys-bundler-context/verify.py` already fails at fe522fb because the
+vendored cookbook no longer matches either pinned manifest; production is not deployed.
 
 ## Lona family app switcher (agent choices, 2026-11-08, pending operator review)
 
