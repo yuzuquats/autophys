@@ -340,6 +340,32 @@ html[data-ck-stage="tour"] .ck-tour-peek { opacity: 1; transition-duration: 300m
   .ck-slide-description { font-size: 18px; line-height: 28px; }
 }
 @media (min-width: 768px) { .ck-slide { --ck-lead-h: 224px; } .ck-slide-title { font-size: 36px; line-height: 44px; } .ck-stat-value { font-size: 28px; line-height: 36px; } }
+/* Phones: stats stack, one per line, value beside its label. */
+@media (max-width: 639px) {
+  .ck-stats { flex-direction: column; gap: 10px; }
+  .ck-stat { display: grid; grid-template-columns: 116px 1fr; column-gap: 12px; align-items: baseline; }
+  .ck-stat-value { font-size: 20px; line-height: 28px; }
+  .ck-stat-label { margin: 0; }
+}
+/* Short phones (iPhone SE class): a compact deck so each slide fits between the
+   header and the counter, and fade bands behind both so anything that still
+   overflows scrolls under them instead of colliding. The bands hide while a
+   swipe shows the dark backdrop between pages. */
+@media (max-width: 639px) and (max-height: 700px) {
+  .ck-deck-page { padding-top: calc(64px + var(--ck-safe-top)); padding-bottom: calc(72px + var(--ck-safe-bottom)); }
+  .ck-slide { padding-top: 8px; --ck-slide-gap: 20px; --ck-lead-h: 0px; }
+  .ck-slide-eyebrow { height: auto; margin-bottom: 10px; }
+  .ck-slide-title { min-height: 0; font-size: 22px; line-height: 28px; }
+  .ck-slide-description { margin-top: 10px; font-size: 15px; line-height: 22px; }
+  .ck-slide-actions + .ck-stats { margin-top: 28px; }
+  .ck-plot.ck-cases { height: calc(var(--ck-case-rows, 6) * 38px); margin-top: 26px; }
+  .ck-header:not([data-app])::before, .ck-deck-controls::before { content: ""; position: absolute; inset: 0; z-index: -1;
+    pointer-events: none; transition: opacity 160ms ease; }
+  .ck-header:not([data-app])::before { background: linear-gradient(#fff 72%, rgb(255 255 255 / 0)); }
+  .ck-deck-controls { isolation: isolate; }
+  .ck-deck-controls::before { background: linear-gradient(to top, #fff 70%, rgb(255 255 255 / 0)); top: -14px; }
+  body:has(.ck-deck[data-moving]) .ck-header::before, .ck-deck[data-moving] .ck-deck-controls::before { opacity: 0; }
+}
 @media (max-height: 760px) { .ck-cmp td { padding: 12px 16px 12px 0; } }
 
 /* tutorial */
