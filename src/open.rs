@@ -86,8 +86,10 @@ pub fn configure(cfg: &mut web::ServiceConfig, api: Api) {
 
 /// Whether a login-off request could not be a cross-site existence probe: a
 /// probe (HEAD) must be same-origin or typed by the user, and a GET must be a
-/// top-level navigation, not a subresource whose load/error another page could
-/// observe. Clients without Fetch Metadata (curl, SDKs) send neither header.
+/// top-level navigation, not a subresource or frame whose load/error another
+/// page could observe. `<iframe>`, `<object>` and `<embed>` loads are also mode
+/// `navigate`, so a GET must additionally be destined for a `document`. Clients
+/// without Fetch Metadata (curl, SDKs) send none of these headers.
 fn not_cross_site(req: &HttpRequest) -> bool {
     let fetch = |name: &str| {
         req.headers()
@@ -99,6 +101,7 @@ fn not_cross_site(req: &HttpRequest) -> bool {
         fetch("sec-fetch-site").is_none_or(|s| s == "same-origin" || s == "none")
     } else {
         fetch("sec-fetch-mode").is_none_or(|m| m == "navigate")
+            && fetch("sec-fetch-dest").is_none_or(|d| d == "document")
     }
 }
 

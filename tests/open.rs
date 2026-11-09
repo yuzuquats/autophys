@@ -243,21 +243,40 @@ async fn a_login_off_install_opens_its_local_collection() {
     for user in ["local", "me"] {
         let uri = format!("/open/{user}/workbook/{BOOK}");
         // Another Host (DNS rebinding) or a remote peer learns nothing.
-        assert_eq!(send(&app, head(&uri, None)).await.0, 404, "{uri} via a foreign Host");
+        assert_eq!(
+            send(&app, head(&uri, None)).await.0,
+            404,
+            "{uri} via a foreign Host"
+        );
         let remote = local(head(&uri, None)).peer_addr("10.0.0.5:50000".parse().unwrap());
         assert_eq!(send(&app, remote).await.0, 404, "{uri} from a remote peer");
         assert_eq!(send(&app, local(head(&uri, None))).await.0, 200, "{uri}");
-        // Another page cannot probe it: a cross-site HEAD or a subresource GET.
+        // Another page cannot probe it: a cross-site HEAD, a subresource GET or a
+        // framed (<object>/<iframe>) load.
         let cross = local(head(&uri, None)).insert_header(("sec-fetch-site", "cross-site"));
         assert_eq!(send(&app, cross).await.0, 404, "{uri} cross-site HEAD");
         let sub = local(get_page(&uri, None)).insert_header(("sec-fetch-mode", "no-cors"));
         assert_eq!(send(&app, sub).await.0, 404, "{uri} subresource GET");
-        let nav = local(get_page(&uri, None)).insert_header(("sec-fetch-mode", "navigate")).insert_header(("sec-fetch-site", "cross-site"));
-        assert_eq!(send(&app, nav).await.0, 302, "{uri} followed from another site");
+        let framed = local(get_page(&uri, None))
+            .insert_header(("sec-fetch-mode", "navigate"))
+            .insert_header(("sec-fetch-dest", "object"));
+        assert_eq!(send(&app, framed).await.0, 404, "{uri} framed (object) GET");
+        let nav = local(get_page(&uri, None))
+            .insert_header(("sec-fetch-mode", "navigate"))
+            .insert_header(("sec-fetch-site", "cross-site"));
+        assert_eq!(
+            send(&app, nav).await.0,
+            302,
+            "{uri} followed from another site"
+        );
         let (s, to, _, _) = send(&app, local(get_page(&uri, None))).await;
         assert_eq!((s, to), (302, format!("/app?open={user}/workbook/{BOOK}")));
         let missing = format!("/open/{user}/workbook/missing");
-        assert_eq!(send(&app, local(head(&missing, None))).await.0, 404, "{missing}");
+        assert_eq!(
+            send(&app, local(head(&missing, None))).await.0,
+            404,
+            "{missing}"
+        );
     }
     // There is no demo account without --login.
     f.api.keys.users_set_demo("demo@lab.org", true).unwrap();
