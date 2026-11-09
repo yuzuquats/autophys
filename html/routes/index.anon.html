@@ -5,6 +5,9 @@
 <meta name="color-scheme" content="light" />
 <title>Autophys</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<!-- The server appends the account button to <body>; the shell moves it into the
+     header when it mounts. Keep it out of the first paint until then. -->
+<style>body{margin:0}body>#ap-account{position:absolute;visibility:hidden}</style>
 <script type="module" src="/index.root.js"></script>
 <body></body>
 </html>

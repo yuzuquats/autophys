@@ -137,6 +137,12 @@ Deno checked the header module. Browser checks on the live page with the maintai
 
 Published to origin master as `fcc0ff0` (8126d47, bc80719, 12288d0, fcc0ff0) after two read-only agent review rounds, both ready. Deployed on 2026-11-08 as release `21edee0-web-fcc0ff0-20261108`: the native prefix of `21edee0` byte for byte with only the web payload replaced. Public health reports commit `21edee0` and web ID `43d66f97d6dd68d4ec3804993473e0205996ea421a85af2f90fccbf5be8059da`. Live checks on autophys.lona.so and dev--autophys.lona.so confirmed the mark, its collapse on Try now and return, hidden at 390 px, and no page errors. The previous release `21edee0-20261108` and the unit backup `autophys.service.pre-web-fcc0ff0-20261108` are retained for rollback.
 
+## Account button kept out of the first paint
+
+With sign-in enabled the server appends the account button to `<body>`, and the module script runs after parsing. The browser therefore first painted that button unstyled at the top-left of a body with the default 8 px margin for about 80 ms. The page then shifted when the shell mounted and moved the button into the header. `html/routes/index.anon.html` now hides a body-level `#ap-account` (absolutely positioned, not visible) and zeroes the body margin. Once the shell moves the button into `.ck-nav-links` the rule no longer matches. No Rust change was needed.
+
+On dev--autophys.lona.so a layout-shift observer recorded no shifts at 1280 or 390 px, where it had previously recorded one body shift at about 70 to 105 ms. Screencast frames go from blank straight to the finished page, and the button is visible in the header on `/` and `/app`. The web suite passed (141 tests). Production still serves the earlier release and keeps the flash until this is deployed.
+
 ## Pending sign-in surface consolidation
 
 The standalone login renderer is removed. GET `/login` is a compatibility redirect to `/app`, preserving only a safe workspace `next` address. The header keeps its existing lona-js Dialog/Overlay; signed-out workspaces keep their shared inline credential fields. Sign-out returns to `/app`, the anonymous badge falls back to `/app`, and session expiry reloads the current workspace address to refresh its signed-out context. No client navigation sends a user to `/login`.
