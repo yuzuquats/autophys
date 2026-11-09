@@ -122,7 +122,7 @@ const app: Cookbook.App = {
         ctl.handle(intent);
         const toggle = document.querySelector<HTMLButtonElement>(".ck-details-toggle");
         const panels = document.querySelector<HTMLElement>(".ck-panels");
-        const open = matchMedia("(max-width:639px)").matches ? panels?.dataset.mobile === "details" : panels?.hasAttribute("data-details");
+        const open = panels?.hasAttribute("data-details"); // the shell sets it in narrow mode too
         if (toggle && !open) toggle.click();
         return;
       }

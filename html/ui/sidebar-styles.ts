@@ -24,8 +24,10 @@ export function sidebarStyles(w: string): string {
 .ck-app[data-cookbook] .ck-panels[data-ap-setup-only] .ck-details-toggle { display:none; }
 .ck-app[data-cookbook] .ck-panels[data-ap-setup-only] .ck-main { right:0; }
 .ck-app[data-cookbook] .ck-panels[data-ap-setup-only] .ap-toolbar { padding-right:12px; }
-@media (max-width:1100px) and (min-width:640px) { .ck-app[data-cookbook] .ck-panels:has(.ap-sidebar) { --ck-side-width:280px; } }
-@media (max-width:639px) { .ck-app[data-cookbook] .ck-panels:has(.ap-sidebar) { --ck-side-width:100%; } }
+/* 760px is the shell's narrow breakpoint (panels.ts): below it one pane shows at a time, so an
+   open sidebar must fill the width or the hidden main column leaves a blank strip. */
+@media (max-width:1100px) and (min-width:761px) { .ck-app[data-cookbook] .ck-panels:has(.ap-sidebar) { --ck-side-width:280px; } }
+@media (max-width:760px) { .ck-app[data-cookbook] .ck-panels:has(.ap-sidebar) { --ck-side-width:100%; } }
 
 ${w}.ap-sidebar { display:flex;min-height:0;height:100%;overflow:hidden;--rail-inset:12px;--divider:var(--ap-line); }
 /* The frame owns the grey surface; suppress the rail's white page fallback
