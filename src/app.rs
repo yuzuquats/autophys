@@ -108,6 +108,8 @@ pub fn domain(config: &AppConfig, info: BuildInfo) -> DomainConfig {
             if let Some(api) = store.as_ref() {
                 cfg.app_data(web::Data::new(api.clone()));
                 crate::login::configure(cfg, api.clone());
+                // Deep links probed by the landing and followed into /app.
+                crate::open::configure(cfg, api.clone());
             }
             // Anything else under /api is a JSON 404, never the page.
             cfg.route("/api", web::route().to(api_not_found));

@@ -50,6 +50,8 @@ pub struct AuthOptions {
 #[derive(Clone, Debug, Serialize)]
 pub struct WorkspaceRef {
     pub id: String,
+    /// The demo account's collection, which `/open/demo/...` links name.
+    pub demo: bool,
 }
 #[derive(Clone, Debug, Serialize)]
 pub struct AppContext {
@@ -134,13 +136,14 @@ impl KeyStore {
     }
 
     pub(crate) fn resolve_workspace(&self, caller: &Caller, local_root: &Path) -> Result<Resolved> {
-        let (owner, email, writable, binding) = match caller {
-            Caller::Browser => ("local".to_string(), None, true, None),
+        let (owner, email, writable, binding, demo) = match caller {
+            Caller::Browser => ("local".to_string(), None, true, None, false),
             Caller::Member(user) => (
                 user.id.clone(),
                 Some(user.email.clone()),
                 !user.read_only && !user.demo,
                 None,
+                user.demo,
             ),
             Caller::Key(key) => {
                 let binding: Option<(String, String, bool)> = self.conn()?.query_row(
@@ -151,7 +154,7 @@ impl KeyStore {
                     Some((owner, workspace, grant))
                         if owner == "local" && !self.options().login =>
                     {
-                        (owner, None, grant, Some(workspace))
+                        (owner, None, grant, Some(workspace), false)
                     }
                     Some((owner, workspace, grant)) if owner != "local" => {
                         let user = self
@@ -164,9 +167,10 @@ impl KeyStore {
                             Some(user.email),
                             grant && !user.read_only && !user.demo,
                             Some(workspace),
+                            user.demo,
                         )
                     }
-                    None if !self.options().login => ("local".to_string(), None, true, None),
+                    None if !self.options().login => ("local".to_string(), None, true, None, false),
                     _ => {
                         return Err(ApiError::Forbidden(
                             "This key needs an explicit workspace binding.".into(),
@@ -218,7 +222,7 @@ impl KeyStore {
         Ok(Resolved {
             context: AppContext {
                 principal: Some(profile),
-                workspace: Some(WorkspaceRef { id: workspace }),
+                workspace: Some(WorkspaceRef { id: workspace, demo }),
                 capabilities: Capabilities::new(true, writable),
                 auth: AuthOptions {
                     can_sign_in: false,
@@ -230,6 +234,24 @@ impl KeyStore {
             owner,
             writable,
         })
+    }
+
+    /// Account `user_id`'s collection directory, read-only: no profile row is
+    /// written and nothing is created. `None` without a membership, or when the
+    /// registered path no longer resolves to itself (the check
+    /// [`KeyStore::resolve_workspace`] refuses with operator review).
+    pub(crate) fn collection_of(&self, user_id: &str) -> Result<Option<PathBuf>> {
+        let root: Option<String> = self
+            .conn()?
+            .query_row(
+                "SELECT w.root FROM memberships m JOIN workspaces w ON w.id = m.workspace_id WHERE m.user_id = ?1",
+                [user_id],
+                |r| r.get(0),
+            )
+            .optional()?;
+        Ok(root
+            .map(PathBuf::from)
+            .filter(|root| std::fs::canonicalize(root).is_ok_and(|c| &c == root)))
     }
 
     pub(crate) fn scoped_pair_decide(

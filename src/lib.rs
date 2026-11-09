@@ -6,7 +6,8 @@
 //! crate (`sdks/rust`) over a collection of `.ap-workbook` files; [`keys`]
 //! holds the server's own database of API keys and pairings; [`admin`] is
 //! `autophys pair | keys | db | users`; [`accounts`] and [`login`] are the
-//! invite-only browser sign-in of `serve --login`. On the user's side,
+//! invite-only browser sign-in of `serve --login`; [`open`] is the
+//! `/open/{user}/{kind}/{name}` deep links. On the user's side,
 //! [`device`] is `autophys connect | whoami` and [`scaffold`] is
 //! `autophys new`. [`devtools`] holds the developer commands on the SDK
 //! primitives: `bench`, `research`, `autoloop`, `export-trajectories` and
@@ -24,6 +25,7 @@ pub mod http;
 pub mod keys;
 pub mod login;
 pub mod examples;
+pub mod open;
 pub mod scaffold;
 pub mod scripts;
 pub mod server;
