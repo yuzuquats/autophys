@@ -56,12 +56,15 @@ queueMicrotask(() => {
        outside the nav) sits 8px from the top and sides and is 48px tall, and
        the panels start 8px under it, 8px from the edges and from each other.
        The 24px gutter and the brand's 16px pad put the mark at x 40 on the
-       landing and in the app alike; the back arrow sits in front of it at
-       x 14, inside the card. The landing's slides move up with the bar. */
+       landing. In the app the back arrow needs its own room: at x 14 it sat
+       6px from the card's edge, too tight (operator, 2026-11-09). So opening
+       the app slides the mark to x 56 (a 32px pad), and the arrow sits at
+       x 24, 16px inside the card and 12px before the mark. The landing's
+       slides move up with the bar. */
     .ck-header { height: calc(64px + var(--ck-safe-top)); }
     .ck-header .ck-nav { height: 48px; }
-    .ck-header .ck-brand, .ck-header[data-app] .ck-brand { padding-left: 16px; }
-    .ck-header .ck-brand-back { left: -10px; }
+    .ck-header .ck-brand { padding-left: 16px; }
+    .ck-header[data-app] .ck-brand { padding-left: 32px; }
     .ck-panels { --ck-gap: 8px; top: calc(64px + var(--ck-safe-top)); }
     .ck-deck-page { padding-top: calc(64px + var(--ck-safe-top)); }
     /* The slide is only for opening and closing the app. This sheet arrives
