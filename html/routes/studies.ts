@@ -113,6 +113,28 @@ const CANDIDATES: Study[] = [
       ["Needed", "A kinetics simulator for the model registry and recorded batch runs."],
     ],
   },
+  {
+    visual: "slm",
+    title: "Small language model self-monitoring",
+    status: "Not run · good fit",
+    candidate: true,
+    question: "Do a small model's own signals, such as token entropy and logit margin, predict its wrong answers better than task difficulty alone, on task families it was never fitted to?",
+    rows: [
+      ["Why it fits", "Signal and difficulty rise together, so a plain fit can't tell them apart. The loop can ask for difficulty-matched tasks that separate them, and the claim has to hold on held-out families."],
+      ["Needed", "Generated tasks with exact answers, a frozen local model, and a model of error rate against signal and difficulty."],
+    ],
+  },
+  {
+    visual: "nrg",
+    title: "Energy budget of an evolving particle world",
+    status: "Not run · good fit",
+    candidate: true,
+    question: "Does evolution make the population better at harvesting energy? Measure it as an effective harvest rate, fitted from how the world settles after a change in sunlight.",
+    rows: [
+      ["Why it fits", "The simulation keeps an exact energy ledger, so a two-pool model, field and creatures, can be fitted to it. A short sunlight pulse fixes the field's decay but leaves harvest rate and upkeep confounded, so the loop asks for the longer step that separates them."],
+      ["Needed", "Resuming runs from a checkpoint with new sunlight, and the two-pool model in the model registry. Comparing evolved and no-heredity runs gives the answer."],
+    ],
+  },
 ];
 
 const CSS = `

@@ -6,14 +6,14 @@
 // Dependency-free. Each function returns inner SVG markup for a w×h box
 // (origin top-left); the caller wraps it in <svg viewBox="0 0 w h">.
 //
-// Family rules (shared by all seven):
+// Family rules (shared by all nine):
 //   ink  #141414, 2px   = the informative test / what Autophys adds
 //   grey #b8b8b8, 1.5px = the easy test / the alternative
 //   hairline #d9d9d9 baseline, #ebebeb guides; labels #8a8a8a, 9–10px system-ui,
 //   haloed in white so they never fight a line. No numeric axes except on the
 //   one recorded chart (disc).
 
-export type StudyId = "bat" | "disc" | "osc" | "th" | "lfp" | "bld" | "kin";
+export type StudyId = "bat" | "disc" | "osc" | "th" | "lfp" | "bld" | "kin" | "slm" | "nrg";
 
 const INK = "#141414";
 const GREY = "#b8b8b8";
@@ -210,6 +210,47 @@ function kin(w: number, h: number): string {
     text(cx - r * 1.3 - 5, cy - r + 1, "+ 2nd condition", h, "end");
 }
 
+// ---------------------------------------------------- model self-monitoring
+
+function slm(w: number, h: number): string {
+  const s = fs(h);
+  const F = frame(w, h, s + 5, s + 7, s + 7, PAD);
+  const a = 0.3, b = 0.48;
+  const diff = (t: number) => 0.06 + 0.78 / (1 + Math.exp(-(t - 0.55) * 9));
+  const sig = (t: number) => diff(t) + 0.26 * Math.exp(-(((t - (a + b) / 2) / 0.13) ** 2));
+  const band = `<rect x="${f1(F.x(a))}" y="${f1(F.y0)}" width="${f1(F.x(b) - F.x(a))}" height="${f1(F.y1 - F.y0)}" fill="#f4f4f4"/>`;
+  const axes = line(F.x0, F.y1 + 0.5, F.x1, F.y1 + 0.5) + line(F.x0 - 0.5, F.y0, F.x0 - 0.5, F.y1);
+  const ylab = `<text transform="translate(${f1(F.x0 - 5)} ${f1(F.y1)}) rotate(-90)" font-size="${s}" font-family="system-ui,-apple-system,sans-serif" fill="${LABEL}">error</text>`;
+  return band + axes + ylab +
+    grey(trace(F, [[0, 1, diff]], 120)) + ink(trace(F, [[0, 1, sig]], 120)) +
+    text(F.x((a + b) / 2), F.y0 - 3, "matched", h, "middle") +
+    text(F.x(a) - 4, F.y(0.42), "+ signal", h, "end") +
+    text(F.x1, F.y(0.2), "difficulty only", h, "end") +
+    text(F.x1, h - PAD - 2, "difficulty", h, "end");
+}
+
+// ------------------------------------------------------ particle world energy
+
+function nrg(w: number, h: number): string {
+  const lab = fs(h) + 5;
+  const F = frame(w, h, lab + 4, PAD + 1);
+  const amb = 0.06, on = 0.12, pOff = 0.22;
+  const field = (t: number) => amb + 0.62 * ex(t - on, 0.025) - 0.24 * ex(t - on, 0.28);
+  const t1 = 0.22, t2 = 0.05;
+  const creatures = (t: number) => {
+    const u = t - on;
+    return amb + 0.66 * (1 - (t1 * Math.exp(-u / t1) - t2 * Math.exp(-u / t2)) / (t1 - t2));
+  };
+  const sun = line(F.x(on), F.y0, F.x(on), F.y1, RULE);
+  return baseline(F) + sun +
+    grey(trace(F, [[0, on, () => amb], [on, 1, field]], 120)) +
+    ink(trace(F, [[0, on, () => amb], [on, 1, creatures]], 120)) +
+    text(F.x(on) - 4, F.y(0.45), "sun", h, "end") +
+    text(F.x(0.3), F.y(0.14), "creatures", h) +
+    text(F.x1, F.y(field(1)) + fs(h) + 3, "field", h, "end") +
+    pair(F, h, lab, on, pOff, "pulse: decay", pOff + 0.04, "step: harvest, upkeep");
+}
+
 // --------------------------------------------------------------- discovery
 // Recorded held-out RMSE, one seed. Calibration alone (grey) → Spark + Autophys (ink).
 
@@ -253,7 +294,7 @@ function disc(w: number, h: number): string {
   return out;
 }
 
-export const VISUALS: Record<StudyId, (w: number, h: number) => string> = { bat, disc, osc, th, lfp, bld, kin };
+export const VISUALS: Record<StudyId, (w: number, h: number) => string> = { bat, disc, osc, th, lfp, bld, kin, slm, nrg };
 
 export const CAPTIONS: Record<StudyId, string> = {
   bat: "schematic, not data",
@@ -263,4 +304,6 @@ export const CAPTIONS: Record<StudyId, string> = {
   lfp: "schematic, planned test",
   bld: "schematic, planned test",
   kin: "schematic, planned test",
+  slm: "schematic, planned test",
+  nrg: "schematic, planned test",
 };
