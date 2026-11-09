@@ -8,6 +8,7 @@
  * placed by percentage, so text never scales with the chart.
  */
 import type { DeckCases, DeckLines, DeckProfile, DeckUncertainty } from "./deck-data.ts";
+import { caseLayout } from "./deck-data.ts";
 import { h } from "./dom.ts";
 
 const NS = "http://www.w3.org/2000/svg";
@@ -137,21 +138,18 @@ export function renderCases(body: DeckCases): HTMLElement {
   area.append(band);
   root.style.setProperty("--ck-case-rows", String(body.rows.length));
   const axis = body.axis;
-  const f = (v: number) => (axis.log ? Math.log10(Math.max(v, Number.MIN_VALUE)) : v);
-  const lo = f(axis.min), hi = f(axis.max);
-  const sx = (v: number) => clamp01((f(v) - lo) / (hi - lo || 1));
-  const sy = (i: number) => (i + 0.5) / Math.max(1, body.rows.length);
+  const layout = caseLayout(body);
   const ticks = h("div", "ck-ticks");
-  for (const t of axis.ticks ?? []) {
-    canvas.append(svg("line", { x1: sx(t), x2: sx(t), y1: 0, y2: 1, class: "ck-grid" }));
-    pin(ticks, sx(t), 0, "ck-tick", `${t}${axis.unit ?? ""}`);
+  for (const t of layout.ticks) {
+    canvas.append(svg("line", { x1: t.x, x2: t.x, y1: 0, y2: 1, class: "ck-grid" }));
+    pin(ticks, t.x, 0, "ck-tick", `${t.value}${axis.unit ?? ""}`);
   }
   band.append(ticks);
   pin(band, 0, 0, "ck-axis-label", axis.label);
   // Outcomes take their left edge from the stylesheet, not from the band.
   const text = (y: number, className: string, value: string) => { pin(area, 0, y, className, value).style.left = ""; };
   body.rows.forEach((row, i) => {
-    const y = sy(i), bx = sx(row.base), vx = sx(row.value);
+    const { y, base: bx, value: vx, paired } = layout.rows[i];
     canvas.append(svg("line", { x1: bx, x2: vx, y1: y, y2: y, class: "ck-rail" }));
     pin(area, 0, y, "ck-case-label", row.label);
     pin(band, bx, y, "ck-dot");
@@ -161,7 +159,7 @@ export function renderCases(body: DeckCases): HTMLElement {
     } else {
       pin(band, vx, y, "ck-dot ck-emphasis");
     }
-    text(y, "ck-case-outcome" + (row.emphasis ? " ck-emphasis" : "") + (row.baseOutcome ? " ck-case-paired" : ""), row.outcome);
+    text(y, "ck-case-outcome" + (row.emphasis ? " ck-emphasis" : "") + (paired ? " ck-case-paired" : ""), row.outcome);
     if (row.baseOutcome) text(y, "ck-case-base" + (row.baseEmphasis ? " ck-emphasis" : ""), row.baseOutcome);
   });
   const parts: HTMLElement[] = [root, legend([{ label: body.legend[0] }, { label: body.legend[1], emphasis: true }])];

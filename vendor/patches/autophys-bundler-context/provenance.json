@@ -55,10 +55,10 @@
     {
       "name": "repin-20261108",
       "file": "pinned-20261108.json",
-      "commit": "a444c019904ac74663e80594521ae91d9cea6327",
-      "manifest_sha256": "a087ace00a269efb96dc66c6b3960517aa42a75964dcfc302db0da29d8578210",
+      "manifest_sha256": "083c9b897a7548b2fb0a503f41004b668968ae4f6f647314ea1ed1248d55a5da",
       "files": 2441,
-      "description": "Every tracked vendor/tento file at the commit, re-pinned on the operator's direction (2026-11-08) after cookbook, tento-lisp-cmd, tento-web and tento-brand-js edits made in place. Vendored libraries are not edited directly; a change lands upstream and is re-vendored, then re-pinned here."
+      "description": "Every tracked vendor/tento file at the commit that last updated this entry, with the cookbook re-vendored from upstream tento (2026-11-08). Vendored libraries are not edited directly; a change lands upstream, is re-vendored, and is re-pinned here in the same commit.",
+      "cookbook_upstream": "tento 54edca64ef: vendor/tento/tento-cookbook-js equals upstream tento-cookbook-js except checks/check-footer.js"
     }
   ]
 }

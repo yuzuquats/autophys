@@ -228,6 +228,32 @@ export function stepTarget(
   return { index: target, build: dir > 0 ? 0 : builds[target] - 1 };
 }
 
+/** Where the cases chart places things, as fractions of its band (x, 0 at
+ * the axis minimum) and of its height (y): every tick, and per row the y of
+ * its centre line, which its label, rail, dots and outcome share, and the x
+ * of its base and value dots. Values outside the axis, or at or below zero
+ * on a log axis, clamp to the nearest edge. `paired` rows also show a base
+ * outcome, so their own outcome sits on the upper half of the row. */
+export type CaseLayout = {
+  ticks: { value: number; x: number }[];
+  rows: { y: number; base: number; value: number; paired: boolean }[];
+};
+export function caseLayout(body: Pick<DeckCases, "axis" | "rows">): CaseLayout {
+  const { axis, rows } = body;
+  const f = (v: number) => (axis.log ? Math.log10(Math.max(v, Number.MIN_VALUE)) : v);
+  const lo = f(axis.min), hi = f(axis.max);
+  const x = (v: number) => Math.max(0, Math.min(1, (f(v) - lo) / (hi - lo || 1)));
+  return {
+    ticks: (axis.ticks ?? []).map((value) => ({ value, x: x(value) })),
+    rows: rows.map((row, i) => ({
+      y: (i + 0.5) / Math.max(1, rows.length),
+      base: x(row.base),
+      value: x(row.value),
+      paired: Boolean(row.baseOutcome),
+    })),
+  };
+}
+
 export function clampSlide(index: number, count: number): number {
   return Math.max(0, Math.min(count - 1, Math.round(index)));
 }

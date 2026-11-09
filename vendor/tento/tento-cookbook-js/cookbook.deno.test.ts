@@ -8,7 +8,7 @@ import {
   togglePanel,
   visiblePanels,
 } from "./src/model.ts";
-import { clampSlide, dragOffset, swipeTarget } from "./src/deck-data.ts";
+import { caseLayout, clampSlide, dragOffset, swipeTarget } from "./src/deck-data.ts";
 import { deckPull, deckTransforms } from "./src/deck.ts";
 import { bubbleRadii, shellTokens } from "./src/deck-convo.ts";
 import { ringPath, ringPaths } from "./src/deck-loops.ts";
@@ -539,4 +539,36 @@ Deno.test("tutorial: grouped steps share one progress bar", () => {
   assertEquals(progress(steps, 1), { bar: 1, count: 3, fill: 0.5 });
   assertEquals(progress(steps, 2), { bar: 1, count: 3, fill: 1 });
   assertEquals(progress(steps, 3), { bar: 2, count: 3, fill: 1 });
+});
+
+Deno.test("deck cases: dots sit on the log axis, one centre line per row, and clamp at the edges", () => {
+  const axis = { label: "RMSE", min: 0.03, max: 10, ticks: [0.03, 0.1, 1, 10], log: true };
+  const rows = [
+    { label: "a", base: 0.57, value: 0.05, outcome: "Found" },
+    { label: "b", base: 0.3, value: 7.08, outcome: "No wrong claim", baseOutcome: "alone: wrong claim" },
+    { label: "c", base: 0, value: 40, outcome: "Off the axis" },
+  ];
+  const { ticks, rows: out } = caseLayout({ axis, rows });
+  const at = (v: number) => (Math.log10(v) - Math.log10(0.03)) / (Math.log10(10) - Math.log10(0.03));
+  assertEquals(ticks.map((t) => t.value), [0.03, 0.1, 1, 10]);
+  assertEquals(ticks[0].x, 0);
+  assertEquals(ticks[3].x, 1);
+  assertAlmostEquals(ticks[2].x, at(1), 1e-9);
+  // Each row's label, rail, dots and outcome share one centre line.
+  assertEquals(out.map((r) => r.y), [1 / 6, 3 / 6, 5 / 6]);
+  assertAlmostEquals(out[0].base, at(0.57), 1e-9);
+  assertAlmostEquals(out[0].value, at(0.05), 1e-9);
+  assertAlmostEquals(out[1].value, at(7.08), 1e-9);
+  // Zero on a log axis and values past the maximum clamp, never NaN.
+  assertEquals([out[2].base, out[2].value], [0, 1]);
+  // Only a row with a base outcome is paired.
+  assertEquals(out.map((r) => r.paired), [false, true, false]);
+});
+
+Deno.test("deck cases: a linear axis spaces values evenly and an empty chart has no rows", () => {
+  const axis = { label: "x", min: 0, max: 4, ticks: [0, 2, 4] };
+  const { ticks, rows } = caseLayout({ axis, rows: [{ label: "a", base: 1, value: 3, outcome: "" }] });
+  assertEquals(ticks.map((t) => t.x), [0, 0.5, 1]);
+  assertEquals(rows, [{ y: 0.5, base: 0.25, value: 0.75, paired: false }]);
+  assertEquals(caseLayout({ axis, rows: [] }).rows, []);
 });
