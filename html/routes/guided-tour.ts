@@ -8,7 +8,12 @@ export function mountGuidedTour(host: Host) {
   const ctl = host.controller;
   const style = document.createElement("style");
   style.textContent = `
-    .ck-target-ring { transition:none; box-shadow:0 0 0 1px rgb(91 142 196 / 60%),0 0 0 4px rgb(91 142 196 / 14%) !important; }
+    /* The cookbook places the ring 4px outside its target (tutorial.ts); the
+       operator found that gap noisy (2026-11-09). The line is drawn 1px off
+       the target instead (an outline pulled 3px into the ring), and the pale
+       band runs from that line to the ring's edge and 1px past it. */
+    .ck-target-ring { transition:none; outline:1px solid rgb(91 142 196 / 60%); outline-offset:-3px;
+      box-shadow:inset 0 0 0 2px rgb(91 142 196 / 14%),0 0 0 1px rgb(91 142 196 / 14%) !important; }
     @media(max-width:600px) {
       .ck-tour { padding-block:14px 10px; }
       .ck-tour-bars { margin-bottom:8px; }
