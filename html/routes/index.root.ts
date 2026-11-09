@@ -24,6 +24,7 @@ import { deck } from "./content.ts";
 import { mountGuidedTour } from "./guided-tour.ts";
 import { contentTransitionStyles } from "./content-transition.ts";
 import { landingDocs } from "./docs.ts";
+import { mountPageScrollbar } from "./page-scrollbar.ts";
 import { landingStudies } from "./studies.ts";
 import { quietLoading, signedOutView } from "../client/derive/signed-out.ts";
 import { cancelAccountBadge, signInInPlace, takeSignInError, showSignInError } from "./sign-in-in-place.ts";
@@ -308,6 +309,7 @@ void followOpenLink(startupSearch, context, setSigningOut).then(step => {
 });
 docs.mount();
 studies.mount();
+mountPageScrollbar(location.hostname); // hosted sites only (page-scrollbar.ts)
 
 // Remove the unused hard-coded shell control before the first app open too.
 document.querySelector(".ck-header .ck-export")?.remove();
