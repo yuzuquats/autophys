@@ -247,6 +247,13 @@ async fn a_login_off_install_opens_its_local_collection() {
         let remote = local(head(&uri, None)).peer_addr("10.0.0.5:50000".parse().unwrap());
         assert_eq!(send(&app, remote).await.0, 404, "{uri} from a remote peer");
         assert_eq!(send(&app, local(head(&uri, None))).await.0, 200, "{uri}");
+        // Another page cannot probe it: a cross-site HEAD or a subresource GET.
+        let cross = local(head(&uri, None)).insert_header(("sec-fetch-site", "cross-site"));
+        assert_eq!(send(&app, cross).await.0, 404, "{uri} cross-site HEAD");
+        let sub = local(get_page(&uri, None)).insert_header(("sec-fetch-mode", "no-cors"));
+        assert_eq!(send(&app, sub).await.0, 404, "{uri} subresource GET");
+        let nav = local(get_page(&uri, None)).insert_header(("sec-fetch-mode", "navigate")).insert_header(("sec-fetch-site", "cross-site"));
+        assert_eq!(send(&app, nav).await.0, 302, "{uri} followed from another site");
         let (s, to, _, _) = send(&app, local(get_page(&uri, None))).await;
         assert_eq!((s, to), (302, format!("/app?open={user}/workbook/{BOOK}")));
         let missing = format!("/open/{user}/workbook/missing");

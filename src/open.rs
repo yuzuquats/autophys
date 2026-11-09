@@ -84,6 +84,24 @@ pub fn configure(cfg: &mut web::ServiceConfig, api: Api) {
     cfg.route(&format!("{PREFIX}/{{tail:.*}}"), web::route().to(missing));
 }
 
+/// Whether a login-off request could not be a cross-site existence probe: a
+/// probe (HEAD) must be same-origin or typed by the user, and a GET must be a
+/// top-level navigation, not a subresource whose load/error another page could
+/// observe. Clients without Fetch Metadata (curl, SDKs) send neither header.
+fn not_cross_site(req: &HttpRequest) -> bool {
+    let fetch = |name: &str| {
+        req.headers()
+            .get(name)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_ascii_lowercase)
+    };
+    if *req.method() == actix_web::http::Method::HEAD {
+        fetch("sec-fetch-site").is_none_or(|s| s == "same-origin" || s == "none")
+    } else {
+        fetch("sec-fetch-mode").is_none_or(|m| m == "navigate")
+    }
+}
+
 /// The collection a reserved user name selects, when the caller may open it.
 fn collection(
     api: &Api,
@@ -115,7 +133,7 @@ async fn allowed(api: &Api, req: &HttpRequest, path: &(String, String, String)) 
     }
     let login = api.options().login;
     // A login-off daemon answers only its own local browser (loopback, local Host).
-    if !login && !crate::http::auth::local_browser(req, api) {
+    if !login && !(crate::http::auth::local_browser(req, api) && not_cross_site(req)) {
         return Ok(false);
     }
     let caller = if login {
