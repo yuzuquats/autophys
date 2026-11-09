@@ -20,5 +20,5 @@ reads both files during `autophys build-web` and replaces
 
 `icons/*.svg` are the Lona family's switcher tiles, copied byte for byte from
 tento's `tento-brand-lona-js/family/assets.generated.ts` (`GENERATED_TILES`,
-manifest sha256 `95860d94b0a0afca…`). After the family's artwork changes,
+manifest sha256 `b5502700b159cb3d…`). After the family's artwork changes,
 copy them again from that table rather than editing them here.
