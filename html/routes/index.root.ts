@@ -22,6 +22,7 @@ import { deck } from "./content.ts";
 import { mountGuidedTour } from "./guided-tour.ts";
 import { contentTransitionStyles } from "./content-transition.ts";
 import { landingDocs } from "./docs.ts";
+import { landingStudies } from "./studies.ts";
 import { quietLoading, signedOutView } from "../client/derive/signed-out.ts";
 import { cancelAccountBadge, signInInPlace, takeSignInError, showSignInError } from "./sign-in-in-place.ts";
 import { mountAccount } from "./account-header.ts";
@@ -259,7 +260,8 @@ const app: Cookbook.App = {
 };
 
 const docs = landingDocs();
-Cookbook.mount({ deck, onStage: (stage) => docs.onStage(stage), tutorial: { start: () => { if (skipInitialWalkthrough) { skipInitialWalkthrough = false; return []; } return guided?.source.start() ?? []; }, finish: result => guided?.source.finish?.(result) }, status: null, labels: { sidebar: "Workspace" } }).run(app);
+const studies = landingStudies();
+Cookbook.mount({ deck, onStage: (stage) => { docs.onStage(stage); studies.onStage(stage); }, tutorial: { start: () => { if (skipInitialWalkthrough) { skipInitialWalkthrough = false; return []; } return guided?.source.start() ?? []; }, finish: result => guided?.source.finish?.(result) }, status: null, labels: { sidebar: "Workspace" } }).run(app);
 function onContextChanged(next: AppContext): void {
   cancelAccountBadge();
   context = next; SIGNED_OUT = !next.principal;
@@ -270,6 +272,7 @@ function onContextChanged(next: AppContext): void {
 }
 mountAccount(onContextChanged, pending => { signingOut = pending; }, () => focusWorkspaceSignIn?.() ?? false);
 docs.mount();
+studies.mount();
 
 // Remove the unused hard-coded shell control before the first app open too.
 document.querySelector(".ck-header .ck-export")?.remove();

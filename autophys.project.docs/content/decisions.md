@@ -210,3 +210,16 @@ said "go ahead" on the shown before/after.
 | POS-1 | The hero leads with the agent and the check: "Muse Spark plans the experiment. Autophys checks the claim." Its stats are real or guaranteed (8 / 8 live runs by Spark 1.3 and by Wonder 1.0, ±10% at 1σ, every test approved by a person) instead of the mock "6.3× fewer test hours" and "12 held-out cells". The docs name Spark as the default driver and Wonder as the playbook improver. | operator, 2026-11-08 ("we should highlight muse or wonder specifically", "go ahead") | implemented |
 | POS-2 | Slide 6 replaces the mock test-hours chart with the recorded Spark 1.3 discovery pass (seed 0, six cases), drawn by a new `cases` deck body in `vendor/tento/tento-cookbook-js`. The pass comes from the experimental `autophys.discovery` package, so the slide is only as public as that package. Strongest alternative: three stat tiles (0 false claims, 1 wrong claim alone, 1 recovered structure), which read faster but drop the per-case error. Reversal: restore the `lines` slide or swap the body; the `cases` kind can stay unused (minutes). | **agent-chosen, pending operator review** (the form; updating the chart was the operator's request) | implemented |
 | POS-3 | The product name stays "Autophys" (header, page title, `app.title`); the review's "AutoPhys" spelling is not adopted, so the deck and header agree. Reversal: change `index.root.ts` `title` and the README (minutes). | **agent-chosen, pending operator review** | implemented |
+
+**POS-4, case studies and experiments section** (agent-chosen, pending operator review).
+Before: the landing ended at the docs. After: a section below them, behind the same
+full-width divider, lists what has been run (battery 1RC live, the Spark discovery pass,
+mass-spring-damper and thermal RC offline) and three highlighted candidates not run yet
+(lithium-iron cells across temperature, a building thermal envelope, reaction kinetics),
+each with why it fits and what it needs. Recommendation: name candidates by the fit
+criteria (a few named parameters, tests costing hours or days, parameters an easy test
+confounds) so readers can judge them. Strongest alternative: list only what has run,
+which avoids any appearance of a claim but hides where the product is meant to go.
+Candidates claim no results. Reverse by dropping `html/routes/studies.ts` and its two
+lines in `index.root.ts` (minutes). The docs' discovery sentence now says the package is
+in development, because `autophys.discovery` is not on this master.

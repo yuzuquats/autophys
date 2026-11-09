@@ -170,7 +170,7 @@ Inside each evaluation, an investigation is not a fixed cycle. At every step the
 
 Live model calls are off by default. The \`reason\` policy and the \`api\` and \`muse\` researchers each need a recorded replay, or \`AUTOPHYS_ALLOW_LIVE_REASON=1\`; the \`scripted\` and \`fake-reasoner\` policies and the \`scripted\` and \`heuristic\` researchers run offline. With the defaults (every built-in case, three train seeds and two held-out seeds), a research run evaluates three investigations per case for the baseline and for each valid edit, and four per case on the held-out seeds at the end (two seeds, for the starting and the final playbook).
 
-\`autoloop\` records each edit's hypothesis, diff, scores and decision in a journal, feeds recent history back to the researcher, and can accept an edit by a paired bootstrap test. A planted sensor-bias case, \`battery-biased\`, exercises a playbook fix offline. Procedurally sampled and misspecified cases are not built yet. An experimental \`autophys.discovery\` package in the Python SDK tests refinements of a model's structure, and refuses any new structure that has not passed a test on data it never saw.
+\`autoloop\` records each edit's hypothesis, diff, scores and decision in a journal, feeds recent history back to the researcher, and can accept an edit by a paired bootstrap test. A planted sensor-bias case, \`battery-biased\`, exercises a playbook fix offline. Procedurally sampled and misspecified cases are not built yet. Model discovery, which refines a model's structure and refuses any new structure that has not passed a test on data it never saw, is in development and not in this release.
 
 ## Examples
 
@@ -780,11 +780,24 @@ const NODE_VIEWS: Documentation.Props["nodeViews"] = {
       : ReviewFence.dispatch(node, null) ?? new StaticCodeBlockView(node),
 };
 
-/** Keep the closed landing's docs out of rendering, focus and accessibility while
- * preserving their exact layout height for the drawer's scroll restoration.
- * Toggling inherited inert on this large shadow tree restyled thousands of nodes.
+/** Keep a closed landing section out of rendering, focus and accessibility while
+ * preserving its exact layout height for the drawer's scroll restoration.
+ * Toggling inherited inert on the docs' large shadow tree restyled thousands of nodes.
  * content-visibility hides the contents without propagating an inherited change.
  */
+export function hideOffLanding(section: HTMLElement, stage: Cookbook.Stage): void {
+  if (stage !== "landing") {
+    if (section.style.contentVisibility !== "hidden") {
+      const css = getComputedStyle(section);
+      const contentHeight = section.getBoundingClientRect().height
+        - parseFloat(css.paddingTop) - parseFloat(css.paddingBottom)
+        - parseFloat(css.borderTopWidth) - parseFloat(css.borderBottomWidth);
+      section.style.containIntrinsicBlockSize = `${Math.max(0, contentHeight)}px`;
+      section.style.contentVisibility = "hidden";
+    }
+  } else section.style.contentVisibility = "visible";
+}
+
 export function landingDocs(): { onStage(stage: Cookbook.Stage): void; mount(): void } {
   const section = document.createElement("section");
   section.id = "docs";
@@ -792,16 +805,7 @@ export function landingDocs(): { onStage(stage: Cookbook.Stage): void; mount(): 
   section.setAttribute("aria-label", "Documentation");
   return {
     onStage(stage) {
-      if (stage !== "landing") {
-        if (section.style.contentVisibility !== "hidden") {
-          const css = getComputedStyle(section);
-          const contentHeight = section.getBoundingClientRect().height
-            - parseFloat(css.paddingTop) - parseFloat(css.paddingBottom)
-            - parseFloat(css.borderTopWidth) - parseFloat(css.borderBottomWidth);
-          section.style.containIntrinsicBlockSize = `${Math.max(0, contentHeight)}px`;
-          section.style.contentVisibility = "hidden";
-        }
-      } else section.style.contentVisibility = "visible";
+      hideOffLanding(section, stage);
     },
     mount() {
       if (!InstanceUrl.hasStaticBase()) InstanceUrl.setStaticBase("");
