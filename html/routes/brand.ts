@@ -37,7 +37,13 @@ queueMicrotask(() => {
     .ck-header .ap-github-link svg { display: block; flex: none; }
     .ck-header .ap-github-link:hover { color: var(--ck-secondary); }
     .ck-header :is(.ap-section-link, .ap-github-link):focus-visible { outline: 2px solid var(--ck-ink); outline-offset: 3px; }
-    .ck-header .ck-brand { padding-left: 28px; }
+    .ck-header .ck-brand { padding-left: 28px; transition: padding-left 700ms var(--ck-ease); }
+    /* Phones: the landing logo sits flush with the slide text (24px); the
+       arrow's room opens only in the app, sliding the logo over. */
+    @media (max-width: 639px) {
+      .ck-header { --ck-gutter: 24px; }
+      .ck-header:not([data-app]) .ck-brand { padding-left: 0; }
+    }
     /* GitHub is a landing link. Opening the app fades it out while its width
        (and the gap before it) closes, so Docs slides over beside the profile;
        closing reverses it. A transition, not a FLIP, so reversals never snap. */
@@ -49,9 +55,9 @@ queueMicrotask(() => {
       transition: opacity 180ms ease, visibility 0s linear 180ms, max-width 700ms var(--ck-ease),
         margin-left 700ms var(--ck-ease); }
     /* Phones keep Try now and Docs; the wordmark needs the room. Studies goes
-       below 420px, where it would push Try now into the wordmark. */
+       below 370px, where it would push Try now into the wordmark. */
     @media (max-width: 479px) { .ck-header .ap-github-link { display: none; } }
-    @media (max-width: 419px) { .ck-header .ap-section-link[href="/#studies"] { display: none; } }
+    @media (max-width: 369px) { .ck-header .ap-section-link[href="/#studies"] { display: none; } }
     @media (max-width: 359px) {
       .ck-header, .ck-header[data-app] { --ck-gutter: 16px; }
       .ck-header .ck-nav { gap: 12px; }
