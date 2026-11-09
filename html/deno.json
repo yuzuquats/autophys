@@ -7,6 +7,7 @@
     "@tento-ui/icons/": "../vendor/tento/tento-ui-js/icons/mock-svg-dir/",
     "@tento-core/": "../vendor/tento/tento-core-js/",
     "@tento-cookbook/": "../vendor/tento/tento-cookbook-js/",
+    "@tento-brand/": "../vendor/tento/tento-brand-js/",
     "@tento-lisp/": "../vendor/tento/tento-lisp-js/src/",
     "@tento-plugins/codemirror": "./routes/codemirror-plugin.d.ts",
     "@tento-trace": "../vendor/tento/tento-trace-js/src/lib.ts",

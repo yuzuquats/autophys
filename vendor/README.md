@@ -9,6 +9,7 @@ would not remove a dependency or establish a license grant.
 | --- | --- |
 | Root Rust CLI | `tento-web`: file routing, browser bundler and dev watch; `tento-sh`: typed command tree; `tento-dirs`: compatible app state/cache locations |
 | Browser | `tento-cookbook-js` shell and `tento-ui-js`, with transitive core, chrono, trace and Lisp utilities |
+| Browser (header) | `tento-brand-js` app switcher kit (`kit/app-switcher.ts`, `kit/app-switcher.packaged.ts`) and the native-UI helpers it imports (`src/`): the Lona family app switcher, packaged by `tento-web-js/build-plugins/app-switcher.deno.ts` (html/app-switcher/README.md) |
 | Optional browser flow | `tento-headless-js` child lifetime/cleanup helpers |
 | Cargo patches | `vendor/{notify,fsevent-sys,iana-time-zone}` as declared in root Cargo.toml; each has README.vendor.md provenance and existing license files |
 | Rust/Python SDKs | No sibling Tento or Lona source dependency; registry/PyPI dependencies still need acquisition |

@@ -1,4 +1,5 @@
 import { installSurfaceFinish, surfaceFinishStyles } from "./surface-finish.ts";
+import { appSwitcherStyles, mountAppSwitcher } from "./app-switcher.ts";
 
 /** App-owned header branding; the first slide starts directly with its title.
  * The shell mounts synchronously after this module's import. One microtask
@@ -28,6 +29,7 @@ queueMicrotask(() => {
   navigationStyle.textContent = `
     .ck-landing[data-lowered] { position: relative; inset: auto; }
     ${surfaceFinishStyles}
+    ${appSwitcherStyles}
     .ck-header { --ck-gutter: 28px; }
     .ck-header .ck-nav-links { gap: 16px; }
     .ck-header :is(.ap-section-link, .ap-github-link) { display: inline-flex; align-items: center;
@@ -142,6 +144,8 @@ queueMicrotask(() => {
     image.style.marginRight = "4px";
     wordmark.before(image);
   }
+  const brand = document.querySelector<HTMLAnchorElement>(".ck-header .ck-brand");
+  if (brand) mountAppSwitcher(brand, () => brand.querySelector("[data-autophys-mark]"));
   for (
     const eyebrow of document.querySelectorAll(".ck-hook .ck-slide-eyebrow")
   ) {

@@ -1,0 +1,72 @@
+{
+  "$comment": "The Lona family app switcher, packaged by tento-web (vendor/tento/tento-web-js/build-plugins/app-switcher.deno.ts). Icons are the family tiles from tento-brand-lona-js/family/assets.generated.ts; html/app-switcher/README.md says how to refresh them. html/app-switcher.env turns the whole set on or off.",
+  "label": "Switch Lona app",
+  "apps": [
+    {
+      "id": "calendar",
+      "name": "Calendar",
+      "href": "https://dev.lona.so",
+      "icon": "app-switcher/icons/calendar.svg"
+    },
+    {
+      "id": "spaces",
+      "name": "Spaces",
+      "href": "https://spaces.lona.so",
+      "icon": "app-switcher/icons/spaces.svg"
+    },
+    {
+      "id": "music",
+      "name": "Music",
+      "href": "https://music.lona.so",
+      "icon": "app-switcher/icons/music.svg"
+    },
+    {
+      "id": "design",
+      "name": "Design",
+      "href": "https://artifacts.lona.so",
+      "icon": "app-switcher/icons/design.svg"
+    },
+    {
+      "id": "forge",
+      "name": "Forge",
+      "href": "https://forge.lona.so",
+      "icon": "app-switcher/icons/forge.svg"
+    },
+    {
+      "id": "marketing",
+      "name": "Marketing",
+      "href": "https://funnel.lona.so",
+      "icon": "app-switcher/icons/marketing.svg"
+    },
+    {
+      "id": "tsh",
+      "name": "tsh",
+      "href": "https://tsh.lona.so",
+      "icon": "app-switcher/icons/tsh.svg"
+    },
+    {
+      "id": "autophys",
+      "name": "Autophys",
+      "href": "https://autophys.lona.so",
+      "icon": "app-switcher/icons/autophys.svg"
+    },
+    {
+      "id": "autotrade",
+      "name": "Autotrade",
+      "href": "https://autotrade.lona.so",
+      "icon": "app-switcher/icons/autotrade.svg"
+    },
+    {
+      "id": "brand",
+      "name": "Brand",
+      "href": "https://brand.lona.so",
+      "icon": "app-switcher/icons/brand.svg"
+    },
+    {
+      "id": "ui",
+      "name": "UI",
+      "href": "https://ui.lona.so",
+      "icon": "app-switcher/icons/ui.svg"
+    }
+  ]
+}
