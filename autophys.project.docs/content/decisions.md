@@ -208,10 +208,10 @@ said "go ahead" on the shown before/after.
 | ID | Decision | Source | State |
 | --- | --- | --- | --- |
 | POS-1 | The hero leads with the agent and the check: "Muse Spark plans the experiment. Autophys checks the claim." Its stats are real or guaranteed (8 / 8 live runs by Spark 1.3 and by Wonder 1.0, ±10% at 1σ, every test approved by a person in the workbench) instead of the mock "6.3× fewer test hours" and "12 held-out cells". The docs name Spark as the default driver and Wonder as the playbook improver. | operator, 2026-11-08 ("we should highlight muse or wonder specifically", "go ahead") | implemented |
-| POS-2 | Slide 6 replaces the mock test-hours chart with the recorded Spark 1.3 discovery pass (seed 0, six cases), drawn by a new `cases` deck body in `vendor/tento/tento-cookbook-js`. The pass comes from the experimental `autophys.discovery` package, so the slide is only as public as that package. Strongest alternative: three stat tiles (0 false claims, 1 wrong claim alone, 1 recovered structure), which read faster but drop the per-case error. Reversal: restore the `lines` slide or swap the body; the `cases` kind can stay unused (minutes). | **agent-chosen, pending operator review** (the form; updating the chart was the operator's request) | implemented |
-| POS-3 | The product name stays "Autophys" (header, page title, `app.title`); the review's "AutoPhys" spelling is not adopted, so the deck and header agree. Reversal: change `index.root.ts` `title` and the README (minutes). | **agent-chosen, pending operator review** | implemented |
+| POS-2 | Slide 6 replaces the mock test-hours chart with the recorded Spark 1.3 discovery pass (seed 0, six cases), drawn by a new `cases` deck body in `vendor/tento/tento-cookbook-js`. The pass comes from the experimental `autophys.discovery` package, so the slide is only as public as that package. Strongest alternative: three stat tiles (0 false claims, 1 wrong claim alone, 1 recovered structure), which read faster but drop the per-case error. Reversal: restore the `lines` slide or swap the body; the `cases` kind can stay unused (minutes). | operator-confirmed 2026-11-08 (/open-questions: keep the per-case chart) | implemented |
+| POS-3 | The product name stays "Autophys" (header, page title, `app.title`); the review's "AutoPhys" spelling is not adopted, so the deck and header agree. Reversal: change `index.root.ts` `title` and the README (minutes). | operator-confirmed 2026-11-08 (/open-questions: keep "Autophys") | implemented |
 
-**POS-4, case studies and experiments section** (agent-chosen, pending operator review).
+**POS-4, case studies and experiments section** (operator-confirmed 2026-11-08 in /open-questions: keep the not-run candidates).
 Before: the landing ended at the docs. After: a section below them, behind the same
 full-width divider, lists what has been run (battery 1RC live, the Spark discovery pass,
 mass-spring-damper and thermal RC offline) and three highlighted candidates not run yet
@@ -233,6 +233,17 @@ Spark's three adopts were refused and the root fit stood; plus copy fixes), all 
 141 html tests, 22 cookbook tests. Open: no unit test for the `cases` body;
 `vendor/patches/autophys-bundler-context/verify.py` already fails at fe522fb because the
 vendored cookbook no longer matches either pinned manifest; production is not deployed.
+
+## Case study deep links (operator decisions, /open-questions 2026-11-08)
+
+| Id | Decision | Decided by | State |
+| --- | --- | --- | --- |
+| DL-1 | A generic deep-link scheme rather than a studies-only list: links read `/open/<user>/<kind>/<name>`; the page probes the link with `HEAD` and shows its button only when the answer is not 404. `GET` redirects into the app and selects the target. | operator ("can we build a generic deeplinking scheme? the fe checks if the link/asset is 404") | not started |
+| DL-2 | The user part uses reserved names: `demo`, `me`, and `local` on login-off installs. No schema change; unique `@handles` can take the same slot when sharing exists. The probe answers 404 for anything the caller cannot open, so it never reveals another account's workbooks. | operator (reserved names; asked that links include a user scheme) | not started |
+| DL-3 | A signed-in visitor following a `/open/demo/…` link is asked to switch to the demo (signing out of their workspace) before it opens. A light access rule makes the demo account's collection public: anyone may probe it and switch into it; every other collection answers only its owner. The rule is derived from `users.demo`, with no new column. Reading the demo alongside one's own workspace stays a later option that keeps the same links. | operator ("confirm, then switch - we'll need some light acl so that the demo account is public") | not started |
+| DL-4 | Add mass-spring-damper and thermal RC demo workbooks, generated from the offline benchmark runs, to the demo collection: dev's demo books first, prod's `/home/james/autophys` (demo-only; the operator's account uses its own workspace) after the operator looks. Model discovery gets none until its package is released. | operator (add both, dev first) | not started |
+
+The server pieces (the `/open` route, the probe and the access rule) change Rust, so production needs a native build, not the web-only redeploy.
 
 ## Lona family app switcher (agent choices, 2026-11-08, pending operator review)
 
