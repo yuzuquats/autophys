@@ -161,7 +161,7 @@ export function renderCases(body: DeckCases): HTMLElement {
     } else {
       pin(band, vx, y, "ck-dot ck-emphasis");
     }
-    text(y, "ck-case-outcome" + (row.emphasis ? " ck-emphasis" : ""), row.outcome);
+    text(y, "ck-case-outcome" + (row.emphasis ? " ck-emphasis" : "") + (row.baseOutcome ? " ck-case-paired" : ""), row.outcome);
     if (row.baseOutcome) text(y, "ck-case-base" + (row.baseEmphasis ? " ck-emphasis" : ""), row.baseOutcome);
   });
   const parts: HTMLElement[] = [root, legend([{ label: body.legend[0] }, { label: body.legend[1], emphasis: true }])];

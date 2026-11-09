@@ -205,15 +205,17 @@ html[data-ck-stage="tour"] .ck-tour-peek { opacity: 1; transition-duration: 300m
 .ck-cases .ck-case-band { position: absolute; top: 0; bottom: 0; left: var(--ck-case-x0); right: calc(100% - var(--ck-case-x1)); }
 .ck-cases .ck-case-outcome, .ck-cases .ck-case-base { left: var(--ck-case-out); }
 .ck-cases .ck-case-label { transform: translateY(-50%); color: var(--ck-n900); }
-.ck-cases .ck-case-outcome { transform: translateY(-100%); color: var(--ck-n900); }
+.ck-cases .ck-case-outcome { transform: translateY(-50%); color: var(--ck-n900); }
+/* With a base outcome below it, the outcome sits on the upper half of the row. */
+.ck-cases .ck-case-outcome.ck-case-paired { transform: translateY(-100%); }
 .ck-plot .ck-dot.ck-hollow { background: #fff; box-shadow: inset 0 0 0 2px var(--ck-n500); }
 .ck-chart-note { margin: 6px 0 0; font-size: 12px; line-height: 16px; color: var(--ck-n500); }
 /* Phones: the band takes the full width. Each case's name and outcome sit on
-   the line above its rail, and the calibration-alone outcome below it; the
-   chart grows with its rows and the deck page scrolls. */
+   the line above its rail, an optional base outcome below it, and the chart
+   grows with its rows. */
 @media (max-width: 639px) {
-  .ck-plot.ck-cases { --ck-case-x0: 0%; --ck-case-x1: 100%; height: calc(var(--ck-case-rows, 6) * 62px); margin-top: 32px; }
-  .ck-cases .ck-case-label, .ck-cases .ck-case-outcome { transform: translateY(calc(-100% - 8px)); }
+  .ck-plot.ck-cases { --ck-case-x0: 0%; --ck-case-x1: 100%; height: calc(var(--ck-case-rows, 6) * 44px); margin-top: 32px; }
+  .ck-cases .ck-case-label, .ck-cases .ck-case-outcome, .ck-cases .ck-case-outcome.ck-case-paired { transform: translateY(calc(-100% - 8px)); }
   .ck-cases .ck-case-outcome, .ck-cases .ck-case-base { left: auto; right: 0; text-align: right; }
   .ck-cases .ck-case-base { transform: translateY(6px); font-size: 11px; line-height: 14px; }
 }

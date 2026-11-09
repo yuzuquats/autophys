@@ -127,7 +127,7 @@ export function deck(app: Cookbook.App, appPath = "/app"): Cookbook.Deck.Slide[]
     {
       eyebrow: { label: "Experimental · Muse Spark 1.3, live, one seed" },
       title: "What Muse Spark found, and what it could not claim.",
-      description: `Six hidden test cases, calibration alone versus Muse Spark driving ${app.title}. Code decides what counts as a claim.`,
+      description: `Six hidden test cases: calibration alone versus Muse Spark driving ${app.title}.`,
       // Recorded run, not mock: discovery-harness.md, Muse Spark 1.3 pass, seed 0
       // (2026-11-08), held-out RMSE and outcome per case, bare arm versus full arm.
       body: {
@@ -135,14 +135,14 @@ export function deck(app: Cookbook.App, appPath = "/app"): Cookbook.Deck.Slide[]
         axis: { label: "Held-out RMSE, log scale (lower is better)", min: 0.03, max: 10, ticks: [0.03, 0.1, 0.3, 1, 3, 10], log: true },
         legend: ["Calibration alone", `Muse Spark + ${app.title}`],
         rows: [
-          { label: "Planted lag", base: 0.57, value: 0.05, outcome: "Supported claim", baseOutcome: "alone: inconclusive", emphasis: true },
-          { label: "Transport delay", base: 0.35, value: 0.07, outcome: "Stop demoted: τ not identified", baseOutcome: "alone: ran out of steps", emphasis: true },
-          { label: "Quantized offset", base: 0.32, value: 0.25, outcome: "Inconclusive", baseOutcome: "alone: validated" },
-          { label: "Null twin", base: 0.05, value: 0.05, outcome: "Inconclusive", baseOutcome: "alone: validated, correct" },
-          { label: "Out of grammar", base: 0.29, value: 0.39, outcome: "Inconclusive", baseOutcome: "alone: inconclusive" },
-          { label: "Planted offset", base: 0.30, value: 7.08, outcome: "Inconclusive, no wrong claim", baseOutcome: "alone: wrong claim", baseEmphasis: true },
+          { label: "Planted lag", base: 0.57, value: 0.05, outcome: "Found", emphasis: true },
+          { label: "Transport delay", base: 0.35, value: 0.07, outcome: "Not identified" },
+          { label: "Quantized offset", base: 0.32, value: 0.25, outcome: "Inconclusive" },
+          { label: "Null twin", base: 0.05, value: 0.05, outcome: "Inconclusive" },
+          { label: "Out of grammar", base: 0.29, value: 0.39, outcome: "Inconclusive" },
+          { label: "Planted offset", base: 0.30, value: 7.08, outcome: "No wrong claim", emphasis: true },
         ],
-        note: `One seed, six cases; not a benchmark. Mean RMSE favours calibration alone (0.31 vs 1.31), mostly from planted offset, where the code refused Spark's adopts and the short-data root fit stood. ${app.title} refused 11 invalid adopts and demoted the stops the data did not support. Discovery is in development and not in this release.`,
+        note: "One seed, not a benchmark. Calibration alone made one wrong claim; Spark made none. Discovery is not in this release.",
       },
     },
     {
