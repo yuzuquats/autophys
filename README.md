@@ -31,9 +31,9 @@ notices. Serving needs nothing else installed.
 
 ```sh
 target=x86_64-unknown-linux-gnu      # or aarch64-apple-darwin on an Apple silicon Mac
-curl -fLO https://github.com/yuzuquats/autophys/releases/download/v0.1.4/autophys-v0.1.4-$target.tar.gz
-tar -xzf autophys-v0.1.4-$target.tar.gz
-install -m 755 autophys-v0.1.4-$target/autophys ~/.local/bin/autophys   # or any directory on your PATH
+curl -fLO https://github.com/yuzuquats/autophys/releases/download/v0.1.5/autophys-v0.1.5-$target.tar.gz
+tar -xzf autophys-v0.1.5-$target.tar.gz
+install -m 755 autophys-v0.1.5-$target/autophys ~/.local/bin/autophys   # or any directory on your PATH
 autophys serve          # the workbench and API on http://127.0.0.1:4794
 ```
 
