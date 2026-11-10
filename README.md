@@ -24,13 +24,14 @@ held-out data.
 ## Install a release
 
 Each [release](https://github.com/yuzuquats/autophys/releases) has an archive
-for Linux x86_64 (`x86_64-unknown-linux-gnu`, glibc 2.39 or newer, such as
-Ubuntu 24.04 or Debian 13) and Apple silicon macOS (`aarch64-apple-darwin`).
+for Linux x86_64 (`x86_64-unknown-linux-gnu`, glibc 2.39 or newer), Linux
+ARM64 (`aarch64-unknown-linux-gnu`, glibc 2.28 or newer), Apple silicon macOS
+(`aarch64-apple-darwin`) and Intel macOS (`x86_64-apple-darwin`).
 It holds one `autophys` executable with the web app built in, plus the license
 notices. Serving needs nothing else installed.
 
 ```sh
-target=x86_64-unknown-linux-gnu      # or aarch64-apple-darwin on an Apple silicon Mac
+target=x86_64-unknown-linux-gnu      # choose the target above for your OS and CPU
 curl -fLO https://github.com/yuzuquats/autophys/releases/download/v0.1.5/autophys-v0.1.5-$target.tar.gz
 tar -xzf autophys-v0.1.5-$target.tar.gz
 install -m 755 autophys-v0.1.5-$target/autophys ~/.local/bin/autophys   # or any directory on your PATH
