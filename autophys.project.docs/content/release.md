@@ -1,5 +1,16 @@
 # GitHub releases
 
+## v0.1.5 release plan, 2026-11-10
+
+Requested: publish standalone macOS and Linux archives for ARM64 and x86_64.
+Use one committed owner-master source identity, public default web build switches,
+full native Rust/Deno suites, embedded-app smoke checks, architecture and signing
+checks, license notices and SHA-256 sidecars. Native Mac builds use frozen release
+inputs on rwc-01 SSD, following previous releases; Linux builds stay on yuzuquats.
+ARM64 Linux is cross-compiled and exercised on the native rwc-dev-01 consumer.
+Existing untracked owner files and private packaging switches are excluded.
+Remaining: version bump, build, qualify, publish and verify downloads.
+
 ## v0.1.4, 2026-11-08
 
 Published at https://github.com/yuzuquats/autophys/releases/tag/v0.1.4 (marked
