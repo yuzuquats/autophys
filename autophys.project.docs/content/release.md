@@ -1,15 +1,59 @@
 # GitHub releases
 
-## v0.1.5 release plan, 2026-11-10
+## v0.1.5, 2026-11-10
 
-Requested: publish standalone macOS and Linux archives for ARM64 and x86_64.
-Use one committed owner-master source identity, public default web build switches,
-full native Rust/Deno suites, embedded-app smoke checks, architecture and signing
-checks, license notices and SHA-256 sidecars. Native Mac builds use frozen release
-inputs on rwc-01 SSD, following previous releases; Linux builds stay on yuzuquats.
-ARM64 Linux is cross-compiled and exercised on the native rwc-dev-01 consumer.
-Existing untracked owner files and private packaging switches are excluded.
-Remaining: version bump, build, qualify, publish and verify downloads.
+Published, marked latest: https://github.com/yuzuquats/autophys/releases/tag/v0.1.5.
+The operator requested macOS and Linux packages for ARM64 and x86_64, followed
+by GitHub publication. All four archives and their SHA-256 sidecars are public.
+The annotated tag points at `cbf2d3e698cfd63bcb08cb2e0e44e8993a010306`.
+No release work remains.
+
+### Source and qualification
+
+- Owner-master commits: release plan `1842bc4` (Kind: plan), version bump
+  `0da2db3` (Change-Id `I4f21a8d3252d43db9b8dc7f392d7ea36`), and four-target
+  installation instructions `cbf2d3e` (`I0665e60eefae48b19bcf58164553a379`).
+  The previously unpublished dev-deploy receipt `162a07a` was inspected; its
+  only change was release documentation. Existing untracked owner content and
+  ignored private packaging switches were preserved and excluded from builds.
+- Full Rust suites: Linux x86_64 362 passed; Apple silicon and Intel macOS
+  356 each passed, zero failures (one ignored documentation test per platform).
+  Frontend: 150 tests passed on each of those platforms. Suites ran from
+  `0da2db3`; the final commit differs only in root README installation text.
+  Final binaries were rebuilt and repacked from `cbf2d3e` with that identity.
+  Frontend type checking and the vendored patch/integrity replay also passed.
+- Linux builds stayed on yuzuquats. ARM64 used cargo-zigbuild with glibc 2.28,
+  reusing the verified x86_64 web ZIP and the documented APZIP001 footer format;
+  its target-specific license graph was generated separately. The final ARM64
+  archive was extracted and exercised on native rwc-dev-01. Full ARM64 Linux
+  Rust tests were not run. Linux x86_64 retains its glibc 2.39 requirement.
+- macOS builds used frozen owner commits on rwc-01's external SSD, following
+  previous releases. Intel compilation/tests ran through Rosetta. Both final
+  binaries pass strict codesign verification. Intel's linker leaves its output
+  unsigned, so the release packaging step explicitly ran `codesign --force
+  --sign -` after packing; Apple silicon received its linker ad-hoc signature.
+  Neither binary is notarized. The maintained host-only release script still
+  needs this explicit signing step when used for Intel packaging.
+- All four final binaries report 0.1.5 and the tag commit, serve their embedded
+  app with an empty HOME, and pass healthz plus GET / and /app checks. Archive
+  membership, executable modes, architectures, notices and SHA-256 sidecars
+  were checked. After publication, all four anonymous GitHub archive downloads
+  and checksum sidecars matched the qualified local artifacts.
+- Evidence: rwc-01 `~/workspace/fleet/evidence/autophys-release-v0.1.5/`;
+  final artifacts and packaging helper under
+  `/Users/james/ssd-mount/autophys-release-v0.1.5-final-assets/`.
+  The two Mac build caches are registered with tento-scratch. Owner build logs
+  and inputs remain under yuzuquats `~/workspace/autophys/target/release-v0.1.5-*`.
+  Owner workspace/home layout checks still report pre-existing exceptions;
+  the owner lacks an installed tento-scratch CLI. These unrelated host
+  bookkeeping issues were not hidden or changed for the release.
+
+| Asset | SHA-256 |
+| --- | --- |
+| `autophys-v0.1.5-aarch64-apple-darwin.tar.gz` | `4f0ae7f23d39299d1b8155f61febf64403153e88713bbc97c11bf73c568eb820` |
+| `autophys-v0.1.5-aarch64-unknown-linux-gnu.tar.gz` | `3dc71b425ae2ddcf9a6aae98e99be72fc48b74e58f8ce0ff7a7cd16530ae2887` |
+| `autophys-v0.1.5-x86_64-apple-darwin.tar.gz` | `7dec5d2a6d9d73bca3f1ba914e5f14a348e6654ca917c880301f48b544132187` |
+| `autophys-v0.1.5-x86_64-unknown-linux-gnu.tar.gz` | `679ad273307df020f09e3d46d1b5ebd2d89084f01712a47638420d87a41e9c17` |
 
 ## v0.1.4, 2026-11-08
 
