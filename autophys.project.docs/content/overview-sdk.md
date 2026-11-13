@@ -503,3 +503,16 @@ hashes, the new-seed report, write results, verify output before and after,
 record and investigation dumps, `qualification-{pre,live,post}.json`,
 screenshots, the healthz output and the API probe. This docs-only receipt
 follows the activated source commit and does not trigger another activation.
+
+## Operator review — /open-questions, 2026-11-13
+
+| Id | Decision | Reason | Decided by | Implementation state |
+| --- | --- | --- | --- | --- |
+| OV-1 | Keep: every overview save that changes the text adds a version; `overview_versions()` stays | Agents rewrite notes as evidence changes, so earlier versions should stay visible and restorable; matches append-only records and config versions. Revisit if automated loops rewrite overviews very frequently (pruning) | operator | Implemented (`ca3a230`, `5b1544c`), live on dev |
+| OV-7 | Change: `/workspace` and the SSE `overview` event send one `overview: {markdown, seq, digest, author, created}` object; `overview_meta` goes away; the UI reads `.markdown` | One shape everywhere, matching the SDK `overview()` and `GET /projects/{pid}/overview`; text and metadata cannot be paired wrongly. Cheap now (unpushed, only dev UI reads it) | operator | Pending: forward commit + dev redeploy after the walkthrough |
+| OV-12 | Keep: `GET /projects/{pid}/overview` returns 200 with `overview: null` before the first write; 404 only for an unknown project | "Not written yet" is a normal state and must stay distinguishable from a mistyped id; the activation loop depends on it | operator | Implemented (`963cd6a`), live on dev |
+| OV-3 + OV-13 | Keep: card problems never block a save (refused only for empty, non-UTF-8 or >256 KiB bodies); the strict canonical-form lint decides warnings and may over-warn | Overviews are mostly agent-written and can follow the canonical form; blocking would turn a cosmetic issue into a failed write. Revisit (e.g. a CLI `--strict` flag) if agent writes must be guaranteed clean | operator | Implemented (`ca3a230`, `aee6beb`), live on dev |
+| OV-4 + OV-8 | Change: `autophys overview set` requires `--author` (error shows the flag); SDKs keep requiring an author | Agents call the CLI far more than the operator; a default would silently record an agent rewrite as the operator | operator | Pending: forward commit with OV-7 |
+| OV-2, OV-5/OV-10, OV-6, OV-11 | Keep all four as built | Format 3 only on the first overview write keeps older SDKs reading other workbooks; templated demo notes preserve ids and chains; one canonical card-field list with a test-pinned Python copy; append-only stays SDK-enforced like display and config versions | operator | Implemented, live on dev |
+
+OV-9 is superseded by OV-13. No agent-chosen overview decision remains pending.
