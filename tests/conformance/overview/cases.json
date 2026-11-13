@@ -1,5 +1,5 @@
 {
-  "comment": "Shared overview vectors (OV-2..OV-4) for sdks/rust/tests/workbook_format3.rs and sdks/python/tests/test_workbook_format3.py.",
+  "comment": "Shared overview vectors (OV-2..OV-4, OV-9) for sdks/rust/tests/workbook_format3.rs and sdks/python/tests/test_workbook_format3.py. Each warning case also gives the 1-based lines where the viewer renders an <ap-investigation> card (cards) and whether it can display the document at all (renders); html/routes/overview-vectors.deno.test.ts checks those, and the insert_in_paragraph lines, against the bundled viewer parser.",
   "ddl": "CREATE TABLE IF NOT EXISTS overviews (\n  seq INTEGER PRIMARY KEY,\n  project TEXT NOT NULL REFERENCES projects(id),\n  digest TEXT NOT NULL,\n  markdown TEXT NOT NULL,\n  author TEXT NOT NULL,\n  created REAL NOT NULL\n);",
   "sql": "CREATE TABLE overviews (\n  seq INTEGER PRIMARY KEY,\n  project TEXT NOT NULL REFERENCES projects(id),\n  digest TEXT NOT NULL,\n  markdown TEXT NOT NULL,\n  author TEXT NOT NULL,\n  created REAL NOT NULL\n)",
   "max_bytes": 262144,
@@ -25,7 +25,11 @@
     {
       "name": "known",
       "markdown": "# Note\n\n<ap-investigation investigation=\"inv_0123456789abcdef\" title=\"T\" summary=\"S\"></ap-investigation>\n",
-      "warnings": []
+      "warnings": [],
+      "cards": [
+        3
+      ],
+      "renders": true
     },
     {
       "name": "unknown id",
@@ -36,7 +40,11 @@
           "message": "<ap-investigation> names \"inv_ffffffffffffffff\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
           "investigation": "inv_ffffffffffffffff"
         }
-      ]
+      ],
+      "cards": [
+        1
+      ],
+      "renders": true
     },
     {
       "name": "no investigation attribute",
@@ -47,7 +55,11 @@
           "message": "<ap-investigation> names no investigation; the viewer shows \"Investigation unavailable\"",
           "investigation": ""
         }
-      ]
+      ],
+      "cards": [
+        1
+      ],
+      "renders": true
     },
     {
       "name": "empty investigation attribute",
@@ -58,7 +70,11 @@
           "message": "<ap-investigation> names no investigation; the viewer shows \"Investigation unavailable\"",
           "investigation": ""
         }
-      ]
+      ],
+      "cards": [
+        1
+      ],
+      "renders": true
     },
     {
       "name": "unknown attribute, then unknown id",
@@ -74,27 +90,47 @@
           "message": "<ap-investigation> names \"inv_x\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
           "investigation": "inv_x"
         }
-      ]
+      ],
+      "cards": [
+        1
+      ],
+      "renders": true
     },
     {
-      "name": "tag and attribute names are case-insensitive",
-      "markdown": "<AP-Investigation Investigation='inv_0123456789abcdef' TITLE=x></AP-Investigation>\n",
-      "warnings": []
+      "name": "attribute names are case-insensitive",
+      "markdown": "<ap-investigation Investigation='inv_0123456789abcdef' TITLE=x></ap-investigation>\n",
+      "warnings": [],
+      "cards": [
+        1
+      ],
+      "renders": true
     },
     {
       "name": "character references in values",
       "markdown": "<ap-investigation investigation=\"inv&#95;0123456789abcdef\" summary=\"a &amp; b &quot;c&quot;\"></ap-investigation>\n",
-      "warnings": []
+      "warnings": [],
+      "cards": [
+        1
+      ],
+      "renders": true
     },
     {
       "name": "hex character reference",
       "markdown": "<ap-investigation investigation=\"inv&#x5f;0123456789abcdef\"></ap-investigation>\n",
-      "warnings": []
+      "warnings": [],
+      "cards": [
+        1
+      ],
+      "renders": true
     },
     {
       "name": "unquoted value",
       "markdown": "<ap-investigation investigation=inv_0123456789abcdef></ap-investigation>\n",
-      "warnings": []
+      "warnings": [],
+      "cards": [
+        1
+      ],
+      "renders": true
     },
     {
       "name": "attributes over several lines",
@@ -105,7 +141,11 @@
           "message": "<ap-investigation> has an unknown attribute \"hue\"; the viewer ignores it",
           "attribute": "hue"
         }
-      ]
+      ],
+      "cards": [
+        1
+      ],
+      "renders": true
     },
     {
       "name": "each finding once",
@@ -121,7 +161,12 @@
           "message": "<ap-investigation> names \"inv_x\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
           "investigation": "inv_x"
         }
-      ]
+      ],
+      "cards": [
+        1,
+        3
+      ],
+      "renders": true
     },
     {
       "name": "document order",
@@ -137,12 +182,21 @@
           "message": "<ap-investigation> names \"inv_a\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
           "investigation": "inv_a"
         }
-      ]
+      ],
+      "cards": [
+        1,
+        3
+      ],
+      "renders": true
     },
     {
       "name": "first duplicate attribute wins",
       "markdown": "<ap-investigation investigation=\"inv_0123456789abcdef\" investigation=\"inv_x\"></ap-investigation>\n",
-      "warnings": []
+      "warnings": [],
+      "cards": [
+        1
+      ],
+      "renders": true
     },
     {
       "name": "up to three spaces of indentation",
@@ -153,27 +207,39 @@
           "message": "<ap-investigation> names \"inv_x\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
           "investigation": "inv_x"
         }
-      ]
+      ],
+      "cards": [
+        1
+      ],
+      "renders": true
     },
     {
       "name": "four spaces is indented code",
       "markdown": "    <ap-investigation investigation=\"inv_x\"></ap-investigation>\n",
-      "warnings": []
+      "warnings": [],
+      "cards": [],
+      "renders": true
     },
     {
       "name": "a mid-line mention is inline HTML",
       "markdown": "See `<ap-investigation investigation=\"inv_x\">` here.\n",
-      "warnings": []
+      "warnings": [],
+      "cards": [],
+      "renders": true
     },
     {
       "name": "backtick fence",
       "markdown": "```html\n<ap-investigation investigation=\"inv_x\"></ap-investigation>\n```\n",
-      "warnings": []
+      "warnings": [],
+      "cards": [],
+      "renders": true
     },
     {
       "name": "tilde fence with a longer close",
       "markdown": "~~~\n<ap-investigation investigation=\"inv_x\"></ap-investigation>\n~~~~\n",
-      "warnings": []
+      "warnings": [],
+      "cards": [],
+      "renders": true
     },
     {
       "name": "a shorter run does not close the fence",
@@ -184,38 +250,76 @@
           "message": "<ap-investigation> names \"inv_y\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
           "investigation": "inv_y"
         }
-      ]
+      ],
+      "cards": [
+        5
+      ],
+      "renders": true
     },
     {
       "name": "an unclosed fence runs to the end",
       "markdown": "```\n<ap-investigation investigation=\"inv_x\"></ap-investigation>\n",
-      "warnings": []
+      "warnings": [],
+      "cards": [],
+      "renders": true
     },
     {
-      "name": "a backtick info string with a backtick is not a fence",
+      "name": "a backtick info string with a backtick is not a fence, so the insert continues its paragraph",
       "markdown": "``` a`b\n<ap-investigation investigation=\"inv_x\"></ap-investigation>\n",
       "warnings": [
         {
-          "code": "unknown_investigation",
-          "message": "<ap-investigation> names \"inv_x\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
-          "investigation": "inv_x"
+          "code": "insert_in_paragraph",
+          "message": "<ap-investigation> on line 2 continues the text above it, so the viewer shows no card; put a blank line before it",
+          "line": 2
         }
-      ]
+      ],
+      "cards": [],
+      "renders": true
     },
     {
-      "name": "an incomplete tag is ignored",
+      "name": "an incomplete tag still renders an unavailable card",
       "markdown": "<ap-investigation investigation=\"inv_x\"\n",
-      "warnings": []
+      "warnings": [
+        {
+          "code": "unknown_investigation",
+          "message": "<ap-investigation> names no investigation; the viewer shows \"Investigation unavailable\"",
+          "investigation": ""
+        }
+      ],
+      "cards": [
+        1
+      ],
+      "renders": true
     },
     {
-      "name": "an unterminated quote is ignored",
+      "name": "an unterminated quote still renders an unavailable card",
       "markdown": "<ap-investigation investigation=\"inv_x></ap-investigation>\n",
-      "warnings": []
+      "warnings": [
+        {
+          "code": "unknown_investigation",
+          "message": "<ap-investigation> names no investigation; the viewer shows \"Investigation unavailable\"",
+          "investigation": ""
+        }
+      ],
+      "cards": [
+        1
+      ],
+      "renders": true
     },
     {
-      "name": "a longer tag name is another element",
+      "name": "a longer tag name starting with the tag renders an unavailable card",
       "markdown": "<ap-investigations investigation=\"inv_x\"></ap-investigations>\n",
-      "warnings": []
+      "warnings": [
+        {
+          "code": "unknown_investigation",
+          "message": "<ap-investigation> names no investigation; the viewer shows \"Investigation unavailable\"",
+          "investigation": ""
+        }
+      ],
+      "cards": [
+        1
+      ],
+      "renders": true
     },
     {
       "name": "self-closing",
@@ -226,7 +330,11 @@
           "message": "<ap-investigation> names \"inv_x\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
           "investigation": "inv_x"
         }
-      ]
+      ],
+      "cards": [
+        1
+      ],
+      "renders": true
     },
     {
       "name": "CRLF line endings",
@@ -237,7 +345,11 @@
           "message": "<ap-investigation> has an unknown attribute \"x\"; the viewer ignores it",
           "attribute": "x"
         }
-      ]
+      ],
+      "cards": [
+        3
+      ],
+      "renders": true
     },
     {
       "name": "non-ASCII attribute names keep their case",
@@ -253,7 +365,11 @@
           "message": "<ap-investigation> has an unknown attribute \"état\"; the viewer ignores it",
           "attribute": "état"
         }
-      ]
+      ],
+      "cards": [
+        1
+      ],
+      "renders": true
     },
     {
       "name": "a leading equals sign belongs to the name",
@@ -264,18 +380,26 @@
           "message": "<ap-investigation> has an unknown attribute \"=x\"; the viewer ignores it",
           "attribute": "=x"
         }
-      ]
+      ],
+      "cards": [
+        1
+      ],
+      "renders": true
     },
     {
-      "name": "unknown references stay as written",
+      "name": "invalid numeric references decode to U+FFFD, unknown names stay",
       "markdown": "<ap-investigation investigation=\"inv&bogus;&#xD800;&#1114112;&\"></ap-investigation>\n",
       "warnings": [
         {
           "code": "unknown_investigation",
-          "message": "<ap-investigation> names \"inv&bogus;&#xD800;&#1114112;&\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
-          "investigation": "inv&bogus;&#xD800;&#1114112;&"
+          "message": "<ap-investigation> names \"inv&bogus;��&\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
+          "investigation": "inv&bogus;��&"
         }
-      ]
+      ],
+      "cards": [
+        1
+      ],
+      "renders": true
     },
     {
       "name": "a bare attribute",
@@ -286,7 +410,320 @@
           "message": "<ap-investigation> has an unknown attribute \"open\"; the viewer ignores it",
           "attribute": "open"
         }
-      ]
+      ],
+      "cards": [
+        1
+      ],
+      "renders": true
+    },
+    {
+      "name": "an insert line right after a paragraph line continues it",
+      "markdown": "Intro.\n<ap-investigation investigation=\"inv_x\"></ap-investigation>\n",
+      "warnings": [
+        {
+          "code": "insert_in_paragraph",
+          "message": "<ap-investigation> on line 2 continues the text above it, so the viewer shows no card; put a blank line before it",
+          "line": 2
+        }
+      ],
+      "cards": [],
+      "renders": true
+    },
+    {
+      "name": "a known insert that continues a paragraph still renders nothing",
+      "markdown": "Intro.\n<ap-investigation investigation=\"inv_0123456789abcdef\"></ap-investigation>\n",
+      "warnings": [
+        {
+          "code": "insert_in_paragraph",
+          "message": "<ap-investigation> on line 2 continues the text above it, so the viewer shows no card; put a blank line before it",
+          "line": 2
+        }
+      ],
+      "cards": [],
+      "renders": true
+    },
+    {
+      "name": "a lazy line continues a blockquote paragraph",
+      "markdown": "> Quote\n<ap-investigation investigation=\"inv_0123456789abcdef\"></ap-investigation>\n",
+      "warnings": [
+        {
+          "code": "insert_in_paragraph",
+          "message": "<ap-investigation> on line 2 continues the text above it, so the viewer shows no card; put a blank line before it",
+          "line": 2
+        }
+      ],
+      "cards": [],
+      "renders": true
+    },
+    {
+      "name": "a line under a list item's text continues it",
+      "markdown": "- Item\n  <ap-investigation investigation=\"inv_0123456789abcdef\"></ap-investigation>\n",
+      "warnings": [
+        {
+          "code": "insert_in_paragraph",
+          "message": "<ap-investigation> on line 2 continues the text above it, so the viewer shows no card; put a blank line before it",
+          "line": 2
+        }
+      ],
+      "cards": [],
+      "renders": true
+    },
+    {
+      "name": "a line under a table becomes a row",
+      "markdown": "| a |\n| - |\n<ap-investigation investigation=\"inv_0123456789abcdef\"></ap-investigation>\n",
+      "warnings": [
+        {
+          "code": "insert_in_paragraph",
+          "message": "<ap-investigation> on line 3 continues the text above it, so the viewer shows no card; put a blank line before it",
+          "line": 3
+        }
+      ],
+      "cards": [],
+      "renders": true
+    },
+    {
+      "name": "a line right after an ATX heading starts a block",
+      "markdown": "# Title\n<ap-investigation investigation=\"inv_0123456789abcdef\"></ap-investigation>\n",
+      "warnings": [],
+      "cards": [
+        2
+      ],
+      "renders": true
+    },
+    {
+      "name": "an insert in a blockquote renders",
+      "markdown": "> <ap-investigation investigation=\"inv_bad\"></ap-investigation>\n",
+      "warnings": [
+        {
+          "code": "unknown_investigation",
+          "message": "<ap-investigation> names \"inv_bad\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
+          "investigation": "inv_bad"
+        }
+      ],
+      "cards": [
+        1
+      ],
+      "renders": true
+    },
+    {
+      "name": "an insert in a list item renders",
+      "markdown": "- <ap-investigation investigation=\"inv_y\"></ap-investigation>\n",
+      "warnings": [
+        {
+          "code": "unknown_investigation",
+          "message": "<ap-investigation> names \"inv_y\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
+          "investigation": "inv_y"
+        }
+      ],
+      "cards": [
+        1
+      ],
+      "renders": true
+    },
+    {
+      "name": "an insert in a list in a blockquote renders",
+      "markdown": "> 1. <ap-investigation investigation=\"inv_0123456789abcdef\"></ap-investigation>\n",
+      "warnings": [],
+      "cards": [
+        1
+      ],
+      "renders": true
+    },
+    {
+      "name": "fenced code in a list item hides the insert",
+      "markdown": "- x\n\n  ```\n  <ap-investigation investigation=\"inv_x\"></ap-investigation>\n  ```\n",
+      "warnings": [],
+      "cards": [],
+      "renders": true
+    },
+    {
+      "name": "an uppercase tag inside a line is inline HTML",
+      "markdown": "<AP-INVESTIGATION investigation=\"inv_x\"></AP-INVESTIGATION>\n",
+      "warnings": [],
+      "cards": [],
+      "renders": true
+    },
+    {
+      "name": "an uppercase tag alone on a line is an HTML block",
+      "markdown": "<AP-INVESTIGATION investigation=\"inv_x\">\n",
+      "warnings": [
+        {
+          "code": "html_block",
+          "message": "line 1 starts an HTML block, which the viewer cannot display; it shows \"The document could not be displayed\" instead of the overview",
+          "line": 1
+        }
+      ],
+      "cards": [],
+      "renders": false
+    },
+    {
+      "name": "an HTML comment stops the whole document rendering",
+      "markdown": "# A\n\n<!-- draft -->\n\n<ap-investigation investigation=\"inv_0123456789abcdef\"></ap-investigation>\n",
+      "warnings": [
+        {
+          "code": "html_block",
+          "message": "line 3 starts an HTML block, which the viewer cannot display; it shows \"The document could not be displayed\" instead of the overview",
+          "line": 3
+        }
+      ],
+      "cards": [
+        5
+      ],
+      "renders": false
+    },
+    {
+      "name": "a div block stops the whole document rendering",
+      "markdown": "<div>\n<ap-investigation investigation=\"inv_0123456789abcdef\"></ap-investigation>\n</div>\n",
+      "warnings": [
+        {
+          "code": "html_block",
+          "message": "line 1 starts an HTML block, which the viewer cannot display; it shows \"The document could not be displayed\" instead of the overview",
+          "line": 1
+        }
+      ],
+      "cards": [],
+      "renders": false
+    },
+    {
+      "name": "a hyphenated longer tag renders an unavailable card",
+      "markdown": "<ap-investigation-x investigation=\"inv_x\"></ap-investigation-x>\n",
+      "warnings": [
+        {
+          "code": "unknown_investigation",
+          "message": "<ap-investigation> names no investigation; the viewer shows \"Investigation unavailable\"",
+          "investigation": ""
+        }
+      ],
+      "cards": [
+        1
+      ],
+      "renders": true
+    },
+    {
+      "name": "an insert never closed hides the rest of its block",
+      "markdown": "<ap-investigation investigation=\"inv_0123456789abcdef\">\n\nLater text.\n",
+      "warnings": [
+        {
+          "code": "unclosed_insert",
+          "message": "<ap-investigation> on line 1 is never closed with </ap-investigation>, so the viewer hides lines 2 to 3",
+          "line": 1
+        }
+      ],
+      "cards": [
+        1
+      ],
+      "renders": true
+    },
+    {
+      "name": "text between a start tag and a closing tag on a later line is hidden",
+      "markdown": "<ap-investigation investigation=\"inv_0123456789abcdef\">\nA note.\n</ap-investigation>\n",
+      "warnings": [
+        {
+          "code": "unclosed_insert",
+          "message": "<ap-investigation> on line 1 is not closed until line 3, so the viewer hides lines 2 to 3",
+          "line": 1
+        }
+      ],
+      "cards": [
+        1
+      ],
+      "renders": true
+    },
+    {
+      "name": "a self-closing insert runs to the next closing tag and hides the lines between",
+      "markdown": "<ap-investigation investigation=\"inv_0123456789abcdef\" />\n\nLater text.\n\n<ap-investigation investigation=\"inv_x\"></ap-investigation>\n",
+      "warnings": [
+        {
+          "code": "unclosed_insert",
+          "message": "<ap-investigation> on line 1 is not closed until line 5, so the viewer hides lines 2 to 5",
+          "line": 1
+        }
+      ],
+      "cards": [
+        1
+      ],
+      "renders": true
+    },
+    {
+      "name": "an unclosed built-in insert hides an insert after it",
+      "markdown": "<std-lisp-example code=\"(+ 1 2)\">\n\n<ap-investigation investigation=\"inv_x\"></ap-investigation>\n",
+      "warnings": [
+        {
+          "code": "unclosed_insert",
+          "message": "<std-lisp-example> on line 1 is never closed with </std-lisp-example>, so the viewer hides lines 2 to 3",
+          "line": 1
+        }
+      ],
+      "cards": [],
+      "renders": true
+    },
+    {
+      "name": "a leading no-break space is trimmed like the viewer does",
+      "markdown": " <ap-investigation investigation=\"inv_x\"></ap-investigation>\n",
+      "warnings": [
+        {
+          "code": "unknown_investigation",
+          "message": "<ap-investigation> names \"inv_x\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
+          "investigation": "inv_x"
+        }
+      ],
+      "cards": [
+        1
+      ],
+      "renders": true
+    },
+    {
+      "name": "a tab indent of four columns is indented code",
+      "markdown": "\t<ap-investigation investigation=\"inv_x\"></ap-investigation>\n",
+      "warnings": [],
+      "cards": [],
+      "renders": true
+    },
+    {
+      "name": "twenty levels of nesting are skipped",
+      "markdown": "> > > > > > > > > > > > > > > > > > > > <ap-investigation investigation=\"inv_x\"></ap-investigation>\n",
+      "warnings": [],
+      "cards": [],
+      "renders": true
+    },
+    {
+      "name": "nineteen levels of nesting still render",
+      "markdown": "> > > > > > > > > > > > > > > > > > > <ap-investigation investigation=\"inv_x\"></ap-investigation>\n",
+      "warnings": [
+        {
+          "code": "unknown_investigation",
+          "message": "<ap-investigation> names \"inv_x\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
+          "investigation": "inv_x"
+        }
+      ],
+      "cards": [
+        1
+      ],
+      "renders": true
+    },
+    {
+      "name": "a closing tag later in the line closes the card",
+      "markdown": "<ap-investigation investigation=\"inv_0123456789abcdef\">x</ap-investigation>\nAfter.\n",
+      "warnings": [],
+      "cards": [
+        1
+      ],
+      "renders": true
+    },
+    {
+      "name": "legacy and numeric references without a semicolon",
+      "markdown": "<ap-investigation investigation=\"inv&#95x&ampy&amp z&#x80;\"></ap-investigation>\n",
+      "warnings": [
+        {
+          "code": "unknown_investigation",
+          "message": "<ap-investigation> names \"inv_x&ampy& z€\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
+          "investigation": "inv_x&ampy& z€"
+        }
+      ],
+      "cards": [
+        1
+      ],
+      "renders": true
     }
   ],
   "refused": [

@@ -11,10 +11,11 @@ import pytest
 
 import conformance_cases
 from autophys import connect
-from autophys.overview import INSERTS_JSON, check_overview
+from autophys import _overview_blocks
+from autophys.overview import INSERTS_JSON, check_overview, decode
 from autophys.store import MemoryStore, config_hash
-from autophys.workbook import (DISPLAY_VERSION, MAX_OVERVIEW_BYTES, OVERVIEW_VERSION, SCHEMA_VERSION, WorkbookError,
-                               WorkbookStore)
+from autophys.workbook import (_OVERVIEWS_DDL, DISPLAY_VERSION, MAX_OVERVIEW_BYTES, OVERVIEW_VERSION, SCHEMA_VERSION,
+                               WorkbookError, WorkbookStore)
 
 ROOT = Path(__file__).resolve().parents[3]
 SHARED = ROOT / "tests" / "conformance" / "overview"
@@ -181,6 +182,28 @@ def test_digests_are_the_sha256_of_the_utf8_body(tmp_path):
 @pytest.mark.parametrize("case", CASES["warnings"], ids=lambda c: c["name"])
 def test_warnings_match_the_shared_vectors(case):
     assert check_overview(case["markdown"], CASES["investigations"]) == case["warnings"]
+
+
+@pytest.mark.parametrize("case", CASES["warnings"], ids=lambda c: c["name"])
+def test_cards_and_renders_match_the_shared_vectors(case):
+    """The block pass puts cards and HTML blocks where the viewer does
+    (html/routes/overview-vectors.deno.test.ts checks the same vectors against the
+    bundled parser)."""
+    found = _overview_blocks.blocks(case["markdown"], ("ap-investigation",))
+    assert [f[2] + 1 for f in found if f[0] == "card" and f[1] == "ap-investigation"] == case["cards"]
+    assert (not any(f[0] == "html_block" for f in found)) == case["renders"]
+
+
+@pytest.mark.parametrize(("raw", "want"), [
+    ("a&amp;b", "a&b"), ("a&ampb", "a&ampb"), ("a&amp b", "a& b"), ("a&amp=b", "a&amp=b"),
+    ("&#95x&#x80;", "_x\u20ac"), ("&#0;&#xD800;&#x110000;", "\ufffd\ufffd\ufffd"), ("&bogus;&", "&bogus;&"),
+    ("&#;", "&#;")])
+def test_attribute_values_decode_as_the_html_parser_does(raw, want):
+    assert decode(raw) == want
+
+
+def test_overviews_ddl_is_the_shared_vector():
+    assert _OVERVIEWS_DDL == CASES["ddl"]
 
 
 def test_a_write_warns_about_its_own_workbook_and_still_stores_the_body(tmp_path):

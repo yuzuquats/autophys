@@ -146,3 +146,16 @@ fn run_steps(tx: &Transaction<'_>, from: i64, to: i64) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    /// The table every SDK creates is byte-for-byte the shared vector.
+    #[test]
+    fn overviews_ddl_is_the_shared_vector() {
+        let cases: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../tests/conformance/overview/cases.json"
+        ))
+        .unwrap();
+        assert_eq!(super::OVERVIEWS_DDL, cases["ddl"].as_str().unwrap());
+    }
+}

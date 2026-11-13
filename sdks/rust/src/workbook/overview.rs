@@ -5,12 +5,18 @@
 //!
 //! Validation is advisory (OV-3): a write is refused only for an empty body,
 //! a body over [`MAX_OVERVIEW_BYTES`] or a missing author. Inserts that name
-//! an investigation the workbook does not hold, and insert attributes the
-//! viewer does not know, come back as [`OverviewWarning`]s. The insert tags
-//! and their attribute keys are read from `html/ui/investigation-inserts.json`,
-//! the list the browser's document view registers.
+//! an investigation the workbook does not hold, insert attributes the viewer
+//! does not know, and Markdown the viewer will not render as written (OV-9)
+//! come back as [`OverviewWarning`]s. The insert tags and their attribute
+//! keys are read from `html/ui/investigation-inserts.json`, the list the
+//! browser's document view registers. Where a card renders is decided by
+//! [`blocks`], a port of the viewer's block parser; Python's
+//! `autophys.overview` has the same rules and
+//! `tests/conformance/overview/cases.json` pins both.
 use std::collections::BTreeSet;
 use std::sync::OnceLock;
+
+use super::overview_blocks::{self as blocks, Found, js_trim};
 
 use super::*;
 
@@ -32,8 +38,19 @@ pub struct StoredOverview {
 }
 
 /// An advisory finding about an overview write; the write still happened.
-/// `code` is `unknown_investigation` (with `investigation`, empty when the
-/// insert names none) or `unknown_attribute` (with `attribute`).
+/// `code` is one of:
+///
+/// - `unknown_investigation` (with `investigation`, empty when the insert
+///   names none): a card the viewer shows as "Investigation unavailable";
+/// - `unknown_attribute` (with `attribute`): an attribute the viewer ignores;
+/// - `insert_in_paragraph` (with `line`): an insert line that continues the
+///   text above it, so the viewer renders no card;
+/// - `unclosed_insert` (with `line`): a card whose closing tag comes lines
+///   later or never, so the viewer hides the lines in between;
+/// - `html_block` (with `line`): an HTML block, which stops the viewer
+///   displaying the whole overview.
+///
+/// `line` is 1-based.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OverviewWarning {
     pub code: String,
@@ -42,6 +59,20 @@ pub struct OverviewWarning {
     pub investigation: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attribute: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line: Option<usize>,
+}
+
+impl OverviewWarning {
+    fn at_line(code: &str, message: String, line: usize) -> Self {
+        OverviewWarning {
+            code: code.into(),
+            message,
+            investigation: None,
+            attribute: None,
+            line: Some(line),
+        }
+    }
 }
 
 struct InsertSpec {
@@ -61,7 +92,6 @@ struct InsertJson {
     reference: String,
     attributes: Vec<String>,
 }
-
 /// The shared insert list; Python's copy is pinned byte-equal to this file.
 pub(crate) const INSERTS_JSON: &str =
     include_str!("../../../../html/ui/investigation-inserts.json");
@@ -74,7 +104,7 @@ fn inserts() -> &'static [InsertSpec] {
         file.inserts
             .into_iter()
             .map(|i| InsertSpec {
-                tag: i.tag.to_ascii_lowercase(),
+                tag: i.tag,
                 reference: i.reference,
                 attributes: i.attributes,
             })
@@ -101,121 +131,257 @@ pub(crate) fn check_write(markdown: &str, author: &str) -> Result<()> {
 }
 
 /// The advisory warnings for `markdown` in a workbook holding the
-/// investigations `known` (OV-3), in document order, each finding once.
-/// An insert is an HTML block: its tag starts a line (after at most three
-/// spaces) outside fenced code, as the viewer's Markdown parser reads it.
+/// investigations `known` (OV-3, OV-9), in document order, each attribute and
+/// investigation finding once. Cards are found where the viewer renders them.
 pub fn check_overview<S: AsRef<str>>(markdown: &str, known: &[S]) -> Vec<OverviewWarning> {
     let known: BTreeSet<&str> = known.iter().map(AsRef::as_ref).collect();
+    let specs = inserts();
+    let tags: Vec<&str> = specs.iter().map(|s| s.tag.as_str()).collect();
+    let spec_of = |tag: &str| specs.iter().find(|s| s.tag == tag);
     let mut seen = BTreeSet::new();
     let mut out = Vec::new();
-    for (spec, attrs) in scan(markdown) {
-        for (name, _) in &attrs {
-            if !spec.attributes.iter().any(|a| a == name)
-                && seen.insert(("attribute", name.clone()))
-            {
-                out.push(OverviewWarning {
-                    code: "unknown_attribute".into(),
-                    message: format!(
-                        "<{}> has an unknown attribute \"{name}\"; the viewer ignores it",
-                        spec.tag
+    for found in blocks::blocks(markdown, &tags) {
+        match found {
+            Found::HtmlBlock { line } => {
+                let line = line + 1;
+                out.push(OverviewWarning::at_line(
+                    "html_block",
+                    format!(
+                        "line {line} starts an HTML block, which the viewer cannot display; it shows \"The document could not be displayed\" instead of the overview"
                     ),
-                    investigation: None,
-                    attribute: Some(name.clone()),
-                });
+                    line,
+                ));
+            }
+            Found::Continued { tag, line } => {
+                // The viewer's built-in insert is not ours to place.
+                if spec_of(&tag).is_some() {
+                    let line = line + 1;
+                    out.push(OverviewWarning::at_line(
+                        "insert_in_paragraph",
+                        format!(
+                            "<{tag}> on line {line} continues the text above it, so the viewer shows no card; put a blank line before it"
+                        ),
+                        line,
+                    ));
+                }
+            }
+            Found::Card {
+                tag,
+                line,
+                content,
+                end,
+                closed,
+            } => {
+                let line = line + 1;
+                if let Some(spec) = spec_of(&tag) {
+                    let attrs =
+                        element_attributes(&content, &tag.to_ascii_lowercase()).unwrap_or_default();
+                    card_warnings(spec, &attrs, &known, &mut seen, &mut out);
+                }
+                if hides_lines(&content, &tag) {
+                    let until = if closed {
+                        format!("is not closed until line {end}")
+                    } else {
+                        format!("is never closed with </{tag}>")
+                    };
+                    out.push(OverviewWarning::at_line(
+                        "unclosed_insert",
+                        format!(
+                            "<{tag}> on line {line} {until}, so the viewer hides lines {} to {end}",
+                            line + 1
+                        ),
+                        line,
+                    ));
+                }
             }
         }
-        let id = attrs
-            .iter()
-            .find(|(n, _)| *n == spec.reference)
-            .map_or("", |(_, v)| v.as_str());
-        if !known.contains(id) && seen.insert(("investigation", id.to_string())) {
-            let message = if id.is_empty() {
-                format!(
-                    "<{}> names no investigation; the viewer shows \"Investigation unavailable\"",
-                    spec.tag
-                )
-            } else {
-                format!(
-                    "<{}> names \"{id}\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
-                    spec.tag
-                )
-            };
+    }
+    out
+}
+
+/// A rendered card's attribute and investigation warnings, each once.
+fn card_warnings(
+    spec: &InsertSpec,
+    attrs: &[(String, String)],
+    known: &BTreeSet<&str>,
+    seen: &mut BTreeSet<(&'static str, String)>,
+    out: &mut Vec<OverviewWarning>,
+) {
+    let tag = &spec.tag;
+    for (name, _) in attrs {
+        if !spec.attributes.iter().any(|a| a == name) && seen.insert(("attribute", name.clone())) {
             out.push(OverviewWarning {
-                code: "unknown_investigation".into(),
-                message,
-                investigation: Some(id.to_string()),
-                attribute: None,
+                code: "unknown_attribute".into(),
+                message: format!(
+                    "<{tag}> has an unknown attribute \"{name}\"; the viewer ignores it"
+                ),
+                investigation: None,
+                attribute: Some(name.clone()),
+                line: None,
             });
         }
     }
-    out
-}
-
-/// Every insert tag in `markdown` with its attributes (lowercased names,
-/// decoded values, first occurrence wins), in document order.
-fn scan(markdown: &str) -> Vec<(&'static InsertSpec, Vec<(String, String)>)> {
-    let mut out = Vec::new();
-    let mut fence: Option<(u8, usize)> = None;
-    let mut start = 0;
-    while start < markdown.len() {
-        let end = markdown[start..]
-            .find('\n')
-            .map_or(markdown.len(), |i| start + i);
-        let line = markdown[start..end]
-            .strip_suffix('\r')
-            .unwrap_or(&markdown[start..end]);
-        let indent = line.bytes().take_while(|&b| b == b' ').count();
-        let rest = &line[indent..];
-        let run = |c: u8| rest.bytes().take_while(|&b| b == c).count();
-        match fence {
-            Some((c, n)) => {
-                if indent <= 3 && run(c) >= n && rest[run(c)..].trim_matches([' ', '\t']).is_empty()
-                {
-                    fence = None;
-                }
-            }
-            None if indent <= 3 && (run(b'`') >= 3 || run(b'~') >= 3) => {
-                let c = rest.as_bytes()[0];
-                let n = run(c);
-                if c != b'`' || !rest[n..].contains('`') {
-                    fence = Some((c, n));
-                }
-            }
-            None if indent <= 3 && rest.starts_with('<') => {
-                if let Some(found) = insert_at(&markdown[start + indent..]) {
-                    out.push(found);
-                }
-            }
-            None => {}
-        }
-        start = end + 1;
+    let id = attrs
+        .iter()
+        .find(|(n, _)| *n == spec.reference)
+        .map_or("", |(_, v)| v.as_str());
+    if !known.contains(id) && seen.insert(("investigation", id.to_string())) {
+        let message = if id.is_empty() {
+            format!(
+                "<{tag}> names no investigation; the viewer shows \"Investigation unavailable\""
+            )
+        } else {
+            format!(
+                "<{tag}> names \"{id}\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\""
+            )
+        };
+        out.push(OverviewWarning {
+            code: "unknown_investigation".into(),
+            message,
+            investigation: Some(id.to_string()),
+            attribute: None,
+            line: None,
+        });
     }
-    out
 }
 
-fn is_space(b: u8) -> bool {
+/// Whether a card token runs past its first line and holds text besides its
+/// start tag and closing tag: the viewer shows none of that text. A start tag
+/// with its attributes over several lines hides nothing; one cut off by the
+/// end of the block hides every line after it.
+fn hides_lines(content: &str, tag: &str) -> bool {
+    if !content.contains('\n') {
+        return false;
+    }
+    let parsed = content
+        .find(&format!("<{tag}"))
+        .and_then(|at| start_tag(content, at + 1));
+    match parsed {
+        None => content.split('\n').skip(1).any(|s| !js_trim(s).is_empty()),
+        Some((_, _, end)) => {
+            !js_trim(&content[end..].replacen(&format!("</{tag}>"), "", 1)).is_empty()
+        }
+    }
+}
+
+// The viewer's getAttrs: the first <tag> element of the card's HTML.
+
+const RAW_TEXT: &[&str] = &[
+    "script", "style", "xmp", "iframe", "noembed", "noframes", "noscript", "textarea", "title",
+];
+
+/// HTML's ASCII whitespace.
+fn html_space(b: u8) -> bool {
     matches!(b, b' ' | b'\t' | b'\n' | b'\r' | 0x0c)
 }
 
-/// The insert whose start tag begins `text` (at its `<`), if the tag is
-/// complete.
-fn insert_at(text: &str) -> Option<(&'static InsertSpec, Vec<(String, String)>)> {
-    let b = text.as_bytes();
-    let spec = inserts().iter().find(|s| {
-        let n = s.tag.len() + 1;
-        b.len() >= n
-            && b[1..n].eq_ignore_ascii_case(s.tag.as_bytes())
-            && b.get(n)
-                .is_none_or(|&c| is_space(c) || c == b'/' || c == b'>')
-    })?;
-    let mut i = spec.tag.len() + 1;
-    let mut attrs: Vec<(String, String)> = Vec::new();
+/// The attributes of the first `tag` element (lowercase) the HTML parser
+/// makes of `html`, as the viewer's `getAttrs` reads them through `innerHTML`
+/// and `querySelector`: names lowercased, values decoded, the first of a
+/// repeated name kept. None when there is no such element, which includes a
+/// tag cut off by the end of the text.
+fn element_attributes(html: &str, tag: &str) -> Option<Vec<(String, String)>> {
+    let b = html.as_bytes();
+    let n = b.len();
+    let find = |pat: &str, from: usize| html[from..].find(pat).map(|k| k + from);
+    let mut i = 0;
     loop {
-        while i < b.len() && is_space(b[i]) {
+        let lt = find("<", i)?;
+        if lt + 1 >= n {
+            return None;
+        }
+        match b[lt + 1] {
+            b'!' => {
+                if html[lt..].starts_with("<!--") {
+                    let j = lt + 4;
+                    if html[j..].starts_with('>') {
+                        i = j + 1;
+                    } else if html[j..].starts_with("->") {
+                        i = j + 2;
+                    } else {
+                        let k = [find("-->", j), find("--!>", j)]
+                            .into_iter()
+                            .flatten()
+                            .min()?;
+                        i = k + if html[k..].starts_with("-->") { 3 } else { 4 };
+                    }
+                } else {
+                    i = find(">", lt + 2)? + 1;
+                }
+                continue;
+            }
+            b'?' => {
+                i = find(">", lt + 2)? + 1;
+                continue;
+            }
+            _ => {}
+        }
+        let closing = b[lt + 1] == b'/';
+        let start = if closing { lt + 2 } else { lt + 1 };
+        if start >= n {
+            return None;
+        }
+        if !b[start].is_ascii_alphabetic() {
+            i = if closing && b[start] == b'>' {
+                start + 1
+            } else if closing {
+                find(">", start)? + 1
+            } else {
+                lt + 1
+            };
+            continue;
+        }
+        let (name, attrs, after) = start_tag(html, start)?;
+        i = after;
+        if closing {
+            continue;
+        }
+        if name == tag {
+            return Some(attrs);
+        }
+        if name == "plaintext" {
+            return None;
+        }
+        if RAW_TEXT.contains(&name.as_str()) {
+            i = raw_text_end(html, i, &name)?;
+        }
+    }
+}
+
+/// Where the `</name` that ends a raw text element starts, or None.
+fn raw_text_end(html: &str, mut i: usize, name: &str) -> Option<usize> {
+    let lowered = html.to_ascii_lowercase();
+    let closing = format!("</{name}");
+    loop {
+        let k = lowered[i..].find(&closing)? + i;
+        let after = k + closing.len();
+        match html.as_bytes().get(after) {
+            None => return Some(k),
+            Some(&c) if html_space(c) || c == b'/' || c == b'>' => return Some(k),
+            _ => i = after,
+        }
+    }
+}
+
+type Attributes = Vec<(String, String)>;
+
+/// Tag name (from its first letter at `at`), attributes and the index after
+/// `>`; None when the text ends inside the tag.
+fn start_tag(text: &str, at: usize) -> Option<(String, Attributes, usize)> {
+    let b = text.as_bytes();
+    let n = b.len();
+    let mut i = at;
+    while i < n && !html_space(b[i]) && b[i] != b'/' && b[i] != b'>' {
+        i += 1;
+    }
+    let name = text[at..i].to_ascii_lowercase().replace('\0', "\u{fffd}");
+    let mut attrs: Attributes = Vec::new();
+    loop {
+        while i < n && html_space(b[i]) {
             i += 1;
         }
         match b.get(i)? {
-            b'>' => return Some((spec, attrs)),
+            b'>' => return Some((name, attrs, i + 1)),
             b'/' => {
                 i += 1;
                 continue;
@@ -225,29 +391,29 @@ fn insert_at(text: &str) -> Option<(&'static InsertSpec, Vec<(String, String)>)>
         let name_start = i;
         // The first character belongs to the name, even a '='.
         i += text[i..].chars().next().map_or(1, char::len_utf8);
-        while i < b.len() && !is_space(b[i]) && !matches!(b[i], b'/' | b'>' | b'=') {
+        while i < n && !html_space(b[i]) && !matches!(b[i], b'/' | b'>' | b'=') {
             i += 1;
         }
-        let name = text[name_start..i].to_ascii_lowercase();
+        let attr = text[name_start..i].to_ascii_lowercase();
         let mut j = i;
-        while j < b.len() && is_space(b[j]) {
+        while j < n && html_space(b[j]) {
             j += 1;
         }
         let mut value = String::new();
         if b.get(j) == Some(&b'=') {
             j += 1;
-            while j < b.len() && is_space(b[j]) {
+            while j < n && html_space(b[j]) {
                 j += 1;
             }
-            match b.get(j)? {
-                &q if q == b'"' || q == b'\'' => {
+            match *b.get(j)? {
+                q @ (b'"' | b'\'') => {
                     let close = text[j + 1..].find(q as char)? + j + 1;
                     value = decode(&text[j + 1..close]);
                     i = close + 1;
                 }
                 _ => {
                     let from = j;
-                    while j < b.len() && !is_space(b[j]) && b[j] != b'>' {
+                    while j < n && !html_space(b[j]) && b[j] != b'>' {
                         j += 1;
                     }
                     value = decode(&text[from..j]);
@@ -255,56 +421,126 @@ fn insert_at(text: &str) -> Option<(&'static InsertSpec, Vec<(String, String)>)>
                 }
             }
         }
-        if !attrs.iter().any(|(n, _)| *n == name) {
-            attrs.push((name, value));
+        if !attrs.iter().any(|(a, _)| *a == attr) {
+            attrs.push((attr, value));
         }
     }
 }
 
-/// Decode the character references an attribute value may use: the five
-/// named XML ones and numeric references, each with its `;`. Anything else
-/// stays as written (OV-3 warnings only need ids, which are plain ASCII).
+const NAMED: &[(&str, char)] = &[
+    ("amp", '&'),
+    ("lt", '<'),
+    ("gt", '>'),
+    ("quot", '"'),
+    ("apos", '\''),
+];
+/// Legacy names the HTML parser also reads without `;`.
+const LEGACY: &[&str] = &["amp", "quot", "lt", "gt"];
+
+/// Numeric references to C1 controls, which HTML reads as windows-1252.
+fn windows_1252(code: u32) -> u32 {
+    match code {
+        0x80 => 0x20AC,
+        0x82 => 0x201A,
+        0x83 => 0x0192,
+        0x84 => 0x201E,
+        0x85 => 0x2026,
+        0x86 => 0x2020,
+        0x87 => 0x2021,
+        0x88 => 0x02C6,
+        0x89 => 0x2030,
+        0x8A => 0x0160,
+        0x8B => 0x2039,
+        0x8C => 0x0152,
+        0x8E => 0x017D,
+        0x91 => 0x2018,
+        0x92 => 0x2019,
+        0x93 => 0x201C,
+        0x94 => 0x201D,
+        0x95 => 0x2022,
+        0x96 => 0x2013,
+        0x97 => 0x2014,
+        0x98 => 0x02DC,
+        0x99 => 0x2122,
+        0x9A => 0x0161,
+        0x9B => 0x203A,
+        0x9C => 0x0153,
+        0x9E => 0x017E,
+        0x9F => 0x0178,
+        other => other,
+    }
+}
+
+/// A numeric reference at `value[at] == '#'`: the character and the index
+/// after it, or None without digits.
+fn numeric(value: &str, at: usize) -> Option<(char, usize)> {
+    let b = value.as_bytes();
+    let mut i = at + 1;
+    let hex = matches!(b.get(i), Some(b'x' | b'X'));
+    if hex {
+        i += 1;
+    }
+    let radix = if hex { 16 } else { 10 };
+    let start = i;
+    let mut code: u32 = 0;
+    while let Some(d) = b.get(i).and_then(|&c| (c as char).to_digit(radix)) {
+        code = (code * radix + d).min(0x110000);
+        i += 1;
+    }
+    if i == start {
+        return None;
+    }
+    if b.get(i) == Some(&b';') {
+        i += 1;
+    }
+    let ch = if code == 0 {
+        '\u{fffd}'
+    } else {
+        char::from_u32(windows_1252(code)).unwrap_or('\u{fffd}')
+    };
+    Some((ch, i))
+}
+
+/// Character references in an attribute value, as the HTML parser reads
+/// them: numeric ones (with or without `;`), the five XML names with `;`, and
+/// `&amp`, `&quot`, `&lt`, `&gt` without one unless a letter, digit or `=`
+/// follows. Other names stay as written; insert ids are plain ASCII.
 fn decode(value: &str) -> String {
+    let b = value.as_bytes();
     let mut out = String::with_capacity(value.len());
-    let mut rest = value;
-    while let Some(at) = rest.find('&') {
-        out.push_str(&rest[..at]);
-        rest = &rest[at..];
-        let Some(semi) = rest[1..].find(';').map(|i| i + 1) else {
-            break;
-        };
-        let entity = &rest[1..semi];
-        let ch = match entity {
-            "amp" => Some('&'),
-            "lt" => Some('<'),
-            "gt" => Some('>'),
-            "quot" => Some('"'),
-            "apos" => Some('\''),
-            _ => entity
-                .strip_prefix('#')
-                .and_then(|n| match n.strip_prefix(['x', 'X']) {
-                    Some(hex) if !hex.is_empty() && hex.bytes().all(|c| c.is_ascii_hexdigit()) => {
-                        u32::from_str_radix(hex, 16).ok()
-                    }
-                    None if !n.is_empty() && n.bytes().all(|c| c.is_ascii_digit()) => {
-                        n.parse().ok()
-                    }
-                    _ => None,
-                })
-                .and_then(char::from_u32),
-        };
-        match ch {
-            Some(c) => {
-                out.push(c);
-                rest = &rest[semi + 1..];
+    let mut i = 0;
+    while let Some(at) = value[i..].find('&').map(|k| k + i) {
+        out.push_str(&value[i..at]);
+        if b.get(at + 1) == Some(&b'#') {
+            if let Some((ch, next)) = numeric(value, at + 1) {
+                out.push(ch);
+                i = next;
+                continue;
             }
-            None => {
-                out.push('&');
-                rest = &rest[1..];
+        } else {
+            let named = value[at + 1..].find(';').and_then(|semi| {
+                NAMED
+                    .iter()
+                    .find(|(n, _)| *n == &value[at + 1..at + 1 + semi])
+            });
+            if let Some((name, ch)) = named {
+                out.push(*ch);
+                i = at + 2 + name.len();
+                continue;
+            }
+            if let Some(name) = LEGACY.iter().find(|n| value[at + 1..].starts_with(*n)) {
+                let after = b.get(at + 1 + name.len());
+                if !after.is_some_and(|c| c.is_ascii_alphanumeric() || *c == b'=') {
+                    out.push(NAMED.iter().find(|(n, _)| n == name).unwrap().1);
+                    i = at + 1 + name.len();
+                    continue;
+                }
             }
         }
+        out.push('&');
+        i = at + 1;
     }
-    out.push_str(rest);
+    out.push_str(&value[i..]);
     out
 }
 
@@ -418,4 +654,60 @@ pub(super) fn latest(conn: &Connection, project: &str) -> Result<Option<StoredOv
             row,
         )
         .optional()?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const CASES: &str = include_str!("../../../../tests/conformance/overview/cases.json");
+
+    /// The block pass puts cards and HTML blocks where the viewer does: each
+    /// vector gives the lines of its <ap-investigation> cards and whether the
+    /// viewer can display it (html/routes/overview-vectors.deno.test.ts checks the
+    /// same against the bundled parser).
+    #[test]
+    fn cards_and_renders_match_the_shared_vectors() {
+        let cases: serde_json::Value = serde_json::from_str(CASES).unwrap();
+        let tags: Vec<&str> = inserts().iter().map(|s| s.tag.as_str()).collect();
+        for case in cases["warnings"].as_array().unwrap() {
+            let found = blocks::blocks(case["markdown"].as_str().unwrap(), &tags);
+            let cards: Vec<usize> = found
+                .iter()
+                .filter_map(|f| match f {
+                    Found::Card { tag, line, .. } if tag == "ap-investigation" => Some(line + 1),
+                    _ => None,
+                })
+                .collect();
+            let renders = !found.iter().any(|f| matches!(f, Found::HtmlBlock { .. }));
+            assert_eq!(
+                serde_json::json!(cards),
+                case["cards"],
+                "{}: cards",
+                case["name"]
+            );
+            assert_eq!(
+                serde_json::json!(renders),
+                case["renders"],
+                "{}: renders",
+                case["name"]
+            );
+        }
+    }
+
+    #[test]
+    fn attribute_values_decode_as_the_html_parser_does() {
+        for (raw, want) in [
+            ("a&amp;b", "a&b"),
+            ("a&ampb", "a&ampb"),
+            ("a&amp b", "a& b"),
+            ("a&amp=b", "a&amp=b"),
+            ("&#95x&#x80;", "_x\u{20ac}"),
+            ("&#0;&#xD800;&#x110000;", "\u{fffd}\u{fffd}\u{fffd}"),
+            ("&bogus;&", "&bogus;&"),
+            ("&#;", "&#;"),
+        ] {
+            assert_eq!(decode(raw), want, "{raw}");
+        }
+    }
 }
