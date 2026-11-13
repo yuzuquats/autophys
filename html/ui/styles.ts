@@ -73,9 +73,20 @@ ${w} .ap-trail { display:inline-flex;align-items:center;gap:4px;font:11px/16px v
 ${w} .ap-badge { display:inline-block;min-width:16px;padding:0 6px;border-radius:999px;background:var(--hx-ink,#111);color:#fff;font:600 10.5px/16px var(--ap-font);text-align:center; }
 
 /* ---- main ---- */
-${w} .ap-document-view { display:block;background:var(--ap-card-bg); }
+${w} .ap-viewer.ap-document-view { display:block;background:#fff; }
 ${w} .ap-document-view > [data-ap-document] { max-width:800px;margin:0 auto; }
-${w} .ap-document-view std-documentation { display:block; }
+/* std-documentation consumes the cap-height scale from theme-base.css. Supply its
+   tokens only on the document host so the global theme cannot restyle the shell. */
+${w} .ap-document-view std-documentation {
+  display:block;
+  --cap-height:0.125;--baseline:0.155;--line-height-ratio:1.4;
+  --text-8px:0.5rem;--text-9px:0.5625rem;--text-10px:0.625rem;--text-11px:0.6875rem;
+  --text-12px:0.75rem;--text-14px:0.875rem;--text-16px:1rem;--text-18px:1.125rem;
+  --h1-size:var(--text-18px);--h2-size:var(--text-16px);--h3-size:var(--text-14px);
+  --h4-size:var(--text-12px);--h5-size:var(--text-12px);--h6-size:var(--text-12px);
+  --p-size:var(--text-11px);--font-size:var(--p-size);
+  --bg-surface:var(--ck-n100);--code-bg:var(--ck-n100);--divider:var(--ap-line);
+}
 ${w} .ap-toolbar { display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;flex-shrink:0;min-height:34px; }
 ${w} .ap-crumb { display:flex;align-items:center;flex-wrap:wrap;gap:2px;min-width:0;font:13px/18px var(--ap-font);color:var(--ap-sec); }
 ${w} .ap-crumb button { padding:2px 4px;border:0;border-radius:6px;background:none;font:inherit;color:inherit;cursor:pointer; }
