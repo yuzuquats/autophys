@@ -67,7 +67,7 @@ export class ApiError extends Error {
 
 /** The part of EventSource the daemon source uses (so tests can fake it). */
 export type EventStream = {
-  addEventListener(type: "record" | "display", fn: (e: { data: string; lastEventId: string }) => void): void;
+  addEventListener(type: "record" | "display" | "overview", fn: (e: { data: string; lastEventId: string }) => void): void;
   addEventListener(type: "open" | "error", fn: () => void): void;
   close(): void;
 };
@@ -195,11 +195,12 @@ export function daemon(opts: DaemonOptions = {}): Source {
         if (!live) return;
         const s = es = openStream(`${base}/stream?after=${encodeURIComponent(String(cursor))}`);
         s.addEventListener("open", () => { if (live && es === s) failures = 0; });
-        s.addEventListener("display", (e) => {
+        // Presentation events (no id): the record cursor stays where it is.
+        for (const kind of ["display", "overview"] as const) s.addEventListener(kind, (e) => {
           if (!live || es !== s || !model) return;
           let event: unknown;
           try { event = JSON.parse(e.data); } catch { return; }
-          if (!model.display(event)) return;
+          if (!(kind === "display" ? model.display(event) : model.overview(event))) return;
           model.takeChanged();
           const ws = model.workspace();
           for (const update of updates) update(ws);

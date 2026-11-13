@@ -4,9 +4,13 @@ import { Card } from "@tento-ui/components/card/card";
 import type { ProseMirrorEditor } from "@tento-ui/components/prosemirror";
 import type { InvestigationSummary } from "./view-model.ts";
 import type { IntentHandler } from "./intent.ts";
+import inserts from "./investigation-inserts.json" with { type: "json" };
 
-/** Authored prose stays in the Markdown; evidence and navigation come from records. */
-export const investigationAttributeKeys = ["investigation", "title", "summary", "before", "before-detail", "after", "after-detail", "scope"] as const;
+/** The insert's tag and attribute keys, shared with both SDKs (investigation-inserts.json), whose
+ * overview writes warn about any other attribute or an unknown investigation. Authored prose stays
+ * in the Markdown; evidence and navigation come from records. */
+const investigationInsert = inserts.inserts.find(i => i.id === "ap_investigation")!;
+export const investigationAttributeKeys: readonly string[] = investigationInsert.attributes;
 
 const styles = `
 :host{display:block;margin:24px 0;min-width:0;font:13px/1.6 var(--ap-font,system-ui,sans-serif);color:var(--ap-ink,#252525)}
@@ -131,7 +135,7 @@ export function hydrateInvestigationDocuments(host: HTMLElement, onIntent: Inten
     const state = { summaries, views: new Set<InvestigationView>() }; documents.set(marker, state);
     const doc = Documentation.make(); marker.replaceChildren(doc);
     void doc.bind({ markdown: marker.dataset.apDocument!, inserts: [{
-      id: "ap_investigation", componentName: "ap-investigation", attributeKeys: investigationAttributeKeys,
+      id: investigationInsert.id, componentName: investigationInsert.tag, attributeKeys: investigationAttributeKeys,
       nodeView: node => {
         const view = new InvestigationView(node, () => state.summaries, onIntent); state.views.add(view);
         return { dom: view.dom, update: node => view.update(node), stopEvent: () => view.stopEvent(),

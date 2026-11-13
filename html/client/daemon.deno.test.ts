@@ -563,3 +563,93 @@ Deno.test("wire: duplicate display receipt protects an in-flight reference witho
   assertEquals(model.workspace().projects[0].configs[0].catalog[1].label, "Current");
   model.takeChanged(); assertEquals(model.display(event), false); assertEquals(model.takeChanged(), false);
 });
+
+// ------------------------------------------------------------------ project overviews (OV-5)
+
+const overviewEvent = (markdown: string, digest: string, project_id = "p_bench") =>
+  ({ project_id, seq: 1, digest, author: "ada", created: T0, markdown });
+
+Deno.test("daemon: the snapshot's overview becomes the project's Overview document", async () => {
+  const { initialSelection, reduce } = await import("./controller.ts");
+  const { derive, ids, parseSel } = await import("./derive/index.ts");
+  const { investigationSummary } = await import("./derive/investigation-summary.ts");
+  const d = fakeDaemon();
+  d.ws.projects.push({ id: "p_plain", name: "Plain", overview: null, overview_meta: null });
+  d.ws.projects[0].overview = "# Bench overview";
+  d.ws.projects[0].overview_meta = { digest: "a".repeat(64) };
+  const store = new Store(daemon(d.opts));
+  await store.start();
+  const snap = store.snapshot()!;
+  const [project, plain] = snap.workspace.projects;
+  assertEquals([project.overview, plain.overview, "overview" in plain], ["# Bench overview", undefined, false]);
+  const selection = reduce(initialSelection(snap.workspace), snap, { kind: "select", id: ids.overview(project) }, { user: "james", now: () => "" }).selection;
+  const view = derive(snap, selection);
+  assertEquals(view.sidebar.nodes[0].children![0].label, "Overview");
+  assertEquals(view.main.body, { kind: "document", id: ids.overview(project), markdown: "# Bench overview", investigations: project.investigations.map(inv => investigationSummary(project, inv)) });
+  assertEquals(view.details.title, "Overview");
+  assertEquals(parseSel(project, ids.overview(plain)), null);
+  assert(view.sidebar.nodes[1].children === null || view.sidebar.nodes[1].children!.every(node => node.label !== "Overview"));
+  store.close();
+});
+
+Deno.test("daemon: overview events redraw without advancing records, once per digest", async () => {
+  const d = fakeDaemon(), store = new Store(daemon(d.opts));
+  await store.start();
+  let redraws = 0;
+  store.subscribe(() => redraws++);
+  const cursor = store.snapshot()!.gseq, before = store.snapshot()!.workspace.projects[0];
+  assertEquals(before.overview, undefined);
+  const fire = (event: unknown, stream = d.streams.at(-1)!) => stream.fire.overview?.forEach((fn) => fn({ data: JSON.stringify(event), lastEventId: "" }));
+  for (const invalid of [null, {}, { ...overviewEvent("# x", "bad") }, { ...overviewEvent("# x", "a".repeat(64)), markdown: 7 }, { ...overviewEvent("# x", "a".repeat(64)), project_id: "" }]) fire(invalid);
+  assertEquals(redraws, 0);
+  fire(overviewEvent("# First", "a".repeat(64))); fire(overviewEvent("# First", "a".repeat(64)));
+  const p = store.snapshot()!.workspace.projects[0];
+  assertEquals([redraws, p.overview, store.snapshot()!.gseq, store.applied.length], [1, "# First", cursor, 0]);
+  assertEquals([p.configs, p.investigations], [before.configs, before.investigations]);
+  fire(overviewEvent("# Other", "f".repeat(64), "p_missing"));
+  assertEquals(store.snapshot()!.workspace.projects.map(p => p.id), ["p_bench"]);
+  // A record still folds onto the project that kept its overview.
+  d.emit(9, rec("proposal", { proposal_id: "prop_1", event: "approved", by: "writer" }));
+  assertEquals([store.applied.length, store.snapshot()!.workspace.projects[0].overview], [1, "# First"]);
+  const old = d.streams[0]; d.drop(); await settle();
+  const redrawsBeforeStale = redraws;
+  fire(overviewEvent("# Stale connection", "b".repeat(64)), old);
+  assertEquals([store.snapshot()!.workspace.projects[0].overview, redraws], ["# First", redrawsBeforeStale]);
+  // The new connection resends the latest: the same digest repaints nothing.
+  fire(overviewEvent("# First", "a".repeat(64)));
+  assertEquals(redraws, redrawsBeforeStale);
+  fire(overviewEvent("# Second", "c".repeat(64)));
+  assertEquals([store.snapshot()!.workspace.projects[0].overview, store.snapshot()!.gseq], ["# Second", 9]);
+  store.close();
+});
+
+Deno.test("wire: an overview receipt wins over an in-flight snapshot, and a later snapshot replaces it", async () => {
+  const { WireModel } = await import("./wire.ts");
+  const raw = workspace(), model = new WireModel(raw);
+  assert(model.overview(overviewEvent("# Live", "e".repeat(64)))); model.takeChanged();
+  const started = model.displayRevision;
+  assertEquals(model.overview(overviewEvent("# Live", "e".repeat(64))), false); assertEquals(model.takeChanged(), false);
+  raw.projects[0].overview = "# Older snapshot"; raw.projects[0].overview_meta = { digest: "d".repeat(64) };
+  model.reference(raw, started);
+  assertEquals(model.workspace().projects[0].overview, "# Live");
+  // A snapshot taken after the receipt is authoritative, even with another body.
+  raw.projects[0].overview = "# Newer snapshot"; raw.projects[0].overview_meta = { digest: "f".repeat(64) };
+  model.reference(raw);
+  assertEquals(model.workspace().projects[0].overview, "# Newer snapshot");
+  // The live digest was forgotten with its body, so the same event applies again.
+  assert(model.overview(overviewEvent("# Live", "e".repeat(64))));
+  assertEquals(model.workspace().projects[0].overview, "# Live");
+  // A snapshot that installs the same digest keeps the receipt: a repeat is a no-op.
+  raw.projects[0].overview = "# Live"; raw.projects[0].overview_meta = { digest: "e".repeat(64) };
+  model.reference(raw); model.takeChanged();
+  assertEquals(model.overview(overviewEvent("# Live", "e".repeat(64))), false);
+});
+
+Deno.test("investigation inserts: the viewer's keys are the shared list both SDKs check", async () => {
+  const shared = JSON.parse(await Deno.readTextFile(new URL("../ui/investigation-inserts.json", import.meta.url)));
+  const python = await Deno.readTextFile(new URL("../../sdks/python/src/autophys/investigation-inserts.json", import.meta.url));
+  assertEquals(python, await Deno.readTextFile(new URL("../ui/investigation-inserts.json", import.meta.url)));
+  const insert = shared.inserts.find((i: { id: string }) => i.id === "ap_investigation");
+  assertEquals([insert.tag, insert.reference], ["ap-investigation", "investigation"]);
+  assertEquals(insert.attributes, ["investigation", "title", "summary", "before", "before-detail", "after", "after-detail", "scope"]);
+});

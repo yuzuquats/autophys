@@ -14,8 +14,10 @@ import type {
 
 /** A record exactly as the daemon serves it (the SDK's 8 fields). */
 export type WireRecord = { id: string; investigation: string; seq: number; kind: string; ts: number; payload: Record<string, unknown>; prev_hash?: string; hash?: string };
-/** `display` is the project's latest display manifest (format 1), or null when none was uploaded. */
-export type WireProject = { id: string; name: string; display?: unknown };
+/** `display` is the project's latest display manifest (format 1), or null when none was uploaded.
+ * `overview` is the latest overview's Markdown (workbook format 3) and `overview_meta` its version
+ * `{seq, digest, author, created}`; both null before the first write. */
+export type WireProject = { id: string; name: string; display?: unknown; overview?: string | null; overview_meta?: { digest?: unknown } | null };
 export type WireConfig = { project_id: string; version: string; config: unknown };
 /** `GET /workspace`: one consistent snapshot; resume the stream from `cursor`. */
 export type WireWorkspace = { workspace_id?: string; principal_id?: string; cursor: number | string; projects: WireProject[]; config_versions: WireConfig[]; records: WireRecord[] };
@@ -373,6 +375,8 @@ export class WireModel {
   /** Monotonic local receipt order, independent of record cursors. */
   displayRevision = 0;
   private displays = new Map<string, { digest: string; display: unknown; revision: number }>();
+  /** Live `event: overview` receipts, ordered with display receipts by `displayRevision`. */
+  private overviews = new Map<string, { digest: string; markdown: string; revision: number }>();
 
   /** The server validates format-1 manifests; reject malformed stream envelopes here. */
   display(event: unknown): boolean {
@@ -389,6 +393,22 @@ export class WireModel {
     this.changed = true;
     return true;
   }
+  /** An `event: overview` (`{project_id, digest, markdown, …}`): the project's latest overview.
+   * Like a display receipt, it wins over a snapshot that was already in flight when it arrived. */
+  overview(event: unknown): boolean {
+    const e = obj(event);
+    if (typeof e.project_id !== "string" || !e.project_id || typeof e.digest !== "string" || !/^[a-f0-9]{64}$/.test(e.digest) || typeof e.markdown !== "string") return false;
+    const previous = this.overviews.get(e.project_id), revision = ++this.displayRevision;
+    if (previous?.digest === e.digest) {
+      this.overviews.set(e.project_id, { ...previous, revision });
+      return false;
+    }
+    this.overviews.set(e.project_id, { digest: e.digest, markdown: e.markdown, revision });
+    const markdown = e.markdown;
+    this.projects = this.projects.map((p) => p.id === e.project_id ? { ...p, overview: markdown, overview_meta: { digest: e.digest } } : p);
+    this.changed = true;
+    return true;
+  }
   /** Set when a record pins a project or config version the reference data lacks: refetch it. */
   stale = false;
 
@@ -401,14 +421,19 @@ export class WireModel {
   reference(w: Pick<WireWorkspace, "projects" | "config_versions">, startedAt = this.displayRevision): void {
     this.projects = w.projects.map((p) => {
       const live = this.displays.get(p.id);
-      if (live && live.revision > startedAt) return { ...p, display: live.display };
+      if (live && live.revision > startedAt) p = { ...p, display: live.display };
       // A remembered digest belongs to its body, not to every later snapshot.
       // Keep it only when the snapshot installs that same presentation.
-      if (live && !sameDisplay(live.display, p.display)) this.displays.delete(p.id);
+      else if (live && !sameDisplay(live.display, p.display)) this.displays.delete(p.id);
+      const text = this.overviews.get(p.id);
+      if (text && text.revision > startedAt) return { ...p, overview: text.markdown, overview_meta: { digest: text.digest } };
+      if (text && text.digest !== p.overview_meta?.digest) this.overviews.delete(p.id);
       return p;
     });
-    for (const [id, live] of this.displays) {
-      if (live.revision <= startedAt && !w.projects.some((p) => p.id === id)) this.displays.delete(id);
+    for (const live of [this.displays, this.overviews]) {
+      for (const [id, entry] of live) {
+        if (entry.revision <= startedAt && !w.projects.some((p) => p.id === id)) live.delete(id);
+      }
     }
     this.configs = new Map();
     for (const c of w.config_versions) this.configs.set(c.project_id, [...(this.configs.get(c.project_id) ?? []), { version: c.version, config: c.config }]);
@@ -454,8 +479,9 @@ export class WireModel {
     const projects: Project[] = [];
     for (const wp of this.projects) {
       const cfgs = this.configs.get(wp.id) ?? [];
+      const overview = typeof wp.overview === "string" ? { overview: wp.overview } : {};
       if (!cfgs.length) {
-        projects.push({ id: wp.id, name: wp.name, configs: [], investigations: [] });
+        projects.push({ ...overview, id: wp.id, name: wp.name, configs: [], investigations: [] });
         // Its first streamed investigation may reference a config registered after load.
         if ([...this.logs.values()].some((log) => str(log[0]?.payload.project_id) === wp.id)) this.stale = true;
         continue;
@@ -473,7 +499,7 @@ export class WireModel {
       for (const m of mapped) used.set(m.inv.configVersion, [...(used.get(m.inv.configVersion) ?? []), ...m.experiments]);
       // Applied after ensureSpecs, so experiments only records name still get the manifest's labels.
       const configs = cfgs.map((c, i) => applyDisplay(ensureSpecs(mapConfig(c.config, i + 1, c.version), used.get(i + 1) ?? []), wp.display));
-      projects.push({ id: wp.id, name: wp.name, configs, investigations: mapped.map((m) => m.inv) });
+      projects.push({ ...overview, id: wp.id, name: wp.name, configs, investigations: mapped.map((m) => m.inv) });
     }
     for (const [, log] of this.logs) if (log[0]?.kind === "investigation" && !this.projects.some((p) => p.id === str(log[0].payload.project_id))) this.stale = true;
     return { user: this.user, projects };
