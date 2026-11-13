@@ -263,6 +263,11 @@ The server pieces (the `/open` route, the probe and the access rule) change Rust
 - Production: native release `~/.local/share/tento/services/autophys/1d5d193-20261108` (tree identical to local master at the time; 725f629 plus the five peer commits), web_id f2d0fc8c…, rehearsed on :4793 with temp state. Unit backup `autophys.service.pre-1d5d193-20261108`; rollback release `fe522fb-web-7059330-20261109`. Public checks: healthz commit 1d5d193; `HEAD /open/demo/workbook/{battery_cycler_demo,mass_spring_damper_demo,thermal_rc_demo}` 200, missing 404, `/open/me/…` signed out 404, GET 302 to `/app?open=…`; a signed-out click on Studies' Thermal RC button signs in as the demo and opens inv_c393efe1a93f5e94.
 - Dev (dev--autophys.lona.so) still runs the older native binary with a newer web build, so its Studies buttons stay hidden until a native dev deploy.
 
+## Project overviews (agent choices, 2026-11-13, pending operator review)
+
+OV-1 to OV-5 are in [overview-sdk.md](overview-sdk.md) under Rules. OV-6 to OV-11, chosen
+during implementation, are in its Result section.
+
 ## Lona family app switcher (agent choices, 2026-11-08, pending operator review)
 
 The header's brand link now carries the Lona family app switcher (operator
