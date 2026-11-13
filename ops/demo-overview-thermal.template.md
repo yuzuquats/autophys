@@ -42,7 +42,7 @@ samples**, below the recorded threshold of **2**. Identification and validation
 answer different questions: the pulse separated the model settings; the unseen
 short step checked prediction under that specific condition.
 
-<ap-investigation investigation="inv_c393efe1a93f5e94" title="Telling heat storage from heat escape" summary="The first heating test showed how much heat the system stores, but left heat escape uncertain. We added a longer test that heated the system and then let it cool. This separated the two effects, and the updated model passed a separate short heating check." before="Heat escape uncertain" before-detail="The short heating step constrained heat capacity, but thermal resistance remained unresolved." after="Both effects distinguished" after-detail="Adding heating and cooling measurements identified heat capacity and thermal resistance." scope="Scope: synthetic data; prediction checked on a short 5 W heating step."></ap-investigation>
+<ap-investigation investigation="{{investigation_1}}" title="Telling heat storage from heat escape" summary="The first heating test showed how much heat the system stores, but left heat escape uncertain. We added a longer test that heated the system and then let it cool. This separated the two effects, and the updated model passed a separate short heating check." before="Heat escape uncertain" before-detail="The short heating step constrained heat capacity, but thermal resistance remained unresolved." after="Both effects distinguished" after-detail="Adding heating and cooling measurements identified heat capacity and thermal resistance." scope="Scope: synthetic data; prediction checked on a short 5 W heating step."></ap-investigation>
 
 ## Takeaways and limits
 

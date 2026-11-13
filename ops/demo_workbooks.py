@@ -9,7 +9,9 @@ starting data, finds what it leaves undetermined and proposes the catalog
 experiment that resolves it. The proposal is approved as ``--by``, the hidden
 system runs it (synthetic data, labelled so) and the loop refits and validates.
 The starting data, the hidden truth and the experiment noise are the same as
-``autophys bench --example NAME#full --seeds 1`` at that seed.
+``autophys bench --example NAME#full --seeds 1`` at that seed. Each workbook
+then gets its project overview, ``ops/demo-overview-*.template.md`` with the new
+investigation's id, written through the SDK by ``--by`` (``ops/demo_overviews.py``).
 
 Writes DIR/<project>.ap-workbook for each demo and refuses to overwrite one.
 DIR is a staging directory: copying a workbook into a live demo collection is a
@@ -26,6 +28,8 @@ import autophys as ap
 from autophys.agent import ProposalRunner, ScriptedPolicy
 from autophys.backtest import Backtest
 from autophys.synthetic import case_project
+
+import demo_overviews
 
 # project name -> (built-in backtest, case, title of the starting test)
 DEMOS = {
@@ -47,8 +51,8 @@ def generate(name: str, out: Path, seed: int, by: str) -> dict:
     for obs in view.dataset:
         obs.meta = {**obs.meta, "note": NOTE}
     with ap.connect(path) as client:
-        inv = client.project(project).investigate(view.dataset, ProposalRunner(), policy=ScriptedPolicy(),
-                                                  seed=seed, title=title)
+        wb = client.project(project)
+        inv = wb.investigate(view.dataset, ProposalRunner(), policy=ScriptedPolicy(), seed=seed, title=title)
         steps = []
         outcome = inv.run()
         while inv.pending:
@@ -63,12 +67,14 @@ def generate(name: str, out: Path, seed: int, by: str) -> dict:
             inv.attach_data(pid, obs)
             outcome = inv.run()
         rel = evaluator.relative_errors(outcome.estimate) if outcome.estimate else {}
+        overview = demo_overviews.write(inv.store, wb.project_id, name, by, ids={"investigation_1": inv.id})
         return {
             "project": name, "workbook": str(path), "example": f"builtin:{example}#{case}", "seed": seed,
             "investigation": inv.id, "status": outcome.status, "proposals": steps,
             "identified": sorted(outcome.identified), "estimate": outcome.estimate,
             # Printed for the operator only; the truth is never recorded in the workbook.
             "relative_error_vs_hidden_truth": rel,
+            "overview": overview,
         }
 
 

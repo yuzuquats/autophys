@@ -45,7 +45,7 @@ below the recorded acceptance threshold of 2. This supports the model’s
 prediction under the tested conditions. Both the short pulse and the pulse
 ladder belong to this single investigation.
 
-<ap-investigation investigation="inv_c51194ac2a68ef19" title="A clearer model of the battery’s response" summary="The first test showed how much the battery’s voltage drops right away, but left its slower behavior uncertain. A follow-up test using a sequence of current pulses separated those effects. The updated model then passed a check on measurements it hadn’t been fitted to." before="Slow response uncertain" before-detail="The immediate voltage drop was clear, but two settings for the slower response remained uncertain." after="Slow response resolved" after-detail="The extra measurements let us determine all three model settings." scope="Scope: a simulated cell under the tested conditions."></ap-investigation>
+<ap-investigation investigation="{{investigation_1}}" title="A clearer model of the battery’s response" summary="The first test showed how much the battery’s voltage drops right away, but left its slower behavior uncertain. A follow-up test using a sequence of current pulses separated those effects. The updated model then passed a check on measurements it hadn’t been fitted to." before="Slow response uncertain" before-detail="The immediate voltage drop was clear, but two settings for the slower response remained uncertain." after="Slow response resolved" after-detail="The extra measurements let us determine all three model settings." scope="Scope: a simulated cell under the tested conditions."></ap-investigation>
 
 ## Takeaways
 
@@ -65,7 +65,7 @@ R1 and C1 remain unresolved. Its pulse ladder proposal is awaiting approval,
 so no follow-up measurements or held-out validation are recorded. It does not
 yet provide a completed replication of the first result.
 
-<ap-investigation investigation="inv_1b63c1cbdd6c12bd" title="The battery’s slower response is still uncertain" summary="The first test showed how much the battery’s voltage drops right away, but couldn’t distinguish the two settings that describe its slower response. A follow-up sequence of current pulses has been proposed to separate them. It’s awaiting approval, so we don’t yet know whether it will resolve the uncertainty." before="Slow response uncertain" before-detail="The immediate voltage drop was clear, but two settings for the slower response remained uncertain." after="Try a sequence of pulses" after-detail="Awaiting approval. No follow-up result is recorded yet." scope="Scope: a simulated cell under the tested conditions."></ap-investigation>
+<ap-investigation investigation="{{investigation_2}}" title="The battery’s slower response is still uncertain" summary="The first test showed how much the battery’s voltage drops right away, but couldn’t distinguish the two settings that describe its slower response. A follow-up sequence of current pulses has been proposed to separate them. It’s awaiting approval, so we don’t yet know whether it will resolve the uncertainty." before="Slow response uncertain" before-detail="The immediate voltage drop was clear, but two settings for the slower response remained uncertain." after="Try a sequence of pulses" after-detail="Awaiting approval. No follow-up result is recorded yet." scope="Scope: a simulated cell under the tested conditions."></ap-investigation>
 
 ## Limitations
 

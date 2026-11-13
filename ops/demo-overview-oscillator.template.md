@@ -45,7 +45,7 @@ under the recorded identification criterion. Rounded fitted values are:
 The held-out check passed: **χ²/N = 1.0300** across **1,001 samples**, below
 the acceptance threshold of **2**.
 
-<ap-investigation investigation="inv_f9937c62fb18ecf0" title="A known push reveals the physical values" summary="Watching the motion fade matched the curve but left mass, spring stiffness and damping uncertain. Applying a known repeating force separated their values. The updated model then predicted a separate free motion successfully." before="Physical values unresolved" before-detail="The fading motion fitted well, but all three values shared an unknown scale." after="All three values identified" after-detail="The known force supplied the missing scale; a separate free-motion check passed." scope="Scope: synthetic data; held-out validation covers a separate free response."></ap-investigation>
+<ap-investigation investigation="{{investigation_1}}" title="A known push reveals the physical values" summary="Watching the motion fade matched the curve but left mass, spring stiffness and damping uncertain. Applying a known repeating force separated their values. The updated model then predicted a separate free motion successfully." before="Physical values unresolved" before-detail="The fading motion fitted well, but all three values shared an unknown scale." after="All three values identified" after-detail="The known force supplied the missing scale; a separate free-motion check passed." scope="Scope: synthetic data; held-out validation covers a separate free response."></ap-investigation>
 
 ## Takeaways and limits
 
