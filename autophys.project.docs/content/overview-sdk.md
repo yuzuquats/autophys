@@ -577,3 +577,22 @@ Evidence (ignored): yuzuquats
 ~/workspace/fleet/evidence/autophys/overview-sdk-activation-20261113/round2/
 (package and build-web logs, healthz, `qualification.json`, screenshots, the
 curl shape summary and the two scripts). No browser processes remained.
+
+## Publication note — Jazz split out, 2026-11-13
+
+This range was published without the Jazz workstream (project
+`jazz-performance-demo`), at the operator's direction. The Jazz generator
+(`ops/jazz_demo.py`), its template (`ops/jazz-demo-overview.template.md`) and
+`html/routes/demo-overview-jazz.md` belong to that unpublished project and are
+not in this published tree. Earlier sections that mention them describe the
+full local history.
+
+As published, `ops/demo_overviews.py` (commit "Write the demo overviews through
+the SDK and stage a format-3 seed") supports only `{{investigation_N}}`
+placeholders, for the battery, oscillator and thermal demos. The
+`{{KEY_investigation}}` placeholders and the `jazz-plan-` ids named in OV-10,
+and the Jazz overview write, arrive with the Jazz project's own commit. That
+commit message's verification ("all four workbooks reach format 3") was run
+with the Jazz mapping present. With the published script, a seed containing
+a Jazz workbook leaves that workbook without an overview, at its existing
+format.
