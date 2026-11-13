@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Autophys investigation summary concepts</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font:14px/1.55 var(--font-sans,system-ui,sans-serif);color:var(--foreground,#191919)}
+button,a{font:inherit}button{cursor:pointer}button:focus-visible,a:focus-visible,summary:focus-visible{outline:2px solid #356b97;outline-offset:3px}button:disabled{cursor:default}
+::selection{background:#dce8ec;color:#111}button{color:inherit}a{color:inherit;text-underline-offset:3px}
+.chooser{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--border,#ddd);padding-bottom:12px;margin-bottom:8px}
+.chooser button{border:0;background:transparent;border-radius:7px;padding:9px 12px;color:var(--muted-foreground,#666);font-size:13px}
+.chooser button[aria-pressed=true]{color:var(--foreground,#111);background:var(--secondary,#eee);font-weight:600}
+.chooser button:hover{background:var(--secondary,#eee)}
+.context{color:var(--muted-foreground,#666);font-size:12px;margin:8px 0 18px}
+.app{--ink:#191919;--sec:#505050;--line:#dedede;--wash:#f4f4f4;--pass:#26644d;--amber:#895016;--radius:12px;background:#f5f5f5;color:var(--ink);border-radius:12px;padding:16px;overflow:hidden}
+.app button{font-size:12px}.app button:hover{text-decoration:underline;text-underline-offset:3px}
+.appbar{display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px solid var(--line);padding:0 0 14px;font-size:12px}
+.brand{font-weight:600;letter-spacing:-.02em}.appbar .sub{color:#656565;font-weight:400;margin-left:12px}.demo{color:#656565}
+.workspace{display:grid;grid-template-columns:146px minmax(0,1fr);gap:16px;margin-top:16px}
+.sidebar{font-size:12px;padding:4px 0}.side-title{font-weight:600;margin:0 0 18px}.project-name{font-size:11px;white-space:nowrap;margin-bottom:7px;color:var(--sec)}
+.tree{display:flex;flex-direction:column;gap:2px}.tree button{border:0;background:transparent;text-align:left;padding:7px 9px;border-radius:6px;color:var(--sec);line-height:1.4}
+.tree button.selected{background:#e5e5e5;color:#111}.tree .indent{padding-left:18px}.tree small{display:block;font-size:11px;color:#626262;margin-top:2px}.tree .selected small{color:#444}
+.content{min-width:0;background:#fff;border-radius:10px;padding:0 26px 30px}
+.breadcrumb{display:flex;justify-content:space-between;gap:8px;align-items:center;border-bottom:1px solid #e8e8e8;padding:14px 0;margin-bottom:27px;font-size:11px;color:#626262}
+.breadcrumb b{color:#333;font-weight:500}.breadcrumb .back{border:0;background:none;padding:0;color:#555;text-decoration:underline;text-underline-offset:3px}
+h1,h2,h3,p{margin:0}h1{font-size:25px;line-height:1.2;letter-spacing:-.025em;max-width:26ch;text-wrap:balance;margin-bottom:14px}h2{font-size:19px;line-height:1.3;letter-spacing:-.015em;margin:30px 0 12px}h3{font-size:15px;line-height:1.4;font-weight:600}
+p{font-size:13px;line-height:1.65;color:var(--sec);max-width:72ch;margin:10px 0}.intro{font-size:14px;line-height:1.65;margin-bottom:25px}
+.meta{color:#666;font-size:11px;margin:12px 0 24px;display:flex;align-items:center;flex-wrap:wrap;gap:9px}
+.status{font-size:11px;font-weight:500;color:var(--pass);background:#edf5ef;border-radius:4px;padding:3px 6px;white-space:nowrap}
+.status.uncertain{color:var(--amber);background:#fbf2e5}
+.result{border-top:1px solid var(--line);padding:22px 0 20px}.result:last-child{border-bottom:1px solid var(--line)}
+.result-head{display:flex;gap:10px;align-items:baseline;justify-content:space-between;flex-wrap:wrap;margin-bottom:12px}
+.result-head h3{font-size:13px;font-weight:500;color:#555}.result .conclusion{font-size:19px;line-height:1.35;letter-spacing:-.015em;margin-bottom:9px;max-width:36ch}
+.produced{display:flex;gap:7px 14px;flex-wrap:wrap;font-size:11px;color:#555;margin-top:14px;align-items:center}.produced strong{font-weight:500;color:#292929}
+.text-button{border:0;background:none;padding:0;text-align:left;color:#343434;text-decoration:underline;text-underline-offset:3px}
+.result .read{display:block;margin-top:15px;font-size:12px}
+.output-strip{display:grid;grid-template-columns:1fr 1fr;gap:16px;border-top:1px solid #ececec;padding-top:13px;margin-top:16px}
+.output-strip span{font-size:11px;color:#666;display:block}.output-strip strong{font-weight:500;font-size:12px;display:block;margin-top:3px}
+.next{margin-top:26px}.next p{font-size:12px}
+.block-head{display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin:28px 0 12px}.block-head h2{font-size:16px;margin:0}.block-head span{font-size:11px;color:#666}
+table{border-collapse:collapse;width:100%;font-size:12px;font-variant-numeric:tabular-nums}th{text-align:left;font-size:11px;font-weight:500;color:#676767;padding:0 8px 9px;border-bottom:1px solid #ddd}td{border-bottom:1px solid #ececec;padding:11px 8px;vertical-align:top}th:first-child,td:first-child{padding-left:0}th:last-child,td:last-child{padding-right:0}td small{display:block;font-size:11px;color:#666;margin-top:2px}.ok-text{color:var(--pass)}.uncertain-text{color:var(--amber)}
+.component-note{font-size:11px;color:#707070;margin:9px 0 0}
+.validation{margin:26px 0;padding-top:21px;border-top:1px solid #ddd}.validation h2{font-size:16px;margin:0 0 8px}.validation-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.validation p{font-size:12px;margin:6px 0 0}.validation .value{font-size:12px;color:#2d634c;font-weight:500;white-space:nowrap}
+.legend{display:flex;gap:18px;font-size:11px;color:#555;align-items:center;margin:14px 0 3px}.swatch{display:inline-block;width:15px;border-top:2px solid #376d87;margin-right:5px;vertical-align:middle}.swatch.points{border-top:2px dotted #676767}
+.chart{position:relative}.chart canvas{width:100%;height:166px;display:block}.chart .tip{position:absolute;top:8px;right:8px;padding:6px 9px;background:#f4f4f4;border:1px solid #ddd;font-size:11px;pointer-events:none;border-radius:5px}
+.artifacts{border-top:1px solid #ddd;margin-top:26px;padding-top:20px}.artifacts h2{font-size:16px;margin:0 0 4px}.artifact{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:12px 0;border-bottom:1px solid #ececec}.artifact button{border:0;background:none;padding:0;text-align:left;font-size:12px;font-weight:500;text-decoration:underline;text-underline-offset:3px}.artifact span{display:block;color:#666;font-size:11px;font-weight:400;margin-top:2px}.artifact .format{font-size:11px;color:#777;align-self:center}
+.artifact-detail{border-bottom:1px solid #ddd;background:#f8f8f8;padding:15px;margin-top:0;font-size:12px}.artifact-detail header{display:flex;justify-content:space-between;gap:12px;margin-bottom:8px}.artifact-detail button{padding:0;background:transparent;border:0;text-decoration:underline;font-size:11px}.artifact-detail pre{font-size:11px;overflow:auto;font-family:var(--font-mono,monospace);margin-bottom:0}.artifact-detail p{font-size:11px}
+.takeaway{border-top:1px solid #ddd;margin-top:24px;padding-top:18px}.takeaway h2{font-size:16px;margin:0 0 9px}.takeaway p{font-size:12px}
+.explanation{margin:18px 0 0;font-size:12px;color:var(--muted-foreground,#666)}.explanation strong{font-weight:500;color:var(--foreground,#222)}
+details{border-top:1px solid var(--border,#ddd);margin-top:20px;padding-top:16px;font-size:12px}summary{cursor:pointer;font-weight:500;color:var(--foreground,#222)}details p{font-size:12px;color:var(--muted-foreground,#666);margin:10px 0}details pre{padding:16px;background:var(--code-background,#eee);color:var(--code-foreground,#222);font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:8px;line-height:1.6}
+@media(min-width:900px){.workspace{grid-template-columns:182px minmax(0,1fr)}.content{padding-inline:40px}.sidebar{font-size:13px}.tree button{font-size:12px}h1{font-size:28px}}
+@media(max-width:560px){.app{padding:16px}.workspace{display:block}.sidebar{display:none}.content{padding:0 16px 24px}.appbar .sub{display:none}h1{font-size:23px}.breadcrumb{margin-bottom:22px}.chooser{gap:0}.chooser button{font-size:12px;padding:8px}.result-head{gap:7px}.result .conclusion{font-size:18px}.validation-head{display:block}.validation .value{margin-top:8px}.block-head span{display:none}td,th{padding-inline:6px}.output-strip{gap:12px}.produced{font-size:11px}.meta{gap:7px}.status{white-space:normal}.chart canvas{height:155px}.appbar{font-size:11px}}
+</style>
+<body>
+<nav class="chooser" aria-label="Mock views">
+<button type="button" data-view="overview" aria-pressed="true">Project overview</button>
+<button type="button" data-view="validated" aria-pressed="false">Completed investigation</button>
+<button type="button" data-view="uncertain" aria-pressed="false">Unresolved outcome</button>
+</nav>
+<p class="context">Interactive concepts · Illustrative battery results. Open reports and select an output to inspect it.</p>
+<div class="app">
+<header class="appbar"><div><span class="brand">Autophys</span><span class="sub">/ battery_cycler_demo</span></div><span class="demo">Demo workspace</span></header>
+<div class="workspace">
+<aside class="sidebar"><div class="side-title">Workspace</div><div class="project-name">battery_cycler_demo</div><nav class="tree" aria-label="Project">
+<button data-view="overview" class="selected">Overview</button><button class="indent" data-artifact="configuration">Configuration</button>
+<button class="indent" data-view="uncertain">Investigation 01<small>Baseline pulse · complete</small></button>
+<button class="indent" data-view="validated">Investigation 02<small>Slow response · complete</small></button>
+</nav></aside>
+<main class="content" id="screen" aria-live="polite"></main>
+</div></div>
+<p class="explanation"><strong id="explain-title"></strong> <span id="explain-copy"></span></p>
+<details><summary>How this could work inside std-documentation</summary>
+<p>Agents write the explanation in Markdown. Registered inserts reference recorded investigations, fits and datasets, so the evidence stays tied to the run it describes.</p>
+<pre># What the investigations established
+
+The pulse ladder resolved the remaining ambiguity.
+
+&lt;ap-investigation-result investigation="inv_02" /&gt;
+
+## What changed
+&lt;ap-parameter-comparison before="fit_01" after="fit_02" /&gt;
+
+## Does it predict new measurements?
+&lt;ap-validation-result validation="validation_02" /&gt;
+
+## Produced by this investigation
+&lt;ap-investigation-outputs investigation="inv_02" /&gt;</pre>
+<p>Proposed component names. These mocks show their visual roles; they are not yet registered in the app. A completed investigation can be validated, unresolved, or fail validation. Missing uncertainty stays explicit.</p>
+</details>
+<script>
+const screen=document.getElementById('screen');
+let view='overview', openArtifact=null;
+const data={
+overview:{title:'Compact results inside the project narrative.',copy:'Each investigation gets its conclusion, what it produced, and a link to the full report. The narrative explains how one result led to the next.'},
+validated:{title:'The same result, expanded into an evidence-backed report.',copy:'The conclusion leads. Embedded comparisons, held-out validation and output links provide the evidence without turning the document into a run log.'},
+uncertain:{title:'Completion is separate from scientific success.',copy:'This investigation finished its planned work but left two parameters coupled. The report preserves that limitation and the next experiment it produced.'}
+};
+const artifactData={
+model:{title:'Fitted parameter set',copy:'From Investigation 02 · final fit. These estimates describe the synthetic cell under the tested conditions. Parameter uncertainty was not recorded.',body:'{\n  "R0_ohm": 0.025,\n  "R1_ohm": 0.040,\n  "C1_F": 1600,\n  "uncertainty": null\n}'},
+pulse:{title:'Pulse ladder measurements',copy:'Training data used by the final fit. The held-out check remains separate.',body:'time_s,current_A,voltage_V\n0,0,4.050\n1,2,4.000\n2,2,3.999\n…'},
+validation:{title:'Held-out validation report',copy:'Evaluation on check@1. These measurements were excluded from fitting. Passing this check supports the model within the tested conditions.',body:'Dataset: check@1\nNoise-weighted χ²/N: 1.04\nAcceptance threshold: ≤ 2.00\nResult: passed'},
+baseline:{title:'Baseline fitted model',copy:'From Investigation 01. R0 is identified; R1 and C1 remain coupled. A good fit to the short pulse does not resolve that ambiguity.',body:'R0: 0.0249 Ω · identified\nR1: unresolved\nC1: unresolved\nUncertainty: not recorded'},
+proposal:{title:'Proposed next experiment',copy:'Produced by Investigation 01 to distinguish the slower resistance from the capacitance. A person must approve this proposal before an experiment runs.',body:'Experiment: pulse_ladder\nPurpose: observe the slow response at multiple pulse durations\nDecision: requires human approval'},
+quick:{title:'Short-pulse measurements',copy:'The original training data for Investigation 01. This stimulus reveals the immediate voltage drop but provides too little information about the slow response.',body:'Dataset: quick_pulse@1\nUse: training\nSource: synthetic battery cell'},
+configuration:{title:'Model configuration',copy:'A first-order equivalent-circuit model with an immediate resistance and one slower RC branch.',body:'Parameters: R0, R1, C1\nAvailable tests: quick_pulse, pulse_ladder, check\nSource: synthetic battery example'}
+};
+function crumb(label){return '<div class="breadcrumb"><span>battery_cycler_demo / <b>'+label+'</b></span>'+(view==='overview'?'':'<button class="back" data-view="overview">Overview</button>')+'</div>'}
+function art(id,label){return '<button class="text-button" data-artifact="'+id+'">'+label+'</button>'}
+function detail(){if(!openArtifact)return '';const a=artifactData[openArtifact];return '<section class="artifact-detail" id="artifact-preview" tabindex="-1"><header><strong>'+a.title+'</strong><button data-close>Close preview</button></header><p>'+a.copy+'</p><pre>'+a.body+'</pre></section>'}
+function overview(){return crumb('Overview')+
+'<h1>What the investigations established</h1><p class="intro">We can now distinguish the battery’s immediate resistance from its slower response. Two investigations explain how we got there.</p>'+
+'<section class="result"><div class="result-head"><h3>Investigation 01 · Baseline pulse</h3><span class="status uncertain">Complete · ambiguity remains</span></div><h2 class="conclusion">The fast resistance is resolved. The slow response is not.</h2><p>A short pulse identifies R0, but many combinations of R1 and C1 still explain the measurements. A longer, varied stimulus is needed.</p><div class="output-strip"><div><span>Established</span><strong>R0 identified at 0.0249 Ω</strong></div><div><span>Next experiment</span><strong>Pulse ladder proposed</strong></div></div><div class="produced"><strong>Produced</strong>'+art('baseline','Baseline model')+art('quick','Pulse data')+art('proposal','Experiment proposal')+'</div><button class="text-button read" data-view="uncertain">Open investigation report</button></section>'+
+'<section class="result"><div class="result-head"><h3>Investigation 02 · Resolve the slow response</h3><span class="status">Complete · validated</span></div><h2 class="conclusion">The pulse ladder separates R1 from C1.</h2><p>Measurements at multiple pulse durations identify all three parameters. The final model also predicts a separate held-out test within the acceptance threshold.</p><div class="output-strip"><div><span>Established</span><strong>R0, R1 and C1 identified</strong></div><div><span>Held-out check</span><strong>χ²/N 1.04 · passed</strong></div></div><div class="produced"><strong>Produced</strong>'+art('model','Parameter set')+art('pulse','Pulse ladder data')+art('validation','Validation report')+'</div><button class="text-button read" data-view="validated">Open investigation report</button></section>'+
+detail()+'<div class="next"><h2>What this means for the project</h2><p>The model explains the synthetic cell under the tested conditions. Temperature changes and aging remain outside this result.</p></div>'}
+function artifacts(unresolved){const rows=unresolved?[['baseline','Baseline fitted model','R0 estimate; R1 and C1 unresolved','JSON'],['quick','Short-pulse measurements','Training data · quick_pulse@1','CSV'],['proposal','Pulse ladder proposal','Next experiment to resolve the ambiguity','Proposal']]:[['model','Fitted parameter set','R0, R1 and C1 · final fit','JSON'],['pulse','Pulse ladder measurements','Training data · pulse_ladder@1','CSV'],['validation','Held-out validation report','Independent check · check@1','Report']];return '<section class="artifacts"><h2>Produced by this investigation</h2>'+rows.map(r=>'<div class="artifact"><div><button data-artifact="'+r[0]+'">'+r[1]+'</button><span>'+r[2]+'</span></div><div class="format">'+r[3]+'</div></div>').join('')+detail()+'</section>'}
+function validated(){return crumb('Investigation 02')+
+'<h1>The pulse ladder separates R1 from C1.</h1><div class="meta"><span>Investigation 02 · Resolve the slow response</span><span class="status">Complete · validated</span></div>'+
+'<p class="intro">The initial pulse left the slow resistance and capacitance coupled. Adding a pulse ladder made their effects distinguishable and identified all three parameters.</p>'+
+'<div class="block-head"><h2>What changed</h2><span>Recorded fit comparison</span></div><table><thead><tr><th>Parameter</th><th>Initial pulse</th><th>After pulse ladder</th></tr></thead><tbody><tr><td>R0 <small>Immediate resistance</small></td><td>0.0249 Ω<small>Identified</small></td><td>0.0250 Ω<small class="ok-text">Identified</small></td></tr><tr><td>R1 <small>Slow resistance</small></td><td class="uncertain-text">Unresolved<small>Coupled with C1</small></td><td>0.0400 Ω<small class="ok-text">Identified</small></td></tr><tr><td>C1 <small>Capacitance</small></td><td class="uncertain-text">Unresolved<small>Coupled with R1</small></td><td>1,600 F<small class="ok-text">Identified</small></td></tr></tbody></table><p class="component-note">Parameter uncertainty was not recorded. Identification reflects the sensitivity analysis.</p>'+
+'<section class="validation"><div class="validation-head"><div><h2>Passed on held-out measurements</h2><p>The model predicts a pulse it was never fitted to.</p></div><div class="value">χ²/N 1.04 ≤ 2.00</div></div><div class="legend"><span><i class="swatch"></i>Model prediction</span><span><i class="swatch points"></i>Held-out measurements</span></div><div class="chart"><canvas id="validation-chart" role="img" aria-label="Illustrative voltage response: model prediction and held-out measurements nearly overlap across 600 seconds"></canvas><span class="tip" hidden></span></div><p class="component-note">Illustrative plot · check@1 was excluded from fitting.</p></section>'+
+artifacts(false)+'<section class="takeaway"><h2>Where this result applies</h2><p>The result supports the model for the tested synthetic cell and pulse conditions. It does not establish behavior across temperature or aging.</p></section>'}
+function uncertain(){return crumb('Investigation 01')+
+'<h1>The fast resistance is resolved. The slow response is not.</h1><div class="meta"><span>Investigation 01 · Baseline pulse</span><span class="status uncertain">Complete · ambiguity remains</span></div>'+
+'<p class="intro">The short pulse fits well, but it does not contain enough information to separate R1 from C1. This investigation produced a useful first model and a specific next experiment.</p>'+
+'<div class="block-head"><h2>What we learned</h2></div><table><thead><tr><th>Parameter</th><th>Result</th><th>What supports it</th></tr></thead><tbody><tr><td>R0</td><td>0.0249 Ω<small class="ok-text">Identified</small></td><td>Immediate voltage drop</td></tr><tr><td>R1</td><td class="uncertain-text">Unresolved</td><td>Coupled with C1</td></tr><tr><td>C1</td><td class="uncertain-text">Unresolved</td><td>Coupled with R1</td></tr></tbody></table><p class="component-note">Parameter uncertainty was not recorded.</p>'+
+'<section class="takeaway"><h2>A good fit is not enough</h2><p>Different R1 and C1 values explain this short pulse equally well. Reporting a unique value for either would overstate what the measurements establish.</p><p><strong>Held-out validation:</strong> not run in this illustrative investigation.</p></section>'+
+artifacts(true)+'<section class="takeaway"><h2>What the next experiment should resolve</h2><p>A pulse ladder spans more of the slow response. It should distinguish the resistance from the capacitance; a person must approve it before it runs.</p><button class="text-button" data-view="validated">See the follow-up investigation</button></section>'}
+function render(){screen.innerHTML=view==='overview'?overview():view==='validated'?validated():uncertain();document.querySelectorAll('.chooser button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===view)));document.querySelectorAll('.tree [data-view]').forEach(b=>b.classList.toggle('selected',b.dataset.view===view));document.getElementById('explain-title').textContent=data[view].title;document.getElementById('explain-copy').textContent=data[view].copy;draw();}
+document.addEventListener('click',e=>{const v=e.target.closest('[data-view]'),a=e.target.closest('[data-artifact]'),c=e.target.closest('[data-close]');if(v){view=v.dataset.view;openArtifact=null;render()}else if(a){openArtifact=openArtifact===a.dataset.artifact?null:a.dataset.artifact;render()}else if(c){openArtifact=null;render()}});
+function draw(){const c=document.getElementById('validation-chart');if(!c)return;const w=c.clientWidth,h=c.clientHeight,d=devicePixelRatio||1;c.width=w*d;c.height=h*d;const x=c.getContext('2d');x.scale(d,d);const p={l:35,r:9,t:18,b:29};const X=t=>p.l+t/600*(w-p.l-p.r);const Y=v=>h-p.b-(v-3.8)/.3*(h-p.t-p.b);const f=t=>t<70?4.05:t<320?3.93-.065*(1-Math.exp(-(t-70)/64)):4.05-.064*Math.exp(-(t-320)/64);x.font='11px system-ui';x.fillStyle='#6a6a6a';x.strokeStyle='#e8e8e8';x.lineWidth=1;for(const v of [3.8,3.9,4.0,4.1]){x.beginPath();x.moveTo(p.l,Y(v));x.lineTo(w-p.r,Y(v));x.stroke();x.fillText(v.toFixed(1),4,Y(v)+3)}x.textAlign='center';for(const t of [0,200,400,600])x.fillText(t,X(t),h-13);x.textAlign='left';x.fillText('V',4,10);x.textAlign='right';x.fillText('Time (s)',w-8,h-1);x.strokeStyle='#376d87';x.lineWidth=1.7;x.beginPath();for(let t=0;t<=600;t+=2){const yy=f(t);t?x.lineTo(X(t),Y(yy)):x.moveTo(X(t),Y(yy))}x.stroke();x.fillStyle='#646464';for(let t=9;t<600;t+=17){const v=f(t)+.002*Math.sin(t*1.3);x.beginPath();x.arc(X(t),Y(v),1.7,0,Math.PI*2);x.fill()}c.onpointermove=e=>{const r=c.getBoundingClientRect(),t=Math.max(0,Math.min(600,(e.clientX-r.left-p.l)/(w-p.l-p.r)*600));const tip=c.parentNode.querySelector('.tip');tip.hidden=false;tip.textContent=Math.round(t)+' s · prediction '+f(t).toFixed(3)+' V'};c.onpointerleave=()=>c.parentNode.querySelector('.tip').hidden=true;}
+new ResizeObserver(draw).observe(screen);render();
+console.log('Mock ready: 3 views; output previews; illustrative data.');
+</script></body></html>

@@ -1,6 +1,8 @@
 # autophys is a daemon that serves the tento cookbook shell, and grows from there
 
-The [project document design](document-node.md) is agent-maintained Markdown rendered with std-documentation. The [demo Markdown](../../html/routes/demo-overview.md) is wired into the battery demo’s Overview node; dev deployment is underway.
+The [project document design](document-node.md) is agent-maintained Markdown rendered with std-documentation. The [demo Markdown](../../html/routes/demo-overview.md) is wired into the battery demo’s Overview node; the preview is deployed at https://dev--autophys.lona.so.
+
+The [investigation summary mocks](investigation-summaries.md) explore compact completed results and evidence-backed reports inside that narrative.
 
 Current contributor setup and layout are in [CONTRIBUTING.md](../../CONTRIBUTING.md)
 and [docs/README.md](../../docs/README.md). The bounded OSS portability batch is
