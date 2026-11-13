@@ -22,7 +22,7 @@ h3,h4,p{margin:0}h3{font:600 21px/1.35 var(--ap-font,system-ui,sans-serif);lette
 .change h4{font-size:12px;font-weight:500;color:var(--ap-sec,#666);margin-bottom:7px}.change strong{display:block;font-size:15px;font-weight:600;line-height:1.45}.change p{font-size:13px;color:var(--ap-sec,#555);margin-top:7px}
 .check{font-size:13px}.scope{font-size:12px;color:var(--ap-sec,#666);margin-top:6px}
 footer{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:14px 20px;border-top:1px solid var(--ap-line,#e6e6e6);padding-top:14px;margin-top:20px}
-details{flex:1;min-width:150px}summary{font-size:12px;cursor:pointer;list-style-position:inside;text-decoration:underline;text-underline-offset:3px}
+details{flex:1;min-width:150px}details[open]{flex-basis:100%}summary{font-size:12px;cursor:pointer;list-style-position:inside;text-decoration:underline;text-underline-offset:3px}
 .technical{font-size:12px;color:var(--ap-sec,#555);margin-top:14px}.technical p+p{margin-top:9px}.parameters{display:flex;flex-wrap:wrap;gap:4px 16px;font-variant-numeric:tabular-nums;margin-top:9px}.outputs{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:14px}
 button{border:0;background:none;padding:2px 0;font:12px/1.5 var(--ap-font,system-ui,sans-serif);color:var(--ap-ink,#333);text-decoration:underline;text-underline-offset:3px;cursor:pointer;overflow-wrap:anywhere;text-align:left}
 button:hover,summary:hover{color:#111}button:focus-visible,summary:focus-visible{outline:2px solid #39708d;outline-offset:4px}::selection{background:#d8e7ed;color:#162e39}

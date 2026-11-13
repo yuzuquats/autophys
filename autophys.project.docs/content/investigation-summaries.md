@@ -353,3 +353,9 @@ comparison prose, collapsed details, disclosure/focus preservation during
 evidence refresh, recorded navigation dispatch and missing references. The
 predeployment browser fixture supplies the new fields to the previous dev
 snapshot; the same checks will run against deployed derived data below.
+
+The initial deployed mobile check exposed a narrow technical column beside
+Open investigation. Expanded details now take the full card width and the
+open link moves below them. Closed-card layout remains compact. This is a
+CSS-only refinement; browser/record behavior is unchanged. Final verification
+and deployment receipt follow below.
