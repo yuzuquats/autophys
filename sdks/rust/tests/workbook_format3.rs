@@ -346,7 +346,9 @@ fn overview_goldens_read_back() {
         .collect();
     goldens.sort();
     let names: Vec<String> = goldens.iter().map(|p| p.file_stem().unwrap().to_string_lossy().into()).collect();
-    assert!(names.iter().any(|n| n == "rust"), "{names:?}");
+    for side in ["python", "rust"] {
+        assert!(names.iter().any(|n| n == side), "{side} golden missing: {names:?}");
+    }
     for golden in goldens {
         read_golden(&golden);
     }

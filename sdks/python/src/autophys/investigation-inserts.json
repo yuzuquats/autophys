@@ -1,0 +1,10 @@
+{
+  "inserts": [
+    {
+      "id": "ap_investigation",
+      "tag": "ap-investigation",
+      "reference": "investigation",
+      "attributes": ["investigation", "title", "summary", "before", "before-detail", "after", "after-detail", "scope"]
+    }
+  ]
+}

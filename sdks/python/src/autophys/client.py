@@ -225,6 +225,22 @@ class Workbook:
     def config_versions(self) -> list[dict]:
         return self.store.config_versions(self.project_id)
 
+    def put_overview(self, markdown: str | bytes, author: str):
+        """Append the project's overview (Markdown) by ``author``.
+
+        Returns ``(stored, changed, warnings)`` for a workbook file or a
+        daemon, None for a Memory/Jsonl store (which keeps no overview).
+        """
+        return self.store.put_overview(self.project_id, markdown, author)
+
+    def overview(self) -> dict | None:
+        """The latest overview ``{"seq", "digest", "markdown", "author", "created"}``, or None."""
+        return self.store.overview(self.project_id)
+
+    def overview_versions(self) -> list[dict]:
+        """Every overview version, oldest first."""
+        return self.store.overview_versions(self.project_id)
+
     def verify(self) -> dict:
         """Check every chain (and, for a local file, that projections match a rebuild)."""
         if isinstance(self.store, WorkbookStore):

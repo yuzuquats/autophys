@@ -485,3 +485,41 @@ def test_unscoped_stream_with_a_bare_gseq_is_refused(server):
     with pytest.raises(HttpError) as e:
         request_json("GET", server.url + "/api/v1/stream?after=3", None, api_key=server.issue_key())
     assert e.value.status == 400
+
+
+# --- project overviews (OV-5) ------------------------------------------------
+
+def test_http_overviews_write_read_and_list_versions():
+    from autophys.store import StoreError
+    with FakeAutophys() as fake:
+        store = HttpStore(fake.url, fake.issue_key())
+        pid = store.ensure_project("toy")
+        cfg = {"physics": True}
+        ver = store.put_config_version(pid, config_hash(cfg), cfg)
+        inv = store.create_investigation({"project_id": pid, "config_version": ver})
+        assert store.overview(pid) is None and store.overview_versions(pid) == []
+        md = f'# Toy é\n\n<ap-investigation investigation="{inv}" hue="1"></ap-investigation>\n'
+        stored, changed, warnings = store.put_overview(pid, md, "ada")
+        assert changed and stored["markdown"] == md and stored["seq"] == 1
+        assert [w["code"] for w in warnings] == ["unknown_attribute"]
+        assert store.overview(pid) == stored
+        again, changed, _ = store.put_overview(pid, md.encode(), "grace")
+        assert not changed and again == stored
+        second, changed, _ = store.put_overview(pid, "# Two\n", "grace")
+        assert changed and store.overview_versions(pid) == [stored, second]
+        sent = len(fake.requests)
+        for markdown, author in (("", "ada"), ("# x", ""), (b"\xff", "ada"), ("x" * (256 * 1024 + 1), "ada")):
+            with pytest.raises(StoreError):
+                store.put_overview(pid, markdown, author)
+        assert len(fake.requests) == sent, "what OV-3 refuses never reaches the daemon"
+
+
+@pytest.mark.parametrize("status", [404, 405])
+def test_http_overviews_on_an_old_daemon_are_an_upgrade_error(status):
+    with FakeAutophys() as fake:
+        store = HttpStore(fake.url, fake.issue_key())
+        pid = store.ensure_project("toy")
+        fake.overview_status = status
+        for call in (lambda: store.put_overview(pid, "# x\n", "ada"), lambda: store.overview_versions(pid)):
+            with pytest.raises(HttpError, match="too old for project overviews.*upgrade the autophys daemon"):
+                call()

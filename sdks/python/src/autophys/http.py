@@ -450,6 +450,47 @@ class HttpStore(Store):
                 raise StoreError("display manifest rejected: expected format 1 (HTTP 422)") from None
             raise HttpError(status, "display_upload_failed") from None
 
+    def put_overview(self, project_id: str, markdown: str | bytes, author: str) -> tuple[dict, bool, list[dict]]:
+        """``PUT /projects/{pid}/overview`` with ``{markdown, author}``.
+
+        Returns ``(stored, changed, warnings)`` as ``WorkbookStore.put_overview``;
+        the daemon checks the inserts against its workbook. What OV-3 refuses
+        is refused here first, without a request.
+        """
+        from .overview import check_write
+        markdown = check_write(markdown, author, lambda code, msg, path: StoreError(f"{path}: {msg}" if path else msg))
+        pid = urllib.parse.quote(project_id, safe="")
+        try:
+            status, body = request_json("PUT", self.base + f"/projects/{pid}/overview",
+                                        {"markdown": markdown, "author": author}, api_key=self._key, timeout=self.timeout)
+        except HttpError as error:
+            if _route_missing(error):
+                raise _daemon_too_old(error, "project overviews") from None
+            raise
+        stored = dict(body["overview"], markdown=markdown)
+        return stored, status == 201, body.get("warnings", [])
+
+    def overview(self, project_id: str) -> dict | None:
+        """The latest version from the scoped ``/workspace`` snapshot, or None."""
+        pid = urllib.parse.quote(project_id, safe="")
+        projects = self._req("GET", f"/workspace?project={pid}").get("projects") or []
+        project = projects[0] if projects else {}
+        markdown, meta = project.get("overview"), project.get("overview_meta")
+        if not isinstance(markdown, str) or not isinstance(meta, dict):
+            return None
+        return {"seq": meta["seq"], "digest": meta["digest"], "markdown": markdown, "author": meta["author"],
+                "created": meta["created"]}
+
+    def overview_versions(self, project_id: str) -> list[dict]:
+        """``GET /projects/{pid}/overview/versions``, oldest first."""
+        pid = urllib.parse.quote(project_id, safe="")
+        try:
+            return self._req("GET", f"/projects/{pid}/overview/versions")["versions"]
+        except HttpError as error:
+            if _route_missing(error):
+                raise _daemon_too_old(error, "project overviews") from None
+            raise
+
     def put_config_version(self, project_id: str, version: str, config: dict) -> str:
         """PUT the canonical config bytes; the server checks sha256(body) == version."""
         if config_hash(config) != version:

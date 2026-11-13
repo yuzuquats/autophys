@@ -30,6 +30,8 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from ._text import rust_trim
+from . import overview as _overview
+from .overview import MAX_OVERVIEW_BYTES, check_overview
 from .store import _clean, GENESIS, Record, Store, StoreError, batch_items, canonical, chain_hash, with_batch_hashes
 
 #: ``PRAGMA application_id`` of a workbook: ASCII ``APWB``.
@@ -39,8 +41,14 @@ INITIAL_VERSION = 1
 #: The newest workbook format this module reads and writes. Format 2 adds the
 #: ``display`` table. A workbook reaches it at its first display write, never
 #: on open (DM-D1a), so a workbook without a display stays format 1 and
-#: readable by SDK 0.1.x.
-SCHEMA_VERSION = 2
+#: readable by SDK 0.1.x. Format 3 adds the ``overviews`` table and is
+#: reached only at the first overview write (OV-2).
+SCHEMA_VERSION = 3
+#: The format a display write upgrades to: exactly 2, never the current
+#: format, so a display-only workbook stays readable by SDKs that read up to 2.
+DISPLAY_VERSION = 2
+#: The format an overview write upgrades to.
+OVERVIEW_VERSION = 3
 SUFFIX = ".ap-workbook"
 MAX_DISPLAY_BYTES = 256 * 1024
 
@@ -121,13 +129,29 @@ _DISPLAY_DDL = (
     "            );"
 )
 
+# The overviews table (OV-1), byte-for-byte the Rust SDK's OVERVIEWS_DDL and
+# tests/conformance/overview/cases.json's "ddl". Rows are only inserted; the
+# latest version is the highest seq.
+_OVERVIEWS_DDL = (
+    "CREATE TABLE IF NOT EXISTS overviews (\n"
+    "  seq INTEGER PRIMARY KEY,\n"
+    "  project TEXT NOT NULL REFERENCES projects(id),\n"
+    "  digest TEXT NOT NULL,\n"
+    "  markdown TEXT NOT NULL,\n"
+    "  author TEXT NOT NULL,\n"
+    "  created REAL NOT NULL\n"
+    ");"
+)
+
 #: Upgrade steps, append-only: ``_MIGRATIONS[n - INITIAL_VERSION]`` takes a
 #: workbook from format ``n`` to ``n + 1``. Never edit a step that has shipped.
 #: Steps run only when a write needs the newer format, never on open.
 _MIGRATIONS: tuple[str, ...] = (
     _DISPLAY_DDL,  # 1 -> 2: the display table (DM-D1)
+    _OVERVIEWS_DDL,  # 2 -> 3: the project overviews (OV-1)
 )
 assert INITIAL_VERSION + len(_MIGRATIONS) == SCHEMA_VERSION
+assert (DISPLAY_VERSION, OVERVIEW_VERSION) == (2, 3) == (SCHEMA_VERSION - 1, SCHEMA_VERSION)
 
 
 def _migrate(conn: sqlite3.Connection, target: int) -> None:
@@ -845,8 +869,9 @@ class WorkbookStore(Store):
         Validates only ``format: 1``, canonicalises, and replaces the
         project's row. Returns ``({"digest", "body", "created"}, changed)``;
         an identical canonical body keeps the stored row. The first display
-        write upgrades the workbook to format 2 in the same transaction; a
-        failed write leaves the file as it was.
+        write upgrades the workbook to exactly format 2 in the same
+        transaction, never further (OV-2); a failed write leaves the file as
+        it was.
         """
         if not isinstance(body, (bytes, bytearray)):
             raise _invalid("$", "the manifest must be bytes")
@@ -869,7 +894,7 @@ class WorkbookStore(Store):
         with self._tx() as c:
             if not c.execute("SELECT 1 FROM projects WHERE id = ?", (project_id,)).fetchone():
                 raise WorkbookError("not_found", "unknown project")
-            _migrate(c, SCHEMA_VERSION)
+            _migrate(c, DISPLAY_VERSION)
             old = _read_display(c, project_id)
             if old is not None and old["digest"] == digest:
                 return old, False
@@ -888,6 +913,51 @@ class WorkbookStore(Store):
         """
         with self._lock:
             return _read_display(self._conn, project_id)
+
+    # --- overview -------------------------------------------------------------
+    def put_overview(self, project_id: str, markdown: str | bytes, author: str) -> tuple[dict, bool, list[dict]]:
+        """Append ``markdown`` as the project's latest overview by ``author``.
+
+        Returns ``({"seq", "digest", "markdown", "author", "created"},
+        changed, warnings)``. A body whose digest is the latest version's adds
+        no row (``changed`` False), whoever writes it. Refused only for an
+        empty body, more than 256 KiB of UTF-8, invalid UTF-8 or a missing
+        author (OV-3); unknown investigation ids and insert attributes come
+        back as warnings. The first overview write upgrades the workbook to
+        format 3 in the same transaction; SDKs that read up to format 2
+        cannot open it afterwards.
+        """
+        markdown = _overview.check_write(markdown, author, lambda code, msg, path: WorkbookError(code, msg, path))
+        digest = _overview.digest(markdown)
+        with self._tx() as c:
+            if not c.execute("SELECT 1 FROM projects WHERE id = ?", (project_id,)).fetchone():
+                raise WorkbookError("not_found", "unknown project")
+            _migrate(c, OVERVIEW_VERSION)
+            known = [r[0] for r in c.execute("SELECT id FROM investigations")]
+            warnings = check_overview(markdown, known)
+            old = _read_overviews(c, project_id, latest=True)
+            if old and old[0]["digest"] == digest:
+                return old[0], False, warnings
+            created = now_ts()
+            cur = c.execute("INSERT INTO overviews (project, digest, markdown, author, created) VALUES (?, ?, ?, ?, ?)",
+                            (project_id, digest, markdown, author, created))
+            seq = cur.lastrowid
+        return {"seq": seq, "digest": digest, "markdown": markdown, "author": author, "created": created}, True, warnings
+
+    def overview(self, project_id: str) -> dict | None:
+        """The latest version (highest ``seq``), or None.
+
+        Reading never creates the table or changes the format, so formats 1
+        and 2 read as None.
+        """
+        with self._lock:
+            rows = _read_overviews(self._conn, project_id, latest=True)
+        return rows[0] if rows else None
+
+    def overview_versions(self, project_id: str) -> list[dict]:
+        """Every version, oldest first (empty before the first write)."""
+        with self._lock:
+            return _read_overviews(self._conn, project_id, latest=False)
 
     # --- integrity ----------------------------------------------------------
     def check(self) -> dict:
@@ -940,6 +1010,17 @@ def _read_display(conn: sqlite3.Connection, project: str) -> dict | None:
     except ValueError as exc:
         raise WorkbookError("invalid", f"stored display is not JSON: {exc}") from None
     return {"digest": row[0], "body": body, "created": row[2]}
+
+
+def _read_overviews(conn: sqlite3.Connection, project: str, *, latest: bool) -> list[dict]:
+    exists = conn.execute("SELECT EXISTS(SELECT 1 FROM sqlite_master"
+                          " WHERE type = 'table' AND name = 'overviews')").fetchone()[0]
+    if not exists:
+        return []
+    order = "DESC LIMIT 1" if latest else "ASC"
+    rows = conn.execute("SELECT seq, digest, markdown, author, created FROM overviews WHERE project = ?"
+                        f" ORDER BY seq {order}", (project,)).fetchall()
+    return [dict(zip(("seq", "digest", "markdown", "author", "created"), r)) for r in rows]
 
 
 def _split(script: str) -> list[str]:

@@ -79,6 +79,8 @@ class FakeAutophys:
         self.blobs = {}
         self.displays = {}
         self.display_status = None
+        self.overviews: dict[str, list[dict]] = {}  # PUT /projects/{pid}/overview, oldest first
+        self.overview_status = None  # 404/405: a daemon without the overview routes
         self.configs: dict[str, dict[str, bytes]] = {}
         self.investigations: dict[str, dict] = {}
         self.records: dict[str, list[dict]] = {}
@@ -391,6 +393,41 @@ class FakeAutophys:
                         self.end_headers()
                         self.wfile.write(data)
                         return
+                if path == "/workspace" and method == "GET" and fake.overview_status is None:
+                    pid = query.get("project", [None])[0]
+                    projects = [dict(p) for p in fake.projects.values() if p["workspace"] == who["workspace"]
+                                and (pid is None or p["id"] == pid)]
+                    for p in projects:
+                        latest = (fake.overviews.get(p["id"]) or [None])[-1]
+                        p["overview"] = latest and latest["markdown"]
+                        p["overview_meta"] = latest and {k: latest[k] for k in ("seq", "digest", "author", "created")}
+                    return self._send(200, {"projects": projects})
+                overview = re.fullmatch(r"/projects/([^/]+)/overview(/versions)?", path)
+                if overview:
+                    pid, versions = overview.group(1), overview.group(2)
+                    if fake.overview_status:
+                        return self._err(fake.overview_status, "not_found", "unknown route")
+                    if pid not in fake.projects:
+                        return self._err(404, "not_found", "unknown project")
+                    rows = fake.overviews.setdefault(pid, [])
+                    if versions and method == "GET":
+                        return self._send(200, {"versions": rows})
+                    if not versions and method == "PUT":
+                        from autophys.overview import check_overview, check_write, digest
+                        try:
+                            md = check_write(body.get("markdown"), body.get("author"),
+                                             lambda code, msg, p: WorkbookError(code, msg, p))
+                        except WorkbookError as e:
+                            return self._err(413 if e.error == "too_large" else 422, e.error, str(e), e.path)
+                        known = [i for i, inv in fake.investigations.items() if inv.get("project_id") == pid]
+                        warnings = check_overview(md, known)
+                        changed = not rows or rows[-1]["digest"] != digest(md)
+                        if changed:
+                            rows.append({"seq": len(rows) + 1, "digest": digest(md), "markdown": md,
+                                         "author": body["author"], "created": time.time()})
+                        meta = {k: rows[-1][k] for k in ("seq", "digest", "author", "created")}
+                        return self._send(201 if changed else 200,
+                                          {"project_id": pid, "overview": meta, "changed": changed, "warnings": warnings})
                 display = re.fullmatch(r"/projects/([^/]+)/display", path)
                 if display and method == "PUT":
                     pid = display.group(1)

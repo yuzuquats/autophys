@@ -166,6 +166,55 @@ def write(out: Path, names=None, *, replay=None) -> list[Path]:
     return written
 
 
+def overview_expected(store: WorkbookStore, path: Path, project_id: str) -> dict:
+    """What a reader must find in an overview golden (tests/conformance/overview/),
+    the same keys as sdks/rust/tests/workbook_format3.rs writes."""
+    c = sqlite3.connect(path)
+    try:
+        version = c.execute("PRAGMA user_version").fetchone()[0]
+        sql = c.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'overviews'").fetchone()
+    finally:
+        c.close()
+    return {
+        "format": {"user_version": version},
+        "project": store.project_name(),
+        "investigations": [i["id"] for i in store.investigations()],
+        "overview_sql": sql[0] if sql else None,
+        "versions": store.overview_versions(project_id),
+    }
+
+
+def write_overview_golden(out: Path) -> Path:
+    """The Python overview golden: two versions by two authors, the second
+    non-ASCII and naming the workbook's investigation, then a display write."""
+    out.mkdir(parents=True, exist_ok=True)
+    path = out / "python.ap-workbook"
+    for p in (path, path.with_name(path.name + "-wal"), path.with_name(path.name + "-shm")):
+        p.unlink(missing_ok=True)
+    with WorkbookStore(path) as store:
+        pid = store.ensure_project("overview")
+        cfg = {"physics": True}
+        ver = store.put_config_version(pid, config_hash(cfg), cfg)
+        inv = store.create_investigation({"project_id": pid, "config_version": ver})
+        store.put_overview(pid, "# Overview\n\nA first draft.\n", "python-writer")
+        md = (f"# Overview \u2014 Temp\u00e9rature \U0001f525\n\n"
+              f'<ap-investigation investigation="{inv}" title="Fit"></ap-investigation>\n')
+        assert store.put_overview(pid, md, "python-reviewer")[2] == []
+        store.put_display(pid, b'{"format":1,"title":"overview"}')
+        exp = overview_expected(store, path, pid)
+    c = sqlite3.connect(path)
+    c.execute("PRAGMA journal_mode = DELETE")
+    c.execute("VACUUM")
+    c.close()
+    path.with_suffix(".json").write_text(json.dumps(exp, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return path
+
+
 if __name__ == "__main__":
+    # ``--overview DIR`` writes only the overview golden (python.ap-workbook).
+    if sys.argv[1:2] == ["--overview"]:
+        p = write_overview_golden(Path(sys.argv[2]))
+        print(p, p.stat().st_size)
+        sys.exit(0)
     for p in write(Path(sys.argv[1]), sys.argv[2:] or None):
         print(p, p.stat().st_size)

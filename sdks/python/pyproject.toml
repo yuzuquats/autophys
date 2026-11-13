@@ -24,4 +24,4 @@ testpaths = ["tests"]
 addopts = "-p no:cacheprovider"
 
 [tool.setuptools.package-data]
-autophys = ["playbooks/*/SKILL.md", "prices.json", "backtests/*.backtest/*.toml", "backtests/*.backtest/hidden/*.toml"]
+autophys = ["playbooks/*/SKILL.md", "prices.json", "investigation-inserts.json", "backtests/*.backtest/*.toml", "backtests/*.backtest/hidden/*.toml"]

@@ -159,6 +159,22 @@ class Store(ABC):
         separate. ``register_display`` stays a no-op for every local store.
         """
 
+    def put_overview(self, project_id: str, markdown: str | bytes, author: str):
+        """Memory and Jsonl stores do not persist overviews: returns None.
+
+        ``WorkbookStore`` keeps them (workbook format 3) and ``HttpStore``
+        sends them to the daemon; both return ``(stored, changed, warnings)``.
+        """
+        return None
+
+    def overview(self, project_id: str) -> dict | None:
+        """The latest overview; None where the store keeps none."""
+        return None
+
+    def overview_versions(self, project_id: str) -> list[dict]:
+        """Every overview version, oldest first; empty where the store keeps none."""
+        return []
+
 
     @abstractmethod
     def ensure_project(self, name: str) -> str: ...

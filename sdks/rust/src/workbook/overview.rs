@@ -197,7 +197,8 @@ fn insert_at(text: &str) -> Option<(&'static InsertSpec, Vec<(String, String)>)>
             _ => {}
         }
         let name_start = i;
-        i += 1; // a leading '=' belongs to the name
+        // The first character belongs to the name, even a '='.
+        i += text[i..].chars().next().map_or(1, char::len_utf8);
         while i < b.len() && !is_space(b[i]) && !matches!(b[i], b'/' | b'>' | b'=') {
             i += 1;
         }

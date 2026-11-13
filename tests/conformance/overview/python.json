@@ -1,0 +1,26 @@
+{
+  "format": {
+    "user_version": 3
+  },
+  "project": "overview",
+  "investigations": [
+    "inv_4002a55abe1d471e"
+  ],
+  "overview_sql": "CREATE TABLE overviews (\n  seq INTEGER PRIMARY KEY,\n  project TEXT NOT NULL REFERENCES projects(id),\n  digest TEXT NOT NULL,\n  markdown TEXT NOT NULL,\n  author TEXT NOT NULL,\n  created REAL NOT NULL\n)",
+  "versions": [
+    {
+      "seq": 1,
+      "digest": "a45b4b910508df77e521dfa88ed6a9db09f2e2513f86e23fa27faa0f2a6b78d4",
+      "markdown": "# Overview\n\nA first draft.\n",
+      "author": "python-writer",
+      "created": 1794572003.901228
+    },
+    {
+      "seq": 2,
+      "digest": "48fffa49a63be8491adfcec137b309c3a0152bfc24ceb0da65d597b44efcac87",
+      "markdown": "# Overview — Température 🔥\n\n<ap-investigation investigation=\"inv_4002a55abe1d471e\" title=\"Fit\"></ap-investigation>\n",
+      "author": "python-reviewer",
+      "created": 1794572003.901299
+    }
+  ]
+}

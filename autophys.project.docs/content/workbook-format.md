@@ -277,7 +277,13 @@ the JSON, and write its own workbook for the Python suite to verify.
 workbook per SDK (`rust.ap-workbook`, `python.ap-workbook`) with two overview
 versions and a display. Each SDK reads both goldens, checks every version and
 its digest, and confirms that rewriting the latest version adds no row and a
-display write leaves format 3.
+display write leaves format 3. Regenerate them with
+`AUTOPHYS_WRITE_GOLDENS=1 cargo test -p autophys --test workbook_format3
+the_overview_generator` and, from `sdks/python`,
+`PYTHONPATH=src python3 tests/conformance_cases.py --overview
+../../tests/conformance/overview`; the insert tags and attribute keys come from
+`html/ui/investigation-inserts.json`, which the Python package carries as a
+byte-identical copy (`autophys/investigation-inserts.json`, pinned by a test).
 
 ### Candidate uncertainty in ranking steps
 

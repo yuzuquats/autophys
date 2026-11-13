@@ -240,6 +240,44 @@
       ]
     },
     {
+      "name": "non-ASCII attribute names keep their case",
+      "markdown": "<ap-investigation État=\"1\" investigation=\"inv_0123456789abcdef\" état=\"2\"></ap-investigation>\n",
+      "warnings": [
+        {
+          "code": "unknown_attribute",
+          "message": "<ap-investigation> has an unknown attribute \"État\"; the viewer ignores it",
+          "attribute": "État"
+        },
+        {
+          "code": "unknown_attribute",
+          "message": "<ap-investigation> has an unknown attribute \"état\"; the viewer ignores it",
+          "attribute": "état"
+        }
+      ]
+    },
+    {
+      "name": "a leading equals sign belongs to the name",
+      "markdown": "<ap-investigation =x investigation=\"inv_0123456789abcdef\"></ap-investigation>\n",
+      "warnings": [
+        {
+          "code": "unknown_attribute",
+          "message": "<ap-investigation> has an unknown attribute \"=x\"; the viewer ignores it",
+          "attribute": "=x"
+        }
+      ]
+    },
+    {
+      "name": "unknown references stay as written",
+      "markdown": "<ap-investigation investigation=\"inv&bogus;&#xD800;&#1114112;&\"></ap-investigation>\n",
+      "warnings": [
+        {
+          "code": "unknown_investigation",
+          "message": "<ap-investigation> names \"inv&bogus;&#xD800;&#1114112;&\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
+          "investigation": "inv&bogus;&#xD800;&#1114112;&"
+        }
+      ]
+    },
+    {
       "name": "a bare attribute",
       "markdown": "<ap-investigation investigation=\"inv_0123456789abcdef\" open></ap-investigation>\n",
       "warnings": [

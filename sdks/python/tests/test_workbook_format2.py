@@ -39,7 +39,7 @@ def workbook(path):
 
 
 def test_versions():
-    assert (INITIAL_VERSION, SCHEMA_VERSION) == (1, 2)
+    assert (INITIAL_VERSION, SCHEMA_VERSION) == (1, 3)
 
 
 def test_new_workbook_is_format_1_and_opening_never_migrates(tmp_path):
@@ -112,11 +112,11 @@ def test_newer_formats_are_refused(tmp_path):
     path = tmp_path / "p.ap-workbook"
     workbook(path)[0].close()
     conn = sqlite3.connect(path)
-    conn.execute("PRAGMA user_version = 3")
+    conn.execute("PRAGMA user_version = 4")
     conn.commit()
     conn.close()
     for readonly in (False, True):
-        with pytest.raises(WorkbookError, match="format 3; this SDK reads up to 2"):
+        with pytest.raises(WorkbookError, match="format 4; this SDK reads up to 3"):
             WorkbookStore(path, readonly=readonly)
 
 
@@ -124,14 +124,14 @@ def test_a_newer_format_written_after_open_is_not_downgraded(tmp_path):
     path = tmp_path / "p.ap-workbook"
     wb, pid = workbook(path)
     conn = sqlite3.connect(path)
-    conn.execute("PRAGMA user_version = 3")
+    conn.execute("PRAGMA user_version = 4")
     conn.commit()
     conn.close()
-    with pytest.raises(WorkbookError, match="format 3"):
+    with pytest.raises(WorkbookError, match="format 4"):
         wb.put_display(pid, BODY)
     wb.close()
     version, tables = raw(path)
-    assert version == 3 and "display" not in tables
+    assert version == 4 and "display" not in tables
 
 
 class _FailingDisplayInsert:
