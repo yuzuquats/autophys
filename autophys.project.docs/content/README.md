@@ -1,6 +1,6 @@
 # autophys is a daemon that serves the tento cookbook shell, and grows from there
 
-The [document node exploration](document-node.md) proposes a project Overview above Configuration; its [interactive concept](document-node-concept.html) uses illustrative battery-demo copy. Agents maintain a living narrative as work progresses; persistence remains open.
+The [project document design](document-node.md) is agent-maintained Markdown rendered with std-documentation. An [example document](project-overview.example.md) illustrates the content; workbench integration remains open.
 
 Current contributor setup and layout are in [CONTRIBUTING.md](../../CONTRIBUTING.md)
 and [docs/README.md](../../docs/README.md). The bounded OSS portability batch is
