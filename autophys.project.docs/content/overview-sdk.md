@@ -1,6 +1,6 @@
 # Project overviews in the workbook and SDK
 
-Status: steps 1-5 implemented, review rounds 1-3 applied, and active on dev since 2026-11-13 (see Dev activation);
+Status: steps 1-5 implemented, review rounds 1-3 applied, and active on dev since 2026-11-13 (see Dev activation; OV-7/OV-8 redeployed the same day);
 production is unchanged. Operator approved
 the direction ("go ahead") after an independent review. The decisions below marked agent-chosen are still
 pending operator review.
@@ -29,7 +29,7 @@ the snapshot like any other project data.
 | Python | `Store.put_display`, `WorkbookStore.display` | same three, on `WorkbookStore`, `HttpStore` and the `Store` protocol, plus the project-scoped `Workbook` handle |
 | HTTP | `PUT /projects/{pid}/display` | `PUT /projects/{pid}/overview`, overview in the snapshot |
 | SSE | `display` event | `overview` event, same digest de-duplication; the resume cursor is untouched |
-| CLI | `autophys approve …` | `autophys overview set PROJECT FILE.md [--author]`, `autophys overview show PROJECT` |
+| CLI | `autophys approve …` | `autophys overview set PROJECT FILE.md --author NAME` (required, OV-8), `autophys overview show PROJECT` |
 | UI | `Project.overview?: string` | filled from the snapshot or SSE; `demo-document.ts` deleted |
 
 ```sql
@@ -163,11 +163,12 @@ The UI build (`autophys build-web`) bundles the shared JSON insert list.
 - The canonical insert list is `html/ui/investigation-inserts.json`. Rust
   embeds it with `include_str!`. Python ships a byte-identical package-data
   copy, and tests in both Python and Deno pin it to the canonical file.
-- The `/workspace` project carries `overview` (Markdown or null) and
-  `overview_meta` (`{seq, digest, author, created}` or null). These are not
-  one nested object, because the UI's `Project.overview` was already a string.
-- `autophys overview set` takes `--author`, which defaults to `operator`, and
-  accepts `-` to read stdin. `autophys overview show --json` prints
+- The `/workspace` project carried `overview` (Markdown or null) and
+  `overview_meta` (`{seq, digest, author, created}` or null). Superseded by
+  the operator's OV-7: one `overview` version object (see Dev redeploy —
+  OV-7/OV-8).
+- `autophys overview set` took `--author`, defaulting to `operator`, and
+  accepts `-` to read stdin. Superseded by OV-8: `--author` is required. `autophys overview show --json` prints
   `{project_id, overview}`, with `overview` null when there is none.
 - There is no battery generator in `ops/`. The battery overview is written
   only by the new-seed script. Its template is
@@ -509,10 +510,70 @@ follows the activated source commit and does not trigger another activation.
 | Id | Decision | Reason | Decided by | Implementation state |
 | --- | --- | --- | --- | --- |
 | OV-1 | Keep: every overview save that changes the text adds a version; `overview_versions()` stays | Agents rewrite notes as evidence changes, so earlier versions should stay visible and restorable; matches append-only records and config versions. Revisit if automated loops rewrite overviews very frequently (pruning) | operator | Implemented (`ca3a230`, `5b1544c`), live on dev |
-| OV-7 | Change: `/workspace` and the SSE `overview` event send one `overview: {markdown, seq, digest, author, created}` object; `overview_meta` goes away; the UI reads `.markdown` | One shape everywhere, matching the SDK `overview()` and `GET /projects/{pid}/overview`; text and metadata cannot be paired wrongly. Cheap now (unpushed, only dev UI reads it) | operator | Pending: forward commit + dev redeploy after the walkthrough |
+| OV-7 | Change: `/workspace` and the SSE `overview` event send one `overview: {markdown, seq, digest, author, created}` object; `overview_meta` goes away; the UI reads `.markdown` | One shape everywhere, matching the SDK `overview()` and `GET /projects/{pid}/overview`; text and metadata cannot be paired wrongly. Cheap now (unpushed, only dev UI reads it) | operator | Implemented (`8eecec4`, Change-Id `I0ed35724680e5ac1696729854af8e440ea6899ca`), live on dev |
 | OV-12 | Keep: `GET /projects/{pid}/overview` returns 200 with `overview: null` before the first write; 404 only for an unknown project | "Not written yet" is a normal state and must stay distinguishable from a mistyped id; the activation loop depends on it | operator | Implemented (`963cd6a`), live on dev |
 | OV-3 + OV-13 | Keep: card problems never block a save (refused only for empty, non-UTF-8 or >256 KiB bodies); the strict canonical-form lint decides warnings and may over-warn | Overviews are mostly agent-written and can follow the canonical form; blocking would turn a cosmetic issue into a failed write. Revisit (e.g. a CLI `--strict` flag) if agent writes must be guaranteed clean | operator | Implemented (`ca3a230`, `aee6beb`), live on dev |
-| OV-4 + OV-8 | Change: `autophys overview set` requires `--author` (error shows the flag); SDKs keep requiring an author | Agents call the CLI far more than the operator; a default would silently record an agent rewrite as the operator | operator | Pending: forward commit with OV-7 |
+| OV-4 + OV-8 | Change: `autophys overview set` requires `--author` (error shows the flag); SDKs keep requiring an author | Agents call the CLI far more than the operator; a default would silently record an agent rewrite as the operator | operator | Implemented (`7afb562`, Change-Id `I784fb871906d07f5614e3ad15541f4344abf2796`), live on dev |
 | OV-2, OV-5/OV-10, OV-6, OV-11 | Keep all four as built | Format 3 only on the first overview write keeps older SDKs reading other workbooks; templated demo notes preserve ids and chains; one canonical card-field list with a test-pinned Python copy; append-only stays SDK-enforced like display and config versions | operator | Implemented, live on dev |
 
 OV-9 is superseded by OV-13. No agent-chosen overview decision remains pending.
+
+## Dev redeploy — OV-7/OV-8
+
+Dev serves yuzuquats master 8eecec4bbe79b79b3c5c10c676eb4217933bc233
+(version 0.1.5): `7afb562` (OV-8, `I784fb871906d07f5614e3ad15541f4344abf2796`)
+and `8eecec4` (OV-7, `I0ed35724680e5ac1696729854af8e440ea6899ca`).
+
+- **Wire shape.** Each `/workspace` project carries
+  `overview: {seq, digest, markdown, author, created}` or `null`, the same
+  null-when-absent convention as `display`; `overview_meta` is gone.
+  `event: overview` data is `{project_id, overview}`. One server function
+  builds the object for the route, `/workspace` and the event, and a test
+  asserts the three are byte for byte equal (the event's data equals the
+  route's body). The field order is the route's existing order. The browser
+  keeps `Project.overview` as the Markdown string, mapped from
+  `overview.markdown` in `WireModel`, so `derive/*` is unchanged. SSE
+  de-duplication by digest and the record resume cursor are unchanged.
+- **CLI.** `autophys overview set` without `--author` exits 2 with
+  "missing required option --author" and writes nothing.
+- **Suites on the committed tree:** `cargo test --workspace --locked` 388
+  passed, 2 ignored (38 binaries); pytest 864 passed, 15 skipped; deno 230
+  passed. `ops/package.sh` reran cargo and deno with the same counts and
+  built the release binary; no stale fingerprints this time.
+- **Release:** ~/.local/share/tento/services/autophys-dev/releases/8eecec4-overview-object-20261113
+  (packed binary, `web/` from its `build-web`, `COMMIT`). `current` moved
+  from `2b94570-overview-20261113`, which is retained. Only
+  autophys-dev.service restarted, at 2026-11-13 07:43:58 PST (PID 1618046,
+  0 restarts). No data changed: the workbooks were already format 3 and the
+  change is wire-only; the backups directory was not touched. Public
+  /api/healthz:
+
+  ```
+  {"ok":true,"version":"0.1.5","commit":"8eecec4bbe79b79b3c5c10c676eb4217933bc233","web_id":null}
+  ```
+
+- **Rollback:** point `current` back at `releases/2b94570-overview-20261113`
+  and `systemctl --user restart autophys-dev.service`, then check healthz for
+  2b945706b9d2343ef269d9d7e18fe8d8e0f7666c. No data restore is needed.
+- **Qualification** (headless chrome-headless-shell 131 with `--no-sandbox`,
+  via tento-headless-js, one fresh browser context per run): all four demo
+  workbooks via `/open/demo/workbook/<project>`, Overview selected in the
+  tree, at 1280×800 and 390×844. In all 8 runs the document rendered
+  (7 to 11 headings), every insert rendered as a card with its title
+  (battery 2, oscillator 1, thermal 1, Jazz 3), none "Investigation
+  unavailable", and the page did not overflow horizontally. No console
+  errors, no page errors, no HTTP responses ≥ 400. The only failed requests
+  are the 48 open-link `HEAD` probes (ERR_ABORTED) seen in earlier releases.
+- **Wire check:** the UI reads `GET /api/v1/workspace` with the session
+  cookie. The browser saw, and a `curl` with the demo session's cookies and
+  `Sec-Fetch-Site: same-origin` (the `--login` read rule) got 200 with,
+  every project's `overview` keys `seq, digest, markdown, author, created`,
+  no `overview_meta`, and the digests written at activation (battery
+  `b3fbb8f6…`, oscillator `f63bcfca…`, thermal `74e3b3e5…`, Jazz `68b4721f…`).
+- **Not done:** production autophys.service is still PID 1747 (active since
+  2026-11-09 05:26:46 PST). No push.
+
+Evidence (ignored): yuzuquats
+~/workspace/fleet/evidence/autophys/overview-sdk-activation-20261113/round2/
+(package and build-web logs, healthz, `qualification.json`, screenshots, the
+curl shape summary and the two scripts). No browser processes remained.
