@@ -290,3 +290,30 @@ outputs, preview focus and focus restoration, and horizontal overflow. No
 uncaught errors were reported. The paired contextual mock is intentionally
 a single investigation excerpt, not the whole project document. Diff checks
 pass; owner workspace/home layout checks retain their existing findings.
+
+## Plain-language summary above B — revision 6 concept
+
+The operator preferred B and requested a clear explanation for a lay reader.
+The [refined B mock](investigation-card-summary.mock.html) adds a short narrative
+above the before/after comparison: the initial test left slower behavior
+uncertain, a follow-up pulse sequence resolved the model settings, and the
+updated model passed a check against measurements excluded from fitting.
+The pending state explains the proposed test without implying it succeeded.
+
+Technical parameter names, fitted values, dataset ids and the chi-squared
+statistic move into a native expandable details section. The default card
+retains the plain-language prediction-check result, simulated scope and
+Open investigation link to the corresponding dev record. The shadowed
+std-card direction remains. This HTML is a design mock; no live insert or
+service was changed.
+
+D-SUM-4 update: the operator's preference for B supersedes the agent's
+recommendation of A. The requested plain-language summary is now mocked;
+its exact copy and final implementation remain for review. Switching copy
+or layout is a small concept edit with no persisted-data impact.
+
+Validation: completed and pending cards inspected at 728px and 390px. Six
+checks at each width cover state changes retaining keyboard focus, collapsed
+and expanded layout without horizontal overflow, and matching record links.
+No uncaught errors were reported. Diff check passes. Owner layout checks
+retain the pre-existing workspace/home-policy findings.
