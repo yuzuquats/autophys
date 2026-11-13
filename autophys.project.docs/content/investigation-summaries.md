@@ -88,8 +88,14 @@ observed. The final overview was also inspected at 728px after the typography
 correction. The detector identified undersized sidebar text; the 10px text was
 raised to 11px. `git diff --check` passes.
 
-Two independent review attempts returned no final verdict (the retry was
-interrupted). No independent approval is claimed. These remain concept mocks
-for operator review. The existing dev app and production service are unchanged.
+The independent concept review found one material interaction issue: an output
+preview could open below the viewport and lose keyboard focus. Opening now
+focuses and reveals the preview; closing or toggling restores focus and
+visibility to the originating link. DOM assertions passed for all 12 outputs
+at both 728px and 390px, covering reveal, focus, close and toggle behavior.
+The subsequent independent verdict scored this finding resolved, disposition
+`ship`, with no regressions found in the changed helper and handler. This
+verdict covers the correction; it is not scientific or production validation.
+The existing dev app and production service are unchanged.
 Host layout checks retain their pre-existing findings; this work adds no app,
 service, build directory or home entry.
