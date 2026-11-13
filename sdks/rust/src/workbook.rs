@@ -12,7 +12,9 @@ mod manifest;
 mod overview;
 mod overview_blocks;
 pub use manifest::{MAX_DISPLAY_BYTES, StoredDisplay};
-pub use overview::{MAX_OVERVIEW_BYTES, OverviewWarning, StoredOverview, check_overview};
+pub use overview::{
+    MAX_OVERVIEW_BYTES, OverviewHead, OverviewWarning, StoredOverview, check_overview,
+};
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};

@@ -412,6 +412,8 @@ class FakeAutophys:
                     rows = fake.overviews.setdefault(pid, [])
                     if versions and method == "GET":
                         return self._send(200, {"versions": rows})
+                    if not versions and method == "GET":
+                        return self._send(200, {"project_id": pid, "overview": rows[-1] if rows else None})
                     if not versions and method == "PUT":
                         from autophys.overview import check_overview, check_write, digest
                         try:

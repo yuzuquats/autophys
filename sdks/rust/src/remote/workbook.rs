@@ -208,6 +208,21 @@ impl Remote {
             decode(j["warnings"].take())?,
         ))
     }
+    /// `GET /projects/{pid}/overview`: the latest version, or None before
+    /// the first write.
+    pub(crate) async fn overview(&self, pid: &str) -> Result<Option<StoredOverview>> {
+        let (_, mut j) = self
+            .json(
+                "GET",
+                &format!("/projects/{}/overview", encode(pid)),
+                None,
+                None,
+                self.timeout,
+            )
+            .await
+            .map_err(|e| super::daemon_too_old(e, "project overviews"))?;
+        decode(j["overview"].take())
+    }
     /// `GET /projects/{pid}/overview/versions`, oldest first.
     pub(crate) async fn overview_versions(&self, pid: &str) -> Result<Vec<StoredOverview>> {
         let (_, mut j) = self

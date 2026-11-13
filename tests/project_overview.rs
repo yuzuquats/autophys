@@ -88,6 +88,11 @@ async fn writes_append_versions_and_the_snapshot_carries_the_latest() {
     )
     .await;
     assert_eq!((s, &v["versions"]), (200, &json!([])));
+    let (s, latest) = call(&app, get(&path, Some(&key)).to_request()).await;
+    assert_eq!(
+        (s, &latest),
+        (200, &json!({"project_id": pid, "overview": null}))
+    );
     assert_eq!(format(wb.path()), 1, "reads never upgrade");
 
     let md = format!(
@@ -175,6 +180,18 @@ async fn writes_append_versions_and_the_snapshot_carries_the_latest() {
         (&json!("# Two\n"), &json!("grace"))
     );
     assert_eq!(wb.overview().unwrap().unwrap().markdown, "# Two\n");
+    // The latest alone, with its Markdown: what remote readers fetch.
+    let (s, latest) = call(&app, get(&path, Some(&key)).to_request()).await;
+    assert_eq!(
+        (s, &latest["project_id"], &latest["overview"]),
+        (200, &json!(pid), &versions[1])
+    );
+    let head = wb.overview_head().unwrap().unwrap();
+    assert_eq!(
+        (json!(head.seq), json!(head.digest)),
+        (versions[1]["seq"].clone(), versions[1]["digest"].clone())
+    );
+    assert!(other.overview_head().unwrap().is_none());
     assert!(wb.verify().unwrap().ok);
 }
 
@@ -220,15 +237,13 @@ async fn refusals_auth_missing_projects_and_the_size_cap() {
         .0,
         404
     );
-    assert_eq!(
-        call(
-            &app,
-            get("/projects/prj_missing/overview/versions", Some(&key)).to_request()
-        )
-        .await
-        .0,
-        404
-    );
+    for url in [
+        "/projects/prj_missing/overview/versions",
+        "/projects/prj_missing/overview",
+    ] {
+        assert_eq!(call(&app, get(url, Some(&key)).to_request()).await.0, 404, "{url}");
+    }
+    assert_eq!(call(&app, get(&path, None).to_request()).await.0, 401);
     assert_eq!(format(wb.path()), 1, "refused writes leave format 1");
 
     let exact = "x".repeat(MAX_OVERVIEW_BYTES);
@@ -300,7 +315,10 @@ async fn the_stream_sends_the_latest_overview_then_each_new_digest_without_an_id
     assert_eq!(first["digest"], sha256_hex([&b"# First\n"[..]]));
     assert!(first["created"].is_f64());
 
-    // An unchanged digest sends nothing, whoever writes it.
+    // An unchanged digest sends nothing, whoever writes it. The unchanged
+    // write wakes no stream, so a display write wakes this one explicitly,
+    // and the wait outlasts the 1 s poll as well: both re-reads must find
+    // the overview's digest already sent.
     call(
         &app,
         put_json(
@@ -311,8 +329,19 @@ async fn the_stream_sends_the_latest_overview_then_each_new_digest_without_an_id
         .to_request(),
     )
     .await;
+    let (s, _) = call(
+        &app,
+        put_raw(
+            &format!("/projects/{}/display", wb.id()),
+            Some(&key),
+            br#"{"format":1,"title":"wake"}"#,
+        )
+        .to_request(),
+    )
+    .await;
+    assert_eq!(s, 201);
     assert!(
-        overview_event(&mut body, Duration::from_millis(600))
+        overview_event(&mut body, Duration::from_millis(2500))
             .await
             .is_none()
     );

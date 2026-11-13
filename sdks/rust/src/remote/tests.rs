@@ -628,12 +628,11 @@ fn overview_writes_reads_and_versions_travel_as_json() {
         } else if first.starts_with("GET /api/v1/projects/prj_test/overview/versions ") {
             response(200, "application/json", &json!({"versions": [
                 {"seq": 7, "digest": "d1", "markdown": "# A\n", "author": "ada", "created": 2.5}]}).to_string(), "")
-        } else if first.starts_with("GET /api/v1/workspace?project=prj_test ") {
-            response(200, "application/json", &json!({
-                "cursor": 0, "config_versions": [], "investigations": [], "proposals": [], "records": [],
-                "projects": [{"id": "prj_test", "name": "x", "display": null, "overview": "# A\n",
-                              "overview_meta": {"seq": 7, "digest": "d1", "author": "ada", "created": 2.5}}],
-            }).to_string(), "")
+        } else if first.starts_with("GET /api/v1/projects/prj_test/overview ") {
+            response(200, "application/json", &json!({"project_id": "prj_test", "overview":
+                {"seq": 7, "digest": "d1", "markdown": "# A\n", "author": "ada", "created": 2.5}}).to_string(), "")
+        } else if first.starts_with("GET /api/v1/projects/prj_none/overview ") {
+            response(200, "application/json", r#"{"project_id":"prj_none","overview":null}"#, "")
         } else {
             response(404, "application/json", r#"{"error":"not_found","message":"unknown route"}"#, "")
         }
@@ -646,7 +645,19 @@ fn overview_writes_reads_and_versions_travel_as_json() {
     assert_eq!(warnings.len(), 1);
     assert_eq!(warnings[0].investigation.as_deref(), Some("inv_x"));
     assert_eq!(wb.overview().unwrap(), Some(stored.clone()));
+    assert_eq!(
+        wb.overview_head().unwrap(),
+        Some(crate::OverviewHead { seq: 7, digest: "d1".into() })
+    );
     assert_eq!(wb.overview_versions().unwrap(), vec![stored]);
+    let requests = server.requests.lock().unwrap().clone();
+    // The latest comes from its own route, not the project snapshot.
+    assert!(requests.iter().all(|r| !r.contains("/workspace")), "{requests:?}");
+    let none = crate::Workbook::from_remote(
+        Remote::new(&server.url, "key").unwrap(),
+        Project { id: "prj_none".into(), name: "y".into() },
+    );
+    assert_eq!(none.overview().unwrap(), None);
     let requests = server.requests.lock().unwrap().clone();
     assert!(requests[0].to_ascii_lowercase().contains("content-type: application/json"), "{}", requests[0]);
     // Refusals OV-3 names never reach the daemon.
@@ -660,7 +671,11 @@ fn missing_overview_endpoints_say_upgrade_the_daemon() {
     let server = Mock::new(|_, _| response(404, "application/json", r#"{"error":"not_found","message":"unknown route"}"#, ""));
     let remote = Remote::new(&server.url, "key").unwrap();
     let wb = crate::Workbook::from_remote(remote, Project { id: "prj_test".into(), name: "x".into() });
-    for e in [wb.put_overview("# A\n", "ada").unwrap_err(), wb.overview_versions().unwrap_err()] {
+    for e in [
+        wb.put_overview("# A\n", "ada").unwrap_err(),
+        wb.overview().unwrap_err(),
+        wb.overview_versions().unwrap_err(),
+    ] {
         assert!(e.to_string().contains("too old for project overviews"), "{e}");
     }
 }

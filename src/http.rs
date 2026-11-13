@@ -208,6 +208,7 @@ pub fn scope(api: Api) -> actix_web::Scope {
             web::put().to(put_config_version),
         )
         .route("/projects/{pid}/display", web::put().to(display::put))
+        .route("/projects/{pid}/overview", web::get().to(overview::get))
         .route("/projects/{pid}/overview", web::put().to(overview::put))
         .route(
             "/projects/{pid}/overview/versions",

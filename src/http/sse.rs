@@ -20,7 +20,8 @@
 //! the latest manifest, then changed digests (including external writers).
 //! Project overviews follow the same rules as `event: overview`, data
 //! `{project_id, seq, digest, author, created, markdown}`: the latest version
-//! on connect, then each change of digest.
+//! on connect, then each change of digest. Each read compares the latest
+//! `seq` and `digest` first and loads the Markdown only for a new digest.
 //!
 //! Records are always read from the workbooks, in `gseq` order per workbook.
 //! A write this server makes wakes every stream at once; records another
@@ -267,6 +268,7 @@ impl Tail {
         let scoped = self.scoped.clone();
         let client = self.api.client.clone();
         let cursors = self.cursors.clone();
+        let sent = self.overview_digests.clone();
         blocking(move || {
             let wbs = match scoped {
                 Some(wb) => vec![wb],
@@ -279,8 +281,11 @@ impl Tail {
                 if let Some(display) = wb.display()? {
                     displays.push((wb.id().to_string(), display));
                 }
-                if let Some(o) = wb.overview()? {
-                    overviews.push((wb.id().to_string(), o));
+                let head = wb.overview_head()?;
+                if head.is_some_and(|h| sent.get(wb.id()) != Some(&h.digest)) {
+                    if let Some(o) = wb.overview()? {
+                        overviews.push((wb.id().to_string(), o));
+                    }
                 }
                 let after = cursors.get(wb.id()).copied().unwrap_or(0);
                 for l in wb.records_after(after, PAGE)? {

@@ -507,6 +507,8 @@ def test_http_overviews_write_read_and_list_versions():
         assert not changed and again == stored
         second, changed, _ = store.put_overview(pid, "# Two\n", "grace")
         assert changed and store.overview_versions(pid) == [stored, second]
+        assert store.overview(pid) == second
+        assert not [r for r in fake.requests if r[1] == "/workspace"], "the latest has its own route"
         sent = len(fake.requests)
         for markdown, author in (("", "ada"), ("# x", ""), (b"\xff", "ada"), ("x" * (256 * 1024 + 1), "ada")):
             with pytest.raises(StoreError):
@@ -520,6 +522,7 @@ def test_http_overviews_on_an_old_daemon_are_an_upgrade_error(status):
         store = HttpStore(fake.url, fake.issue_key())
         pid = store.ensure_project("toy")
         fake.overview_status = status
-        for call in (lambda: store.put_overview(pid, "# x\n", "ada"), lambda: store.overview_versions(pid)):
+        for call in (lambda: store.put_overview(pid, "# x\n", "ada"), lambda: store.overview(pid),
+                     lambda: store.overview_versions(pid)):
             with pytest.raises(HttpError, match="too old for project overviews.*upgrade the autophys daemon"):
                 call()

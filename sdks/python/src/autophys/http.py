@@ -471,15 +471,15 @@ class HttpStore(Store):
         return stored, status == 201, body.get("warnings", [])
 
     def overview(self, project_id: str) -> dict | None:
-        """The latest version from the scoped ``/workspace`` snapshot, or None."""
+        """``GET /projects/{pid}/overview``: the latest version, or None before
+        the first write."""
         pid = urllib.parse.quote(project_id, safe="")
-        projects = self._req("GET", f"/workspace?project={pid}").get("projects") or []
-        project = projects[0] if projects else {}
-        markdown, meta = project.get("overview"), project.get("overview_meta")
-        if not isinstance(markdown, str) or not isinstance(meta, dict):
-            return None
-        return {"seq": meta["seq"], "digest": meta["digest"], "markdown": markdown, "author": meta["author"],
-                "created": meta["created"]}
+        try:
+            return self._req("GET", f"/projects/{pid}/overview")["overview"]
+        except HttpError as error:
+            if _route_missing(error):
+                raise _daemon_too_old(error, "project overviews") from None
+            raise
 
     def overview_versions(self, project_id: str) -> list[dict]:
         """``GET /projects/{pid}/overview/versions``, oldest first."""

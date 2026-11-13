@@ -49,6 +49,17 @@ pub(super) async fn put(
     ))
 }
 
+/// `GET /projects/{pid}/overview`: `{project_id, overview}`, the latest
+/// version with its Markdown or `null` before the first write. An unknown
+/// project is 404, as for the versions.
+pub(super) async fn get(_: Keyed, api: Data, pid: web::Path<String>) -> Result<HttpResponse> {
+    let wb = workbook(&api, &pid).await?;
+    let latest = blocking(move || Ok(wb.overview()?)).await?;
+    Ok(ok(
+        json!({ "project_id": pid.as_str(), "overview": latest }),
+    ))
+}
+
 /// `GET /projects/{pid}/overview/versions`: every version, oldest first.
 pub(super) async fn versions(_: Keyed, api: Data, pid: web::Path<String>) -> Result<HttpResponse> {
     let wb = workbook(&api, &pid).await?;

@@ -37,6 +37,14 @@ pub struct StoredOverview {
     pub created: f64,
 }
 
+/// The latest version's `seq` and `digest` without its Markdown: what a
+/// poller compares before it reads the body ([`Workbook::overview_head`]).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OverviewHead {
+    pub seq: i64,
+    pub digest: String,
+}
+
 /// An advisory finding about an overview write; the write still happened.
 /// `code` is one of:
 ///
@@ -602,9 +610,38 @@ impl Workbook {
     /// changes the format, so formats 1 and 2 read as None.
     pub fn overview(&self) -> Result<Option<StoredOverview>> {
         if let Some(r) = self.remote() {
-            return Ok(r.snapshot(self.id())?.overview);
+            return r.overview(self.id());
         }
         latest(&*self.conn()?, self.id())
+    }
+
+    /// The latest version's `seq` and `digest`, or None: one row
+    /// without the Markdown, for pollers that read the body only when the
+    /// digest changes. A remote workbook has no head-only route and reads the
+    /// latest version (at most [`MAX_OVERVIEW_BYTES`]).
+    pub fn overview_head(&self) -> Result<Option<OverviewHead>> {
+        if let Some(r) = self.remote() {
+            return Ok(r.overview(self.id())?.map(|o| OverviewHead {
+                seq: o.seq,
+                digest: o.digest,
+            }));
+        }
+        let conn = self.conn()?;
+        if !table_exists(&conn)? {
+            return Ok(None);
+        }
+        Ok(conn
+            .query_row(
+                "SELECT seq, digest FROM overviews WHERE project = ?1 ORDER BY seq DESC LIMIT 1",
+                [self.id()],
+                |r| {
+                    Ok(OverviewHead {
+                        seq: r.get(0)?,
+                        digest: r.get(1)?,
+                    })
+                },
+            )
+            .optional()?)
     }
 
     /// Every overview version, oldest first (empty before the first write).

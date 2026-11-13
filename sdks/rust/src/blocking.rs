@@ -212,6 +212,9 @@ impl Remote {
     ) -> Result<(StoredOverview, bool, Vec<OverviewWarning>)> {
         run(self.inner.put_overview(pid, markdown, author))
     }
+    pub(crate) fn overview(&self, pid: &str) -> Result<Option<StoredOverview>> {
+        run(self.inner.overview(pid))
+    }
     pub(crate) fn overview_versions(&self, pid: &str) -> Result<Vec<StoredOverview>> {
         run(self.inner.overview_versions(pid))
     }
