@@ -1,6 +1,6 @@
 # Project overviews in the workbook and SDK
 
-Status: steps 1-5 implemented (local, unreviewed), 2026-11-13; see Result. Operator approved
+Status: steps 1-5 implemented (local), 2026-11-13, with review rounds 1 and 2 applied; see Result. Operator approved
 the direction ("go ahead") after an independent review. The decisions below marked agent-chosen are still
 pending operator review.
 
@@ -200,15 +200,17 @@ The UI build (`autophys build-web`) bundles the shared JSON insert list.
   ```sh
   for c in COLLECTION_DIR...; do
     for p in battery_cycler_demo mass_spring_damper_demo thermal_rc_demo jazz_performance_demo; do
-      autophys overview show "$p" --target "$c" --json   # skip p if it already has an overview
+      autophys overview show "$p" --target "$c" --json | jq -e '.overview == null' >/dev/null || continue
       autophys overview show "$p" --target NEW_SEED_DIR \
         | autophys overview set "$p" - --target "$c" --author autophys-demo
     done
   done
   ```
 
-  Skip a project the collection does not hold, and one that already has an
-  overview, so a user's own note is never covered. `set` prints warnings: an
+  The guard skips a project that already has an overview, so a user's own
+  note is never covered. It also skips a project the collection does not
+  hold: `show` then exits 1 with "project not found", `jq` gets no input and
+  exits non-zero. (`jq` is `/usr/bin/jq` on yuzuquats.) `set` prints warnings: an
   `unknown_investigation` means that collection's ids differ from the seed's,
   so stop and render that collection's note from its own ids
   (`ops/demo_overviews.py`'s `render`) instead. Each write moves that
@@ -250,7 +252,8 @@ while the host's load average was 12. That test counts pooled connections and
 does not touch overviews. It passed three times on its own and in the next
 full run.
 
-What the port does not cover:
+What the port did not cover (the port was replaced in review round 2; see
+that section for what the lint does not cover):
 - The deno test cannot check attribute values, because Deno has no HTML
   parser. The SDK tests and the fuzzing against the HTML rules cover them.
 - Named character references other than the five XML names, and `&amp`,
@@ -258,6 +261,58 @@ What the port does not cover:
   plain ASCII.
 - `insert_in_paragraph` inside a link reference definition is not checked
   against the bundle, because the bundle leaves no token for it.
+- No CLI test runs `overview show --target URL` against a daemon. It calls the
+  same `Workbook::overview` as the Rust remote test.
+
+### Review round 2
+
+An independent review of `7275b66..d729e10` found no disagreement between
+the round-1 ports and the viewer bundle. The ports were still rejected: each
+viewer or markdown-it change would need three coordinated edits (bundle, Rust,
+Python), and nothing beyond the vectors guarded drift. OV-13 replaces them with
+a canonical-form lint. The fixes are forward commits on yuzuquats master;
+nothing is pushed, deployed or installed, and the live demo collections and
+served seeds are untouched.
+
+| Finding | What changed | Commit | Change-Id |
+| --- | --- | --- | --- |
+| The ports would drift from the viewer | `overview_blocks.rs` and `_overview_blocks.py` and their tests are deleted. Both SDKs run a canonical-form lint (OV-13). An insert is silent only when it is alone on one line at column 0, after a blank line or at the start of the document, as `<ap-investigation ...></ap-investigation>`, outside fenced and indented code. If the line holds a `\|`, the next line must be blank, so it cannot become a table header. Any other line mentioning the tag outside code gets `noncanonical_insert`, with `line` and `reason`; a line that may start an HTML block gets `html_block`. `cases.json` is restated for the lint with 12 new cases and a seeded generator (3,000 documents, pinned by digest). The deno test runs the bundled viewer over every warning-free vector and every generated document, and pins the bundle's sha256 | `aee6beb` | `Ie792999850a909b7bfad3a0c14086a8dc1f23e76` |
+| 1 Text after `</ap-investigation>` is hidden with the card | Canonical form allows only whitespace after the closing tag. The old vector "a closing tag later in the line closes the card", whose trailing text is hidden, now warns ("text after </ap-investigation>"). A new vector covers it too | `aee6beb` | `Ie792999850a909b7bfad3a0c14086a8dc1f23e76` |
+| 2 The activation loop's skip was only a comment | The loop in Open items now guards with `jq -e '.overview == null' \|\| continue`. A dry run on two scratch copies of a freshly generated seed: the collection holding a user note was skipped and stayed byte-identical (sha256); the one without overviews got both notes with the seed's digests and no warnings; projects missing from the collection were skipped. The scratch copies were removed | (this commit) | `Iea86f551adc3f13a6e8560a2afe95ac3953079e7` |
+| 4 20+ nesting levels | A nested insert is not at column 0, so it warns. Deep lists also reach the lint's limit of 64 readings, after which no line counts as canonical, so every insert below warns | `aee6beb` | `Ie792999850a909b7bfad3a0c14086a8dc1f23e76` |
+| 5 Named character references | Still applies, but it can only over-warn. The SDKs decode numeric references, the five XML names and `&amp`, `&quot`, `&lt` and `&gt` without `;`; the browser decodes about 2,231 names. The SDKs decode only where the browser decodes the same way, and ids are `inv_` plus 16 hex digits, so an undecoded `&` never matches a known id. The worst case is a false `unknown_investigation` | (this commit) | `Iea86f551adc3f13a6e8560a2afe95ac3953079e7` |
+
+| Suite | Before (`d729e10`) | After (`aee6beb`) |
+| --- | --- | --- |
+| `cargo test --workspace --locked` | 387 passed, 2 ignored | 388 passed, 0 failed, 2 ignored (38 binaries) |
+| `python3 -m pytest -q tests` in `sdks/python` | 839 passed, 15 skipped | 864 passed, 15 skipped |
+| `deno test --allow-read --config html/deno.json html/` | 216 passed | 230 passed, 0 failed |
+
+`test_cross_writer.py` passed (6 tests) with `AUTOPHYS_RUST_BIN` and
+`AUTOPHYS_RUST_WEB_ROOT` set. This commit changes only this page, so its code
+tree is the same as `aee6beb`'s.
+
+The lint was also checked, outside the checked-in suites, against the bundled
+viewer: about 39,000 random documents (up to 60 lines, some biased towards
+lists, fences and tables), each compared on whether it renders, the card
+lines, the card nodes and hidden text. For every document without warnings,
+the viewer agreed: 0 mismatches. The Rust and Python lints gave identical
+warnings on 24,000 documents.
+
+The lint over-warns on purpose. These reviewer cases give no warning, because
+the viewer shows them as code and hides nothing: four-space and tab-indented
+code, backtick and tilde fences (including a longer close and an unclosed
+fence running to the end), a fence in a list item, and an empty list item
+followed by a fence. These warn although the viewer shows a card or hides
+nothing: an insert indented by up to three spaces, one directly after an ATX
+heading, multi-line attributes, an insert inside a fence in a blockquote, one
+after an indented fence that follows a lazy line, an insert named in inline
+code, and anything below the 64-reading limit (about 8 nested list levels).
+
+What the lint does not cover:
+- Attribute values are not checked by the deno test, because Deno has no
+  HTML parser. The SDK tests and the decoding rules cover them.
+- Named references, as in finding 5.
 - No CLI test runs `overview show --target URL` against a daemon. It calls the
   same `Workbook::overview` as the Rust remote test.
 
@@ -269,8 +324,9 @@ What the port does not cover:
 | OV-6 | The shared insert list is `html/ui/investigation-inserts.json`. Rust embeds it, and Python carries a pinned package-data copy | The UI owns the keys, and the published Python wheel cannot read files outside its package | Generate the Python copy at build time: no checked-in duplicate, but the wheel build gains a step | Implemented in `ca3a230` and `5b1544c`. Switching to a generated copy changes the build only; cheap |
 | OV-7 | Wire shape: `overview` is the Markdown and `overview_meta` is `{seq, digest, author, created}`. The SSE `overview` event carries the full body, has no `id:`, and is de-duplicated by digest per project | It keeps the existing `Project.overview: string`, and the SSE resume cursor is untouched | One `overview: {markdown, …}` object: tidier, but every reader of the string changes | Implemented in `31c9db4` and `84e31d6`. An adopted wire contract once shipped, so changing it later needs a compatibility window |
 | OV-8 | CLI: `--author` defaults to `operator`. Warnings go to stderr, or into the JSON with `--json`. `show --json` returns `{project_id, overview}` | A person at the CLI is the operator, and the Python and Rust APIs still require an author | Require `--author` on the CLI too | Implemented in `31c9db4`. Requiring the flag is one line; cheap |
-| OV-9 | Revised in review round 1. Warnings follow the viewer's own block pass: markdown-it 14.1.0 with std-documentation's insert rule (the trimmed line starts with `<` plus the tag, case-sensitively; it never interrupts a paragraph; it runs in blockquotes and list items; a card runs to its closing tag). Both SDKs carry a hand port (`overview_blocks.rs`, `_overview_blocks.py`), and card attributes are read as the HTML parser reads them. Three warnings are added, each with a 1-based `line`: `insert_in_paragraph`, `unclosed_insert` and `html_block` (any HTML block stops the viewer displaying the whole overview) | A warning is only useful if it matches what the reader sees. The port needs no new dependency in either SDK, and a deno test runs the real bundled parser over the shared vectors, so drift fails a test | Depend on a Markdown parser in each SDK (`pulldown-cmark`, `markdown-it-py`): less code, but neither is markdown-it 14.1.0 with this custom rule, so the cards would still differ | Implemented in `fa11be3`. Agreement was checked by fuzzing 27,000 documents against the bundle and about 100,000 between the two SDKs. Moving to a parser dependency means rewriting both scanners against the same vectors; moderate |
+| OV-9 | Superseded by OV-13 in review round 2. In round 1, warnings were to follow the viewer's own block pass: both SDKs carried a hand port of markdown-it 14.1.0 with std-documentation's insert rule (`overview_blocks.rs`, `_overview_blocks.py`), with three new warnings `insert_in_paragraph`, `unclosed_insert` and `html_block`. Fuzzing found no disagreement with the bundle, but a port is a copy, not the parser, and it is only as exact as the vectors and fuzzing that check it | A warning is only useful if it matches what the reader sees | Depend on a Markdown parser in each SDK (`pulldown-cmark`, `markdown-it-py`): neither is markdown-it 14.1.0 with this custom rule, so the cards would still differ | Implemented in `fa11be3`, deleted in `aee6beb`. See OV-13 for reversal |
 | OV-10 | Demo seeds become a new version through a script that copies the seed with SQLite's online backup and makes one Python SDK write per project. The template placeholders are `{{investigation_N}}` (creation order) and `{{KEY_investigation}}` (Jazz). Authors are `autophys-demo` for seeds, `--by` for `demo_workbooks.py` and `jazz-demo-spec` for Jazz | It needs no running daemon, the source seed is never written, and it checks that the chain is unchanged | `autophys overview set --target` per workbook (OV-5 as written): same bytes, but four commands and no chain check | Implemented in `1a5df7c`, not installed. Before installation, switching is free |
 | OV-11 | Append-only is enforced by the SDK APIs, not by SQL triggers | Neither the display nor the config-version table uses triggers, and a trigger would be part of the format both SDKs must match | Add `BEFORE UPDATE/DELETE` triggers in the format-3 DDL | Not implemented. After seeds ship, adding triggers means a format 4 |
 | OV-12 | `GET /projects/{pid}/overview` answers 200 with `{project_id, overview}`, where `overview` is `null` before the first write. An unknown project is 404, as for the versions route. A remote `overview_head` reads that route, because the daemon has no head-only route | `null` keeps "no overview yet" apart from "no such project", and matches `overview show --json` | 404 when there is no overview: one fewer shape, but a missing project and a missing overview look the same | Implemented in `963cd6a`. An adopted wire contract once shipped; before then, cheap |
+| OV-13 | Before: both SDKs carried hand ports of the viewer's block pass (about 2,500 lines) and warned on exactly what the viewer would show. After (decided by the orchestrator in review round 2): a canonical-form lint. An insert is silent only alone on one line at column 0, after a blank line, as `<ap-investigation ...></ap-investigation>`, outside code, and not over a table delimiter row. Every other mention outside code warns `noncanonical_insert` with a `reason`; `html_block` stays as a conservative line-start check. Warnings gain an optional `reason` field | The ports agreed with the bundle, but each viewer or markdown-it change needed three coordinated edits and only the vectors guarded drift. The lint is smaller, never under-warns, and the deno test checks it against the real bundle on the vectors and 3,000 generated documents, with the bundle pinned by sha256 | Keep the ports and add a checked-in differential fuzz gate against the bundle: precise warnings with fewer false ones (the cases listed in Review round 2), but the three-way maintenance cost remains and the gate only finds drift when it runs | Implemented in `aee6beb` (`Ie792999850a909b7bfad3a0c14086a8dc1f23e76`), agent-chosen, pending operator review. To reverse, restore `overview_blocks.rs`, `_overview_blocks.py`, their tests, `cases.json` and the deno test from `d729e10`, and the `mod` line in `workbook.rs`. The `reason` field is additive and can stay. Nothing is shipped, so the cost is moderate: about an hour, plus the three suites |
 ```
