@@ -160,12 +160,14 @@ class Store(ABC):
         """
 
     def put_overview(self, project_id: str, markdown: str | bytes, author: str):
-        """Memory and Jsonl stores do not persist overviews: returns None.
+        """Memory and Jsonl stores keep no overviews: a write raises
+        :class:`StoreError` rather than appear to succeed.
 
         ``WorkbookStore`` keeps them (workbook format 3) and ``HttpStore``
         sends them to the daemon; both return ``(stored, changed, warnings)``.
         """
-        return None
+        raise StoreError(f"{type(self).__name__} keeps no project overviews; "
+                         "write the overview to a workbook file or a daemon")
 
     def overview(self, project_id: str) -> dict | None:
         """The latest overview; None where the store keeps none."""

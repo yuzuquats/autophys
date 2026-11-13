@@ -229,7 +229,8 @@ class Workbook:
         """Append the project's overview (Markdown) by ``author``.
 
         Returns ``(stored, changed, warnings)`` for a workbook file or a
-        daemon, None for a Memory/Jsonl store (which keeps no overview).
+        daemon; a Memory or Jsonl store keeps no overview and raises
+        :class:`~autophys.store.StoreError`.
         """
         return self.store.put_overview(self.project_id, markdown, author)
 

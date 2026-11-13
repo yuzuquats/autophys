@@ -13,7 +13,7 @@ import conformance_cases
 from autophys import connect
 from autophys import _overview_blocks
 from autophys.overview import INSERTS_JSON, check_overview, decode
-from autophys.store import MemoryStore, config_hash
+from autophys.store import JsonlStore, MemoryStore, StoreError, config_hash
 from autophys.workbook import (_OVERVIEWS_DDL, DISPLAY_VERSION, MAX_OVERVIEW_BYTES, OVERVIEW_VERSION, SCHEMA_VERSION,
                                WorkbookError, WorkbookStore)
 
@@ -247,10 +247,12 @@ def test_only_an_overview_write_makes_a_workbook_unreadable_below_format_3(tmp_p
     wb.close()
 
 
-def test_memory_stores_keep_no_overview():
-    store = MemoryStore()
+@pytest.mark.parametrize("kind", ["memory", "jsonl"])
+def test_memory_and_jsonl_stores_refuse_an_overview_write(tmp_path, kind):
+    store = MemoryStore() if kind == "memory" else JsonlStore(tmp_path)
     pid = store.ensure_project("toy")
-    assert store.put_overview(pid, "# x\n", "ada") is None
+    with pytest.raises(StoreError, match="keeps no project overviews"):
+        store.put_overview(pid, "# x\n", "ada")
     assert store.overview(pid) is None and store.overview_versions(pid) == []
 
 
