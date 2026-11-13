@@ -36,7 +36,7 @@ pub const USAGE: &str =
        autophys users list | users add <EMAIL> [--read-only] | users set <EMAIL> --read-only|--read-write|--demo|--no-demo | users remove <EMAIL>
        autophys workspace list | bind | key | profile | seed [--server-db FILE] [--apply]\n       autophys db verify [--rebuild] [--json] [--project NAME]   (db check is the same)
        autophys train dataset | run | eval | runs | loop | loops   (autophys train for details)
-       autophys overview set PROJECT FILE.md [--author NAME] | overview show PROJECT [--json]   (--target DIR|FILE|URL)
+       autophys overview set PROJECT FILE.md --author NAME | overview show PROJECT [--json]   (--target DIR|FILE|URL)
        (pair, keys and db also take --collection DIR and --server-db FILE;
         --db DIR is an alias of --collection; without --server-db each
         collection has its own server database, except under --login)";

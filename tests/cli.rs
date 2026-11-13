@@ -313,9 +313,9 @@ fn overview_set_and_show_write_and_read_the_latest_version() {
     let set = json_output(home.path(), &["overview", "set", "thermal", path, "--author", "ada", "--json"]);
     assert_eq!((&set["changed"], &set["overview"]["seq"], &set["overview"]["author"]), (&json!(true), &json!(1), &json!("ada")));
     assert_eq!(set["warnings"][0]["investigation"], "inv_gone");
-    let again = json_output(home.path(), &["overview", "set", wb.id(), path, "--json"]);
+    let again = json_output(home.path(), &["overview", "set", wb.id(), path, "--author", "grace", "--json"]);
     assert_eq!(again["changed"], false);
-    let plain = run(home.path(), &["overview", "set", "thermal", path]);
+    let plain = run(home.path(), &["overview", "set", "thermal", path, "--author", "ada"]);
     assert!(plain.status.success());
     assert!(String::from_utf8_lossy(&plain.stderr).contains("warning: <ap-investigation> names \"inv_gone\""));
     let shown = run(home.path(), &["overview", "show", "thermal"]);
@@ -323,13 +323,19 @@ fn overview_set_and_show_write_and_read_the_latest_version() {
     let latest = json_output(home.path(), &["overview", "show", "thermal", "--json"])["overview"].take();
     assert_eq!((&latest["markdown"], &latest["author"]), (&json!(md), &json!("ada")));
     assert_eq!(wb.overview_versions().unwrap().len(), 1);
-    // The default author, and the refusals and lookups that fail.
+    // OV-8: no default author. Without --author nothing is written, and the
+    // error names the flag.
     std::fs::write(&file, "# Two\n").unwrap();
-    assert_eq!(json_output(home.path(), &["overview", "set", "thermal", path, "--json"])["overview"]["author"], "operator");
+    let missing = run(home.path(), &["overview", "set", "thermal", path]);
+    assert_eq!(missing.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&missing.stderr).contains("--author"), "{}", String::from_utf8_lossy(&missing.stderr));
+    assert_eq!(wb.overview_versions().unwrap().len(), 1);
+    assert_eq!(json_output(home.path(), &["overview", "set", "thermal", path, "--author", "operator", "--json"])["overview"]["author"], "operator");
+    // The refusals and lookups that fail.
     std::fs::write(&file, " \n").unwrap();
-    assert_eq!(run(home.path(), &["overview", "set", "thermal", path]).status.code(), Some(1));
+    assert_eq!(run(home.path(), &["overview", "set", "thermal", path, "--author", "ada"]).status.code(), Some(1));
     std::fs::write(&file, b"\xff").unwrap();
-    assert_eq!(run(home.path(), &["overview", "set", "thermal", path]).status.code(), Some(1));
+    assert_eq!(run(home.path(), &["overview", "set", "thermal", path, "--author", "ada"]).status.code(), Some(1));
     assert_eq!(run(home.path(), &["overview", "show", "nope"]).status.code(), Some(1));
     assert_eq!(run(home.path(), &["overview"]).status.code(), Some(2));
     assert_eq!(wb.overview_versions().unwrap().len(), 2);

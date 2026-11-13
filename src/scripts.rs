@@ -629,7 +629,7 @@ pub struct OverviewSetArgs {
     #[arg(positional)]
     file: String,
     target: Option<String>,
-    #[arg(default = "operator")]
+    /// Who wrote this version: an agent's name, or `operator` (OV-8, required).
     author: String,
 }
 
@@ -655,7 +655,7 @@ fn project_workbook(client: &autophys::Client, project: &str) -> anyhow::Result<
 
 #[command(
     name = "set",
-    description = "Store FILE (Markdown, `-` for stdin) as PROJECT's latest overview; --target DIR|FILE|URL, --author NAME, --json. Prints the version, whether it changed and any warnings"
+    description = "Store FILE (Markdown, `-` for stdin) as PROJECT's latest overview; --author NAME (required), --target DIR|FILE|URL, --json. Prints the version, whether it changed and any warnings"
 )]
 async fn overview_set(_: (), args: OverviewSetArgs) -> tento_sh::Result<Value> {
     let bytes = if args.file == "-" {
