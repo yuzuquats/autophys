@@ -189,10 +189,77 @@ The UI build (`autophys build-web`) bundles the shared JSON insert list.
 - `html/routes/demo-overview-jazz.md` is no longer read by anything, but this
   work left it in place for the Jazz workstream to dispose of. The Jazz
   project docs still link the moved `demo-overview*.md` paths.
-- The SSE poll reads each project's latest overview body to compare digests.
-  If projects or bodies grow, compare the digest in SQL.
+- Existing demo collections seeded from the current seed version never get
+  an overview from the new seed, and with `demo-document.ts` deleted they
+  show none (review finding 4; the fallback stays deleted). During the dev
+  activation, after the format-3 server is running and the new seed version
+  exists, give each existing demo collection the same notes with the CLI. No
+  script is needed: the new seed already holds the rendered notes, and
+  seeding preserves investigation ids, so the bytes carry over unchanged.
+
+  ```sh
+  for c in COLLECTION_DIR...; do
+    for p in battery_cycler_demo mass_spring_damper_demo thermal_rc_demo jazz_performance_demo; do
+      autophys overview show "$p" --target "$c" --json   # skip p if it already has an overview
+      autophys overview show "$p" --target NEW_SEED_DIR \
+        | autophys overview set "$p" - --target "$c" --author autophys-demo
+    done
+  done
+  ```
+
+  Skip a project the collection does not hold, and one that already has an
+  overview, so a user's own note is never covered. `set` prints warnings: an
+  `unknown_investigation` means that collection's ids differ from the seed's,
+  so stop and render that collection's note from its own ids
+  (`ops/demo_overviews.py`'s `render`) instead. Each write moves that
+  workbook to format 3, so the server must already read format 3.
+- Before release (review finding 8): the SDK package versions are still
+  0.1.0 (the Rust `autophys` crate, the Python package and its
+  `__version__`). An SDK that reads up to format 2 cannot open a workbook
+  after its first overview write, so release the format-3 readers under new
+  versions. They were deliberately not bumped in this work.
 - No browser check of the Overview node was run, including the
   missing-document case. Only the deno unit tests and build-web cover it.
+
+### Review round 1
+
+An independent review of `7275b66..6c92cb9` raised eight findings. The fixes
+are forward commits on yuzuquats master; nothing is pushed, deployed or
+installed, and the live demo collections and served seeds are untouched.
+
+| Finding | What changed | Commit | Change-Id |
+| --- | --- | --- | --- |
+| 1 The SDK scanners disagreed with the viewer | Both SDKs port the viewer's block pass and its attribute parsing (OV-9, revised). New warnings `insert_in_paragraph`, `unclosed_insert` and `html_block` carry a `line`. `cases.json` holds the reviewer's five cases and about 25 more, each with its card lines and whether the document renders. Both SDKs assert them, and `html/routes/overview-vectors.deno.test.ts` checks them against the bundled parser | `fa11be3` | `Ia2f2e4d3dee2cba9da45100e682832603f6c92e0` |
+| 2 SSE read full bodies on every poll | `Workbook::overview_head` reads `seq` and `digest` only. The SSE read loads the Markdown only when the digest differs from the one already sent | `963cd6a` | `I5eb18f64d1d5559796b3a07bc68544066d2eb7b8` |
+| 3 A remote `overview()` downloaded the whole snapshot | New `GET /projects/{pid}/overview` (OV-12), used by the Rust remote workbook, so also by `autophys overview show --target URL`, and by Python's `HttpStore.overview`. Tests cover the daemon route, the Rust remote client and the Python client, including the upgrade error from an older daemon | `963cd6a` | `I5eb18f64d1d5559796b3a07bc68544066d2eb7b8` |
+| 4 Rollout ordering for seeded collections | Not a code change. Open items give the activation procedure for existing collections; the fallback stays deleted | (this commit) | `I860f836bb437370bc73e71000700b66ba14f17cb` |
+| 5 The unchanged-digest SSE test was vacuous | The test wakes the stream with a display write, then waits 2.5 s, which is longer than the 1 s poll | `963cd6a` | `I5eb18f64d1d5559796b3a07bc68544066d2eb7b8` |
+| 6 `cases["ddl"]` was never asserted | Rust (`schema.rs` unit test) and Python both assert the DDL byte-for-byte | `fa11be3` | `Ia2f2e4d3dee2cba9da45100e682832603f6c92e0` |
+| 7 Memory and Jsonl stores dropped overview writes | `put_overview` raises `StoreError`; reads still return None and [] | `f449a30` | `I66f0c271f310e44ddb3ea280494c1ec6f16b6a36` |
+| 8 SDK versions not bumped | Recorded as a pre-release item in Open items; not bumped | (this commit) | `I860f836bb437370bc73e71000700b66ba14f17cb` |
+
+| Suite | Before (`6c92cb9`) | After (`f449a30`) |
+| --- | --- | --- |
+| `cargo test --workspace --locked` | 384 passed, 2 ignored | 387 passed, 0 failed, 2 ignored |
+| `python3 -m pytest -q sdks/python/tests` | 749 passed, 15 skipped | 839 passed, 15 skipped |
+| `deno test --allow-read --config html/deno.json html/` | 161 passed | 216 passed, 0 failed |
+
+One full cargo run failed
+`remote::tests::blocking_facade_inside_a_runtime_reuses_and_async_client_does_not_pool`
+while the host's load average was 12. That test counts pooled connections and
+does not touch overviews. It passed three times on its own and in the next
+full run.
+
+What the port does not cover:
+- The deno test cannot check attribute values, because Deno has no HTML
+  parser. The SDK tests and the fuzzing against the HTML rules cover them.
+- Named character references other than the five XML names, and `&amp`,
+  `&quot`, `&lt` and `&gt` without `;`, stay as written. Investigation ids are
+  plain ASCII.
+- `insert_in_paragraph` inside a link reference definition is not checked
+  against the bundle, because the bundle leaves no token for it.
+- No CLI test runs `overview show --target URL` against a daemon. It calls the
+  same `Workbook::overview` as the Rust remote test.
 
 ### Agent choices made during implementation (pending operator review)
 
@@ -202,7 +269,8 @@ The UI build (`autophys build-web`) bundles the shared JSON insert list.
 | OV-6 | The shared insert list is `html/ui/investigation-inserts.json`. Rust embeds it, and Python carries a pinned package-data copy | The UI owns the keys, and the published Python wheel cannot read files outside its package | Generate the Python copy at build time: no checked-in duplicate, but the wheel build gains a step | Implemented in `ca3a230` and `5b1544c`. Switching to a generated copy changes the build only; cheap |
 | OV-7 | Wire shape: `overview` is the Markdown and `overview_meta` is `{seq, digest, author, created}`. The SSE `overview` event carries the full body, has no `id:`, and is de-duplicated by digest per project | It keeps the existing `Project.overview: string`, and the SSE resume cursor is untouched | One `overview: {markdown, …}` object: tidier, but every reader of the string changes | Implemented in `31c9db4` and `84e31d6`. An adopted wire contract once shipped, so changing it later needs a compatibility window |
 | OV-8 | CLI: `--author` defaults to `operator`. Warnings go to stderr, or into the JSON with `--json`. `show --json` returns `{project_id, overview}` | A person at the CLI is the operator, and the Python and Rust APIs still require an author | Require `--author` on the CLI too | Implemented in `31c9db4`. Requiring the flag is one line; cheap |
-| OV-9 | An insert counts for warnings only where a CommonMark HTML block can start it: at the start of a line, indented at most three spaces, and outside fenced code | It matches what the viewer actually renders as a card, so mentions in prose or code produce no warnings | Scan the whole body for the tag: simpler, but it warns about examples | Implemented and covered by the shared vectors. Changing the rule changes the vectors; cheap |
+| OV-9 | Revised in review round 1. Warnings follow the viewer's own block pass: markdown-it 14.1.0 with std-documentation's insert rule (the trimmed line starts with `<` plus the tag, case-sensitively; it never interrupts a paragraph; it runs in blockquotes and list items; a card runs to its closing tag). Both SDKs carry a hand port (`overview_blocks.rs`, `_overview_blocks.py`), and card attributes are read as the HTML parser reads them. Three warnings are added, each with a 1-based `line`: `insert_in_paragraph`, `unclosed_insert` and `html_block` (any HTML block stops the viewer displaying the whole overview) | A warning is only useful if it matches what the reader sees. The port needs no new dependency in either SDK, and a deno test runs the real bundled parser over the shared vectors, so drift fails a test | Depend on a Markdown parser in each SDK (`pulldown-cmark`, `markdown-it-py`): less code, but neither is markdown-it 14.1.0 with this custom rule, so the cards would still differ | Implemented in `fa11be3`. Agreement was checked by fuzzing 27,000 documents against the bundle and about 100,000 between the two SDKs. Moving to a parser dependency means rewriting both scanners against the same vectors; moderate |
 | OV-10 | Demo seeds become a new version through a script that copies the seed with SQLite's online backup and makes one Python SDK write per project. The template placeholders are `{{investigation_N}}` (creation order) and `{{KEY_investigation}}` (Jazz). Authors are `autophys-demo` for seeds, `--by` for `demo_workbooks.py` and `jazz-demo-spec` for Jazz | It needs no running daemon, the source seed is never written, and it checks that the chain is unchanged | `autophys overview set --target` per workbook (OV-5 as written): same bytes, but four commands and no chain check | Implemented in `1a5df7c`, not installed. Before installation, switching is free |
 | OV-11 | Append-only is enforced by the SDK APIs, not by SQL triggers | Neither the display nor the config-version table uses triggers, and a trigger would be part of the format both SDKs must match | Add `BEFORE UPDATE/DELETE` triggers in the format-3 DDL | Not implemented. After seeds ship, adding triggers means a format 4 |
+| OV-12 | `GET /projects/{pid}/overview` answers 200 with `{project_id, overview}`, where `overview` is `null` before the first write. An unknown project is 404, as for the versions route. A remote `overview_head` reads that route, because the daemon has no head-only route | `null` keeps "no overview yet" apart from "no such project", and matches `overview show --json` | 404 when there is no overview: one fewer shape, but a missing project and a missing overview look the same | Implemented in `963cd6a`. An adopted wire contract once shipped; before then, cheap |
 ```
