@@ -1,7 +1,8 @@
 # A project document is Markdown rendered with std-documentation
 
-Status: revision 4, 2026-11-12. The demo workbench integration is implemented;
-verification and deployment to dev--autophys.lona.so are underway.
+Status: revision 5, 2026-11-12. Implemented, verified and deployed for review at
+https://dev--autophys.lona.so. The demo is hardcoded; agent editing and document
+persistence are future work.
 
 Agents maintain one Markdown document explaining what the project is doing as
 work progresses. Selecting its document node in the tree displays that Markdown
@@ -30,7 +31,13 @@ document-specific outline is needed. The earlier HTML concept is removed.
 ## Decisions
 
 - **D-DOC-1 — agent-chosen, pending operator review:** an Overview document leaf
-  appears above Configuration. This placement remains a proposal.
+  appears above Configuration, making the project explanation easy to find beside
+  its evidence. Previously the project had no document node. The strongest
+  alternative is an overview inside the investigation; that keeps the tree
+  smaller but gives a project-wide narrative a narrower home. Implemented in
+  8ca8258 (Ib86dc9191d4b494b9d1a61045903430b). Moving or removing the demo
+  leaf is a small frontend change with no stored-data migration. This placement
+  remains a proposal.
 - **D-DOC-2 — operator-confirmed:** agents maintain a living narrative as work
   progresses. This supersedes the earlier suggestion that the operator author
   the goal and approach separately.
@@ -53,3 +60,36 @@ The browser suite passes 151 tests, including demo scoping, selection and
 retention through stream updates and folds. The shared component owns all
 Markdown rendering. Host layout checks retain their pre-existing workspace and
 home-policy findings.
+
+## Dev preview receipt
+
+Deployed implementation: **9a6ce3f9befa781e0c955d42c05034b0a1dcf5fe**
+(Change-Id Ifd714977b42344bbaf4f841ef79a7124), above 8ca8258.
+The document host supplies the shared renderer's scoped typography tokens;
+global theme CSS is not loaded into the workbench.
+
+Open https://dev--autophys.lona.so, choose **Continue as demo**, and select
+**battery_cycler_demo → Overview**. The initial investigation view remains the
+default. The demo document is a read-only Markdown asset rendered by
+std-documentation, not a live agent update or a new persisted document type.
+
+Owner build and deployment: yuzuquats master, autophys-dev.service on
+127.0.0.1:4796, isolated dev books and server database. Release:
+~/.local/share/tento/services/autophys-dev/9a6ce3f-document-20261112.
+The service uses its current symlink. Previous dev release
+8ca8258-document-20261112 is retained for rollback by switching that symlink and
+restarting autophys-dev.service. Native and web output come from the same source;
+the native release is packed with the web payload before activation.
+
+Validation: 151 frontend tests pass, entry-point type check and diff checks pass,
+and the native release builds. Verified the deployed document's heading scale,
+paragraph spacing, navigation to Configuration and Investigation and back,
+scrolling, and component retention across a resize. At 390×844 there is no
+horizontal page overflow. The public Markdown SHA256 matches the source:
+52da9ac23b80bbf0be627a523184abba68f854f4109e9ba3f2ae78291f823072.
+The public health endpoint reports 9a6ce3f and the dev service is active.
+
+Production was not restarted or changed: autophys.service remains PID 1747,
+active since 2026-11-09, reporting 1d5d193 / version 0.1.4. No source push.
+Before/after workspace and home layout checks retain the existing undeclared
+autophys workspace entry and home-policy findings; these are outside this UI work.
