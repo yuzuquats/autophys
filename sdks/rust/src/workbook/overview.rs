@@ -12,7 +12,10 @@
 //! fenced and indented code. Every other line that mentions the insert tag
 //! outside code, and every line that may start an HTML block, gets a warning.
 //! The lint over-warns on purpose: a document with no warnings renders one
-//! card per canonical insert line and hides nothing, which
+//! card per canonical insert line, and no insert hides text. Text the viewer
+//! drops for reasons unrelated to inserts (inline HTML, a hard break in a
+//! setext heading, nesting past markdown-it's limit) is not checked. That
+//! guarantee is what
 //! `html/routes/overview-vectors.deno.test.ts` holds against the bundled
 //! viewer. Canonical inserts are also checked for investigations the workbook
 //! does not hold and attribute keys the viewer does not know, read from

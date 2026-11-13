@@ -330,3 +330,29 @@ What the lint does not cover:
 | OV-12 | `GET /projects/{pid}/overview` answers 200 with `{project_id, overview}`, where `overview` is `null` before the first write. An unknown project is 404, as for the versions route. A remote `overview_head` reads that route, because the daemon has no head-only route | `null` keeps "no overview yet" apart from "no such project", and matches `overview show --json` | 404 when there is no overview: one fewer shape, but a missing project and a missing overview look the same | Implemented in `963cd6a`. An adopted wire contract once shipped; before then, cheap |
 | OV-13 | Before: both SDKs carried hand ports of the viewer's block pass (about 2,500 lines) and warned on exactly what the viewer would show. After (decided by the orchestrator in review round 2): a canonical-form lint. An insert is silent only alone on one line at column 0, after a blank line, as `<ap-investigation ...></ap-investigation>`, outside code, and not over a table delimiter row. Every other mention outside code warns `noncanonical_insert` with a `reason`; `html_block` stays as a conservative line-start check. Warnings gain an optional `reason` field | The ports agreed with the bundle, but each viewer or markdown-it change needed three coordinated edits and only the vectors guarded drift. The lint is smaller, never under-warns, and the deno test checks it against the real bundle on the vectors and 3,000 generated documents, with the bundle pinned by sha256 | Keep the ports and add a checked-in differential fuzz gate against the bundle: precise warnings with fewer false ones (the cases listed in Review round 2), but the three-way maintenance cost remains and the gate only finds drift when it runs | Implemented in `aee6beb` (`Ie792999850a909b7bfad3a0c14086a8dc1f23e76`), agent-chosen, pending operator review. To reverse, restore `overview_blocks.rs`, `_overview_blocks.py`, their tests, `cases.json` and the deno test from `d729e10`, and the `mod` line in `workbook.rs`. The `reason` field is additive and can stay. Nothing is shipped, so the cost is moderate: about an hour, plus the three suites |
 ```
+
+### Review round 3
+
+An independent reviewer found the stack ready (2026-11-13). Its tests:
+
+- **Under-warning hunt:** about 55 hand-written cases and roughly 500k fuzzed
+  documents, run against the bundled viewer. About 100k of them had no
+  warnings. In every one of those, the viewer agreed with the lint on cards,
+  card count and whether the document renders.
+- **Rust/Python agreement:** the two SDKs gave identical warnings on 1,562
+  documents.
+- **Drift guards:** a mutated bundle, a changed generator and a changed
+  insert rule each fail the deno test.
+- **Demo templates:** all four `ops/*.template.md` lint clean.
+- **Suites:** cargo 388 passed, 2 ignored; pytest 864 passed, 15 skipped;
+  deno 230 passed.
+
+The one low finding: the viewer can hide text in a warning-free document for
+reasons that have nothing to do with inserts. The cases are inline HTML
+(`<!-- -->` or an open tag mid-line), a hard break inside a setext heading,
+and nesting past markdown-it's limit. All three predate this work.
+
+The lint's guarantee is now worded to match what it checks: cards show as
+written, and no insert hides text. Warning on these other cases stays open
+as a possible follow-up.
+

@@ -6,7 +6,9 @@
  * Both SDKs assert that a vector without warnings has its canonical insert
  * lines as its `cards`, and that every generated document has no warnings and
  * one canonical line per insert. This test asserts that the viewer shows
- * exactly those cards, displays the document and hides none of its text. The
+ * exactly those cards and displays the document; for generated documents it
+ * also asserts no text is hidden. Text hidden for reasons unrelated to inserts
+ * (inline HTML, setext hard breaks, deep nesting) is outside the lint. The
  * bundle's sha256 is pinned, so a changed viewer fails here until the vectors
  * have been re-run against it.
  *
