@@ -1,6 +1,6 @@
 # A project document is Markdown rendered with std-documentation
 
-Status: revision 6, 2026-11-12. Implemented, verified and deployed for review at
+Status: revision 7, 2026-11-12. Implemented, verified and deployed for review at
 https://dev--autophys.lona.so. The demo is hardcoded; agent editing and document
 persistence are future work.
 
@@ -66,7 +66,9 @@ home-policy findings.
 The dev preview now includes registered investigation inserts using std-card
 with soft shadows. Markdown retains the narrative. The inserts derive their
 results and output links from recorded investigations; paired closing tags
-preserve the surrounding prose. Current deployed implementation is d85c943.
+preserve the surrounding prose. The Overview now reads as a short research
+note, with a question, method, quantitative findings, takeaways and limitations.
+Current deployed implementation is 08a3745.
 See [the card implementation and deployment receipt](investigation-summaries.md)
 for validation, release and rollback details.
 

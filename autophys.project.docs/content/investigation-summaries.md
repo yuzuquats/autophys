@@ -1,6 +1,6 @@
 # Completed investigations should explain what they established and produced
 
-Status: revision 3, 2026-11-12. Implemented, verified and deployed at
+Status: revision 4, 2026-11-12. Implemented, verified and deployed at
 https://dev--autophys.lona.so.
 The current [investigation card mock](investigation-card.mock.html) shows the card
 in the project document and on its own. All results and outputs are illustrative.
@@ -174,9 +174,9 @@ following content in the first deployed check. The source now uses paired
 tags. Two additional browser assertions exercise the actual demo Markdown
 through std-documentation, verifying both inserts and the following narrative.
 
-## Investigation card dev receipt
+## Investigation card dev receipt — preceding deployment
 
-Current implementation: d85c9439011a8800485dc6d6ee07cb96de4dc871
+Card implementation: d85c9439011a8800485dc6d6ee07cb96de4dc871
 (Change-Id Iad54f277c50d4d1c94c0ef8e403c286d), above d7fcc4a
 (Ia6e15be955d34868aee334eb60ac4bc6). Source, native build and web bundle come
 from yuzuquats master. No source push.
@@ -231,3 +231,27 @@ Validation: the frozen browser-test type check and diff check pass. Six browser
 assertions pass against the actual std-documentation renderer: four cover
 reconciliation/focus and two cover both inserts and the following narrative.
 Deployment and responsive checks follow in the receipt below.
+
+## Current research-note dev receipt
+
+Deployed source: 08a3745404903126fb8a9719c2937036088f4e39
+(Change-Id Id406e67966bb4be0936d1e5e0c216d72), yuzuquats master.
+Release: ~/.local/share/tento/services/autophys-dev/08a3745-research-note-20261112.
+The current symlink selects it; rollback is the retained d85c943-card-20261112
+release, activated by switching current and restarting only autophys-dev.service.
+No source push or version bump. Native and offline web builds pass, and the
+packed executable and external web root come from the same clean commit.
+
+Public health reports 08a3745 / version 0.1.5. At 1280×800 and 390×844 the
+research headings, comparison table, both cards and final limitations render.
+The page, document, table and cards have no horizontal overflow. The actual
+std-documentation parser and reconciliation checks pass again on the deployed
+page (six assertions), and both cards' parameter links reach their matching
+record. The frozen browser-test type check and diff check pass. The served
+Markdown matches source SHA256:
+3944490892f4b1a68334d75286d06b50c01c4498364bff51adabde3d229fb06b.
+
+Before/after host layout checks retain the pre-existing workspace autophys
+and home-policy findings. Production was not restarted: autophys.service
+remains PID 1747, active since 2026-11-09 05:26:46 PST. No investigation,
+proposal or measurement record was changed.
