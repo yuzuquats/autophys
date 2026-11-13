@@ -208,3 +208,26 @@ pre-existing workspace autophys and home-policy findings.
 Production was not restarted: autophys.service remains PID 1747, active since
 2026-11-09 05:26:46 PST. No workbook, proposal or experiment was changed during
 browser verification.
+
+## Research-note Overview — revision 4
+
+The operator requested a clearer account of the work and its takeaways, styled
+as Markdown for a small research paper. The demo Overview now has an abstract,
+research question, method, findings, takeaways, work in progress and limitations.
+The existing std-documentation typography and std-card inserts remain the
+rendering surface; there is no new report layout or persisted contract.
+
+The parameter comparison and held-out statistic were checked against the demo
+workspace records. The table omits initial unresolved R1/C1 estimates instead
+of presenting them as established values. The completed investigation contains
+both pulses; the pending investigation is explicitly not a completed
+replication. Synthetic scope and untested temperature, aging and transfer are
+explicit, and no uncertainty bounds are invented. The narrative remains a
+hardcoded demo asset, not an automatic research report.
+
+The browser parser check now follows the revised headings and final limitation
+sentence, retaining coverage for Markdown after both paired insert tags.
+Validation: the frozen browser-test type check and diff check pass. Six browser
+assertions pass against the actual std-documentation renderer: four cover
+reconciliation/focus and two cover both inserts and the following narrative.
+Deployment and responsive checks follow in the receipt below.

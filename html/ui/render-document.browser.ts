@@ -33,7 +33,7 @@ export async function runInserts(DocumentationCtor: { make(): import("@tento-ui/
     const all = (root: ParentNode): Element[] => [...root.querySelectorAll("*")].flatMap(e => [e, ...(e.shadowRoot ? all(e.shadowRoot) : [])]);
     const content = all(host).find(e => e.classList.contains("ProseMirror"))?.textContent ?? "";
     if (seen.length !== 2 || new Set(seen).size !== 2) throw Error("Both investigation references must render");
-    if (!content.includes("Work still awaiting approval") || !content.includes("What remains open") || !content.endsWith("diagnostic evidence.")) throw Error("Inserts must preserve the following Markdown");
+    if (!content.includes("Takeaways") || !content.includes("Work in progress") || !content.includes("Limitations") || !content.endsWith("uncertainty bounds are claimed here.")) throw Error("Inserts must preserve the following Markdown");
     return ["both investigation inserts render", "following narrative and limitations remain visible"];
   } finally { host.remove(); }
 }
