@@ -1,8 +1,38 @@
 # Completed investigations should explain what they established and produced
 
-Status: revision 1, 2026-11-12. Interactive concept mocks only; not integrated or
-deployed. Open [the mock](investigation-summary.mock.html) to explore three views.
-All outcomes, estimates, files and the validation plot in the mock are illustrative.
+Status: revision 2, 2026-11-12. Concept mocks only; not integrated or deployed.
+The current [investigation card mock](investigation-card.mock.html) shows the card
+in the project document and on its own. All results and outputs are illustrative.
+The [earlier summary mock](investigation-summary.mock.html) is retained for comparison.
+
+## A compact card inside the narrative
+
+The operator asked for a clean investigation card, with most prose remaining
+in std-documentation. The revised mock uses one proposed insert,
+`<ap-investigation investigation="inv_01" />`, for the investigation's title,
+completion/outcome state, one-line finding, one evidence line and produced
+outputs. Output previews open directly below their links and preserve focus.
+
+The surrounding Markdown carries explanation, interpretation, limitations and
+the transition to the next investigation. Opening an investigation shows the
+same card above ordinary document sections; it does not create a second bespoke
+report interface. The "Card on its own" view shows validated and unresolved
+states using exactly the same markup as the contextual view.
+
+**D-SUM-3 — operator-directed simplification; visual treatment agent-chosen,
+pending operator review.** Before: several proposed inserts and a detailed
+custom report. After: one investigation card and ordinary Markdown around it.
+This keeps the evidence easy to scan while agents maintain the explanation in
+one familiar format. The strongest alternative is the earlier collection of
+separate evidence inserts, which affords richer layouts but increases component
+and document complexity. Current state: concept HTML only. Reversal is a small
+mock edit; no runtime or persisted API has been adopted.
+
+The earlier proposal and its review below describe revision 1. Revision 2
+supersedes its component decomposition, while preserving the distinction
+between lifecycle completion and scientific outcome.
+
+## Earlier exploration — revision 1
 
 The operator wants a clear summary of each completed investigation and what it
 produced, and suggested registered components inside std-documentation. The
@@ -99,3 +129,11 @@ verdict covers the correction; it is not scientific or production validation.
 The existing dev app and production service are unchanged.
 Host layout checks retain their pre-existing findings; this work adds no app,
 service, build directory or home entry.
+
+## Revision 2 verification
+
+Both views and both investigation documents were inspected at 728px and 390px.
+All six output previews in each view open, reveal focus, and restore focus to
+their links on close. Navigation reaches the corresponding investigation
+document. No horizontal overflow or console exceptions were observed. These
+checks cover the interactive concept, not a registered runtime component.

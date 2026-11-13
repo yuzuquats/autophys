@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Autophys investigation card</title>
+<style>
+*{box-sizing:border-box}body{margin:0;color:var(--foreground,#202020);font:14px/1.6 var(--font-sans,system-ui,sans-serif)}button{font:inherit;color:inherit;cursor:pointer}button:focus-visible,summary:focus-visible,[tabindex]:focus-visible{outline:2px solid #39708d;outline-offset:4px}::selection{background:#dae9ed;color:#111}
+.switcher{display:flex;gap:6px;margin-bottom:8px;border-bottom:1px solid var(--border,#ddd);padding-bottom:12px}.switcher button{border:0;background:none;color:var(--muted-foreground,#666);font-size:13px;padding:8px 12px;border-radius:6px}.switcher button[aria-pressed=true]{background:var(--secondary,#eee);color:var(--foreground,#111);font-weight:600}
+.note{font-size:12px;color:var(--muted-foreground,#666);margin:8px 0 18px}
+.app{background:#f4f4f4;color:#202020;padding:16px;border-radius:12px}
+.appbar{display:flex;justify-content:space-between;gap:16px;font-size:12px;padding-bottom:15px;border-bottom:1px solid #ddd}.appbar strong{font-weight:600}.appbar span{color:#656565}
+.layout{display:grid;grid-template-columns:136px minmax(0,1fr);gap:16px;padding-top:16px}.sidebar{padding-top:6px;font-size:12px}.sidebar strong{font-size:12px;font-weight:600;display:block;margin-bottom:22px}.project{color:#626262;font-size:11px;margin-bottom:8px}.sidebar button{display:block;width:100%;border:0;background:none;text-align:left;padding:8px;border-radius:5px;font-size:12px;color:#555}.sidebar .selected{background:#e5e5e5;color:#111}
+.document{min-width:0;background:#fff;padding:0 24px 28px;border-radius:10px}.crumb{font-size:11px;color:#656565;padding:14px 0;border-bottom:1px solid #e8e8e8;margin-bottom:28px;display:flex;justify-content:space-between;gap:12px}.crumb button{padding:0;border:0;background:none;text-decoration:underline;font-size:11px}
+h1,h2,h3,p{margin:0}h1{font-size:25px;line-height:1.22;letter-spacing:-.025em;margin-bottom:16px;font-weight:600}h2{font-size:18px;line-height:1.35;letter-spacing:-.015em;margin:30px 0 12px;font-weight:600}.prose{font-size:13px;line-height:1.75;color:#505050;margin:14px 0;max-width:72ch}
+.investigation{border:1px solid #d8d8d8;border-radius:12px;padding:18px;margin:20px 0;background:#fff}.cardhead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.cardhead h3{font-size:15px;line-height:1.35;font-weight:600;letter-spacing:-.01em}.identity{font-size:11px;color:#666;margin-top:4px}.state{font-size:11px;line-height:1.45;color:#256046;background:#edf4ee;padding:3px 6px;border-radius:4px;white-space:nowrap}.state.unresolved{color:#845019;background:#fbf2e5}
+.finding{font-size:14px;line-height:1.5;color:#242424;margin:17px 0 10px;font-weight:500}.evidence{font-size:12px;color:#5a5a5a;line-height:1.7;font-variant-numeric:tabular-nums}.evidence strong{font-weight:500;color:#333}
+.outputs{display:flex;align-items:baseline;gap:6px 14px;flex-wrap:wrap;border-top:1px solid #e8e8e8;margin-top:17px;padding-top:12px;font-size:11px}.outputs>span{color:#666}.link{border:0;background:none;padding:2px 0;font-size:12px;text-align:left;color:#3c3c3c;text-decoration:underline;text-underline-offset:3px}.link:hover{color:#111}.open{display:block;width:fit-content;font-size:11px;margin:12px 0 0}
+.preview{background:#f5f5f5;border-radius:6px;padding:14px;margin-top:12px}.preview header{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:12px}.preview strong{font-weight:500}.preview pre{font:11px/1.7 var(--font-mono,monospace);white-space:pre-wrap;overflow-wrap:anywhere;margin:10px 0 0;color:#555}.preview .link{font-size:11px}
+.cards-only .layout{display:block}.cards-only .sidebar{display:none}.cards-only .document{max-width:610px;margin:0 auto;padding-top:8px}.cards-only .crumb{display:none}.cards-only h1{font-size:20px;margin-top:18px}.cards-only .prose{font-size:12px}
+details{border-top:1px solid var(--border,#ddd);margin:20px 0 0;padding-top:14px;font-size:12px}summary{cursor:pointer;color:var(--foreground,#222)}details p{color:var(--muted-foreground,#666);margin:12px 0}details pre{font:12px/1.7 var(--font-mono,monospace);white-space:pre-wrap;overflow-wrap:anywhere;background:var(--code-background,#eee);color:var(--code-foreground,#222);padding:16px;border-radius:8px;margin:12px 0}
+@media(min-width:900px){.layout{grid-template-columns:170px minmax(0,1fr)}.document{padding-inline:40px}h1{font-size:28px}}
+@media(max-width:560px){.layout{display:block}.sidebar{display:none}.document{padding:0 16px 20px}.cardhead{display:block}.state{display:inline-block;margin-top:10px}.investigation{padding:16px}.finding{margin-top:14px}.appbar .workspace-name{display:none}h1{font-size:23px}.crumb{margin-bottom:22px}.outputs{gap:5px 12px}.cards-only .document{padding-top:8px}}
+</style><body>
+<nav class="switcher" aria-label="Mock views"><button data-mode="context" aria-pressed="true">In the document</button><button data-mode="cards" aria-pressed="false">Card on its own</button></nav>
+<p class="note">Concept mock · Illustrative results. Select an output to preview it, or open an investigation.</p>
+<div class="app" id="app"><header class="appbar"><strong>Autophys <span class="workspace-name"> / battery_cycler_demo</span></strong><span>Demo workspace</span></header>
+<div class="layout"><aside class="sidebar"><strong>Workspace</strong><div class="project">battery_cycler_demo</div><button class="selected" data-page="overview">Overview</button><button data-page="inv_01">Baseline pulse</button><button data-page="inv_02">Slow response</button></aside><main class="document" id="document"></main></div></div>
+<details><summary>Markdown + one investigation component</summary><p>Headings, explanation, interpretation and limitations stay in std-documentation. Each insert renders one compact investigation card.</p><pre># Understanding the battery
+
+A short pulse captures the immediate response, but does
+not distinguish the slower resistance from capacitance.
+
+&lt;ap-investigation investigation="inv_01" /&gt;
+
+A pulse ladder spans the slower response and gives the
+fit enough information to separate those effects.
+
+&lt;ap-investigation investigation="inv_02" /&gt;
+
+## What remains open
+The result covers this synthetic cell under the tested
+conditions. Temperature and aging remain untested.</pre><p>Proposed insert syntax; this mock does not register a component or change the live demo.</p></details>
+<script>
+const records={
+inv_01:{title:'Baseline pulse',number:'Investigation 01',status:'Complete · unresolved',unresolved:true,finding:'R0 identified; R1 and C1 remain coupled.',evidence:'<strong>R0 0.0249 Ω</strong> · Held-out validation not run',outputs:[['baseline','Model'],['quick','Measurements'],['proposal','Next experiment']]},
+inv_02:{title:'Resolve the slow response',number:'Investigation 02',status:'Complete · validated',unresolved:false,finding:'All three parameters identified.',evidence:'<strong>Held-out χ²/N 1.04</strong> · Passes threshold ≤ 2.00',outputs:[['parameters','Parameters'],['ladder','Measurements'],['validation','Validation report']]}
+};
+const outputs={
+baseline:{title:'Baseline fitted model',body:'R0: 0.0249 Ω · identified\nR1: unresolved\nC1: unresolved\nParameter uncertainty: not recorded'},
+quick:{title:'Short-pulse measurements',body:'Dataset: quick_pulse@1\nUse: training\nSource: synthetic cell'},
+proposal:{title:'Next experiment',body:'Proposed: pulse ladder\nPurpose: distinguish R1 from C1\nRequires human approval before execution'},
+parameters:{title:'Fitted parameter set',body:'R0: 0.0250 Ω\nR1: 0.0400 Ω\nC1: 1,600 F\nParameter uncertainty: not recorded'},
+ladder:{title:'Pulse ladder measurements',body:'Dataset: pulse_ladder@1\nUse: training\nSource: synthetic cell'},
+validation:{title:'Held-out validation report',body:'Dataset: check@1 · excluded from fitting\nNoise-weighted χ²/N: 1.04\nAcceptance threshold: ≤ 2.00\nResult: passed'}
+};
+let mode='context',page='overview',opened=null;
+function card(id){
+const r=records[id];return '<article class="investigation" aria-label="'+r.number+': '+r.title+'"><header class="cardhead"><div><h3>'+r.title+'</h3><div class="identity">'+r.number+'</div></div><span class="state '+(r.unresolved?'unresolved':'')+'">'+r.status+'</span></header><p class="finding">'+r.finding+'</p><p class="evidence">'+r.evidence+'</p><div class="outputs"><span>Produced</span>'+r.outputs.map(o=>'<button class="link" data-output="'+id+':'+o[0]+'">'+o[1]+'</button>').join('')+'</div>'+(opened&&opened.startsWith(id+':')?preview():'')+(page==='overview'?'<button class="link open" data-page="'+id+'">Open investigation</button>':'')+'</article>';
+}
+function preview(){const o=outputs[opened.split(':')[1]];return '<section class="preview" id="output-preview" tabindex="-1" aria-label="'+o.title+'"><header><strong>'+o.title+'</strong><button class="link" data-close>Close</button></header><pre>'+o.body+'</pre></section>'}
+function prose(s){return '<p class="prose">'+s+'</p>'}
+function render(){
+const doc=document.getElementById('document');
+document.getElementById('app').classList.toggle('cards-only',mode==='cards');
+document.querySelectorAll('[data-mode]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mode===mode)));
+document.querySelectorAll('.sidebar [data-page]').forEach(b=>b.classList.toggle('selected',b.dataset.page===page));
+if(mode==='cards'){doc.innerHTML='<h1>One card. Two outcomes.</h1>'+prose('The card contains the result and its outputs. The explanation belongs in the document around it.')+card('inv_01')+card('inv_02');return}
+doc.innerHTML='<div class="crumb"><span>battery_cycler_demo / '+(page==='overview'?'Overview':records[page].number)+'</span>'+(page!=='overview'?'<button data-page="overview">Overview</button>':'')+'</div>'+(page==='overview'?
+'<h1>Understanding the battery</h1>'+prose('We are building a model that explains how this synthetic battery responds to current. The investigations below show what we have established so far.')+
+'<h2>From a first fit to a predictive model</h2>'+prose('A short pulse captures the immediate voltage drop, but it does not distinguish the slower resistance from capacitance. Several combinations explain the same measurements.')+card('inv_01')+
+prose('The next investigation used a pulse ladder to observe more of the slow response. That gave the fit enough information to separate R1 from C1, then predict measurements excluded from fitting.')+card('inv_02')+
+'<h2>What remains open</h2>'+prose('The result covers this synthetic cell under the tested conditions. Temperature and aging remain untested. Parameter uncertainty was not recorded.'):
+'<h1>'+records[page].title+'</h1>'+card(page)+(page==='inv_01'?'<h2>What we learned</h2>'+prose('The immediate voltage drop identifies R0. The slower resistance and capacitance remain coupled: reporting a unique value for either would overstate what the measurements establish.')+'<h2>What happens next</h2>'+prose('The investigation produced a pulse ladder proposal. Longer, varied pulses should distinguish the slow response. A person must approve the experiment before it runs.'):
+'<h2>What changed</h2>'+prose('Measurements at several pulse durations distinguish R1 from C1. The final fitted values are R0 = 0.0250 Ω, R1 = 0.0400 Ω and C1 = 1,600 F.')+'<h2>What supports the result</h2>'+prose('A separate held-out dataset was excluded from fitting. The model passes the noise-weighted acceptance check on those measurements.')+'<h2>Limits</h2>'+prose('This result applies to the synthetic cell and tested pulses. It does not establish behavior across temperature or aging. Parameter uncertainty was not recorded.')));
+}
+function reveal(id){const target=opened?document.getElementById('output-preview'):document.querySelector('[data-output="'+id+'"]');if(target){target.focus({preventScroll:true});target.scrollIntoView({block:'nearest',behavior:'instant'})}}
+document.addEventListener('click',e=>{const m=e.target.closest('[data-mode]'),p=e.target.closest('[data-page]'),o=e.target.closest('[data-output]'),c=e.target.closest('[data-close]');if(m){mode=m.dataset.mode;page='overview';opened=null;render()}else if(p){mode='context';page=p.dataset.page;opened=null;render();const title=document.querySelector('h1');title.tabIndex=-1;title.focus({preventScroll:true});title.scrollIntoView({block:'nearest',behavior:'instant'})}else if(o){const id=o.dataset.output;opened=opened===id?null:id;render();reveal(id)}else if(c){const id=opened;opened=null;render();reveal(id)}});
+render();
+</script></body></html>
