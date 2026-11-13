@@ -1,4 +1,4 @@
-//! The `.ap-workbook` schema (workbook-format.md, formats 1 and 2) and its
+//! The `.ap-workbook` schema (workbook-format.md, formats 1 to 3) and its
 //! migrations, keyed by `PRAGMA user_version`. Append a step; never edit one
 //! that has shipped.
 //!
@@ -6,7 +6,9 @@
 //! when a write needs them ([`upgrade`], inside that write's transaction),
 //! never on open (DM-D1a): format 2 adds the display table and is reached at
 //! a workbook's first display write, so a workbook without a display stays
-//! format 1 and readable by SDK 0.1.x.
+//! format 1 and readable by SDK 0.1.x. Format 3 adds the overviews table
+//! (OV-2) and is reached only at a workbook's first overview write; a display
+//! write moves a workbook to exactly [`DISPLAY_VERSION`], never further.
 
 use rusqlite::{Connection, Transaction, TransactionBehavior};
 
@@ -55,6 +57,8 @@ const MIGRATIONS: &[&str] = &[
     "#,
     // 1 -> 2: the display table (DM-D1).
     DISPLAY_DDL,
+    // 2 -> 3: the append-only project overviews (OV-1).
+    OVERVIEWS_DDL,
 ];
 
 /// The display table. These bytes are the statement SDKs before format 2 ran
@@ -63,13 +67,29 @@ const MIGRATIONS: &[&str] = &[
 /// `IF NOT EXISTS` because such a format-1 workbook may already hold it.
 const DISPLAY_DDL: &str = "CREATE TABLE IF NOT EXISTS display (\n              project TEXT PRIMARY KEY REFERENCES projects(id),\n              digest TEXT NOT NULL, body TEXT NOT NULL, created REAL NOT NULL\n            );";
 
+/// The overviews table (OV-1). These bytes are the Python SDK's
+/// `_OVERVIEWS_DDL` and the `ddl` of `tests/conformance/overview/cases.json`,
+/// so every SDK leaves the same text in `sqlite_master`. Rows are only ever
+/// inserted; the latest version is the highest `seq`.
+const OVERVIEWS_DDL: &str = "CREATE TABLE IF NOT EXISTS overviews (\n  seq INTEGER PRIMARY KEY,\n  project TEXT NOT NULL REFERENCES projects(id),\n  digest TEXT NOT NULL,\n  markdown TEXT NOT NULL,\n  author TEXT NOT NULL,\n  created REAL NOT NULL\n);";
+
 /// `PRAGMA user_version` of a newly created workbook.
 pub const INITIAL_VERSION: i64 = 1;
+
+/// The format a display write needs. A display write upgrades to exactly
+/// this, so a display-only workbook stays readable by SDKs that read up to
+/// format 2 (OV-2); a workbook already past it is left as it is.
+pub const DISPLAY_VERSION: i64 = 2;
+
+/// The format an overview write needs (the overviews table).
+pub const OVERVIEW_VERSION: i64 = 3;
 
 /// The newest workbook format this build reads and writes.
 pub const VERSION: i64 = MIGRATIONS.len() as i64;
 
-const _: () = assert!(INITIAL_VERSION == 1 && VERSION == 2);
+const _: () = assert!(
+    INITIAL_VERSION == 1 && DISPLAY_VERSION == 2 && OVERVIEW_VERSION == 3 && VERSION == 3
+);
 
 fn pragma(conn: &Connection, name: &str) -> Result<i64> {
     Ok(conn.query_row(&format!("PRAGMA {name}"), [], |r| r.get(0))?)

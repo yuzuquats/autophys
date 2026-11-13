@@ -61,6 +61,7 @@ pub use workbook::{
     Appended, BatchRecord, ChainError, MAX_BATCH_RECORDS, ConfigVersion, Head, Investigation, MAX_DISPLAY_BYTES, Project, Snapshot,
     StoredDisplay, VerifyReport, Workbook,
 };
+pub use workbook::{MAX_OVERVIEW_BYTES, OverviewWarning, StoredOverview, check_overview};
 
 pub mod agent;
 pub mod backtest;

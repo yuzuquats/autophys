@@ -41,7 +41,12 @@ impl Workbook {
         // The display table is workbook format 2 (DM-D1). The first display
         // write moves the workbook there, in this transaction, so a failure
         // leaves format 1; an unchanged body still commits the upgrade.
-        crate::schema::upgrade(&tx, &self.path().display().to_string(), crate::schema::VERSION)?;
+        // Exactly format 2, never the current version (OV-2).
+        crate::schema::upgrade(
+            &tx,
+            &self.path().display().to_string(),
+            crate::schema::DISPLAY_VERSION,
+        )?;
         if let Some(old) = read(&tx, self.id())? {
             if old.digest == digest {
                 tx.commit()?;

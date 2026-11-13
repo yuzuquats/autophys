@@ -1,0 +1,315 @@
+{
+  "comment": "Shared overview vectors (OV-2..OV-4) for sdks/rust/tests/workbook_format3.rs and sdks/python/tests/test_workbook_format3.py.",
+  "ddl": "CREATE TABLE IF NOT EXISTS overviews (\n  seq INTEGER PRIMARY KEY,\n  project TEXT NOT NULL REFERENCES projects(id),\n  digest TEXT NOT NULL,\n  markdown TEXT NOT NULL,\n  author TEXT NOT NULL,\n  created REAL NOT NULL\n);",
+  "sql": "CREATE TABLE overviews (\n  seq INTEGER PRIMARY KEY,\n  project TEXT NOT NULL REFERENCES projects(id),\n  digest TEXT NOT NULL,\n  markdown TEXT NOT NULL,\n  author TEXT NOT NULL,\n  created REAL NOT NULL\n)",
+  "max_bytes": 262144,
+  "investigations": [
+    "inv_0123456789abcdef",
+    "inv_fedcba9876543210"
+  ],
+  "digests": [
+    {
+      "markdown": "# Overview\n",
+      "digest": "875dce0e99707525fd7cb06b8691ff5d783ef8e115ebd47164885edb2e40c905"
+    },
+    {
+      "markdown": "Température — 熱 🔥\n",
+      "digest": "4814bf08bd9f48a3265d6a6331ba202d7c7f6fb77924c9145fad127bd9a2babe"
+    },
+    {
+      "markdown": "line\r\nline\n",
+      "digest": "e6d3002716717aa1b7d87accd5419ec2d873af61de8ff4be5a238f3b8d2f4a1d"
+    }
+  ],
+  "warnings": [
+    {
+      "name": "known",
+      "markdown": "# Note\n\n<ap-investigation investigation=\"inv_0123456789abcdef\" title=\"T\" summary=\"S\"></ap-investigation>\n",
+      "warnings": []
+    },
+    {
+      "name": "unknown id",
+      "markdown": "<ap-investigation investigation=\"inv_ffffffffffffffff\"></ap-investigation>\n",
+      "warnings": [
+        {
+          "code": "unknown_investigation",
+          "message": "<ap-investigation> names \"inv_ffffffffffffffff\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
+          "investigation": "inv_ffffffffffffffff"
+        }
+      ]
+    },
+    {
+      "name": "no investigation attribute",
+      "markdown": "<ap-investigation title=\"x\"></ap-investigation>\n",
+      "warnings": [
+        {
+          "code": "unknown_investigation",
+          "message": "<ap-investigation> names no investigation; the viewer shows \"Investigation unavailable\"",
+          "investigation": ""
+        }
+      ]
+    },
+    {
+      "name": "empty investigation attribute",
+      "markdown": "<ap-investigation investigation=\"\"></ap-investigation>\n",
+      "warnings": [
+        {
+          "code": "unknown_investigation",
+          "message": "<ap-investigation> names no investigation; the viewer shows \"Investigation unavailable\"",
+          "investigation": ""
+        }
+      ]
+    },
+    {
+      "name": "unknown attribute, then unknown id",
+      "markdown": "<ap-investigation colour=\"red\" investigation=\"inv_x\"></ap-investigation>\n",
+      "warnings": [
+        {
+          "code": "unknown_attribute",
+          "message": "<ap-investigation> has an unknown attribute \"colour\"; the viewer ignores it",
+          "attribute": "colour"
+        },
+        {
+          "code": "unknown_investigation",
+          "message": "<ap-investigation> names \"inv_x\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
+          "investigation": "inv_x"
+        }
+      ]
+    },
+    {
+      "name": "tag and attribute names are case-insensitive",
+      "markdown": "<AP-Investigation Investigation='inv_0123456789abcdef' TITLE=x></AP-Investigation>\n",
+      "warnings": []
+    },
+    {
+      "name": "character references in values",
+      "markdown": "<ap-investigation investigation=\"inv&#95;0123456789abcdef\" summary=\"a &amp; b &quot;c&quot;\"></ap-investigation>\n",
+      "warnings": []
+    },
+    {
+      "name": "hex character reference",
+      "markdown": "<ap-investigation investigation=\"inv&#x5f;0123456789abcdef\"></ap-investigation>\n",
+      "warnings": []
+    },
+    {
+      "name": "unquoted value",
+      "markdown": "<ap-investigation investigation=inv_0123456789abcdef></ap-investigation>\n",
+      "warnings": []
+    },
+    {
+      "name": "attributes over several lines",
+      "markdown": "<ap-investigation\n  investigation=\"inv_0123456789abcdef\"\n  before-detail=\"b\"\n  hue=\"1\"\n></ap-investigation>\n",
+      "warnings": [
+        {
+          "code": "unknown_attribute",
+          "message": "<ap-investigation> has an unknown attribute \"hue\"; the viewer ignores it",
+          "attribute": "hue"
+        }
+      ]
+    },
+    {
+      "name": "each finding once",
+      "markdown": "<ap-investigation investigation=\"inv_x\" hue=\"1\"></ap-investigation>\n\n<ap-investigation investigation=\"inv_x\" hue=\"2\"></ap-investigation>\n",
+      "warnings": [
+        {
+          "code": "unknown_attribute",
+          "message": "<ap-investigation> has an unknown attribute \"hue\"; the viewer ignores it",
+          "attribute": "hue"
+        },
+        {
+          "code": "unknown_investigation",
+          "message": "<ap-investigation> names \"inv_x\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
+          "investigation": "inv_x"
+        }
+      ]
+    },
+    {
+      "name": "document order",
+      "markdown": "<ap-investigation investigation=\"inv_b\"></ap-investigation>\n\n<ap-investigation investigation=\"inv_a\"></ap-investigation>\n",
+      "warnings": [
+        {
+          "code": "unknown_investigation",
+          "message": "<ap-investigation> names \"inv_b\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
+          "investigation": "inv_b"
+        },
+        {
+          "code": "unknown_investigation",
+          "message": "<ap-investigation> names \"inv_a\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
+          "investigation": "inv_a"
+        }
+      ]
+    },
+    {
+      "name": "first duplicate attribute wins",
+      "markdown": "<ap-investigation investigation=\"inv_0123456789abcdef\" investigation=\"inv_x\"></ap-investigation>\n",
+      "warnings": []
+    },
+    {
+      "name": "up to three spaces of indentation",
+      "markdown": "   <ap-investigation investigation=\"inv_x\"></ap-investigation>\n",
+      "warnings": [
+        {
+          "code": "unknown_investigation",
+          "message": "<ap-investigation> names \"inv_x\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
+          "investigation": "inv_x"
+        }
+      ]
+    },
+    {
+      "name": "four spaces is indented code",
+      "markdown": "    <ap-investigation investigation=\"inv_x\"></ap-investigation>\n",
+      "warnings": []
+    },
+    {
+      "name": "a mid-line mention is inline HTML",
+      "markdown": "See `<ap-investigation investigation=\"inv_x\">` here.\n",
+      "warnings": []
+    },
+    {
+      "name": "backtick fence",
+      "markdown": "```html\n<ap-investigation investigation=\"inv_x\"></ap-investigation>\n```\n",
+      "warnings": []
+    },
+    {
+      "name": "tilde fence with a longer close",
+      "markdown": "~~~\n<ap-investigation investigation=\"inv_x\"></ap-investigation>\n~~~~\n",
+      "warnings": []
+    },
+    {
+      "name": "a shorter run does not close the fence",
+      "markdown": "````\n```\n<ap-investigation investigation=\"inv_x\"></ap-investigation>\n````\n<ap-investigation investigation=\"inv_y\"></ap-investigation>\n",
+      "warnings": [
+        {
+          "code": "unknown_investigation",
+          "message": "<ap-investigation> names \"inv_y\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
+          "investigation": "inv_y"
+        }
+      ]
+    },
+    {
+      "name": "an unclosed fence runs to the end",
+      "markdown": "```\n<ap-investigation investigation=\"inv_x\"></ap-investigation>\n",
+      "warnings": []
+    },
+    {
+      "name": "a backtick info string with a backtick is not a fence",
+      "markdown": "``` a`b\n<ap-investigation investigation=\"inv_x\"></ap-investigation>\n",
+      "warnings": [
+        {
+          "code": "unknown_investigation",
+          "message": "<ap-investigation> names \"inv_x\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
+          "investigation": "inv_x"
+        }
+      ]
+    },
+    {
+      "name": "an incomplete tag is ignored",
+      "markdown": "<ap-investigation investigation=\"inv_x\"\n",
+      "warnings": []
+    },
+    {
+      "name": "an unterminated quote is ignored",
+      "markdown": "<ap-investigation investigation=\"inv_x></ap-investigation>\n",
+      "warnings": []
+    },
+    {
+      "name": "a longer tag name is another element",
+      "markdown": "<ap-investigations investigation=\"inv_x\"></ap-investigations>\n",
+      "warnings": []
+    },
+    {
+      "name": "self-closing",
+      "markdown": "<ap-investigation investigation=\"inv_x\" />\n",
+      "warnings": [
+        {
+          "code": "unknown_investigation",
+          "message": "<ap-investigation> names \"inv_x\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
+          "investigation": "inv_x"
+        }
+      ]
+    },
+    {
+      "name": "CRLF line endings",
+      "markdown": "# A\r\n\r\n<ap-investigation investigation=\"inv_0123456789abcdef\" x=\"1\"></ap-investigation>\r\n",
+      "warnings": [
+        {
+          "code": "unknown_attribute",
+          "message": "<ap-investigation> has an unknown attribute \"x\"; the viewer ignores it",
+          "attribute": "x"
+        }
+      ]
+    },
+    {
+      "name": "a bare attribute",
+      "markdown": "<ap-investigation investigation=\"inv_0123456789abcdef\" open></ap-investigation>\n",
+      "warnings": [
+        {
+          "code": "unknown_attribute",
+          "message": "<ap-investigation> has an unknown attribute \"open\"; the viewer ignores it",
+          "attribute": "open"
+        }
+      ]
+    }
+  ],
+  "refused": [
+    {
+      "name": "empty",
+      "markdown": "",
+      "author": "a",
+      "error": "invalid_payload",
+      "path": "markdown"
+    },
+    {
+      "name": "whitespace only",
+      "markdown": " \n\t\r\n",
+      "author": "a",
+      "error": "invalid_payload",
+      "path": "markdown"
+    },
+    {
+      "name": "no author",
+      "markdown": "# x",
+      "author": "",
+      "error": "invalid_payload",
+      "path": "author"
+    },
+    {
+      "name": "whitespace author",
+      "markdown": "# x",
+      "author": "  ",
+      "error": "invalid_payload",
+      "path": "author"
+    },
+    {
+      "name": "author over 200 characters",
+      "markdown": "# x",
+      "author": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "error": "invalid_payload",
+      "path": "author"
+    },
+    {
+      "name": "over 256 KiB",
+      "markdown_repeat": [
+        "x",
+        262145
+      ],
+      "author": "a",
+      "error": "payload_too_large"
+    }
+  ],
+  "accepted": [
+    {
+      "name": "exactly 256 KiB",
+      "markdown_repeat": [
+        "x",
+        262144
+      ],
+      "author": "a"
+    },
+    {
+      "name": "author of 200 characters",
+      "markdown": "# x",
+      "author": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+    }
+  ]
+}

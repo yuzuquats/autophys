@@ -1,4 +1,4 @@
-# The `.ap-workbook` file format, version 1
+# The `.ap-workbook` file format, versions 1 to 3
 
 Status: format spec, rev 1, 2026-11-04. It turns the operator decisions in
 [`workbook.md`](workbook.md) (W-3, W-4, W-6) into a byte-level contract. The
@@ -16,12 +16,13 @@ must pass.
   collision is refused when the stored name differs.
 - `PRAGMA application_id = 1095784258` (`0x41505742`, ASCII `APWB`). A file
   without it is not a workbook; an empty new file is initialised.
-- `PRAGMA user_version` is the workbook format: 1 or 2 (format 2 adds the
-  display table, below). A new workbook is created at format 1. Migrations
-  append steps and never edit a shipped one. Readers accept formats 1 and 2
-  and refuse a newer one, on open and when another process wrote it after
-  open. A step past format 1 runs only inside the write that needs it,
-  never on open (DM-D1a).
+- `PRAGMA user_version` is the workbook format: 1, 2 or 3 (format 2 adds the
+  display table, format 3 the overviews table, below). A new workbook is
+  created at format 1. Migrations append steps and never edit a shipped one.
+  Readers accept formats 1 to 3 and refuse a newer one, on open and when
+  another process wrote it after open. A step past format 1 runs only inside
+  the write that needs it, never on open (DM-D1a): a display write moves a
+  workbook to exactly format 2, and only an overview write moves it to 3.
 - `journal_mode = WAL`, `synchronous = NORMAL`, `foreign_keys = ON`, busy
   timeout 5 s. Several processes may open the file; writes are serialised by
   SQLite.
@@ -142,7 +143,9 @@ runs in one `BEGIN IMMEDIATE` transaction: refuse a format above 2, run the
 steps up to 2 and set `user_version = 2`, then compare digests and upsert.
 It commits even when the digest is unchanged, and a failed write leaves the
 file at format 1. Reading a display never creates the table or changes the
-format.
+format. A display write upgrades to exactly format 2, never to the current
+format: a workbook at format 3 stays at 3, and a display-only workbook stays
+readable by SDKs that read up to format 2 (OV-2).
 
 SDKs before format 2 created the same table, with the same statement, as an
 optional extension of format 1. Such a file reads as is (its display
@@ -162,6 +165,57 @@ records/configs. `/workspace.projects[]` includes `display: <manifest|null>`.
 `{project_id, digest, display}` and no event id: records keep their cursors.
 The latest display is sent on reconnect, then when its digest changes.
 Intermediate uploads may coalesce; the latest committed upload wins.
+
+## Format 3: the overviews table (OV-1 to OV-4)
+
+Format 3 is format 2 plus the append-only `overviews` table
+([overview-sdk.md](overview-sdk.md)). A workbook reaches format 3 at its
+first overview write, never on open or on read, so a workbook without an
+overview stays at format 1 or 2. SDKs that read up to format 2 refuse it
+afterwards. Migration step 2 to 3 is exactly this statement, byte-identical
+in both SDKs and in `tests/conformance/overview/cases.json` (`ddl`):
+
+```sql
+CREATE TABLE IF NOT EXISTS overviews (
+  seq INTEGER PRIMARY KEY,
+  project TEXT NOT NULL REFERENCES projects(id),
+  digest TEXT NOT NULL,
+  markdown TEXT NOT NULL,
+  author TEXT NOT NULL,
+  created REAL NOT NULL
+);
+```
+
+Each row is one version of the project's Markdown research note; rows are
+only inserted. The latest version is the highest `seq`, not the latest
+`created`. `digest` is the bare lowercase sha256 of the Markdown's UTF-8
+bytes.
+
+An overview write (Rust `Workbook::put_overview(markdown, author)`, Python
+`WorkbookStore.put_overview(project_id, markdown, author)`) runs in one
+`BEGIN IMMEDIATE` transaction: refuse a format above 3, run the steps up to 3
+and set `user_version = 3`, compare the digest with the latest version's, and
+insert a row only when it differs (`changed`). The author is not part of the
+comparison. A write is refused only for an empty or whitespace-only body
+(`invalid_payload`, path `markdown`), more than 256 KiB of UTF-8
+(`payload_too_large`), invalid UTF-8, or an author that is empty or longer
+than 200 characters (path `author`); a refused write leaves the file as it
+was.
+
+Everything else is advisory (OV-3). The write returns warnings
+`{code, message, investigation | attribute}`: `unknown_investigation` for an
+insert that names no investigation of this workbook (or none at all) and
+`unknown_attribute` for an insert attribute outside the shared list
+`html/ui/investigation-inserts.json`, each finding once, in document order.
+An insert is an HTML block: its tag starts a line after at most three spaces
+of indentation, outside fenced code; tag and attribute names are
+ASCII-case-insensitive, the first of a repeated attribute wins, and values
+decode the five named XML character references and numeric ones. The
+vectors are in `tests/conformance/overview/cases.json`.
+
+Reading an overview (`overview()`, `overview_versions()`, the snapshot) never
+creates the table or changes the format; formats 1 and 2 read as no overview.
+`verify` and the projection rebuild ignore the table, as they ignore display.
 
 ## Payload validation
 
@@ -217,6 +271,13 @@ with a JSON file of its expected projection rows and chain heads. The Python
 suite checks that it reproduces them. The Rust store should open each golden
 workbook, verify every chain, rebuild the projections and compare them with
 the JSON, and write its own workbook for the Python suite to verify.
+
+`tests/conformance/overview/` holds the format-3 contract: `cases.json`
+(the step's DDL, digests, refusals and insert warnings) and one golden
+workbook per SDK (`rust.ap-workbook`, `python.ap-workbook`) with two overview
+versions and a display. Each SDK reads both goldens, checks every version and
+its digest, and confirms that rewriting the latest version adds no row and a
+display write leaves format 3.
 
 ### Candidate uncertainty in ranking steps
 

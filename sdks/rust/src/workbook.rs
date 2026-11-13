@@ -9,7 +9,9 @@
 //! limits, then seq, hash, insert and the projection fold.
 
 mod manifest;
+mod overview;
 pub use manifest::{MAX_DISPLAY_BYTES, StoredDisplay};
+pub use overview::{MAX_OVERVIEW_BYTES, OverviewWarning, StoredOverview, check_overview};
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -88,6 +90,8 @@ pub struct Snapshot {
     pub project: Project,
     pub config_versions: Vec<ConfigVersion>,
     pub display: Option<StoredDisplay>,
+    /// The latest overview version (workbook format 3), if any.
+    pub overview: Option<StoredOverview>,
     pub investigations: Vec<InvestigationInfo>,
     pub proposals: Vec<Proposal>,
     /// Every record in `gseq` order.
@@ -583,6 +587,7 @@ impl Workbook {
             project: self.project().clone(),
             config_versions: list_configs(&tx)?,
             display: manifest::read(&tx, self.id())?,
+            overview: overview::latest(&tx, self.id())?,
             investigations: projections::investigations(&tx)?,
             proposals: projections::proposals(&tx, None)?,
             records: records::after(&tx, 0, cursor, None)?

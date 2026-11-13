@@ -1,6 +1,9 @@
 //! Workbook adapters; the public record and agent APIs do not change with transport.
 use super::{Remote, decode, encode};
-use crate::{workbook::StoredDisplay, *};
+use crate::{
+    workbook::{OverviewWarning, StoredDisplay, StoredOverview},
+    *,
+};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
@@ -136,7 +139,17 @@ impl Remote {
                 created: 0.0,
             })
         };
+        // `overview` is the Markdown the browser renders; `overview_meta`
+        // carries the rest of the stored version.
+        let overview = match (project["overview"].take(), project["overview_meta"].take()) {
+            (Value::String(markdown), meta) if meta.is_object() => Some(StoredOverview {
+                markdown,
+                ..decode::<OverviewMeta>(meta)?.into()
+            }),
+            _ => None,
+        };
         Ok(Snapshot {
+            overview,
             project: decode(project.clone())?,
             cursor: j["cursor"]
                 .as_i64()
@@ -169,6 +182,45 @@ impl Remote {
             },
             status == 201,
         ))
+    }
+    /// `PUT /projects/{pid}/overview` with `{markdown, author}`; the daemon
+    /// checks the inserts against its workbook and returns the warnings.
+    pub(crate) async fn put_overview(
+        &self,
+        pid: &str,
+        markdown: &str,
+        author: &str,
+    ) -> Result<(StoredOverview, bool, Vec<OverviewWarning>)> {
+        let (status, mut j) = self
+            .json(
+                "PUT",
+                &format!("/projects/{}/overview", encode(pid)),
+                Some(&json!({"markdown": markdown, "author": author})),
+                None,
+                self.timeout,
+            )
+            .await
+            .map_err(|e| super::daemon_too_old(e, "project overviews"))?;
+        let meta: OverviewMeta = decode(j["overview"].take())?;
+        Ok((
+            StoredOverview { markdown: markdown.to_string(), ..meta.into() },
+            status == 201,
+            decode(j["warnings"].take())?,
+        ))
+    }
+    /// `GET /projects/{pid}/overview/versions`, oldest first.
+    pub(crate) async fn overview_versions(&self, pid: &str) -> Result<Vec<StoredOverview>> {
+        let (_, mut j) = self
+            .json(
+                "GET",
+                &format!("/projects/{}/overview/versions", encode(pid)),
+                None,
+                None,
+                self.timeout,
+            )
+            .await
+            .map_err(|e| super::daemon_too_old(e, "project overviews"))?;
+        decode(j["versions"].take())
     }
     pub(crate) async fn put_blob(&self, pid: &str, data: &[u8], media_type: &str) -> Result<String> {
         if data.len() > 16 * 1024 * 1024 {
@@ -289,6 +341,22 @@ impl Remote {
             self.see(&l.record.investigation, l.gseq);
         }
         Ok(out)
+    }
+}
+
+/// A stored overview version without its Markdown, as the daemon sends it
+/// beside the body (`overview_meta`, and a write's `overview`).
+#[derive(serde::Deserialize)]
+struct OverviewMeta {
+    seq: i64,
+    digest: String,
+    author: String,
+    created: f64,
+}
+
+impl From<OverviewMeta> for StoredOverview {
+    fn from(m: OverviewMeta) -> Self {
+        StoredOverview { seq: m.seq, digest: m.digest, markdown: String::new(), author: m.author, created: m.created }
     }
 }
 

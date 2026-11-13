@@ -54,7 +54,9 @@ fn reopen(path: &Path) -> Workbook {
 
 #[test]
 fn versions() {
-    assert_eq!((INITIAL_FORMAT_VERSION, FORMAT_VERSION), (1, 2));
+    // Format 3 (overviews) is the current version; display stays at 2
+    // (workbook_format3.rs).
+    assert_eq!((INITIAL_FORMAT_VERSION, FORMAT_VERSION), (1, 3));
 }
 
 #[test]
@@ -161,7 +163,7 @@ fn newer_formats_are_refused() {
     let path = workbook(dir.path()).path().to_path_buf();
     Connection::open(&path)
         .unwrap()
-        .pragma_update(None, "user_version", 3)
+        .pragma_update(None, "user_version", 4)
         .unwrap();
     let err = connect(Some(path.to_str().unwrap()))
         .unwrap()
@@ -170,7 +172,7 @@ fn newer_formats_are_refused() {
     assert!(matches!(err, Error::Format(_)), "{err}");
     assert!(
         err.to_string()
-            .contains("format 3; this library reads up to 2"),
+            .contains("format 4; this library reads up to 3"),
         "{err}"
     );
 }
@@ -181,12 +183,12 @@ fn a_newer_format_written_after_open_is_not_downgraded() {
     let wb = workbook(dir.path());
     Connection::open(wb.path())
         .unwrap()
-        .pragma_update(None, "user_version", 3)
+        .pragma_update(None, "user_version", 4)
         .unwrap();
     let err = wb.put_display(&body()).unwrap_err();
-    assert!(err.to_string().contains("format 3"), "{err}");
+    assert!(err.to_string().contains("format 4"), "{err}");
     let (version, tables) = raw(wb.path());
-    assert_eq!(version, 3);
+    assert_eq!(version, 4);
     assert!(!tables.contains_key("display"));
 }
 

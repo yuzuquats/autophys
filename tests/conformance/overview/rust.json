@@ -1,0 +1,26 @@
+{
+  "format": {
+    "user_version": 3
+  },
+  "project": "overview",
+  "investigations": [
+    "inv_f173fff5cf2ac8fb"
+  ],
+  "overview_sql": "CREATE TABLE overviews (\n  seq INTEGER PRIMARY KEY,\n  project TEXT NOT NULL REFERENCES projects(id),\n  digest TEXT NOT NULL,\n  markdown TEXT NOT NULL,\n  author TEXT NOT NULL,\n  created REAL NOT NULL\n)",
+  "versions": [
+    {
+      "seq": 1,
+      "digest": "a45b4b910508df77e521dfa88ed6a9db09f2e2513f86e23fa27faa0f2a6b78d4",
+      "markdown": "# Overview\n\nA first draft.\n",
+      "author": "rust-writer",
+      "created": 1794571295.85129
+    },
+    {
+      "seq": 2,
+      "digest": "c0f7a6777bb3e63fc97181cfa1f178a3784ff5d7dccf2d1e44a52080f365b2dd",
+      "markdown": "# Overview — Température 🔥\n\n<ap-investigation investigation=\"inv_f173fff5cf2ac8fb\" title=\"Fit\"></ap-investigation>\n",
+      "author": "rust-reviewer",
+      "created": 1794571295.851816
+    }
+  ]
+}

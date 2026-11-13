@@ -25,7 +25,9 @@
 //! one process-wide pooled client (idle connections kept 4 s, under the daemon's 5 s keep-alive); a request
 //! made through the async API on any other runtime uses a client without an
 //! idle pool, so no connection outlives the runtime that opened it.
-use crate::workbook::{ConfigVersion, Investigation, Snapshot, StoredDisplay, Workbook};
+use crate::workbook::{
+    ConfigVersion, Investigation, OverviewWarning, Snapshot, StoredDisplay, StoredOverview, Workbook,
+};
 use crate::{
     Appended, BatchRecord, Error, InvestigationInfo, Logged, Project, Proposal, Record, Result,
 };
@@ -201,6 +203,17 @@ impl Remote {
     }
     pub(crate) fn put_display(&self, pid: &str, body: &[u8]) -> Result<(StoredDisplay, bool)> {
         run(self.inner.put_display(pid, body))
+    }
+    pub(crate) fn put_overview(
+        &self,
+        pid: &str,
+        markdown: &str,
+        author: &str,
+    ) -> Result<(StoredOverview, bool, Vec<OverviewWarning>)> {
+        run(self.inner.put_overview(pid, markdown, author))
+    }
+    pub(crate) fn overview_versions(&self, pid: &str) -> Result<Vec<StoredOverview>> {
+        run(self.inner.overview_versions(pid))
     }
     pub(crate) fn put_blob(&self, pid: &str, data: &[u8], media_type: &str) -> Result<String> {
         run(self.inner.put_blob(pid, data, media_type))
