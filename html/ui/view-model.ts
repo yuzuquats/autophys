@@ -8,6 +8,11 @@
 /** Colour roles. The renderer maps each to a CSS variable; it never picks one itself. */
 import type { SidebarExtras } from "./sidebar-model.ts";
 
+export type InvestigationSummary = {
+  id: string; title: string; caption: string; status: string; tone: "ok" | "warn" | "muted";
+  finding: string; evidence: string; outputs: { label: string; id: string }[];
+};
+
 export type Tone = "default" | "muted" | "ok" | "warn" | "run" | "danger";
 
 /** Glyphs the package draws (icons.ts). */
@@ -119,7 +124,7 @@ export type SetupStep = {
 export type ProjectSetupBody = { kind: "project-setup"; title: string; description: string; notice?: string; steps: SetupStep[] };
 
 export type MainBody =
-  | { kind: "document"; id: string; markdown: string }
+  | { kind: "document"; id: string; markdown: string; investigations?: InvestigationSummary[] }
   | ProjectSetupBody
   | { kind: "empty"; text: string }
   | Missing

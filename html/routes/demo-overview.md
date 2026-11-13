@@ -1,34 +1,31 @@
 # Understand the battery’s response
 
-We are fitting a simple battery model to find out what the measurements actually
-tell us, then choosing the experiment that would resolve what remains uncertain.
+We are fitting a simple battery model to distinguish the cell’s immediate
+resistance, **R0**, from its slower response, described by **R1** and **C1**.
+This demonstration uses a synthetic cell.
 
-## What we want to learn
+## What the completed investigation established
 
-Can we distinguish the cell’s immediate resistance, **R0**, from its slower
-response, described by **R1** and **C1**?
+The first investigation began with a short current pulse. It identified R0,
+while leaving R1 and C1 hard to distinguish. After a person approved a pulse
+ladder, the new measurements separated those effects. The final model also
+passed a held-out prediction check.
 
-A voltage curve can fit well even when different parameter values explain it
-equally well. The goal is to determine the parameters and check the model’s
-predictions against measurements it has never seen.
+<ap-investigation investigation="inv_c51194ac2a68ef19" />
 
-## How the investigation progresses
+The card links to the recorded fits, measurements, proposal and validation.
+Both the initial pulse and the pulse ladder belong to this one investigation.
 
-Start with a short current pulse and fit a first-order battery model. The pulse
-can identify R0 while leaving R1 and C1 hard to distinguish.
+## Work still awaiting approval
 
-The agent compares the available tests and proposes a pulse ladder to expose
-more of the slower response. A person approves the test before it runs. Once its
-measurements arrive, fit again and check whether the ambiguity has been resolved.
+The second investigation is a separate run from the same starting pulse.
+Its pulse ladder proposal remains pending. A good fit to the initial curve
+does not yet establish R1 and C1.
 
-Finally, predict the voltage response on a held-out test. Those measurements
-stay out of fitting, so they provide a separate check of the model.
+<ap-investigation investigation="inv_1b63c1cbdd6c12bd" />
 
-## Reading the workbench
+## What remains open
 
-**Configuration** describes the model’s parameters and available tests.
-Each **Investigation** contains the measured data, successive fits, experiment
-proposals and validation result. Open those records to see the evidence behind
-the project’s progress.
-
-This demonstration uses a synthetic cell with known parameters.
+The results describe this synthetic cell under the tested conditions.
+Temperature changes and aging remain outside the demonstration. Open an
+investigation to inspect its parameter uncertainty and diagnostic evidence.

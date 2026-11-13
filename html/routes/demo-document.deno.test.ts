@@ -1,4 +1,5 @@
 import { assertEquals, assert } from "jsr:@std/assert@1";
+import { investigationSummary } from "../client/derive/investigation-summary.ts";
 import { withDemoDocument } from "./demo-document.ts";
 import { fixtures } from "../client/fixtures/source.ts";
 import { initialSelection, reduce } from "../client/controller.ts";
@@ -31,7 +32,7 @@ Deno.test("demo document survives refreshes and record folds without changing ot
   const selection = reduce(initialSelection(decorated.workspace), decorated, { kind: "select", id: ids.overview(project) }, { user: "demo", now: () => "" }).selection;
   const view = derive(decorated, selection);
   assertEquals(view.sidebar.nodes[0].children![0].label, "Overview");
-  assertEquals(view.main.body, { kind: "document", id: ids.overview(project), markdown: "# Battery overview" });
+  assertEquals(view.main.body, { kind: "document", id: ids.overview(project), markdown: "# Battery overview", investigations: project.investigations.map(inv => investigationSummary(project, inv)) });
   assertEquals(view.details.title, "Overview");
   assertEquals(parseSel(raw.projects[0], ids.overview(project)), null);
   assert(view.sidebar.nodes[1].children!.every(node => node.label !== "Overview"));

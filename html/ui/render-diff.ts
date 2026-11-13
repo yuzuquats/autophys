@@ -49,6 +49,14 @@ function attributes(live: Element, before: Element, next: Element): void {
 }
 function patch(record: Mounted, next: Node, grids: Set<Element>): Mounted {
   if (record.source.isEqualNode(next)) return record;
+  // The Markdown stays opaque, but its evidence can refresh inside retained node views.
+  if (record.source instanceof Element && next instanceof Element && record.live instanceof Element
+    && compatible(record.source, next) && next.hasAttribute("data-ap-document")
+    && record.source.getAttribute("data-ap-document") === next.getAttribute("data-ap-document")) {
+    attributes(record.live, record.source, next);
+    record.source = next;
+    return record;
+  }
   if (!compatible(record.source, next) || next instanceof Element && next.matches(opaque)) {
     const replacement = mount(next);
     record.live.parentNode?.replaceChild(replacement.live, record.live);

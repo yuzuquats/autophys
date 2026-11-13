@@ -1,4 +1,4 @@
-import { Documentation } from "@tento-ui/components/documentation/documentation";
+import { hydrateInvestigationDocuments } from "./investigation-document.ts";
 import { freshMarkers } from "./render-diff.ts";
 import { ColumnsIcon, LinkIcon, GearIcon, ComponentIcon, DatabaseIcon, FormulaIcon, BarChartIcon,
   TextIcon, PlayIcon, CheckmarkIcon, EyeIcon, GridIcon, SearchIcon, PlusIcon, ChevronRightIcon } from "@tento-ui/ui/icons";
@@ -21,11 +21,7 @@ import { LabelTimeline } from "./timeline.ts";
 import type { IntentHandler } from "./intent.ts";
 
 export function hydrateComponents(host: HTMLElement, onIntent: IntentHandler): void {
-  for (const marker of freshMarkers(host, "[data-ap-document]")) {
-    const doc = Documentation.make();
-    marker.replaceChildren(doc);
-    void doc.bind({ markdown: marker.dataset.apDocument! }).catch(() => { marker.textContent = "The document could not be displayed. Reload to try again."; });
-  }
+  hydrateInvestigationDocuments(host, onIntent);
   for (const marker of freshMarkers(host, "[data-ap-icon]")) {
     marker.style.cssText = "display:inline-flex;width:14px;height:14px;flex:none";
     marker.innerHTML = (icons[marker.dataset.apIcon!] ?? "").replace("<svg", '<svg width="14" height="14" aria-hidden="true"');

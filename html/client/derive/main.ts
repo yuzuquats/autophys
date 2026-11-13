@@ -1,4 +1,5 @@
 /** The main column: crumb, meta, the viewer's panels and one credit line. */
+import { investigationSummary } from "./investigation-summary.ts";
 import type { Investigation, Measurement, Project, ProjectConfig, Proposal } from "../domain.ts";
 import type { BarRow, ChartPanel, InvestigationBody, InvestigationCard, MainModel, RangesChart, Section, TableRow, TraceRow } from "../../ui/view-model.ts";
 import {
@@ -146,7 +147,7 @@ function selectedMain(s: State): MainModel {
   const sel = parseSel(project, s.selected[project.id] ?? "") ?? parseSel(project, defaultSelection(project))!;
   switch (sel.kind) {
     case "document": return { crumb: [{ label: project.name }, { label: "Overview" }], meta: "", actions: [],
-      body: { kind: "document", id: ids.overview(project), markdown: project.overview! }, credit: "" };
+      body: { kind: "document", id: ids.overview(project), markdown: project.overview!, investigations: project.investigations.map(inv => investigationSummary(project, inv)) }, credit: "" };
     case "config": {
       const c = latestConfig(project);
       return { crumb: [{ label: project.name }, { label: "Configuration" }], meta: `v${c.version} · ${shortHash(c.hash)}`, actions: [],

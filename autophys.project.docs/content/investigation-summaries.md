@@ -1,6 +1,6 @@
 # Completed investigations should explain what they established and produced
 
-Status: revision 2, 2026-11-12. Concept mocks only; not integrated or deployed.
+Status: revision 3, 2026-11-12. Implemented; dev deployment verification in progress.
 The current [investigation card mock](investigation-card.mock.html) shows the card
 in the project document and on its own. All results and outputs are illustrative.
 The [earlier summary mock](investigation-summary.mock.html) is retained for comparison.
@@ -137,3 +137,31 @@ All six output previews in each view open, reveal focus, and restore focus to
 their links on close. Navigation reaches the corresponding investigation
 document. No horizontal overflow or console exceptions were observed. These
 checks cover the interactive concept, not a registered runtime component.
+
+
+## Implementation — revision 3
+
+The operator approved implementation and requested std-card with shadows.
+D-SUM-3's compact-card direction is operator-confirmed. The insert uses
+`Documentation.bind({ markdown, inserts })` without modifying the shared
+renderer. App-owned node views project the card's content into std-card; the
+shared card owns its surface and a soft, offset shadow.
+
+Card text is derived from the project's existing investigation records. The
+demo contains one completed investigation spanning the initial pulse and pulse
+ladder, plus another awaiting approval. The narrative now describes those
+actual records rather than the synthetic split in the earlier mocks. The
+Markdown references their exact investigation ids. Missing references show an
+explicit unavailable state; missing scientific evidence is not filled in.
+
+Outputs navigate to existing fit, measurement, proposal and validation nodes.
+There is no separate artifact store or new persisted contract. During evidence
+updates the Markdown component remains mounted and its card views refresh.
+Ordinary account workspaces still receive no hardcoded document.
+
+Validation: 156 frontend tests pass, including missing identification,
+unresolved completion, failed validation and validation tied to an older fit.
+The frozen entry-point type check passes. Four browser regression assertions
+verify document/insert retention and focus through evidence updates, updated
+evidence delivery and remounting when Markdown changes. Deployment and final
+render checks follow in the receipt below.

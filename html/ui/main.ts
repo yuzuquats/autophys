@@ -38,7 +38,7 @@ export function mainMarkup(model: MainModel, width: number, classes: MainClasses
   const toolbar = `<div class="${esc([classes.toolbar ?? "", "ap-toolbar"].filter(Boolean).join(" "))}"><nav class="ap-crumb" aria-label="Selection" title="${esc(breadcrumbText(model.crumb))}">${crumb}</nav><div class="ap-right"><span class="ap-meta" id="ap-meta" title="${esc(model.metaTitle ? `${model.meta} (${model.metaTitle})` : model.meta)}">${esc(model.meta)}</span>${model.actions.map((a) => buttonMarkup(a, classes)).join("")}</div></div>`;
   let body: string;
   if (model.body.kind === "document") {
-    body = `<section class="ap-viewer ap-document-view"><div data-ap-document="${esc(model.body.markdown)}"></div></section>`;
+    body = `<section class="ap-viewer ap-document-view"><div data-ap-document="${esc(model.body.markdown)}" data-ap-investigations="${esc(JSON.stringify(model.body.investigations ?? []))}"></div></section>`;
   } else if (model.body.kind === "project-setup") {
     body = newProjectMarkup(model.body);
   } else if (model.body.kind === "empty") {
