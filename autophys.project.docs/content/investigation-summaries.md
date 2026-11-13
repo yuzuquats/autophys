@@ -391,3 +391,47 @@ diff check and both build steps pass as described above. Before/after owner
 workspace and home checks retain their pre-existing policy findings.
 Production was not restarted: autophys.service remains PID 1747, active since
 2026-11-09 05:26:46 PST. No investigation, proposal or measurement was changed.
+
+
+## Oscillator and thermal Overview backfill — 2026-11-12
+
+The operator requested subagents to carry the research-note Overview into the
+other demo projects. Separate authors added
+[oscillator](../../html/routes/demo-overview-oscillator.md) and
+[thermal](../../html/routes/demo-overview-thermal.md) Markdown; an independent
+reviewer found no content issues against the recorded investigations and
+simulator settings. Each note explains the question, method, findings and
+limits for a lay reader, with one paired investigation insert summarizing
+the initial ambiguity and the informative follow-up test. Completion and
+held-out prediction remain distinct; fitted estimates are not uncertainty
+bounds. Oscillator validation covers free_neg, while thermal validation
+covers the short 5 W step; neither claims general hardware validation.
+
+The demo-only adapter loads an explicit per-project Markdown asset, caches
+successful reads and retries failed assets. Loaded documents survive folds
+and stream refreshes. Unregistered projects retain their recorded content.
+The registry includes jazz_performance_demo -> /demo-overview-jazz.md for
+the concurrent Jazz workstream, which owns that asset, its generator and
+its separate spec. Assets are requested only for projects in the snapshot;
+this registry entry can precede the Jazz workbook safely.
+
+Validation: the full frontend suite passed 160 tests before the Jazz registry
+entry; all three loader tests passed again with Jazz included. Frozen route
+and browser-test type checks and diff checks pass. The browser regression
+was generalized for any number of cards. Against current recorded data,
+both new documents passed real std-documentation parsing and card rendering,
+following-prose retention, initial collapsed details, focus/disclosure
+preservation across evidence updates, output-target dispatch and missing
+references (24 assertions including shared reconciliation checks). This is
+predeployment rendering, not verification of served oscillator/thermal pages.
+
+Activation coordination: this workstream will not restart dev independently.
+After the scoped backfill commit, the Jazz thread receives the shared adapter
+and ownership of the single combined dev activation once its workbook is
+ready. The activation must include desktop/mobile rendering and record-link
+checks for these two Overviews as well as Jazz, and record source/served
+matching. Production and source publication remain untouched. The current
+dev receipt above remains bd27ce9 until that coordinated activation.
+
+Owner workspace/home checks retain the pre-existing undeclared autophys
+workspace entry and home-policy findings; no new root entries were added.

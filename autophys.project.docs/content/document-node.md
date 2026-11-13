@@ -106,3 +106,15 @@ Production was not restarted or changed: autophys.service remains PID 1747,
 active since 2026-11-09, reporting 1d5d193 / version 0.1.4. No source push.
 Before/after workspace and home layout checks retain the existing undeclared
 autophys workspace entry and home-policy findings; these are outside this UI work.
+
+
+## Other demo documents — source ready, activation coordinated
+
+The demo-only adapter now maps battery, oscillator and thermal projects to
+separate Markdown assets. Oscillator and thermal use the same short-paper
+structure and plain-language investigation cards as battery. Jazz has a
+reserved map entry owned by its concurrent workbook workstream. Account
+workspaces retain their recorded documents. See
+[the backfill record](investigation-summaries.md#oscillator-and-thermal-overview-backfill--2026-11-12)
+for source validation and the coordinated dev activation boundary. These
+new pages are not yet served by the bd27ce9 release described above.
