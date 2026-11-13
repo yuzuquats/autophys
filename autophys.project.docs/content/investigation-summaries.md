@@ -1,6 +1,7 @@
 # Completed investigations should explain what they established and produced
 
-Status: revision 3, 2026-11-12. Implemented; dev deployment verification in progress.
+Status: revision 3, 2026-11-12. Implemented, verified and deployed at
+https://dev--autophys.lona.so.
 The current [investigation card mock](investigation-card.mock.html) shows the card
 in the project document and on its own. All results and outputs are illustrative.
 The [earlier summary mock](investigation-summary.mock.html) is retained for comparison.
@@ -172,3 +173,38 @@ Self-closing tags are not supported by its HTML block parser and swallowed
 following content in the first deployed check. The source now uses paired
 tags. Two additional browser assertions exercise the actual demo Markdown
 through std-documentation, verifying both inserts and the following narrative.
+
+## Investigation card dev receipt
+
+Current implementation: d85c9439011a8800485dc6d6ee07cb96de4dc871
+(Change-Id Iad54f277c50d4d1c94c0ef8e403c286d), above d7fcc4a
+(Ia6e15be955d34868aee334eb60ac4bc6). Source, native build and web bundle come
+from yuzuquats master. No source push.
+
+Release: ~/.local/share/tento/services/autophys-dev/d85c943-card-20261112.
+autophys-dev.service remains on 127.0.0.1:4796 with isolated dev books and
+server database. Its current symlink selects the release. The previous complete
+document release, 9a6ce3f-document-20261112, is retained for rollback; switch
+current to it and restart only autophys-dev.service.
+
+The public health endpoint reports d85c943 / version 0.1.5 and the service is
+active. The native executable was packed with the web payload; the service's
+existing explicit --web-root serves the matching external bundle (so health's
+web_id is null). No version bump was introduced by this work.
+
+Verified both cards, paired-tag rendering and following narrative in the deployed
+Overview. At 1280×800 and 390×844, all 12 output/open links navigate to the
+expected tree records. There is no page or card-content horizontal overflow.
+Computed std-card surface shadows are 0 2px 5px at 6% black and 0 8px 22px at
+7% black. Both card elements and the document stay mounted across a resize.
+The first card shows Complete · validated with recorded held-out χ²/N 1.04;
+the second shows Awaiting approval with R1 and C1 unresolved.
+
+The 156-test frontend suite and frozen entry-point check pass. Six focused
+browser assertions cover reconciliation/focus and parsing the actual Markdown.
+Native release and offline web builds pass. Host layout checks retain the same
+pre-existing workspace autophys and home-policy findings.
+
+Production was not restarted: autophys.service remains PID 1747, active since
+2026-11-09 05:26:46 PST. No workbook, proposal or experiment was changed during
+browser verification.

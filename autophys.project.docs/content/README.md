@@ -2,7 +2,7 @@
 
 The [project document design](document-node.md) is agent-maintained Markdown rendered with std-documentation. The [demo Markdown](../../html/routes/demo-overview.md) is wired into the battery demo’s Overview node; the preview is deployed at https://dev--autophys.lona.so.
 
-The [investigation card mocks](investigation-summaries.md) now use one compact card for result, evidence and outputs, with the explanation in the surrounding Markdown.
+The [investigation cards](investigation-summaries.md) are implemented with std-card and soft shadows inside std-documentation. The demo narrative surrounds cards derived from its recorded investigations, with links to their outputs.
 
 Current contributor setup and layout are in [CONTRIBUTING.md](../../CONTRIBUTING.md)
 and [docs/README.md](../../docs/README.md). The bounded OSS portability batch is

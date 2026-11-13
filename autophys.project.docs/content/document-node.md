@@ -1,6 +1,6 @@
 # A project document is Markdown rendered with std-documentation
 
-Status: revision 5, 2026-11-12. Implemented, verified and deployed for review at
+Status: revision 6, 2026-11-12. Implemented, verified and deployed for review at
 https://dev--autophys.lona.so. The demo is hardcoded; agent editing and document
 persistence are future work.
 
@@ -61,7 +61,16 @@ retention through stream updates and folds. The shared component owns all
 Markdown rendering. Host layout checks retain their pre-existing workspace and
 home-policy findings.
 
-## Dev preview receipt
+## Current investigation card preview
+
+The dev preview now includes registered investigation inserts using std-card
+with soft shadows. Markdown retains the narrative. The inserts derive their
+results and output links from recorded investigations; paired closing tags
+preserve the surrounding prose. Current deployed implementation is d85c943.
+See [the card implementation and deployment receipt](investigation-summaries.md)
+for validation, release and rollback details.
+
+## Original document preview receipt
 
 Deployed implementation: **9a6ce3f9befa781e0c955d42c05034b0a1dcf5fe**
 (Change-Id Ifd714977b42344bbaf4f841ef79a7124), above 8ca8258.
