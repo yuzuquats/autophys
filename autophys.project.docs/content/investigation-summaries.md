@@ -1,9 +1,10 @@
 # Completed investigations should explain what they established and produced
 
-Status: revision 4, 2026-11-12. Implemented, verified and deployed at
+Status: revision 7, 2026-11-12. Implemented, verified and deployed at
 https://dev--autophys.lona.so.
-The current [investigation card mock](investigation-card.mock.html) shows the card
-in the project document and on its own. All results and outputs are illustrative.
+The current [plain-language card mock](investigation-card-summary.mock.html)
+shows the implemented direction using recorded synthetic-cell results. Earlier
+concepts contain illustrative reorganizations.
 The [earlier summary mock](investigation-summary.mock.html) is retained for comparison.
 
 ## A compact card inside the narrative
@@ -232,7 +233,7 @@ assertions pass against the actual std-documentation renderer: four cover
 reconciliation/focus and two cover both inserts and the following narrative.
 Deployment and responsive checks follow in the receipt below.
 
-## Current research-note dev receipt
+## Research-note dev receipt — preceding deployment
 
 Deployed source: 08a3745404903126fb8a9719c2937036088f4e39
 (Change-Id Id406e67966bb4be0936d1e5e0c216d72), yuzuquats master.
@@ -359,3 +360,34 @@ Open investigation. Expanded details now take the full card width and the
 open link moves below them. Closed-card layout remains compact. This is a
 CSS-only refinement; browser/record behavior is unchanged. Final verification
 and deployment receipt follow below.
+
+## Current plain-language card dev receipt
+
+Deployed source: bd27ce9fec150f5a7dc54a7dad738b66df01b515
+(Change-Id I27dd82b75e0444f388d62a394d3a889c), above 450b62a
+(Ie351936f105f4e0db3ce33706cfc786a). Source, native release, offline web build
+and packed executable come from clean yuzuquats master. No source push or
+version bump. Public health reports bd27ce9 / version 0.1.5.
+
+Release: ~/.local/share/tento/services/autophys-dev/bd27ce9-plain-card-20261112.
+The current symlink selects it; autophys-dev.service is active on
+127.0.0.1:4796. The matching external web root remains explicit, so health's
+web_id is null. The pre-work 08a3745-research-note-20261112 release is retained
+for rollback by switching current and restarting only autophys-dev.service.
+
+Verified the completed and pending cards in the deployed Overview. At
+1280×800 and 390×844 the page, document, comparisons and technical sections
+have no horizontal overflow. Expanded details use the full card width
+(566px desktop, 288px mobile). Both std-card surfaces retain the requested
+soft shadows. All 12 navigation buttons reach their matching tree records
+at both widths, including the validation section selected within its
+investigation. The browser regression passes all 14 assertions on deployed
+derived data. The numeric parameter values preserve significant digits and
+unresolved parameters remain explicit. The served Markdown matches source:
+b3fbb8f68fab0cfe6c7fe6908c1267a0263283a7a36cb20f1c9b65eb4eeb0a8f.
+
+The frontend suite, targeted evidence/numeric tests, frozen type checks,
+diff check and both build steps pass as described above. Before/after owner
+workspace and home checks retain their pre-existing policy findings.
+Production was not restarted: autophys.service remains PID 1747, active since
+2026-11-09 05:26:46 PST. No investigation, proposal or measurement was changed.
