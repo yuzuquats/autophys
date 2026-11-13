@@ -18,6 +18,9 @@
 //! Project manifests use `event: display`, data `{project_id, digest, display}`,
 //! without an id: they leave the record cursor intact. Each connection sends
 //! the latest manifest, then changed digests (including external writers).
+//! Project overviews follow the same rules as `event: overview`, data
+//! `{project_id, seq, digest, author, created, markdown}`: the latest version
+//! on connect, then each change of digest.
 //!
 //! Records are always read from the workbooks, in `gseq` order per workbook.
 //! A write this server makes wakes every stream at once; records another
@@ -131,6 +134,8 @@ pub(crate) async fn stream(
         backlog: VecDeque::new(),
         displays: VecDeque::new(),
         display_digests: BTreeMap::new(),
+        overviews: VecDeque::new(),
+        overview_digests: BTreeMap::new(),
         dirty: true,
         quiet_since: Instant::now(),
         next_poll: Instant::now() + POLL,
@@ -162,6 +167,8 @@ struct Tail {
     backlog: VecDeque<(String, Logged)>,
     displays: VecDeque<(String, autophys::StoredDisplay)>,
     display_digests: BTreeMap<String, String>,
+    overviews: VecDeque<(String, autophys::StoredOverview)>,
+    overview_digests: BTreeMap<String, String>,
     /// Re-read the workbooks before waiting again.
     dirty: bool,
     quiet_since: Instant,
@@ -210,11 +217,25 @@ impl Tail {
                 });
                 return Some(Bytes::from(format!("event: display\ndata: {data}\n\n")));
             }
+            if let Some((pid, o)) = self.overviews.pop_front() {
+                if self.overview_digests.get(&pid) == Some(&o.digest) {
+                    continue;
+                }
+                self.overview_digests.insert(pid.clone(), o.digest.clone());
+                self.quiet_since = Instant::now();
+                // No id, as for display: the record resume cursor stays put.
+                let data = serde_json::json!({
+                    "project_id": pid, "seq": o.seq, "digest": o.digest, "author": o.author,
+                    "created": o.created, "markdown": o.markdown,
+                });
+                return Some(Bytes::from(format!("event: overview\ndata: {data}\n\n")));
+            }
             if self.dirty {
-                let (page, displays) = self.read().await.ok()?;
+                let (page, displays, overviews) = self.read().await.ok()?;
                 self.dirty = page.len() as i64 >= PAGE;
                 self.backlog.extend(page);
                 self.displays.extend(displays);
+                self.overviews.extend(overviews);
                 self.next_poll = Instant::now() + POLL;
                 continue;
             }
@@ -241,6 +262,7 @@ impl Tail {
     ) -> Result<(
         Vec<(String, Logged)>,
         Vec<(String, autophys::StoredDisplay)>,
+        Vec<(String, autophys::StoredOverview)>,
     )> {
         let scoped = self.scoped.clone();
         let client = self.api.client.clone();
@@ -252,16 +274,20 @@ impl Tail {
             };
             let mut out = Vec::new();
             let mut displays = Vec::new();
+            let mut overviews = Vec::new();
             for wb in wbs {
                 if let Some(display) = wb.display()? {
                     displays.push((wb.id().to_string(), display));
+                }
+                if let Some(o) = wb.overview()? {
+                    overviews.push((wb.id().to_string(), o));
                 }
                 let after = cursors.get(wb.id()).copied().unwrap_or(0);
                 for l in wb.records_after(after, PAGE)? {
                     out.push((wb.id().to_string(), l));
                 }
             }
-            Ok((out, displays))
+            Ok((out, displays, overviews))
         })
         .await
     }

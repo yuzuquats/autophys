@@ -545,3 +545,42 @@ fn limited_page_preserves_undelivered_stream_backlog() {
     assert_eq!(next.record.seq, 1);
     assert_eq!(next.gseq, page[0].gseq + 1);
 }
+
+#[test]
+fn overviews_write_read_and_list_versions_over_http() {
+    let d = Daemon::start();
+    let (wb, ver) = d.workbook("overview");
+    let (inv, _) = wb
+        .create_investigation(json!({"config_version": ver}), None)
+        .unwrap();
+    assert_eq!(wb.overview().unwrap(), None);
+    assert!(wb.overview_versions().unwrap().is_empty());
+    let md = format!(
+        "# Remote \u{e9}\n\n<ap-investigation investigation=\"{}\" hue=\"1\"></ap-investigation>\n",
+        inv.id
+    );
+    let (first, changed, warnings) = wb.put_overview(&md, "rust").unwrap();
+    assert!(changed && first.markdown == md && first.seq == 1);
+    assert_eq!(warnings.len(), 1);
+    assert_eq!(warnings[0].code, "unknown_attribute");
+    assert_eq!(warnings[0].attribute.as_deref(), Some("hue"));
+    let (same, changed, _) = wb.put_overview(&md, "other").unwrap();
+    assert!(!changed && same == first);
+    let (second, changed, _) = wb.put_overview("# Two\n", "rust").unwrap();
+    assert!(changed && second.seq == 2);
+    assert_eq!(wb.overview().unwrap(), Some(second.clone()));
+    assert_eq!(wb.overview_versions().unwrap(), vec![first, second.clone()]);
+    assert_eq!(wb.snapshot().unwrap().overview, Some(second));
+    // The SDK refuses what OV-3 refuses, as locally.
+    assert!(matches!(
+        wb.put_overview(" \n", "rust").unwrap_err(),
+        Error::Invalid { .. }
+    ));
+    let file = d.dir.path().join("collection/overview.ap-workbook");
+    let local = autophys::connect(Some(file.to_str().unwrap()))
+        .unwrap()
+        .workbooks()
+        .unwrap()
+        .remove(0);
+    assert_eq!(local.overview_versions().unwrap().len(), 2);
+}

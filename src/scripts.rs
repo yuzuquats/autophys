@@ -29,6 +29,7 @@ pub fn scripts() -> Scripts<()> {
         .add_subcommand("users", users_commands())
         .add_subcommand("db", db_commands())
         .add_subcommand("train", train_commands())
+        .add_subcommand("overview", overview_commands())
         .add_command(projects)
         .add_command(investigations)
         .add_command(records)
@@ -46,6 +47,13 @@ fn pair_commands() -> Scripts<()> {
         .add_command(pair_approve)
         .add_command(pair_deny)
 }
+fn overview_commands() -> Scripts<()> {
+    Scripts::new(())
+        .without_usage_on_failure()
+        .add_command(overview_set)
+        .add_command(overview_show)
+}
+
 fn keys_commands() -> Scripts<()> {
     Scripts::new(())
         .without_usage_on_failure()
@@ -286,6 +294,7 @@ fn description(root: &Scripts<()>) -> Value {
         ("users", users_commands()),
         ("db", db_commands()),
         ("train", train_commands()),
+        ("overview", overview_commands()),
     ] {
         doc["commands"][name] = tento_sh::command_index_value(&group);
     }
@@ -610,6 +619,89 @@ async fn reject(_: (), args: RejectArgs) -> tento_sh::Result<Value> {
     .map_err(anyhow::Error::from)?)
 }
 
+#[derive(CommandArg, Deserialize, Clone, Debug)]
+#[serde(deny_unknown_fields)]
+pub struct OverviewSetArgs {
+    /// Project name or id.
+    #[arg(positional)]
+    project: String,
+    /// Markdown file to store as the latest overview; `-` reads stdin.
+    #[arg(positional)]
+    file: String,
+    target: Option<String>,
+    #[arg(default = "operator")]
+    author: String,
+}
+
+#[derive(CommandArg, Deserialize, Clone, Debug)]
+#[serde(deny_unknown_fields)]
+pub struct OverviewShowArgs {
+    /// Project name or id.
+    #[arg(positional)]
+    project: String,
+    target: Option<String>,
+}
+
+/// An existing project's workbook, by name or id.
+fn project_workbook(client: &autophys::Client, project: &str) -> anyhow::Result<autophys::Workbook> {
+    let id = client
+        .projects()?
+        .into_iter()
+        .find(|p| p.name == project || p.id == project)
+        .ok_or_else(|| anyhow::anyhow!("project not found: {project}"))?
+        .id;
+    Ok(client.project_by_id(&id)?)
+}
+
+#[command(
+    name = "set",
+    description = "Store FILE (Markdown, `-` for stdin) as PROJECT's latest overview; --target DIR|FILE|URL, --author NAME, --json. Prints the version, whether it changed and any warnings"
+)]
+async fn overview_set(_: (), args: OverviewSetArgs) -> tento_sh::Result<Value> {
+    let bytes = if args.file == "-" {
+        let mut buf = Vec::new();
+        std::io::Read::read_to_end(&mut std::io::stdin(), &mut buf).map_err(anyhow::Error::from)?;
+        buf
+    } else {
+        std::fs::read(&args.file).map_err(|e| anyhow::anyhow!("reading {}: {e}", args.file))?
+    };
+    let markdown = String::from_utf8(bytes).map_err(|_| anyhow::anyhow!("{} is not UTF-8", args.file))?;
+    let client = autophys::connect(args.target.as_deref()).map_err(anyhow::Error::from)?;
+    let wb = project_workbook(&client, &args.project)?;
+    let (stored, changed, warnings) =
+        wb.put_overview(&markdown, &args.author).map_err(anyhow::Error::from)?;
+    if !JSON_OUTPUT.load(std::sync::atomic::Ordering::Relaxed) {
+        for w in &warnings {
+            eprintln!("warning: {}", w.message);
+        }
+    }
+    Ok(json!({
+        "project_id": wb.id(),
+        "overview": {"seq": stored.seq, "digest": stored.digest, "author": stored.author, "created": stored.created},
+        "changed": changed,
+        "warnings": warnings,
+    }))
+}
+
+#[command(
+    name = "show",
+    description = "Print PROJECT's latest overview Markdown (nothing before the first write); --target DIR|FILE|URL, --json for {project_id, overview} (null before the first write)"
+)]
+async fn overview_show(_: (), args: OverviewShowArgs) -> tento_sh::Result<Value> {
+    let client = autophys::connect(args.target.as_deref()).map_err(anyhow::Error::from)?;
+    let wb = project_workbook(&client, &args.project)?;
+    let latest = wb.overview().map_err(anyhow::Error::from)?;
+    if JSON_OUTPUT.load(std::sync::atomic::Ordering::Relaxed) {
+        // An object even before the first write: a bare null prints nothing.
+        return Ok(json!({"project_id": wb.id(), "overview": latest}));
+    }
+    if let Some(o) = latest {
+        // Exactly the stored bytes: the CLI's value formatter would quote them.
+        print!("{}", o.markdown);
+    }
+    Ok(Value::Null)
+}
+
 #[command(
     name = "verify",
     description = "Verify workbook chains and projections; --target DIR|FILE|URL, --project NAME, --json"
@@ -686,14 +778,17 @@ pub async fn run(mut argv: Vec<String>, out: &mut impl Write) -> u8 {
     }
     let group = matches!(
         argv.get(1).map(String::as_str),
-        Some("pair" | "keys" | "users" | "db" | "train")
+        Some("pair" | "keys" | "users" | "db" | "train" | "overview")
     );
     // The command the `--help` hint names: `records`, or `train dataset`.
     // Flags are skipped, so `--json records --bogus` still names `records`.
     let mut words = argv.iter().skip(1).filter(|word| !word.starts_with('-'));
     crate::cli_error::set_command(match (words.next(), words.next()) {
         (Some(name), Some(sub))
-            if matches!(name.as_str(), "pair" | "keys" | "users" | "db" | "train") =>
+            if matches!(
+                name.as_str(),
+                "pair" | "keys" | "users" | "db" | "train" | "overview"
+            ) =>
         {
             format!("{name} {sub}")
         }

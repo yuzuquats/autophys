@@ -217,6 +217,22 @@ Reading an overview (`overview()`, `overview_versions()`, the snapshot) never
 creates the table or changes the format; formats 1 and 2 read as no overview.
 `verify` and the projection rebuild ignore the table, as they ignore display.
 
+Over HTTP (OV-5), `PUT /projects/{pid}/overview` takes
+`{"markdown", "author"}` and answers 201 (new version) or 200 (unchanged
+digest) with `{project_id, overview: {seq, digest, author, created},
+changed, warnings}`; refusals use the codes above (422 `invalid_payload`,
+413 `payload_too_large`). `GET /projects/{pid}/overview/versions` returns
+`{versions: [{seq, digest, markdown, author, created}]}`, oldest first.
+`/workspace.projects[]` carries `overview: <Markdown|null>` and
+`overview_meta: {seq, digest, author, created}|null`. `/stream` sends
+`event: overview` with `{project_id, seq, digest, author, created, markdown}`
+and no event id, on the same terms as `event: display`: the latest on
+connect, then on each change of digest, without moving the record cursor.
+The CLI writes and reads through the SDK: `autophys overview set PROJECT
+FILE.md [--author NAME]` (default author `operator`) and `autophys overview
+show PROJECT [--json]`, both with `--target DIR|FILE|URL`. An SDK talking to
+a daemon without these routes gets an "upgrade the autophys daemon" error.
+
 ## Payload validation
 
 | Kind | Rule |

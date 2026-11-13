@@ -55,6 +55,7 @@ fn help_json_needs_no_env_credentials_or_database() {
         "approve",
         "reject",
         "verify",
+        "overview",
     ] {
         assert!(
             text.contains(&format!("\"{command}\"")),
@@ -294,4 +295,42 @@ fn failures_are_one_stderr_line_with_a_help_hint_and_no_stdout() {
         );
         assert_eq!(String::from_utf8_lossy(&output.stderr), expected, "{args:?}");
     }
+}
+
+#[test]
+fn overview_set_and_show_write_and_read_the_latest_version() {
+    let home = tempfile::tempdir().unwrap();
+    let client = autophys::connect(Some(home.path().to_str().unwrap())).unwrap();
+    let wb = client.ensure_project("thermal").unwrap().0;
+    let file = home.path().join("overview.md");
+    let md = "# Thermal \u{e9}\n\n<ap-investigation investigation=\"inv_gone\"></ap-investigation>\n";
+    std::fs::write(&file, md).unwrap();
+    let path = file.to_str().unwrap();
+    // Before the first write: nothing printed, null as JSON, format 1 kept.
+    let shown = run(home.path(), &["overview", "show", "thermal"]);
+    assert!(shown.status.success() && shown.stdout.is_empty());
+    assert_eq!(json_output(home.path(), &["overview", "show", "thermal", "--json"]), json!({"project_id": wb.id(), "overview": null}));
+    let set = json_output(home.path(), &["overview", "set", "thermal", path, "--author", "ada", "--json"]);
+    assert_eq!((&set["changed"], &set["overview"]["seq"], &set["overview"]["author"]), (&json!(true), &json!(1), &json!("ada")));
+    assert_eq!(set["warnings"][0]["investigation"], "inv_gone");
+    let again = json_output(home.path(), &["overview", "set", wb.id(), path, "--json"]);
+    assert_eq!(again["changed"], false);
+    let plain = run(home.path(), &["overview", "set", "thermal", path]);
+    assert!(plain.status.success());
+    assert!(String::from_utf8_lossy(&plain.stderr).contains("warning: <ap-investigation> names \"inv_gone\""));
+    let shown = run(home.path(), &["overview", "show", "thermal"]);
+    assert_eq!(String::from_utf8(shown.stdout).unwrap(), md, "exactly the stored Markdown");
+    let latest = json_output(home.path(), &["overview", "show", "thermal", "--json"])["overview"].take();
+    assert_eq!((&latest["markdown"], &latest["author"]), (&json!(md), &json!("ada")));
+    assert_eq!(wb.overview_versions().unwrap().len(), 1);
+    // The default author, and the refusals and lookups that fail.
+    std::fs::write(&file, "# Two\n").unwrap();
+    assert_eq!(json_output(home.path(), &["overview", "set", "thermal", path, "--json"])["overview"]["author"], "operator");
+    std::fs::write(&file, " \n").unwrap();
+    assert_eq!(run(home.path(), &["overview", "set", "thermal", path]).status.code(), Some(1));
+    std::fs::write(&file, b"\xff").unwrap();
+    assert_eq!(run(home.path(), &["overview", "set", "thermal", path]).status.code(), Some(1));
+    assert_eq!(run(home.path(), &["overview", "show", "nope"]).status.code(), Some(1));
+    assert_eq!(run(home.path(), &["overview"]).status.code(), Some(2));
+    assert_eq!(wb.overview_versions().unwrap().len(), 2);
 }

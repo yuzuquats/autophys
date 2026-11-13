@@ -22,6 +22,7 @@
 
 pub mod auth;
 mod display;
+mod overview;
 mod sse;
 
 use std::collections::{BTreeMap, HashMap};
@@ -207,6 +208,11 @@ pub fn scope(api: Api) -> actix_web::Scope {
             web::put().to(put_config_version),
         )
         .route("/projects/{pid}/display", web::put().to(display::put))
+        .route("/projects/{pid}/overview", web::put().to(overview::put))
+        .route(
+            "/projects/{pid}/overview/versions",
+            web::get().to(overview::versions),
+        )
         .route("/projects/{pid}/blobs/{sha256}", web::put().to(put_blob))
         .route("/projects/{pid}/blobs/{sha256}", web::get().to(get_blob))
         .route("/investigations", web::get().to(investigations))
@@ -451,6 +457,9 @@ async fn workspace(
         let mut project = serde_json::to_value(&s.project)
             .map_err(|e| ApiError::Internal(format!("project JSON: {e}")))?;
         project["display"] = s.display.map(|d| d.body).unwrap_or(Value::Null);
+        // The Markdown the browser renders, and its version without the body.
+        project["overview_meta"] = s.overview.as_ref().map(overview::meta).unwrap_or(Value::Null);
+        project["overview"] = s.overview.map(|o| Value::String(o.markdown)).unwrap_or(Value::Null);
         projects.push(project);
         invs.extend(s.investigations);
         props.extend(s.proposals);

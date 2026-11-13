@@ -218,3 +218,23 @@ def test_A5_real_daemon_blob_route_when_available(daemon):
             pytest.skip("installed daemon does not expose project blob PUT yet")
         raise
     assert http.get_blob(key) == (b"playbook bytes", "text/markdown")
+
+
+def test_overviews_cross_the_rust_daemon_and_a_local_writer(daemon):
+    md = '# Daemon é\n\n<ap-investigation investigation="inv_gone"></ap-investigation>\n'
+    with WorkbookStore(daemon["coll"] / "p.ap-workbook") as wb:
+        inv = _pinned(wb)
+        pid = wb.ensure_project("p")
+        http = HttpStore(daemon["url"], daemon["key"], key_id=daemon["key_id"])
+        assert http.overview(pid) is None and http.overview_versions(pid) == []
+        stored, changed, warnings = http.put_overview(pid, md, "rust")
+        assert changed and stored["markdown"] == md
+        assert [(w["code"], w["investigation"]) for w in warnings] == [("unknown_investigation", "inv_gone")]
+        assert wb.overview(pid) == stored, "the daemon's write is the local reader's"
+        assert http.put_overview(pid, md, "someone")[:2] == (stored, False)
+        local = f'# Local\n\n<ap-investigation investigation="{inv}"></ap-investigation>\n'
+        mine, changed, warnings = wb.put_overview(pid, local, "python")
+        assert changed and warnings == []
+        assert http.overview(pid) == mine
+        assert http.overview_versions(pid) == [stored, mine]
+    assert all(r["report"]["ok"] for r in _rust_verify(daemon))

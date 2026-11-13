@@ -63,15 +63,21 @@ struct InsertJson {
 }
 
 /// The shared insert list; Python's copy is pinned byte-equal to this file.
-pub(crate) const INSERTS_JSON: &str = include_str!("../../../../html/ui/investigation-inserts.json");
+pub(crate) const INSERTS_JSON: &str =
+    include_str!("../../../../html/ui/investigation-inserts.json");
 
 fn inserts() -> &'static [InsertSpec] {
     static SPECS: OnceLock<Vec<InsertSpec>> = OnceLock::new();
     SPECS.get_or_init(|| {
-        let file: InsertFile = serde_json::from_str(INSERTS_JSON).expect("investigation-inserts.json");
+        let file: InsertFile =
+            serde_json::from_str(INSERTS_JSON).expect("investigation-inserts.json");
         file.inserts
             .into_iter()
-            .map(|i| InsertSpec { tag: i.tag.to_ascii_lowercase(), reference: i.reference, attributes: i.attributes })
+            .map(|i| InsertSpec {
+                tag: i.tag.to_ascii_lowercase(),
+                reference: i.reference,
+                attributes: i.attributes,
+            })
             .collect()
     })
 }
@@ -86,7 +92,10 @@ pub(crate) fn check_write(markdown: &str, author: &str) -> Result<()> {
         return Err(Error::invalid("markdown", "required non-empty Markdown"));
     }
     if author.trim().is_empty() || author.chars().count() > MAX_AUTHOR_CHARS {
-        return Err(Error::invalid("author", "required string of 1 to 200 characters"));
+        return Err(Error::invalid(
+            "author",
+            "required string of 1 to 200 characters",
+        ));
     }
     Ok(())
 }
@@ -101,19 +110,30 @@ pub fn check_overview<S: AsRef<str>>(markdown: &str, known: &[S]) -> Vec<Overvie
     let mut out = Vec::new();
     for (spec, attrs) in scan(markdown) {
         for (name, _) in &attrs {
-            if !spec.attributes.iter().any(|a| a == name) && seen.insert(("attribute", name.clone())) {
+            if !spec.attributes.iter().any(|a| a == name)
+                && seen.insert(("attribute", name.clone()))
+            {
                 out.push(OverviewWarning {
                     code: "unknown_attribute".into(),
-                    message: format!("<{}> has an unknown attribute \"{name}\"; the viewer ignores it", spec.tag),
+                    message: format!(
+                        "<{}> has an unknown attribute \"{name}\"; the viewer ignores it",
+                        spec.tag
+                    ),
                     investigation: None,
                     attribute: Some(name.clone()),
                 });
             }
         }
-        let id = attrs.iter().find(|(n, _)| *n == spec.reference).map_or("", |(_, v)| v.as_str());
+        let id = attrs
+            .iter()
+            .find(|(n, _)| *n == spec.reference)
+            .map_or("", |(_, v)| v.as_str());
         if !known.contains(id) && seen.insert(("investigation", id.to_string())) {
             let message = if id.is_empty() {
-                format!("<{}> names no investigation; the viewer shows \"Investigation unavailable\"", spec.tag)
+                format!(
+                    "<{}> names no investigation; the viewer shows \"Investigation unavailable\"",
+                    spec.tag
+                )
             } else {
                 format!(
                     "<{}> names \"{id}\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
@@ -138,14 +158,19 @@ fn scan(markdown: &str) -> Vec<(&'static InsertSpec, Vec<(String, String)>)> {
     let mut fence: Option<(u8, usize)> = None;
     let mut start = 0;
     while start < markdown.len() {
-        let end = markdown[start..].find('\n').map_or(markdown.len(), |i| start + i);
-        let line = markdown[start..end].strip_suffix('\r').unwrap_or(&markdown[start..end]);
+        let end = markdown[start..]
+            .find('\n')
+            .map_or(markdown.len(), |i| start + i);
+        let line = markdown[start..end]
+            .strip_suffix('\r')
+            .unwrap_or(&markdown[start..end]);
         let indent = line.bytes().take_while(|&b| b == b' ').count();
         let rest = &line[indent..];
         let run = |c: u8| rest.bytes().take_while(|&b| b == c).count();
         match fence {
             Some((c, n)) => {
-                if indent <= 3 && run(c) >= n && rest[run(c)..].trim_matches([' ', '\t']).is_empty() {
+                if indent <= 3 && run(c) >= n && rest[run(c)..].trim_matches([' ', '\t']).is_empty()
+                {
                     fence = None;
                 }
             }
@@ -180,7 +205,8 @@ fn insert_at(text: &str) -> Option<(&'static InsertSpec, Vec<(String, String)>)>
         let n = s.tag.len() + 1;
         b.len() >= n
             && b[1..n].eq_ignore_ascii_case(s.tag.as_bytes())
-            && b.get(n).is_none_or(|&c| is_space(c) || c == b'/' || c == b'>')
+            && b.get(n)
+                .is_none_or(|&c| is_space(c) || c == b'/' || c == b'>')
     })?;
     let mut i = spec.tag.len() + 1;
     let mut attrs: Vec<(String, String)> = Vec::new();
@@ -244,7 +270,9 @@ fn decode(value: &str) -> String {
     while let Some(at) = rest.find('&') {
         out.push_str(&rest[..at]);
         rest = &rest[at..];
-        let Some(semi) = rest[1..].find(';').map(|i| i + 1) else { break };
+        let Some(semi) = rest[1..].find(';').map(|i| i + 1) else {
+            break;
+        };
         let entity = &rest[1..semi];
         let ch = match entity {
             "amp" => Some('&'),
@@ -255,8 +283,12 @@ fn decode(value: &str) -> String {
             _ => entity
                 .strip_prefix('#')
                 .and_then(|n| match n.strip_prefix(['x', 'X']) {
-                    Some(hex) if !hex.is_empty() && hex.bytes().all(|c| c.is_ascii_hexdigit()) => u32::from_str_radix(hex, 16).ok(),
-                    None if !n.is_empty() && n.bytes().all(|c| c.is_ascii_digit()) => n.parse().ok(),
+                    Some(hex) if !hex.is_empty() && hex.bytes().all(|c| c.is_ascii_hexdigit()) => {
+                        u32::from_str_radix(hex, 16).ok()
+                    }
+                    None if !n.is_empty() && n.bytes().all(|c| c.is_ascii_digit()) => {
+                        n.parse().ok()
+                    }
                     _ => None,
                 })
                 .and_then(char::from_u32),
@@ -294,8 +326,15 @@ impl Workbook {
         let digest = canonical::sha256_hex([markdown.as_bytes()]);
         let mut conn = self.conn()?;
         let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        schema::upgrade(&tx, &self.path().display().to_string(), schema::OVERVIEW_VERSION)?;
-        let ids: Vec<String> = projections::investigations(&tx)?.into_iter().map(|i| i.id).collect();
+        schema::upgrade(
+            &tx,
+            &self.path().display().to_string(),
+            schema::OVERVIEW_VERSION,
+        )?;
+        let ids: Vec<String> = projections::investigations(&tx)?
+            .into_iter()
+            .map(|i| i.id)
+            .collect();
         let warnings = check_overview(markdown, &ids);
         if let Some(old) = latest(&tx, self.id())? {
             if old.digest == digest {
@@ -311,7 +350,13 @@ impl Workbook {
         let seq = tx.last_insert_rowid();
         tx.commit()?;
         Ok((
-            StoredOverview { seq, digest, markdown: markdown.to_string(), author: author.to_string(), created },
+            StoredOverview {
+                seq,
+                digest,
+                markdown: markdown.to_string(),
+                author: author.to_string(),
+                created,
+            },
             true,
             warnings,
         ))
@@ -352,7 +397,13 @@ fn table_exists(conn: &Connection) -> Result<bool> {
 }
 
 fn row(r: &rusqlite::Row<'_>) -> rusqlite::Result<StoredOverview> {
-    Ok(StoredOverview { seq: r.get(0)?, digest: r.get(1)?, markdown: r.get(2)?, author: r.get(3)?, created: r.get(4)? })
+    Ok(StoredOverview {
+        seq: r.get(0)?,
+        digest: r.get(1)?,
+        markdown: r.get(2)?,
+        author: r.get(3)?,
+        created: r.get(4)?,
+    })
 }
 
 /// The highest-`seq` version, or None (also without the table).
