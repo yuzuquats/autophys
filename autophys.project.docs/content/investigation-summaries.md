@@ -165,3 +165,10 @@ The frozen entry-point type check passes. Four browser regression assertions
 verify document/insert retention and focus through evidence updates, updated
 evidence delivery and remounting when Markdown changes. Deployment and final
 render checks follow in the receipt below.
+
+The renderer requires paired tags in authored Markdown, for example
+`<ap-investigation investigation="inv_c51194ac2a68ef19"></ap-investigation>`.
+Self-closing tags are not supported by its HTML block parser and swallowed
+following content in the first deployed check. The source now uses paired
+tags. Two additional browser assertions exercise the actual demo Markdown
+through std-documentation, verifying both inserts and the following narrative.

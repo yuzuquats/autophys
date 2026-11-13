@@ -20,3 +20,20 @@ export function run(): string[] {
     return checks;
   } finally { host.remove(); }
 }
+
+/** Exercise the real renderer with the demo Markdown, including prose after both inserts. */
+export async function runInserts(DocumentationCtor: { make(): import("@tento-ui/components/documentation/documentation").Documentation }, markdown: string): Promise<string[]> {
+  const host = document.createElement("div"), doc = DocumentationCtor.make(), seen: string[] = [];
+  host.style.cssText = "position:fixed;left:-10000px;width:600px"; host.append(doc); document.body.append(host);
+  try {
+    await doc.bind({ markdown, inserts: [{ id: "ap_investigation", componentName: "ap-investigation", attributeKeys: ["investigation"],
+      nodeView: node => { const dom = document.createElement("span"); dom.textContent = String(node.attrs.investigation); seen.push(dom.textContent); return { dom }; },
+    }] });
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const all = (root: ParentNode): Element[] => [...root.querySelectorAll("*")].flatMap(e => [e, ...(e.shadowRoot ? all(e.shadowRoot) : [])]);
+    const content = all(host).find(e => e.classList.contains("ProseMirror"))?.textContent ?? "";
+    if (seen.length !== 2 || new Set(seen).size !== 2) throw Error("Both investigation references must render");
+    if (!content.includes("Work still awaiting approval") || !content.includes("What remains open") || !content.endsWith("diagnostic evidence.")) throw Error("Inserts must preserve the following Markdown");
+    return ["both investigation inserts render", "following narrative and limitations remain visible"];
+  } finally { host.remove(); }
+}

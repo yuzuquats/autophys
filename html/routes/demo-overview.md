@@ -11,7 +11,7 @@ while leaving R1 and C1 hard to distinguish. After a person approved a pulse
 ladder, the new measurements separated those effects. The final model also
 passed a held-out prediction check.
 
-<ap-investigation investigation="inv_c51194ac2a68ef19" />
+<ap-investigation investigation="inv_c51194ac2a68ef19"></ap-investigation>
 
 The card links to the recorded fits, measurements, proposal and validation.
 Both the initial pulse and the pulse ladder belong to this one investigation.
@@ -22,7 +22,7 @@ The second investigation is a separate run from the same starting pulse.
 Its pulse ladder proposal remains pending. A good fit to the initial curve
 does not yet establish R1 and C1.
 
-<ap-investigation investigation="inv_1b63c1cbdd6c12bd" />
+<ap-investigation investigation="inv_1b63c1cbdd6c12bd"></ap-investigation>
 
 ## What remains open
 
