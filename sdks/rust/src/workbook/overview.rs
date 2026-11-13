@@ -4,19 +4,22 @@
 //! ignore it, as they ignore display.
 //!
 //! Validation is advisory (OV-3): a write is refused only for an empty body,
-//! a body over [`MAX_OVERVIEW_BYTES`] or a missing author. Inserts that name
-//! an investigation the workbook does not hold, insert attributes the viewer
-//! does not know, and Markdown the viewer will not render as written (OV-9)
-//! come back as [`OverviewWarning`]s. The insert tags and their attribute
-//! keys are read from `html/ui/investigation-inserts.json`, the list the
-//! browser's document view registers. Where a card renders is decided by
-//! [`blocks`], a port of the viewer's block parser; Python's
-//! `autophys.overview` has the same rules and
-//! `tests/conformance/overview/cases.json` pins both.
+//! a body over [`MAX_OVERVIEW_BYTES`] or a missing author. Everything else
+//! comes back as [`OverviewWarning`]s from a canonical-form lint (OV-13), not
+//! from a Markdown parser. An insert is accepted silently only when it is
+//! written alone on one line at column 0, after a blank line or at the start
+//! of the document, as `<ap-investigation …></ap-investigation>`, outside
+//! fenced and indented code. Every other line that mentions the insert tag
+//! outside code, and every line that may start an HTML block, gets a warning.
+//! The lint over-warns on purpose: a document with no warnings renders one
+//! card per canonical insert line and hides nothing, which
+//! `html/routes/overview-vectors.deno.test.ts` holds against the bundled
+//! viewer. Canonical inserts are also checked for investigations the workbook
+//! does not hold and attribute keys the viewer does not know, read from
+//! `html/ui/investigation-inserts.json`. Python's `autophys.overview` has the
+//! same rules and `tests/conformance/overview/cases.json` pins both.
 use std::collections::BTreeSet;
 use std::sync::OnceLock;
-
-use super::overview_blocks::{self as blocks, Found, js_trim};
 
 use super::*;
 
@@ -48,15 +51,16 @@ pub struct OverviewHead {
 /// An advisory finding about an overview write; the write still happened.
 /// `code` is one of:
 ///
+/// - `noncanonical_insert` (with `line` and `reason`): a line that mentions
+///   an insert tag but is not a canonical insert, so the viewer may show no
+///   card for it or hide text;
+/// - `html_block` (with `line`): a line that may start an HTML block, which
+///   stops the viewer displaying the whole overview;
 /// - `unknown_investigation` (with `investigation`, empty when the insert
-///   names none): a card the viewer shows as "Investigation unavailable";
-/// - `unknown_attribute` (with `attribute`): an attribute the viewer ignores;
-/// - `insert_in_paragraph` (with `line`): an insert line that continues the
-///   text above it, so the viewer renders no card;
-/// - `unclosed_insert` (with `line`): a card whose closing tag comes lines
-///   later or never, so the viewer hides the lines in between;
-/// - `html_block` (with `line`): an HTML block, which stops the viewer
-///   displaying the whole overview.
+///   names none): a canonical insert the viewer shows as "Investigation
+///   unavailable";
+/// - `unknown_attribute` (with `attribute`): an attribute of a canonical
+///   insert that the viewer ignores.
 ///
 /// `line` is 1-based.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -69,18 +73,8 @@ pub struct OverviewWarning {
     pub attribute: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub line: Option<usize>,
-}
-
-impl OverviewWarning {
-    fn at_line(code: &str, message: String, line: usize) -> Self {
-        OverviewWarning {
-            code: code.into(),
-            message,
-            investigation: None,
-            attribute: None,
-            line: Some(line),
-        }
-    }
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
 }
 
 struct InsertSpec {
@@ -139,75 +133,449 @@ pub(crate) fn check_write(markdown: &str, author: &str) -> Result<()> {
 }
 
 /// The advisory warnings for `markdown` in a workbook holding the
-/// investigations `known` (OV-3, OV-9), in document order, each attribute and
-/// investigation finding once. Cards are found where the viewer renders them.
+/// investigations `known` (OV-3, OV-13), in document order. Lines inside
+/// fenced or indented code are skipped; attribute and investigation findings
+/// come once each.
 pub fn check_overview<S: AsRef<str>>(markdown: &str, known: &[S]) -> Vec<OverviewWarning> {
+    lint(markdown, known).0
+}
+
+/// [`check_overview`]'s warnings and the 1-based lines of the canonical
+/// inserts. When there are no warnings, the viewer shows exactly one card for
+/// each of those lines and nothing else.
+pub(crate) fn lint<S: AsRef<str>>(
+    markdown: &str,
+    known: &[S],
+) -> (Vec<OverviewWarning>, Vec<usize>) {
     let known: BTreeSet<&str> = known.iter().map(AsRef::as_ref).collect();
-    let specs = inserts();
-    let tags: Vec<&str> = specs.iter().map(|s| s.tag.as_str()).collect();
-    let spec_of = |tag: &str| specs.iter().find(|s| s.tag == tag);
     let mut seen = BTreeSet::new();
     let mut out = Vec::new();
-    for found in blocks::blocks(markdown, &tags) {
-        match found {
-            Found::HtmlBlock { line } => {
-                let line = line + 1;
-                out.push(OverviewWarning::at_line(
-                    "html_block",
-                    format!(
-                        "line {line} starts an HTML block, which the viewer cannot display; it shows \"The document could not be displayed\" instead of the overview"
-                    ),
-                    line,
-                ));
-            }
-            Found::Continued { tag, line } => {
-                // The viewer's built-in insert is not ours to place.
-                if spec_of(&tag).is_some() {
-                    let line = line + 1;
-                    out.push(OverviewWarning::at_line(
-                        "insert_in_paragraph",
-                        format!(
-                            "<{tag}> on line {line} continues the text above it, so the viewer shows no card; put a blank line before it"
-                        ),
-                        line,
-                    ));
-                }
-            }
-            Found::Card {
-                tag,
-                line,
-                content,
-                end,
-                closed,
-            } => {
-                let line = line + 1;
-                if let Some(spec) = spec_of(&tag) {
-                    let attrs =
-                        element_attributes(&content, &tag.to_ascii_lowercase()).unwrap_or_default();
+    let mut cards = Vec::new();
+    let lines = lines(markdown);
+    let mut states = BTreeSet::from([Reading::start()]);
+    let mut lost = false;
+    for (index, &line) in lines.iter().enumerate() {
+        let number = index + 1;
+        let readings: Vec<(Reading, bool)> = if lost {
+            Vec::new()
+        } else {
+            states.iter().flat_map(|s| step(s, line)).collect()
+        };
+        if !readings.is_empty() && readings.iter().all(|(_, code)| *code) {
+            states = readings.into_iter().map(|(s, _)| s).collect();
+            continue;
+        }
+        let open_code = lost || readings.iter().any(|(_, code)| *code);
+        let lower = line.to_ascii_lowercase();
+        let mention = inserts().iter().find(|s| {
+            lower.contains(&format!("<{}", s.tag)) || lower.contains(&format!("</{}", s.tag))
+        });
+        let mut canonical = false;
+        if let Some(spec) = mention {
+            let tag = &spec.tag;
+            let prev_blank = index == 0 || blank(lines[index - 1]);
+            let next_blank = lines.get(index + 1).is_none_or(|l| blank(l));
+            match canonical_insert(line, &lower, tag, prev_blank, next_blank, open_code) {
+                Ok(attrs) => {
+                    canonical = true;
+                    cards.push(number);
                     card_warnings(spec, &attrs, &known, &mut seen, &mut out);
                 }
-                if hides_lines(&content, &tag) {
-                    let until = if closed {
-                        format!("is not closed until line {end}")
-                    } else {
-                        format!("is never closed with </{tag}>")
-                    };
-                    out.push(OverviewWarning::at_line(
-                        "unclosed_insert",
-                        format!(
-                            "<{tag}> on line {line} {until}, so the viewer hides lines {} to {end}",
-                            line + 1
-                        ),
-                        line,
-                    ));
-                }
+                Err(reason) => out.push(OverviewWarning {
+                    code: "noncanonical_insert".into(),
+                    message: format!(
+                        "<{tag}> on line {number} is not in canonical form ({reason}), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <{tag} ...></{tag}>"
+                    ),
+                    investigation: None,
+                    attribute: None,
+                    line: Some(number),
+                    reason: Some(reason),
+                }),
             }
+        } else if html_start(line) {
+            out.push(OverviewWarning {
+                code: "html_block".into(),
+                message: format!(
+                    "line {number} starts with an HTML tag; if the viewer reads it as an HTML block it shows \"The document could not be displayed\" instead of the overview, and an unclosed element can hide the lines after it"
+                ),
+                investigation: None,
+                attribute: None,
+                line: Some(number),
+                reason: None,
+            });
         }
+        if lost {
+            continue;
+        }
+        states = if canonical {
+            BTreeSet::from([Reading::start()])
+        } else {
+            readings.into_iter().map(|(s, _)| s).collect()
+        };
+        if states.len() > MAX_READINGS {
+            lost = true;
+        }
+    }
+    (out, cards)
+}
+
+/// A canonical insert line's attributes, or why the line is not one.
+fn canonical_insert(
+    line: &str,
+    lower: &str,
+    tag: &str,
+    prev_blank: bool,
+    next_blank: bool,
+    open_code: bool,
+) -> std::result::Result<Attributes, String> {
+    let start = format!("<{tag}");
+    let close = format!("</{tag}>");
+    if lower.matches(&start).count() > 1 || lower.matches(&format!("</{tag}")).count() > 1 {
+        return Err("more than one insert tag on the line".into());
+    }
+    if !line.starts_with(&start) {
+        return Err(if lower.starts_with(&start) {
+            "the tag is not lowercase".into()
+        } else if lower.contains(&start) {
+            "it does not start at column 0".into()
+        } else {
+            "a closing tag without its start tag on the line".into()
+        });
+    }
+    if line[start.len()..]
+        .chars()
+        .next()
+        .is_some_and(|c| !matches!(c, ' ' | '\t' | '>'))
+    {
+        return Err(format!("the tag name continues past {tag}"));
+    }
+    let Some((_, attrs, end)) = start_tag(line, 1) else {
+        return Err("the start tag is not closed on the line".into());
+    };
+    let rest = &line[end..];
+    let Some(after) = rest.strip_prefix(&close) else {
+        return Err(if rest.contains(&close) {
+            format!("text between the start tag and {close}")
+        } else {
+            format!("no {close} on the same line")
+        });
+    };
+    if !after.trim_matches([' ', '\t']).is_empty() {
+        return Err(format!("text after {close}"));
+    }
+    if line.contains('|') && !next_blank {
+        return Err(
+            "a | in the line with a non-blank next line could make it a table header".into(),
+        );
+    }
+    if !prev_blank {
+        return Err("it does not follow a blank line".into());
+    }
+    if open_code {
+        return Err("a code block opened earlier may still be open".into());
+    }
+    Ok(attrs)
+}
+
+// Where code may be open. Not a Markdown parser: an over-approximation of
+// CommonMark's fences, indented code and list items, enough to skip lines
+// that are certainly code and to know that a canonical line is certainly not.
+// Where a line has two readings both are kept; a line is code only when
+// every reading says so. Python's `_step` and `_plain` are the same rules.
+
+const MAX_READINGS: usize = 64;
+
+/// One reading of the document so far.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct Reading {
+    /// 0 none, 1 a top-level fence, 2 a fence in the list item whose
+    /// content starts at `column`.
+    fence: u8,
+    marker: char,
+    run: usize,
+    column: usize,
+    /// Open list items: (content column, started empty).
+    items: Vec<(usize, bool)>,
+    /// The previous line may be paragraph text, so this one may continue it.
+    paragraph: bool,
+}
+
+impl Reading {
+    fn start() -> Self {
+        Reading {
+            fence: 0,
+            marker: '\0',
+            run: 0,
+            column: 0,
+            items: Vec::new(),
+            paragraph: false,
+        }
+    }
+
+    fn plain(items: Vec<(usize, bool)>, paragraph: bool) -> Self {
+        Reading {
+            items,
+            paragraph,
+            ..Reading::start()
+        }
+    }
+
+    fn fenced(
+        fence: u8,
+        (marker, run): (char, usize),
+        column: usize,
+        items: Vec<(usize, bool)>,
+    ) -> Self {
+        Reading {
+            fence,
+            marker,
+            run,
+            column,
+            items,
+            paragraph: false,
+        }
+    }
+}
+
+/// The lines the viewer numbers (`\r\n`, `\r` and `\n` all end one).
+fn lines(markdown: &str) -> Vec<&str> {
+    let b = markdown.as_bytes();
+    let mut out = Vec::new();
+    let (mut start, mut i) = (0, 0);
+    while i < b.len() {
+        match b[i] {
+            b'\n' => {
+                out.push(&markdown[start..i]);
+                i += 1;
+                start = i;
+            }
+            b'\r' => {
+                out.push(&markdown[start..i]);
+                i += if b.get(i + 1) == Some(&b'\n') { 2 } else { 1 };
+                start = i;
+            }
+            _ => i += 1,
+        }
+    }
+    out.push(&markdown[start..]);
+    if out.last() == Some(&"") {
+        out.pop();
     }
     out
 }
 
-/// A rendered card's attribute and investigation warnings, each once.
+fn blank(line: &str) -> bool {
+    line.trim_matches([' ', '\t']).is_empty()
+}
+
+/// (column, index) after the spaces and tabs from `line[i]` at `col`.
+fn indent(line: &str, mut i: usize, mut col: usize) -> (usize, usize) {
+    let b = line.as_bytes();
+    while i < b.len() && matches!(b[i], b' ' | b'\t') {
+        col = if b[i] == b'\t' {
+            col + 4 - col % 4
+        } else {
+            col + 1
+        };
+        i += 1;
+    }
+    (col, i)
+}
+
+/// A fence opener's marker and run length.
+fn fence(rest: &str) -> Option<(char, usize)> {
+    let marker = rest.chars().next().filter(|c| matches!(c, '`' | '~'))?;
+    let run = rest.len() - rest.trim_start_matches(marker).len();
+    if run < 3 || (marker == '`' && rest[run..].contains('`')) {
+        return None;
+    }
+    Some((marker, run))
+}
+
+fn closes(rest: &str, marker: char, run: usize) -> bool {
+    let n = rest.len() - rest.trim_start_matches(marker).len();
+    n >= run && rest[n..].trim_matches([' ', '\t']).is_empty()
+}
+
+/// A list marker at `line[i]` (column `col`): its item's content column, the
+/// index of its content (None when the item starts empty or with indented
+/// code) and whether the item starts empty.
+fn list_marker(line: &str, i: usize, col: usize) -> Option<(usize, Option<usize>, bool)> {
+    let b = line.as_bytes();
+    let mut j = i;
+    if matches!(b.get(j), Some(b'-' | b'+' | b'*')) {
+        j += 1;
+    } else {
+        while j < b.len() && j - i < 9 && b[j].is_ascii_digit() {
+            j += 1;
+        }
+        if j == i || !matches!(b.get(j), Some(b'.' | b')')) {
+            return None;
+        }
+        j += 1;
+    }
+    if j < b.len() && !matches!(b[j], b' ' | b'\t') {
+        return None;
+    }
+    let marker_end = col + j - i;
+    let (after, k) = indent(line, j, marker_end);
+    if k == b.len() {
+        return Some((marker_end + 1, None, true));
+    }
+    if after - marker_end > 4 {
+        return Some((marker_end + 1, None, false));
+    }
+    Some((after, Some(k), false))
+}
+
+/// A thematic break: three or more of one of `*`, `-`, `_`, with spaces or
+/// tabs between.
+fn thematic_break(s: &str) -> bool {
+    let Some(c) = s.chars().next().filter(|c| matches!(c, '*' | '-' | '_')) else {
+        return false;
+    };
+    s.chars().all(|x| x == c || x == ' ' || x == '\t') && s.matches(c).count() >= 3
+}
+
+/// The readings after `line` from one reading, each with whether the line is
+/// code in it.
+fn step(state: &Reading, line: &str) -> Vec<(Reading, bool)> {
+    let (col, i) = indent(line, 0, 0);
+    if i == line.len() {
+        if state.fence != 0 {
+            return vec![(
+                Reading {
+                    paragraph: false,
+                    ..state.clone()
+                },
+                true,
+            )];
+        }
+        let items = state.items.iter().copied().filter(|x| !x.1).collect();
+        return vec![(Reading::plain(items, false), false)];
+    }
+    let items: Vec<(usize, bool)> = state.items.iter().map(|&(c, _)| (c, false)).collect();
+    match state.fence {
+        1 => {
+            if col < 4 && closes(&line[i..], state.marker, state.run) {
+                return vec![(Reading::start(), true)];
+            }
+            vec![(state.clone(), true)]
+        }
+        2 => {
+            if col >= state.column {
+                if col - state.column < 4 && closes(&line[i..], state.marker, state.run) {
+                    return vec![(Reading::plain(items, false), true)];
+                }
+                return vec![(
+                    Reading::fenced(2, (state.marker, state.run), state.column, items),
+                    true,
+                )];
+            }
+            let inner = items.into_iter().filter(|x| x.0 <= col).collect();
+            plain(inner, false, line, col, i)
+        }
+        _ => plain(items, state.paragraph, line, col, i),
+    }
+}
+
+/// Readings for a non-blank line outside fenced code.
+fn plain(
+    items: Vec<(usize, bool)>,
+    paragraph: bool,
+    line: &str,
+    col: usize,
+    i: usize,
+) -> Vec<(Reading, bool)> {
+    let rest = &line[i..];
+    let inner: Vec<(usize, bool)> = items.iter().copied().filter(|x| x.0 <= col).collect();
+    let relative = col - inner.last().map_or(0, |x| x.0);
+    if relative < 4 {
+        if let Some(opener) = fence(rest) {
+            return vec![match inner.last() {
+                Some(&(column, _)) => (Reading::fenced(2, opener, column, inner), false),
+                None => (Reading::fenced(1, opener, 0, Vec::new()), false),
+            }];
+        }
+        if rest.starts_with('>') {
+            return vec![(Reading::plain(inner, true), false)];
+        }
+    }
+    let mut out = Vec::new();
+    if paragraph && inner.len() < items.len() {
+        out.push((Reading::plain(items, true), false));
+    }
+    if relative >= 4 {
+        out.push((Reading::plain(inner, paragraph), !paragraph));
+        return out;
+    }
+    let mut added = inner.clone();
+    let (mut at, mut at_col) = (Some(i), col);
+    while let Some(k) = at {
+        if thematic_break(&line[k..]) {
+            break;
+        }
+        let Some((content, next, empty)) = list_marker(line, k, at_col) else {
+            break;
+        };
+        added.push((content, empty));
+        at = next;
+        at_col = content;
+    }
+    if added.len() == inner.len() {
+        out.push((Reading::plain(inner, true), false));
+        return out;
+    }
+    if paragraph {
+        out.push((Reading::plain(inner, true), false));
+    }
+    let column = added.last().map_or(0, |x| x.0);
+    match at.and_then(|k| fence(&line[k..])) {
+        Some(opener) => out.push((Reading::fenced(2, opener, column, added), false)),
+        None => out.push((Reading::plain(added, true), false)),
+    }
+    out
+}
+
+/// JavaScript's `trim` whitespace: what the viewer's insert rule strips.
+fn js_space(c: char) -> bool {
+    matches!(
+        c,
+        ' ' | '\t' | '\u{0b}' | '\u{0c}' | '\u{a0}' | '\u{1680}' | '\u{2000}'
+            ..='\u{200a}'
+                | '\u{2028}'
+                | '\u{2029}'
+                | '\u{202f}'
+                | '\u{205f}'
+                | '\u{3000}'
+                | '\u{feff}'
+    )
+}
+
+/// Whether the line, past anything that could be container markers or
+/// whitespace, starts with something an HTML block could start with.
+fn html_start(line: &str) -> bool {
+    let rest = line.trim_start_matches(|c: char| {
+        js_space(c) || matches!(c, '>' | '-' | '+' | '*' | '.' | ')' | '0'..='9')
+    });
+    let mut chars = rest.chars();
+    if chars.next() != Some('<') {
+        return false;
+    }
+    match chars.next() {
+        Some('!' | '?' | '/') => true,
+        Some(c) if c.is_ascii_alphabetic() => {
+            let name = chars.as_str();
+            let tail = name.trim_start_matches(|c: char| c.is_ascii_alphanumeric() || c == '-');
+            tail.chars()
+                .next()
+                .is_none_or(|c| js_space(c) || matches!(c, '/' | '>'))
+        }
+        _ => false,
+    }
+}
+
+/// A canonical insert's attribute and investigation warnings, each once.
 fn card_warnings(
     spec: &InsertSpec,
     attrs: &[(String, String)],
@@ -226,6 +594,7 @@ fn card_warnings(
                 investigation: None,
                 attribute: Some(name.clone()),
                 line: None,
+                reason: None,
             });
         }
     }
@@ -249,126 +618,16 @@ fn card_warnings(
             investigation: Some(id.to_string()),
             attribute: None,
             line: None,
+            reason: None,
         });
     }
 }
 
-/// Whether a card token runs past its first line and holds text besides its
-/// start tag and closing tag: the viewer shows none of that text. A start tag
-/// with its attributes over several lines hides nothing; one cut off by the
-/// end of the block hides every line after it.
-fn hides_lines(content: &str, tag: &str) -> bool {
-    if !content.contains('\n') {
-        return false;
-    }
-    let parsed = content
-        .find(&format!("<{tag}"))
-        .and_then(|at| start_tag(content, at + 1));
-    match parsed {
-        None => content.split('\n').skip(1).any(|s| !js_trim(s).is_empty()),
-        Some((_, _, end)) => {
-            !js_trim(&content[end..].replacen(&format!("</{tag}>"), "", 1)).is_empty()
-        }
-    }
-}
-
-// The viewer's getAttrs: the first <tag> element of the card's HTML.
-
-const RAW_TEXT: &[&str] = &[
-    "script", "style", "xmp", "iframe", "noembed", "noframes", "noscript", "textarea", "title",
-];
+// A canonical insert's attributes, as the HTML parser reads its start tag.
 
 /// HTML's ASCII whitespace.
 fn html_space(b: u8) -> bool {
     matches!(b, b' ' | b'\t' | b'\n' | b'\r' | 0x0c)
-}
-
-/// The attributes of the first `tag` element (lowercase) the HTML parser
-/// makes of `html`, as the viewer's `getAttrs` reads them through `innerHTML`
-/// and `querySelector`: names lowercased, values decoded, the first of a
-/// repeated name kept. None when there is no such element, which includes a
-/// tag cut off by the end of the text.
-fn element_attributes(html: &str, tag: &str) -> Option<Vec<(String, String)>> {
-    let b = html.as_bytes();
-    let n = b.len();
-    let find = |pat: &str, from: usize| html[from..].find(pat).map(|k| k + from);
-    let mut i = 0;
-    loop {
-        let lt = find("<", i)?;
-        if lt + 1 >= n {
-            return None;
-        }
-        match b[lt + 1] {
-            b'!' => {
-                if html[lt..].starts_with("<!--") {
-                    let j = lt + 4;
-                    if html[j..].starts_with('>') {
-                        i = j + 1;
-                    } else if html[j..].starts_with("->") {
-                        i = j + 2;
-                    } else {
-                        let k = [find("-->", j), find("--!>", j)]
-                            .into_iter()
-                            .flatten()
-                            .min()?;
-                        i = k + if html[k..].starts_with("-->") { 3 } else { 4 };
-                    }
-                } else {
-                    i = find(">", lt + 2)? + 1;
-                }
-                continue;
-            }
-            b'?' => {
-                i = find(">", lt + 2)? + 1;
-                continue;
-            }
-            _ => {}
-        }
-        let closing = b[lt + 1] == b'/';
-        let start = if closing { lt + 2 } else { lt + 1 };
-        if start >= n {
-            return None;
-        }
-        if !b[start].is_ascii_alphabetic() {
-            i = if closing && b[start] == b'>' {
-                start + 1
-            } else if closing {
-                find(">", start)? + 1
-            } else {
-                lt + 1
-            };
-            continue;
-        }
-        let (name, attrs, after) = start_tag(html, start)?;
-        i = after;
-        if closing {
-            continue;
-        }
-        if name == tag {
-            return Some(attrs);
-        }
-        if name == "plaintext" {
-            return None;
-        }
-        if RAW_TEXT.contains(&name.as_str()) {
-            i = raw_text_end(html, i, &name)?;
-        }
-    }
-}
-
-/// Where the `</name` that ends a raw text element starts, or None.
-fn raw_text_end(html: &str, mut i: usize, name: &str) -> Option<usize> {
-    let lowered = html.to_ascii_lowercase();
-    let closing = format!("</{name}");
-    loop {
-        let k = lowered[i..].find(&closing)? + i;
-        let after = k + closing.len();
-        match html.as_bytes().get(after) {
-            None => return Some(k),
-            Some(&c) if html_space(c) || c == b'/' || c == b'>' => return Some(k),
-            _ => i = after,
-        }
-    }
 }
 
 type Attributes = Vec<(String, String)>;
@@ -696,40 +955,107 @@ pub(super) fn latest(conn: &Connection, project: &str) -> Result<Option<StoredOv
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::Value;
 
     const CASES: &str = include_str!("../../../../tests/conformance/overview/cases.json");
 
-    /// The block pass puts cards and HTML blocks where the viewer does: each
-    /// vector gives the lines of its <ap-investigation> cards and whether the
-    /// viewer can display it (html/routes/overview-vectors.deno.test.ts checks the
-    /// same against the bundled parser).
+    fn cases() -> Value {
+        serde_json::from_str(CASES).unwrap()
+    }
+
+    fn known(cases: &Value) -> Vec<String> {
+        cases["investigations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap().to_string())
+            .collect()
+    }
+
+    /// Where the lint reports nothing, its canonical lines are the viewer's
+    /// cards and the viewer displays the document: each vector gives the
+    /// lines of the viewer's cards and whether it displays the document, and
+    /// html/routes/overview-vectors.deno.test.ts checks those against the
+    /// bundled parser.
     #[test]
-    fn cards_and_renders_match_the_shared_vectors() {
-        let cases: serde_json::Value = serde_json::from_str(CASES).unwrap();
-        let tags: Vec<&str> = inserts().iter().map(|s| s.tag.as_str()).collect();
+    fn a_warning_free_vector_renders_its_canonical_lines_as_cards() {
+        let cases = cases();
+        let known = known(&cases);
         for case in cases["warnings"].as_array().unwrap() {
-            let found = blocks::blocks(case["markdown"].as_str().unwrap(), &tags);
-            let cards: Vec<usize> = found
-                .iter()
-                .filter_map(|f| match f {
-                    Found::Card { tag, line, .. } if tag == "ap-investigation" => Some(line + 1),
-                    _ => None,
-                })
-                .collect();
-            let renders = !found.iter().any(|f| matches!(f, Found::HtmlBlock { .. }));
+            let (warnings, cards) = lint(case["markdown"].as_str().unwrap(), &known);
+            if warnings.is_empty() {
+                assert_eq!(serde_json::json!(cards), case["cards"], "{}", case["name"]);
+                assert_eq!(case["renders"], true, "{}", case["name"]);
+            }
+        }
+    }
+
+    /// The shared generator (cases.json "generator"): canonical inserts
+    /// among ordinary Markdown blocks, apart by blank lines. Python's test and
+    /// the deno test build the same documents.
+    fn generated(cases: &Value) -> Vec<(String, Vec<usize>)> {
+        let g = &cases["generator"];
+        let blocks: Vec<&str> = g["blocks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|b| b.as_str().unwrap())
+            .collect();
+        let ids = known(cases);
+        let insert = g["insert"].as_str().unwrap();
+        let mut seed = g["seed"].as_u64().unwrap() as u32;
+        let mut next = || {
+            seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            seed as usize
+        };
+        let mut docs = Vec::new();
+        for d in 0..g["documents"].as_u64().unwrap() {
+            let (mut parts, mut lines, mut line, mut word) = (Vec::new(), Vec::new(), 1, 0);
+            for _ in 0..1 + next() % g["max_blocks"].as_u64().unwrap() as usize {
+                let r = next() % (blocks.len() + g["insert_slots"].as_u64().unwrap() as usize);
+                let text = if r >= blocks.len() {
+                    lines.push(line);
+                    insert
+                        .replace("{id}", &ids[next() % ids.len()])
+                        .replace("{n}", &lines.len().to_string())
+                } else {
+                    let mut text = blocks[r].to_string();
+                    while text.contains("{w}") {
+                        text = text.replacen("{w}", &format!("w{d}x{word}z"), 1);
+                        word += 1;
+                    }
+                    text
+                };
+                line += text.matches('\n').count() + 2;
+                parts.push(text);
+            }
+            docs.push((parts.join("\n\n") + "\n", lines));
+        }
+        docs
+    }
+
+    #[test]
+    fn generated_documents_have_no_warnings_and_one_card_per_insert() {
+        let cases = cases();
+        let known = known(&cases);
+        let docs = generated(&cases);
+        assert_eq!(
+            docs.len(),
+            cases["generator"]["documents"].as_u64().unwrap() as usize
+        );
+        let all: String = docs.iter().map(|(m, _)| m.as_str()).collect();
+        assert_eq!(
+            canonical::sha256_hex([all.as_bytes()]),
+            cases["generator"]["digest"].as_str().unwrap()
+        );
+        for (markdown, inserts) in &docs {
             assert_eq!(
-                serde_json::json!(cards),
-                case["cards"],
-                "{}: cards",
-                case["name"]
-            );
-            assert_eq!(
-                serde_json::json!(renders),
-                case["renders"],
-                "{}: renders",
-                case["name"]
+                lint(markdown, &known),
+                (Vec::new(), inserts.clone()),
+                "{markdown:?}"
             );
         }
+        assert!(docs.iter().filter(|(_, i)| !i.is_empty()).count() > docs.len() / 2);
     }
 
     #[test]

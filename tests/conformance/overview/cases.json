@@ -1,5 +1,5 @@
 {
-  "comment": "Shared overview vectors (OV-2..OV-4, OV-9) for sdks/rust/tests/workbook_format3.rs and sdks/python/tests/test_workbook_format3.py. Each warning case also gives the 1-based lines where the viewer renders an <ap-investigation> card (cards) and whether it can display the document at all (renders); html/routes/overview-vectors.deno.test.ts checks those, and the insert_in_paragraph lines, against the bundled viewer parser.",
+  "comment": "Shared overview vectors (OV-2..OV-4, OV-13) for sdks/rust/tests/workbook_format3.rs, sdks/rust/src/workbook/overview.rs and sdks/python/tests/test_workbook_format3.py. Each warning case gives the canonical-form lint's warnings, the 1-based lines where the bundled viewer renders an <ap-investigation> card (cards) and whether it can display the document at all (renders). html/routes/overview-vectors.deno.test.ts checks cards and renders against the bundled parser; the SDK tests check that a case without warnings has its canonical lines as its cards and renders. The generator builds the same documents in all three test suites: x = (x * 1664525 + 1013904223) mod 2^32 starting from seed; each document has 1 + x % max_blocks blocks; each block is blocks[x % (len(blocks) + insert_slots)], where an index past the blocks is the insert with {id} = investigations[x % len(investigations)] and {n} = its 1-based index in the document; each {w} in turn becomes w<document index>x<counter>z; blocks are joined with one blank line and the document ends with a newline; digest is the sha256 of all documents concatenated, so the three suites provably build the same ones.",
   "ddl": "CREATE TABLE IF NOT EXISTS overviews (\n  seq INTEGER PRIMARY KEY,\n  project TEXT NOT NULL REFERENCES projects(id),\n  digest TEXT NOT NULL,\n  markdown TEXT NOT NULL,\n  author TEXT NOT NULL,\n  created REAL NOT NULL\n);",
   "sql": "CREATE TABLE overviews (\n  seq INTEGER PRIMARY KEY,\n  project TEXT NOT NULL REFERENCES projects(id),\n  digest TEXT NOT NULL,\n  markdown TEXT NOT NULL,\n  author TEXT NOT NULL,\n  created REAL NOT NULL\n)",
   "max_bytes": 262144,
@@ -137,9 +137,16 @@
       "markdown": "<ap-investigation\n  investigation=\"inv_0123456789abcdef\"\n  before-detail=\"b\"\n  hue=\"1\"\n></ap-investigation>\n",
       "warnings": [
         {
-          "code": "unknown_attribute",
-          "message": "<ap-investigation> has an unknown attribute \"hue\"; the viewer ignores it",
-          "attribute": "hue"
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 1 is not in canonical form (the start tag is not closed on the line), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 1,
+          "reason": "the start tag is not closed on the line"
+        },
+        {
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 5 is not in canonical form (a closing tag without its start tag on the line), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 5,
+          "reason": "a closing tag without its start tag on the line"
         }
       ],
       "cards": [
@@ -203,9 +210,10 @@
       "markdown": "   <ap-investigation investigation=\"inv_x\"></ap-investigation>\n",
       "warnings": [
         {
-          "code": "unknown_investigation",
-          "message": "<ap-investigation> names \"inv_x\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
-          "investigation": "inv_x"
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 1 is not in canonical form (it does not start at column 0), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 1,
+          "reason": "it does not start at column 0"
         }
       ],
       "cards": [
@@ -223,7 +231,14 @@
     {
       "name": "a mid-line mention is inline HTML",
       "markdown": "See `<ap-investigation investigation=\"inv_x\">` here.\n",
-      "warnings": [],
+      "warnings": [
+        {
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 1 is not in canonical form (it does not start at column 0), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 1,
+          "reason": "it does not start at column 0"
+        }
+      ],
       "cards": [],
       "renders": true
     },
@@ -246,9 +261,10 @@
       "markdown": "````\n```\n<ap-investigation investigation=\"inv_x\"></ap-investigation>\n````\n<ap-investigation investigation=\"inv_y\"></ap-investigation>\n",
       "warnings": [
         {
-          "code": "unknown_investigation",
-          "message": "<ap-investigation> names \"inv_y\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
-          "investigation": "inv_y"
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 5 is not in canonical form (it does not follow a blank line), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 5,
+          "reason": "it does not follow a blank line"
         }
       ],
       "cards": [
@@ -268,9 +284,10 @@
       "markdown": "``` a`b\n<ap-investigation investigation=\"inv_x\"></ap-investigation>\n",
       "warnings": [
         {
-          "code": "insert_in_paragraph",
-          "message": "<ap-investigation> on line 2 continues the text above it, so the viewer shows no card; put a blank line before it",
-          "line": 2
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 2 is not in canonical form (it does not follow a blank line), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 2,
+          "reason": "it does not follow a blank line"
         }
       ],
       "cards": [],
@@ -281,9 +298,10 @@
       "markdown": "<ap-investigation investigation=\"inv_x\"\n",
       "warnings": [
         {
-          "code": "unknown_investigation",
-          "message": "<ap-investigation> names no investigation; the viewer shows \"Investigation unavailable\"",
-          "investigation": ""
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 1 is not in canonical form (the start tag is not closed on the line), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 1,
+          "reason": "the start tag is not closed on the line"
         }
       ],
       "cards": [
@@ -296,9 +314,10 @@
       "markdown": "<ap-investigation investigation=\"inv_x></ap-investigation>\n",
       "warnings": [
         {
-          "code": "unknown_investigation",
-          "message": "<ap-investigation> names no investigation; the viewer shows \"Investigation unavailable\"",
-          "investigation": ""
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 1 is not in canonical form (the start tag is not closed on the line), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 1,
+          "reason": "the start tag is not closed on the line"
         }
       ],
       "cards": [
@@ -311,9 +330,10 @@
       "markdown": "<ap-investigations investigation=\"inv_x\"></ap-investigations>\n",
       "warnings": [
         {
-          "code": "unknown_investigation",
-          "message": "<ap-investigation> names no investigation; the viewer shows \"Investigation unavailable\"",
-          "investigation": ""
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 1 is not in canonical form (the tag name continues past ap-investigation), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 1,
+          "reason": "the tag name continues past ap-investigation"
         }
       ],
       "cards": [
@@ -326,9 +346,10 @@
       "markdown": "<ap-investigation investigation=\"inv_x\" />\n",
       "warnings": [
         {
-          "code": "unknown_investigation",
-          "message": "<ap-investigation> names \"inv_x\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
-          "investigation": "inv_x"
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 1 is not in canonical form (no </ap-investigation> on the same line), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 1,
+          "reason": "no </ap-investigation> on the same line"
         }
       ],
       "cards": [
@@ -421,9 +442,10 @@
       "markdown": "Intro.\n<ap-investigation investigation=\"inv_x\"></ap-investigation>\n",
       "warnings": [
         {
-          "code": "insert_in_paragraph",
-          "message": "<ap-investigation> on line 2 continues the text above it, so the viewer shows no card; put a blank line before it",
-          "line": 2
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 2 is not in canonical form (it does not follow a blank line), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 2,
+          "reason": "it does not follow a blank line"
         }
       ],
       "cards": [],
@@ -434,9 +456,10 @@
       "markdown": "Intro.\n<ap-investigation investigation=\"inv_0123456789abcdef\"></ap-investigation>\n",
       "warnings": [
         {
-          "code": "insert_in_paragraph",
-          "message": "<ap-investigation> on line 2 continues the text above it, so the viewer shows no card; put a blank line before it",
-          "line": 2
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 2 is not in canonical form (it does not follow a blank line), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 2,
+          "reason": "it does not follow a blank line"
         }
       ],
       "cards": [],
@@ -447,9 +470,10 @@
       "markdown": "> Quote\n<ap-investigation investigation=\"inv_0123456789abcdef\"></ap-investigation>\n",
       "warnings": [
         {
-          "code": "insert_in_paragraph",
-          "message": "<ap-investigation> on line 2 continues the text above it, so the viewer shows no card; put a blank line before it",
-          "line": 2
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 2 is not in canonical form (it does not follow a blank line), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 2,
+          "reason": "it does not follow a blank line"
         }
       ],
       "cards": [],
@@ -460,9 +484,10 @@
       "markdown": "- Item\n  <ap-investigation investigation=\"inv_0123456789abcdef\"></ap-investigation>\n",
       "warnings": [
         {
-          "code": "insert_in_paragraph",
-          "message": "<ap-investigation> on line 2 continues the text above it, so the viewer shows no card; put a blank line before it",
-          "line": 2
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 2 is not in canonical form (it does not start at column 0), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 2,
+          "reason": "it does not start at column 0"
         }
       ],
       "cards": [],
@@ -473,9 +498,10 @@
       "markdown": "| a |\n| - |\n<ap-investigation investigation=\"inv_0123456789abcdef\"></ap-investigation>\n",
       "warnings": [
         {
-          "code": "insert_in_paragraph",
-          "message": "<ap-investigation> on line 3 continues the text above it, so the viewer shows no card; put a blank line before it",
-          "line": 3
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 3 is not in canonical form (it does not follow a blank line), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 3,
+          "reason": "it does not follow a blank line"
         }
       ],
       "cards": [],
@@ -484,7 +510,14 @@
     {
       "name": "a line right after an ATX heading starts a block",
       "markdown": "# Title\n<ap-investigation investigation=\"inv_0123456789abcdef\"></ap-investigation>\n",
-      "warnings": [],
+      "warnings": [
+        {
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 2 is not in canonical form (it does not follow a blank line), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 2,
+          "reason": "it does not follow a blank line"
+        }
+      ],
       "cards": [
         2
       ],
@@ -495,9 +528,10 @@
       "markdown": "> <ap-investigation investigation=\"inv_bad\"></ap-investigation>\n",
       "warnings": [
         {
-          "code": "unknown_investigation",
-          "message": "<ap-investigation> names \"inv_bad\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
-          "investigation": "inv_bad"
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 1 is not in canonical form (it does not start at column 0), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 1,
+          "reason": "it does not start at column 0"
         }
       ],
       "cards": [
@@ -510,9 +544,10 @@
       "markdown": "- <ap-investigation investigation=\"inv_y\"></ap-investigation>\n",
       "warnings": [
         {
-          "code": "unknown_investigation",
-          "message": "<ap-investigation> names \"inv_y\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
-          "investigation": "inv_y"
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 1 is not in canonical form (it does not start at column 0), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 1,
+          "reason": "it does not start at column 0"
         }
       ],
       "cards": [
@@ -523,7 +558,14 @@
     {
       "name": "an insert in a list in a blockquote renders",
       "markdown": "> 1. <ap-investigation investigation=\"inv_0123456789abcdef\"></ap-investigation>\n",
-      "warnings": [],
+      "warnings": [
+        {
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 1 is not in canonical form (it does not start at column 0), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 1,
+          "reason": "it does not start at column 0"
+        }
+      ],
       "cards": [
         1
       ],
@@ -539,7 +581,14 @@
     {
       "name": "an uppercase tag inside a line is inline HTML",
       "markdown": "<AP-INVESTIGATION investigation=\"inv_x\"></AP-INVESTIGATION>\n",
-      "warnings": [],
+      "warnings": [
+        {
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 1 is not in canonical form (the tag is not lowercase), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 1,
+          "reason": "the tag is not lowercase"
+        }
+      ],
       "cards": [],
       "renders": true
     },
@@ -548,9 +597,10 @@
       "markdown": "<AP-INVESTIGATION investigation=\"inv_x\">\n",
       "warnings": [
         {
-          "code": "html_block",
-          "message": "line 1 starts an HTML block, which the viewer cannot display; it shows \"The document could not be displayed\" instead of the overview",
-          "line": 1
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 1 is not in canonical form (the tag is not lowercase), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 1,
+          "reason": "the tag is not lowercase"
         }
       ],
       "cards": [],
@@ -562,7 +612,7 @@
       "warnings": [
         {
           "code": "html_block",
-          "message": "line 3 starts an HTML block, which the viewer cannot display; it shows \"The document could not be displayed\" instead of the overview",
+          "message": "line 3 starts with an HTML tag; if the viewer reads it as an HTML block it shows \"The document could not be displayed\" instead of the overview, and an unclosed element can hide the lines after it",
           "line": 3
         }
       ],
@@ -577,8 +627,19 @@
       "warnings": [
         {
           "code": "html_block",
-          "message": "line 1 starts an HTML block, which the viewer cannot display; it shows \"The document could not be displayed\" instead of the overview",
+          "message": "line 1 starts with an HTML tag; if the viewer reads it as an HTML block it shows \"The document could not be displayed\" instead of the overview, and an unclosed element can hide the lines after it",
           "line": 1
+        },
+        {
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 2 is not in canonical form (it does not follow a blank line), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 2,
+          "reason": "it does not follow a blank line"
+        },
+        {
+          "code": "html_block",
+          "message": "line 3 starts with an HTML tag; if the viewer reads it as an HTML block it shows \"The document could not be displayed\" instead of the overview, and an unclosed element can hide the lines after it",
+          "line": 3
         }
       ],
       "cards": [],
@@ -589,9 +650,10 @@
       "markdown": "<ap-investigation-x investigation=\"inv_x\"></ap-investigation-x>\n",
       "warnings": [
         {
-          "code": "unknown_investigation",
-          "message": "<ap-investigation> names no investigation; the viewer shows \"Investigation unavailable\"",
-          "investigation": ""
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 1 is not in canonical form (the tag name continues past ap-investigation), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 1,
+          "reason": "the tag name continues past ap-investigation"
         }
       ],
       "cards": [
@@ -604,9 +666,10 @@
       "markdown": "<ap-investigation investigation=\"inv_0123456789abcdef\">\n\nLater text.\n",
       "warnings": [
         {
-          "code": "unclosed_insert",
-          "message": "<ap-investigation> on line 1 is never closed with </ap-investigation>, so the viewer hides lines 2 to 3",
-          "line": 1
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 1 is not in canonical form (no </ap-investigation> on the same line), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 1,
+          "reason": "no </ap-investigation> on the same line"
         }
       ],
       "cards": [
@@ -619,9 +682,16 @@
       "markdown": "<ap-investigation investigation=\"inv_0123456789abcdef\">\nA note.\n</ap-investigation>\n",
       "warnings": [
         {
-          "code": "unclosed_insert",
-          "message": "<ap-investigation> on line 1 is not closed until line 3, so the viewer hides lines 2 to 3",
-          "line": 1
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 1 is not in canonical form (no </ap-investigation> on the same line), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 1,
+          "reason": "no </ap-investigation> on the same line"
+        },
+        {
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 3 is not in canonical form (a closing tag without its start tag on the line), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 3,
+          "reason": "a closing tag without its start tag on the line"
         }
       ],
       "cards": [
@@ -634,9 +704,15 @@
       "markdown": "<ap-investigation investigation=\"inv_0123456789abcdef\" />\n\nLater text.\n\n<ap-investigation investigation=\"inv_x\"></ap-investigation>\n",
       "warnings": [
         {
-          "code": "unclosed_insert",
-          "message": "<ap-investigation> on line 1 is not closed until line 5, so the viewer hides lines 2 to 5",
-          "line": 1
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 1 is not in canonical form (no </ap-investigation> on the same line), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 1,
+          "reason": "no </ap-investigation> on the same line"
+        },
+        {
+          "code": "unknown_investigation",
+          "message": "<ap-investigation> names \"inv_x\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
+          "investigation": "inv_x"
         }
       ],
       "cards": [
@@ -649,9 +725,14 @@
       "markdown": "<std-lisp-example code=\"(+ 1 2)\">\n\n<ap-investigation investigation=\"inv_x\"></ap-investigation>\n",
       "warnings": [
         {
-          "code": "unclosed_insert",
-          "message": "<std-lisp-example> on line 1 is never closed with </std-lisp-example>, so the viewer hides lines 2 to 3",
+          "code": "html_block",
+          "message": "line 1 starts with an HTML tag; if the viewer reads it as an HTML block it shows \"The document could not be displayed\" instead of the overview, and an unclosed element can hide the lines after it",
           "line": 1
+        },
+        {
+          "code": "unknown_investigation",
+          "message": "<ap-investigation> names \"inv_x\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
+          "investigation": "inv_x"
         }
       ],
       "cards": [],
@@ -662,9 +743,10 @@
       "markdown": " <ap-investigation investigation=\"inv_x\"></ap-investigation>\n",
       "warnings": [
         {
-          "code": "unknown_investigation",
-          "message": "<ap-investigation> names \"inv_x\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
-          "investigation": "inv_x"
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 1 is not in canonical form (it does not start at column 0), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 1,
+          "reason": "it does not start at column 0"
         }
       ],
       "cards": [
@@ -682,7 +764,14 @@
     {
       "name": "twenty levels of nesting are skipped",
       "markdown": "> > > > > > > > > > > > > > > > > > > > <ap-investigation investigation=\"inv_x\"></ap-investigation>\n",
-      "warnings": [],
+      "warnings": [
+        {
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 1 is not in canonical form (it does not start at column 0), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 1,
+          "reason": "it does not start at column 0"
+        }
+      ],
       "cards": [],
       "renders": true
     },
@@ -691,9 +780,10 @@
       "markdown": "> > > > > > > > > > > > > > > > > > > <ap-investigation investigation=\"inv_x\"></ap-investigation>\n",
       "warnings": [
         {
-          "code": "unknown_investigation",
-          "message": "<ap-investigation> names \"inv_x\", which is not an investigation in this project; the viewer shows \"Investigation unavailable\"",
-          "investigation": "inv_x"
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 1 is not in canonical form (it does not start at column 0), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 1,
+          "reason": "it does not start at column 0"
         }
       ],
       "cards": [
@@ -704,7 +794,14 @@
     {
       "name": "a closing tag later in the line closes the card",
       "markdown": "<ap-investigation investigation=\"inv_0123456789abcdef\">x</ap-investigation>\nAfter.\n",
-      "warnings": [],
+      "warnings": [
+        {
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 1 is not in canonical form (text between the start tag and </ap-investigation>), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 1,
+          "reason": "text between the start tag and </ap-investigation>"
+        }
+      ],
       "cards": [
         1
       ],
@@ -724,8 +821,182 @@
         1
       ],
       "renders": true
+    },
+    {
+      "name": "two inserts on one line",
+      "markdown": "<ap-investigation investigation=\"inv_0123456789abcdef\"></ap-investigation><ap-investigation investigation=\"inv_fedcba9876543210\"></ap-investigation>\n",
+      "warnings": [
+        {
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 1 is not in canonical form (more than one insert tag on the line), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 1,
+          "reason": "more than one insert tag on the line"
+        }
+      ],
+      "cards": [
+        1
+      ],
+      "renders": true
+    },
+    {
+      "name": "text after the closing tag is hidden with the card",
+      "markdown": "<ap-investigation investigation=\"inv_0123456789abcdef\"></ap-investigation> tail\n",
+      "warnings": [
+        {
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 1 is not in canonical form (text after </ap-investigation>), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 1,
+          "reason": "text after </ap-investigation>"
+        }
+      ],
+      "cards": [
+        1
+      ],
+      "renders": true
+    },
+    {
+      "name": "a pipe in an insert with a delimiter row under it makes a table",
+      "markdown": "<ap-investigation investigation=\"inv_0123456789abcdef\" title=\"a | b\"></ap-investigation>\n| - | - |\n",
+      "warnings": [
+        {
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 1 is not in canonical form (a | in the line with a non-blank next line could make it a table header), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 1,
+          "reason": "a | in the line with a non-blank next line could make it a table header"
+        }
+      ],
+      "cards": [],
+      "renders": true
+    },
+    {
+      "name": "a pipe in an insert followed by a blank line is canonical",
+      "markdown": "<ap-investigation investigation=\"inv_0123456789abcdef\" title=\"a | b\"></ap-investigation>\n\nText.\n",
+      "warnings": [],
+      "cards": [
+        1
+      ],
+      "renders": true
+    },
+    {
+      "name": "an attribute value that mentions the tag",
+      "markdown": "<ap-investigation investigation=\"inv_0123456789abcdef\" title=\"<ap-investigation>\"></ap-investigation>\n",
+      "warnings": [
+        {
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 1 is not in canonical form (more than one insert tag on the line), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 1,
+          "reason": "more than one insert tag on the line"
+        }
+      ],
+      "cards": [
+        1
+      ],
+      "renders": true
+    },
+    {
+      "name": "text right after a canonical insert is its own paragraph",
+      "markdown": "<ap-investigation investigation=\"inv_0123456789abcdef\"></ap-investigation>\nAfter.\n",
+      "warnings": [],
+      "cards": [
+        1
+      ],
+      "renders": true
+    },
+    {
+      "name": "a fence in a list item ends with the item",
+      "markdown": "- a\n\n  ```\nx\n\n<ap-investigation investigation=\"inv_0123456789abcdef\"></ap-investigation>\n",
+      "warnings": [],
+      "cards": [
+        6
+      ],
+      "renders": true
+    },
+    {
+      "name": "a closed fence in a list item leaves later inserts canonical",
+      "markdown": "- a\n\n  ```\n  code\n  ```\n\n<ap-investigation investigation=\"inv_0123456789abcdef\"></ap-investigation>\n",
+      "warnings": [],
+      "cards": [
+        7
+      ],
+      "renders": true
+    },
+    {
+      "name": "an indented fence after a lazy line may be top-level, so a later insert warns",
+      "markdown": "- a\nb\n  ```\n\n<ap-investigation investigation=\"inv_0123456789abcdef\"></ap-investigation>\n",
+      "warnings": [
+        {
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 5 is not in canonical form (a code block opened earlier may still be open), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 5,
+          "reason": "a code block opened earlier may still be open"
+        }
+      ],
+      "cards": [
+        5
+      ],
+      "renders": true
+    },
+    {
+      "name": "an empty list item ends at a blank line, so the fence after it is top-level",
+      "markdown": "-\n\n  ```\n\n<ap-investigation investigation=\"inv_x\"></ap-investigation>\n",
+      "warnings": [],
+      "cards": [],
+      "renders": true
+    },
+    {
+      "name": "an insert in a fenced block in a blockquote",
+      "markdown": "> ```\n> <ap-investigation investigation=\"inv_x\"></ap-investigation>\n> ```\n",
+      "warnings": [
+        {
+          "code": "noncanonical_insert",
+          "message": "<ap-investigation> on line 2 is not in canonical form (it does not start at column 0), so the viewer may show no card or hide text; write each insert alone on one line at column 0 after a blank line, as <ap-investigation ...></ap-investigation>",
+          "line": 2,
+          "reason": "it does not start at column 0"
+        }
+      ],
+      "cards": [],
+      "renders": true
+    },
+    {
+      "name": "an autolink at the start of a line is not HTML",
+      "markdown": "<https://example.org>\n\n<ap-investigation investigation=\"inv_0123456789abcdef\"></ap-investigation>\n",
+      "warnings": [],
+      "cards": [
+        3
+      ],
+      "renders": true
     }
   ],
+  "generator": {
+    "seed": 20261113,
+    "documents": 3000,
+    "max_blocks": 8,
+    "insert_slots": 10,
+    "digest": "21b39fa06a96bbc68ac38c5bf8cd19ed91362d27e4eee364c9263688e68657db",
+    "insert": "<ap-investigation investigation=\"{id}\" title=\"Card {n}\" summary=\"Generated\"></ap-investigation>",
+    "blocks": [
+      "A paragraph {w} with *emphasis* and `code {w}`.",
+      "# Heading {w}",
+      "## Results {w}\nText right under the heading {w}.",
+      "Line one {w}\nline two {w}",
+      "- item {w}\n- item {w}\n  - nested {w}",
+      "1. first {w}\n2. second {w}",
+      "- [ ] task {w}\n- [x] done {w}",
+      "- item {w}\n\n  ```\n  code in a list {w}\n  ```",
+      "1. step {w}\n\n   ```sh\n   run {w}\n   ```",
+      "* star {w}\n\n      deep code {w}",
+      "```\n<ap-investigation investigation=\"inv_0123456789abcdef\"></ap-investigation>\nfenced {w}\n```",
+      "~~~md\n<div>{w}</div>\n~~~",
+      "````\n```\nnested fence {w}\n````",
+      "> quote {w}\n> more {w}",
+      "> ```\n> quoted code {w}\n> ```",
+      "| a | b |\n| - | - |\n| {w} | c |",
+      "Before code {w}\n\n    indented {w}\n    <ap-investigation investigation=\"inv_x\"></ap-investigation>",
+      "---",
+      "Text with a <span>{w}</span> inline tag.",
+      "<https://example.org/{w}>"
+    ]
+  },
   "refused": [
     {
       "name": "empty",

@@ -203,15 +203,30 @@ than 200 characters (path `author`); a refused write leaves the file as it
 was.
 
 Everything else is advisory (OV-3). The write returns warnings
-`{code, message, investigation | attribute}`: `unknown_investigation` for an
-insert that names no investigation of this workbook (or none at all) and
-`unknown_attribute` for an insert attribute outside the shared list
-`html/ui/investigation-inserts.json`, each finding once, in document order.
-An insert is an HTML block: its tag starts a line after at most three spaces
-of indentation, outside fenced code; tag and attribute names are
+`{code, message, line?, reason?, investigation?, attribute?}` from a
+canonical-form lint (OV-13), in document order. An insert is canonical when
+it is written alone on one line at column 0, after a blank line or at the
+start of the document, as `<ap-investigation …></ap-investigation>`, outside
+fenced and indented code; a line that holds a `|` must also be followed by a
+blank line or the end, or the next line could make it a table header. The
+codes are:
+
+- `noncanonical_insert` (`line`, `reason`): any other line that mentions
+  `<ap-investigation` or `</ap-investigation` (ASCII-case-insensitively)
+  outside code;
+- `html_block` (`line`): a line that, past any `>`, list markers and
+  whitespace, starts with `<!`, `<?`, `</` or a tag name followed by
+  whitespace, `/`, `>` or the end of the line;
+- `unknown_investigation` and `unknown_attribute`: a canonical insert that
+  names no investigation of this workbook (or none at all), or has an
+  attribute outside the shared list `html/ui/investigation-inserts.json`,
+  each finding once.
+
+The lint over-warns on purpose: a document without warnings shows exactly one
+card per canonical line and hides nothing in the viewer. Attribute names are
 ASCII-case-insensitive, the first of a repeated attribute wins, and values
-decode the five named XML character references and numeric ones. The
-vectors are in `tests/conformance/overview/cases.json`.
+decode numeric character references and the five XML names. The vectors and
+the shared document generator are in `tests/conformance/overview/cases.json`.
 
 Reading an overview (`overview()`, `overview_versions()`, the snapshot) never
 creates the table or changes the format; formats 1 and 2 read as no overview.

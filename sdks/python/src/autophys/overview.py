@@ -4,26 +4,32 @@ An overview is one Markdown research note per project, kept as an
 append-only history in workbook format 3 (``WorkbookStore.put_overview``).
 A write is refused only for an empty or whitespace-only body, more than
 :data:`MAX_OVERVIEW_BYTES` of UTF-8, invalid UTF-8 or a missing author.
-Everything else is advisory: :func:`check_overview` returns warnings for
-inserts that name an investigation the workbook does not hold or use an
-attribute the viewer does not know, and for Markdown the viewer will not
-render as written (OV-9). The tags and attribute keys come from
-``investigation-inserts.json``, a byte-for-byte copy of
-``html/ui/investigation-inserts.json`` (the browser's list), so the Rust SDK,
-this SDK and the viewer agree. Where a card renders is decided by
-:mod:`autophys._overview_blocks`, a port of the viewer's block parser. The
-rules mirror ``sdks/rust/src/workbook/overview.rs``;
-``tests/conformance/overview/cases.json`` pins both.
+Everything else is advisory: :func:`check_overview` returns warnings.
+
+The warnings come from a canonical-form lint (OV-13), not from a Markdown
+parser. An insert is accepted silently only when it is written alone on one
+line at column 0, after a blank line or at the start of the document, as
+``<ap-investigation …></ap-investigation>``, outside fenced and indented code.
+Every other line that mentions the insert tag outside code, and every line
+that may start an HTML block, gets a warning. The lint over-warns on purpose:
+a document with no warnings renders one card per canonical insert line and
+hides nothing. ``html/routes/overview-vectors.deno.test.ts`` holds that against
+the bundled viewer. Canonical inserts are also checked for investigations the
+workbook does not hold and attribute keys the viewer does not know. The tags
+and keys come from ``investigation-inserts.json``, a byte-for-byte copy of
+``html/ui/investigation-inserts.json``. The rules mirror
+``sdks/rust/src/workbook/overview.rs``; ``tests/conformance/overview/cases.json``
+pins both.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
-from . import _overview_blocks
 from ._text import rust_trim
 
 #: Largest overview body, in UTF-8 bytes (256 KiB).
@@ -42,8 +48,6 @@ def _lower(text: str) -> str:
 
 _INSERTS = [{"tag": i["tag"], "reference": i["reference"], "attributes": tuple(i["attributes"])}
             for i in json.loads(INSERTS_JSON.read_text(encoding="utf-8"))["inserts"]]
-_TAGS = tuple(i["tag"] for i in _INSERTS)
-_BY_TAG = {i["tag"]: i for i in _INSERTS}
 
 
 def check_write(markdown: Any, author: Any, error: Callable[[str, str, str | None], Exception]) -> str:
@@ -76,64 +80,267 @@ def digest(markdown: str) -> str:
 
 def check_overview(markdown: str, known: Iterable[str]) -> list[dict]:
     """Advisory warnings for ``markdown`` in a workbook holding the
-    investigations ``known``, in document order, each finding once.
+    investigations ``known``, in document order (OV-13).
 
-    Cards are found where the viewer renders them (OV-9). Codes:
-    ``unknown_attribute`` and ``unknown_investigation`` for a card;
-    ``insert_in_paragraph`` for an insert line that continues the text above
-    it and so renders no card; ``unclosed_insert`` for a card whose closing
-    tag never comes, which hides the lines after it; and ``html_block`` for
-    an HTML block, which stops the viewer displaying the whole overview.
-    The last three carry the 1-based ``line``.
+    Codes: ``noncanonical_insert`` (with ``line`` and ``reason``) for a line
+    that mentions an insert tag but is not a canonical insert; ``html_block``
+    (with ``line``) for a line that may start an HTML block; and, for
+    canonical inserts only, ``unknown_attribute`` and ``unknown_investigation``,
+    each finding once. Lines inside fenced or indented code are skipped.
     """
+    return lint(markdown, known)[0]
+
+
+def lint(markdown: str, known: Iterable[str]) -> tuple[list[dict], list[int]]:
+    """``(warnings, cards)``: :func:`check_overview`'s warnings and the 1-based
+    lines of the canonical inserts. When there are no warnings, the viewer
+    shows exactly one card for each of those lines and nothing else."""
     known = set(known)
     seen: set[tuple[str, str]] = set()
     out: list[dict] = []
-    for found in _overview_blocks.blocks(markdown, _TAGS):
-        kind, tag, line = found[0], found[1], found[2] + 1
-        if kind == "html_block":
+    cards: list[int] = []
+    lines = _lines(markdown)
+    states = {_START}
+    lost = False
+    for index, line in enumerate(lines):
+        number = index + 1
+        readings = [] if lost else [r for state in states for r in _step(state, line)]
+        if readings and all(code for _, code in readings):
+            states = {state for state, _ in readings}
+            continue
+        open_code = lost or any(code for _, code in readings)
+        lower = _lower(line)
+        mention = next((s for s in _INSERTS if f"<{s['tag']}" in lower or f"</{s['tag']}" in lower), None)
+        canonical = None
+        if mention is not None:
+            after = lines[index + 1] if index + 1 < len(lines) else ""
+            prev_blank = index == 0 or _blank(lines[index - 1])
+            reason, attrs = _canonical(line, lower, mention["tag"], prev_blank, _blank(after), open_code)
+            if reason is None:
+                canonical = attrs
+                cards.append(number)
+                _card_warnings(mention, attrs, known, seen, out)
+            else:
+                tag = mention["tag"]
+                out.append({"code": "noncanonical_insert",
+                            "message": f"<{tag}> on line {number} is not in canonical form ({reason}), so the viewer "
+                                       f"may show no card or hide text; write each insert alone on one line at "
+                                       f"column 0 after a blank line, as <{tag} ...></{tag}>",
+                            "line": number, "reason": reason})
+        elif _html_start(line):
             out.append({"code": "html_block",
-                        "message": f"line {line} starts an HTML block, which the viewer cannot display; "
-                                   'it shows "The document could not be displayed" instead of the overview',
-                        "line": line})
+                        "message": f"line {number} starts with an HTML tag; if the viewer reads it as an HTML block "
+                                   'it shows "The document could not be displayed" instead of the overview, and an '
+                                   "unclosed element can hide the lines after it",
+                        "line": number})
+        if lost:
             continue
-        spec = _BY_TAG.get(tag)
-        if kind == "continued":
-            if spec is None:
-                continue  # the viewer's built-in insert is not ours to place
-            out.append({"code": "insert_in_paragraph",
-                        "message": f"<{tag}> on line {line} continues the text above it, so the viewer shows "
-                                   "no card; put a blank line before it",
-                        "line": line})
+        if canonical is not None:
+            states = {_START}
             continue
-        _, _, _, content, end, closed = found
-        if spec is not None:
-            _card_warnings(spec, element_attributes(content, _lower(tag)) or [], known, seen, out)
-        if _hides_lines(content, tag):
-            until = f"is not closed until line {end}" if closed else f"is never closed with </{tag}>"
-            out.append({"code": "unclosed_insert",
-                        "message": f"<{tag}> on line {line} {until}, so the viewer hides lines {line + 1} to {end}",
-                        "line": line})
+        states = {state for state, _ in readings}
+        if len(states) > _MAX_READINGS:
+            lost = True
+    return out, cards
+
+
+def _canonical(line: str, lower: str, tag: str, prev_blank: bool, next_blank: bool,
+               open_code: bool) -> tuple[str | None, list[tuple[str, str]]]:
+    """``(None, attributes)`` for a canonical insert line, else ``(reason, [])``."""
+    start, close = f"<{tag}", f"</{tag}>"
+    if lower.count(start) > 1 or lower.count(f"</{tag}") > 1:
+        return "more than one insert tag on the line", []
+    if not line.startswith(start):
+        if lower.startswith(start):
+            return "the tag is not lowercase", []
+        if start in lower:
+            return "it does not start at column 0", []
+        return "a closing tag without its start tag on the line", []
+    if len(line) > len(start) and line[len(start)] not in " \t>":
+        return f"the tag name continues past {tag}", []
+    parsed = _start_tag(line, 1)
+    if parsed is None:
+        return "the start tag is not closed on the line", []
+    _, attrs, end = parsed
+    rest = line[end:]
+    if not rest.startswith(close):
+        if close in rest:
+            return f"text between the start tag and {close}", []
+        return f"no {close} on the same line", []
+    if rest[len(close):].strip(" \t"):
+        return f"text after {close}", []
+    if "|" in line and not next_blank:
+        return "a | in the line with a non-blank next line could make it a table header", []
+    if not prev_blank:
+        return "it does not follow a blank line", []
+    if open_code:
+        return "a code block opened earlier may still be open", []
+    return None, attrs
+
+
+# --- where code may be open ---------------------------------------------------
+# Not a Markdown parser: an over-approximation of CommonMark's fences, indented
+# code and list items, enough to skip lines that are certainly code and to know
+# that a canonical line is certainly not. Each reading is
+# (fence, marker, run, item column, items, paragraph): fence 0 is none, 1 a
+# top-level fence, 2 a fence inside the list item whose content starts at
+# ``item column``; ``items`` are the open list items as (content column,
+# started empty); ``paragraph`` says the previous line may be paragraph text, so
+# the next one may continue it lazily. Where a line has two readings both are
+# kept; a line is code only when every reading says so.
+_START = (0, "", 0, 0, (), False)
+_MAX_READINGS = 64
+_NEWLINES = re.compile(r"\r\n?|\n")
+_JS_SPACE = frozenset(" \t\x0b\x0c      　﻿"
+                      + "".join(chr(c) for c in range(0x2000, 0x200B)))
+_PREFIX = _JS_SPACE | frozenset(">-+*.)0123456789")
+_BREAK = re.compile(r"(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})")
+
+
+def _lines(markdown: str) -> list[str]:
+    """The lines the viewer numbers (``\\r\\n``, ``\\r`` and ``\\n`` all end one)."""
+    lines = _NEWLINES.split(markdown)
+    if lines and lines[-1] == "":
+        lines.pop()
+    return lines
+
+
+def _blank(line: str) -> bool:
+    return line.strip(" \t") == ""
+
+
+def _indent(line: str, i: int = 0, col: int = 0) -> tuple[int, int]:
+    """``(column, index)`` after the spaces and tabs from ``line[i]`` at ``col``."""
+    while i < len(line) and line[i] in " \t":
+        col = col + 4 - col % 4 if line[i] == "\t" else col + 1
+        i += 1
+    return col, i
+
+
+def _fence(rest: str) -> tuple[str, int] | None:
+    """A fence opener's marker and run length."""
+    if not rest or rest[0] not in "`~":
+        return None
+    run = len(rest) - len(rest.lstrip(rest[0]))
+    if run < 3 or (rest[0] == "`" and "`" in rest[run:]):
+        return None
+    return rest[0], run
+
+
+def _closes(rest: str, marker: str, run: int) -> bool:
+    n = len(rest) - len(rest.lstrip(marker)) if rest[:1] == marker else 0
+    return n >= run and rest[n:].strip(" \t") == ""
+
+
+def _marker(line: str, i: int, col: int) -> tuple[int, int | None, bool] | None:
+    """A list marker at ``line[i]`` (column ``col``): its item's content
+    column, the index of its content (None when the item starts empty or with
+    indented code) and whether the item starts empty."""
+    j = i
+    if line[j:j + 1] in ("-", "+", "*"):
+        j += 1
+    else:
+        while j < len(line) and j - i < 9 and "0" <= line[j] <= "9":
+            j += 1
+        if j == i or line[j:j + 1] not in (".", ")"):
+            return None
+        j += 1
+    if j < len(line) and line[j] not in " \t":
+        return None
+    after, k = _indent(line, j, col + j - i)
+    if k == len(line):
+        return col + j - i + 1, None, True
+    if after - (col + j - i) > 4:
+        return col + j - i + 1, None, False
+    return after, k, False
+
+
+def _step(state: tuple, line: str) -> list[tuple[tuple, bool]]:
+    """The readings after ``line`` from one reading, each with whether the
+    line is code in it."""
+    fence, marker, run, column, items, paragraph = state
+    col, i = _indent(line)
+    if i == len(line):
+        if fence:
+            return [(state[:5] + (False,), True)]
+        return [((0, "", 0, 0, tuple(x for x in items if not x[1]), False), False)]
+    items = tuple((c, False) for c, _ in items)
+    if fence == 1:
+        if col < 4 and _closes(line[i:], marker, run):
+            return [(_START, True)]
+        return [(state, True)]
+    if fence == 2:
+        if col >= column:
+            if col - column < 4 and _closes(line[i:], marker, run):
+                return [((0, "", 0, 0, items, False), True)]
+            return [((2, marker, run, column, items, False), True)]
+        return _plain(tuple(x for x in items if x[0] <= col), False, line, col, i)
+    return _plain(items, paragraph, line, col, i)
+
+
+def _plain(items: tuple, paragraph: bool, line: str, col: int, i: int) -> list[tuple[tuple, bool]]:
+    """Readings for a non-blank line outside fenced code."""
+    rest = line[i:]
+    inner = tuple(x for x in items if x[0] <= col)
+    relative = col - (inner[-1][0] if inner else 0)
+    opener = _fence(rest)
+    if relative < 4 and opener is not None:
+        if inner:
+            return [((2, opener[0], opener[1], inner[-1][0], inner, False), False)]
+        return [((1, opener[0], opener[1], 0, (), False), False)]
+    if relative < 4 and rest.startswith(">"):
+        return [((0, "", 0, 0, inner, True), False)]
+    out: list[tuple[tuple, bool]] = []
+    if paragraph and len(inner) < len(items):
+        out.append(((0, "", 0, 0, items, True), False))
+    if relative >= 4:
+        out.append(((0, "", 0, 0, inner, paragraph), not paragraph))
+        return out
+    added = list(inner)
+    at, at_col = i, col
+    while not _BREAK.fullmatch(line[at:]):
+        found = _marker(line, at, at_col)
+        if found is None:
+            break
+        content, at, empty = found
+        added.append((content, empty))
+        if at is None:
+            break
+        at_col = content
+    if len(added) == len(inner):
+        out.append(((0, "", 0, 0, inner, True), False))
+        return out
+    if paragraph:
+        out.append(((0, "", 0, 0, inner, True), False))
+    opener = _fence(line[at:]) if at is not None else None
+    if opener is not None:
+        out.append(((2, opener[0], opener[1], added[-1][0], tuple(added), False), False))
+    else:
+        out.append(((0, "", 0, 0, tuple(added), True), False))
     return out
 
 
-def _hides_lines(content: str, tag: str) -> bool:
-    """Whether a card token runs past its first line and holds text besides
-    its start tag and closing tag: the viewer shows none of that text. A start
-    tag with its attributes over several lines hides nothing; one cut off by
-    the end of the block hides every line after it."""
-    if "\n" not in content:
+def _html_start(line: str) -> bool:
+    """Whether the line, past anything that could be container markers or
+    whitespace, starts with something an HTML block could start with."""
+    i = 0
+    while i < len(line) and line[i] in _PREFIX:
+        i += 1
+    rest = line[i:]
+    if len(rest) < 2 or rest[0] != "<":
         return False
-    at = content.find("<" + tag)
-    parsed = _start_tag(content, at + 1) if at >= 0 else None
-    if parsed is None:
-        return any(_overview_blocks.js_trim(s) for s in content.split("\n")[1:])
-    rest = content[parsed[2]:].replace(f"</{tag}>", "", 1)
-    return _overview_blocks.js_trim(rest) != ""
+    if rest[1] in "!?/":
+        return True
+    if not ("a" <= rest[1] <= "z" or "A" <= rest[1] <= "Z"):
+        return False
+    j = 2
+    while j < len(rest) and (rest[j].isascii() and (rest[j].isalnum() or rest[j] == "-")):
+        j += 1
+    return j == len(rest) or rest[j] in _JS_SPACE or rest[j] in "/>"
 
 
 def _card_warnings(spec: dict, attrs: list[tuple[str, str]], known: set, seen: set, out: list[dict]) -> None:
-    """A rendered card's attribute and investigation warnings, each once."""
+    """A canonical insert's attribute and investigation warnings, each once."""
     tag = spec["tag"]
     for name, _ in attrs:
         if name not in spec["attributes"] and ("attribute", name) not in seen:
@@ -149,97 +356,7 @@ def _card_warnings(spec: dict, attrs: list[tuple[str, str]], known: set, seen: s
         out.append({"code": "unknown_investigation", "message": message, "investigation": ref})
 
 
-# --- the viewer's getAttrs: the first <tag> element of the card's HTML --------
-_RAW_TEXT = ("script", "style", "xmp", "iframe", "noembed", "noframes", "noscript", "textarea", "title")
-
-
-def _letter(ch: str) -> bool:
-    return ("a" <= ch <= "z") or ("A" <= ch <= "Z")
-
-
-def element_attributes(html: str, tag: str) -> list[tuple[str, str]] | None:
-    """The attributes of the first ``tag`` element (lowercase) the HTML parser
-    makes of ``html``, as the viewer's ``getAttrs`` reads them through
-    ``innerHTML`` and ``querySelector``: names lowercased, values decoded,
-    the first of a repeated name kept. None when there is no such element,
-    which includes a tag cut off by the end of the text."""
-    i = 0
-    n = len(html)
-    while True:
-        lt = html.find("<", i)
-        if lt < 0 or lt + 1 >= n:
-            return None
-        nxt = html[lt + 1]
-        if nxt == "!":
-            if html.startswith("<!--", lt):
-                j = lt + 4
-                if html.startswith(">", j):
-                    i = j + 1
-                    continue
-                if html.startswith("->", j):
-                    i = j + 2
-                    continue
-                ends = [k for k in (html.find("-->", j), html.find("--!>", j)) if k >= 0]
-                if not ends:
-                    return None
-                k = min(ends)
-                i = k + (3 if html.startswith("-->", k) else 4)
-                continue
-            end = html.find(">", lt + 2)
-            if end < 0:
-                return None
-            i = end + 1
-            continue
-        if nxt == "?":
-            end = html.find(">", lt + 2)
-            if end < 0:
-                return None
-            i = end + 1
-            continue
-        closing = nxt == "/"
-        start = lt + 2 if closing else lt + 1
-        if start >= n:
-            return None
-        if not _letter(html[start]):
-            if closing and html[start] == ">":
-                i = start + 1
-            elif closing:
-                end = html.find(">", start)
-                if end < 0:
-                    return None
-                i = end + 1
-            else:
-                i = lt + 1
-            continue
-        parsed = _start_tag(html, start)
-        if parsed is None:
-            return None
-        name, attrs, i = parsed
-        if closing:
-            continue
-        if name == tag:
-            return attrs
-        if name == "plaintext":
-            return None
-        if name in _RAW_TEXT:
-            i = _raw_text_end(html, i, name)
-            if i < 0:
-                return None
-
-
-def _raw_text_end(html: str, i: int, name: str) -> int:
-    """Past the ``</name`` that ends a raw text element, or -1."""
-    lowered = _lower(html)
-    while True:
-        k = lowered.find("</" + name, i)
-        if k < 0:
-            return -1
-        after = k + 2 + len(name)
-        if after >= len(html) or html[after] in _SPACE + "/>":
-            return k
-        i = after
-
-
+# --- a canonical insert's attributes, as the HTML parser reads its start tag ---
 def _start_tag(text: str, at: int) -> tuple[str, list[tuple[str, str]], int] | None:
     """Tag name (at its first letter), attributes and the index after ``>``."""
     i = at

@@ -11,8 +11,7 @@ import pytest
 
 import conformance_cases
 from autophys import connect
-from autophys import _overview_blocks
-from autophys.overview import INSERTS_JSON, check_overview, decode
+from autophys.overview import INSERTS_JSON, check_overview, decode, lint
 from autophys.store import JsonlStore, MemoryStore, StoreError, config_hash
 from autophys.workbook import (_OVERVIEWS_DDL, DISPLAY_VERSION, MAX_OVERVIEW_BYTES, OVERVIEW_VERSION, SCHEMA_VERSION,
                                WorkbookError, WorkbookStore)
@@ -185,13 +184,53 @@ def test_warnings_match_the_shared_vectors(case):
 
 
 @pytest.mark.parametrize("case", CASES["warnings"], ids=lambda c: c["name"])
-def test_cards_and_renders_match_the_shared_vectors(case):
-    """The block pass puts cards and HTML blocks where the viewer does
-    (html/routes/overview-vectors.deno.test.ts checks the same vectors against the
-    bundled parser)."""
-    found = _overview_blocks.blocks(case["markdown"], ("ap-investigation",))
-    assert [f[2] + 1 for f in found if f[0] == "card" and f[1] == "ap-investigation"] == case["cards"]
-    assert (not any(f[0] == "html_block" for f in found)) == case["renders"]
+def test_a_warning_free_vector_renders_its_canonical_lines_as_cards(case):
+    """Where the lint reports nothing, its canonical lines are the viewer's
+    cards and the viewer displays the document (html/routes/overview-vectors.deno.test.ts
+    checks each vector's cards and renders against the bundled parser)."""
+    warnings, cards = lint(case["markdown"], CASES["investigations"])
+    if not warnings:
+        assert cards == case["cards"] and case["renders"]
+
+
+def generated(cases):
+    """The shared generator (cases.json "generator"): canonical inserts among
+    ordinary Markdown blocks, apart by blank lines. The Rust unit test and the
+    deno test build the same documents."""
+    g = cases["generator"]
+    blocks, ids, seed = g["blocks"], cases["investigations"], g["seed"]
+
+    def nxt():
+        nonlocal seed
+        seed = (seed * 1664525 + 1013904223) & 0xFFFFFFFF
+        return seed
+
+    docs = []
+    for d in range(g["documents"]):
+        parts, lines, line, word = [], [], 1, 0
+        for _ in range(1 + nxt() % g["max_blocks"]):
+            r = nxt() % (len(blocks) + g["insert_slots"])
+            if r >= len(blocks):
+                lines.append(line)
+                text = g["insert"].replace("{id}", ids[nxt() % len(ids)]).replace("{n}", str(len(lines)))
+            else:
+                text = blocks[r]
+                while "{w}" in text:
+                    text = text.replace("{w}", f"w{d}x{word}z", 1)
+                    word += 1
+            line += text.count("\n") + 2
+            parts.append(text)
+        docs.append(("\n\n".join(parts) + "\n", lines))
+    return docs
+
+
+def test_generated_documents_have_no_warnings_and_one_card_per_insert():
+    docs = generated(CASES)
+    assert len(docs) == CASES["generator"]["documents"]
+    assert hashlib.sha256("".join(m for m, _ in docs).encode()).hexdigest() == CASES["generator"]["digest"]
+    for markdown, inserts in docs:
+        assert lint(markdown, CASES["investigations"]) == ([], inserts), markdown
+    assert sum(1 for _, i in docs if i) > len(docs) // 2
 
 
 @pytest.mark.parametrize(("raw", "want"), [

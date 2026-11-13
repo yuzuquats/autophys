@@ -10,7 +10,6 @@
 
 mod manifest;
 mod overview;
-mod overview_blocks;
 pub use manifest::{MAX_DISPLAY_BYTES, StoredDisplay};
 pub use overview::{
     MAX_OVERVIEW_BYTES, OverviewHead, OverviewWarning, StoredOverview, check_overview,
