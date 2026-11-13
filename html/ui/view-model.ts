@@ -10,7 +10,7 @@ import type { SidebarExtras } from "./sidebar-model.ts";
 
 export type InvestigationSummary = {
   id: string; title: string; caption: string; status: string; tone: "ok" | "warn" | "muted";
-  finding: string; evidence: string; outputs: { label: string; id: string }[];
+  finding: string; evidence: string; check: string; parameters: { label: string; value: string }[]; outputs: { label: string; id: string }[];
 };
 
 export type Tone = "default" | "muted" | "ok" | "warn" | "run" | "danger";

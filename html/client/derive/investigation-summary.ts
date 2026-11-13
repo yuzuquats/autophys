@@ -23,6 +23,23 @@ export function investigationSummary(project: Project, inv: Investigation): Inve
   const evidence = checked
     ? `Held-out χ²/N ${Number.isFinite(validation.chi2N) ? validation.chi2N.toFixed(2) : "not recorded"} · ${passed ? "passed" : "failed"} threshold ${Number.isFinite(validation.threshold) ? validation.threshold.toFixed(2) : "not recorded"}${!current ? ` (Fit #${validation.fit})` : ""}`
     : "Held-out validation not recorded.";
+  const checkIds = !checked ? [] : validation.state === "summary" ? validation.measurements : [validation.measurement];
+  const checkData = checkIds.map(id => inv.measurements.find(m => m.id === id));
+  const samples = checkData.length && checkData.every(m => m != null)
+    ? checkData.reduce((n, m) => n + m!.output.filter(Number.isFinite).length, 0) : 0;
+  const checkCount = samples ? `${samples.toLocaleString("en-US")} ` : "";
+  const check = !checked ? "Prediction check not yet recorded."
+    : !current ? "Prediction check belongs to an earlier model."
+    : passed ? `Prediction check passed on ${checkCount}measurements excluded from fitting.`
+    : `Prediction check failed on ${checkCount}measurements excluded from fitting.`;
+  const config = project.configs.find(c => c.version === inv.configVersion);
+  const parameters = fit ? inv.free.flatMap(name => {
+    const value = fit.params[name];
+    if (!Number.isFinite(value)) return [];
+    const unit = config?.params.find(p => p.name === name)?.unit ?? "";
+    const unresolved = diagnosis?.nonIdentified.includes(name);
+    return [{ label: name, value: unresolved ? "Unresolved" : `${value.toLocaleString("en-US", { maximumSignificantDigits: 5 })} ${unit}`.trim() }];
+  }) : [];
   const outputs: InvestigationSummary["outputs"] = [];
   if (fit) outputs.push({ label: `Parameters · Fit #${fit.n}`, id: ids.fit(inv, fit) });
   for (const measurement of inv.measurements) outputs.push({ label: measurement.id, id: ids.measurement(inv, measurement.id) });
@@ -31,5 +48,5 @@ export function investigationSummary(project: Project, inv: Investigation): Inve
   const title = investigationLabel(project, inv), ordinal = `Investigation ${project.investigations.indexOf(inv) + 1}`;
   return { id: inv.id, title, caption: title === ordinal ? "" : ordinal, status,
     tone: complete && current && passed ? "ok" : complete || state === "awaiting-approval" ? "warn" : "muted",
-    finding, evidence, outputs };
+    finding, evidence, check, parameters, outputs };
 }

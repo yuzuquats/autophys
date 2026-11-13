@@ -317,3 +317,39 @@ checks at each width cover state changes retaining keyboard focus, collapsed
 and expanded layout without horizontal overflow, and matching record links.
 No uncaught errors were reported. Diff check passes. Owner layout checks
 retain the pre-existing workspace/home-policy findings.
+
+## Plain-language card implementation — revision 7
+
+The operator approved the refined B card. The registered insert now leads
+with a plain-language explanation and a before/after comparison. The existing
+std-card owns its soft shadow. A native Technical details & outputs disclosure
+contains recorded identification, validation, fitted values and the existing
+record-navigation buttons. Open investigation remains directly available.
+
+The demo Markdown authors optional title, summary, before, before-detail,
+after, after-detail and scope attributes on the paired investigation insert.
+The Markdown therefore remains the editorial source; no battery-specific
+explanation is embedded in the renderer or generic evidence derivation. An
+insert without authored prose keeps its record-derived summary. The demo
+narrative is still hardcoded and requires editorial updates when the scenario
+changes; automatic agent editing and narrative persistence remain deferred.
+Status, prediction-check outcome, sample counts, parameter values and all
+navigation targets remain record-derived. Missing, failed and older checks
+stay explicit; unresolved values are not presented as established estimates.
+
+D-SUM-4's B direction is now operator-approved for implementation, with the
+plain-language summary requested in revision 6. The choice to author optional
+prose as insert attributes is agent-chosen, pending operator review: it keeps
+this demo in one Markdown asset. The alternative is a separate structured
+narrative map, which is easier to author at scale but splits document content.
+Current state: implemented with no server or persisted-data contract change.
+Reversal is a small Markdown/renderer edit, preserving the evidence model.
+
+Validation: the frontend suite passes 157 tests; a subsequent numeric-format
+regression and the six related evidence tests pass (seven targeted tests).
+Frozen entry-point and browser-test type checks and diff checks pass. Fourteen
+browser assertions exercise real std-documentation parsing, both card views,
+comparison prose, collapsed details, disclosure/focus preservation during
+evidence refresh, recorded navigation dispatch and missing references. The
+predeployment browser fixture supplies the new fields to the previous dev
+snapshot; the same checks will run against deployed derived data below.

@@ -28,6 +28,7 @@ Deno.test("a failed held-out check never gets a validated card", () => {
   const result = summarize({ validation: { ...source.validation, state: "failed", chi2N: 4 } });
   assertEquals(result.status, "Complete · failed validation");
   assertEquals(result.tone, "warn");
+  assert(result.check.startsWith("Prediction check failed"));
   assert(result.evidence.includes("4.00") && result.evidence.includes("failed"));
 });
 
@@ -36,6 +37,7 @@ Deno.test("missing diagnosis and missing validation remain explicit", () => {
   assertEquals(result.finding, "Parameter identification not recorded.");
   assertEquals(result.status, "Complete · validation not recorded");
   assertEquals(result.evidence, "Held-out validation not recorded.");
+  assertEquals(result.check, "Prediction check not yet recorded.");
   assertEquals(summarize({ fits: [] }).finding, "No converged fit recorded.");
 });
 
@@ -45,6 +47,7 @@ Deno.test("a check for an older fit is labelled and cannot validate the latest p
   assertEquals(result.status, "Complete · validation out of date");
   assertEquals(result.tone, "warn");
   assert(result.evidence.includes("Fit #-1"));
+  assertEquals(result.check, "Prediction check belongs to an earlier model.");
 });
 
 Deno.test("completed unresolved work preserves its diagnosis", () => {
@@ -54,4 +57,19 @@ Deno.test("completed unresolved work preserves its diagnosis", () => {
   assertEquals(result.status, "Complete · unresolved");
   assert(result.finding.includes("unresolved"));
   assertEquals(result.tone, "warn");
+});
+
+Deno.test("technical parameter values keep unresolved estimates explicit", () => {
+  const pending = project.investigations[0];
+  const result = investigationSummary(project, pending);
+  for (const name of pending.fits.at(-1)!.sensitivity!.nonIdentified) {
+    assertEquals(result.parameters.find(p => p.label === name)?.value, "Unresolved");
+  }
+  assertEquals(summarize({ fits: [] }).parameters, []);
+});
+
+Deno.test("small parameter values keep their significant digits in the technical details", () => {
+  const name = source.free[0];
+  const result = summarize({ fits: source.fits.map(f => ({ ...f, params: { ...f.params, [name]: 0.0249439438 } })) });
+  assert(result.parameters.find(p => p.label === name)?.value.startsWith("0.024944"));
 });
