@@ -566,17 +566,18 @@ Deno.test("wire: duplicate display receipt protects an in-flight reference witho
 
 // ------------------------------------------------------------------ project overviews (OV-5)
 
+// One stored version, the same object `/workspace` and `GET /projects/{pid}/overview` carry (OV-7).
+const overviewVersion = (markdown: string, digest: string) => ({ seq: 1, digest, markdown, author: "ada", created: T0 });
 const overviewEvent = (markdown: string, digest: string, project_id = "p_bench") =>
-  ({ project_id, seq: 1, digest, author: "ada", created: T0, markdown });
+  ({ project_id, overview: overviewVersion(markdown, digest) });
 
 Deno.test("daemon: the snapshot's overview becomes the project's Overview document", async () => {
   const { initialSelection, reduce } = await import("./controller.ts");
   const { derive, ids, parseSel } = await import("./derive/index.ts");
   const { investigationSummary } = await import("./derive/investigation-summary.ts");
   const d = fakeDaemon();
-  d.ws.projects.push({ id: "p_plain", name: "Plain", overview: null, overview_meta: null });
-  d.ws.projects[0].overview = "# Bench overview";
-  d.ws.projects[0].overview_meta = { digest: "a".repeat(64) };
+  d.ws.projects.push({ id: "p_plain", name: "Plain", overview: null });
+  d.ws.projects[0].overview = overviewVersion("# Bench overview", "a".repeat(64));
   const store = new Store(daemon(d.opts));
   await store.start();
   const snap = store.snapshot()!;
@@ -600,7 +601,9 @@ Deno.test("daemon: overview events redraw without advancing records, once per di
   const cursor = store.snapshot()!.gseq, before = store.snapshot()!.workspace.projects[0];
   assertEquals(before.overview, undefined);
   const fire = (event: unknown, stream = d.streams.at(-1)!) => stream.fire.overview?.forEach((fn) => fn({ data: JSON.stringify(event), lastEventId: "" }));
-  for (const invalid of [null, {}, { ...overviewEvent("# x", "bad") }, { ...overviewEvent("# x", "a".repeat(64)), markdown: 7 }, { ...overviewEvent("# x", "a".repeat(64)), project_id: "" }]) fire(invalid);
+  const valid = overviewEvent("# x", "a".repeat(64));
+  for (const invalid of [null, {}, overviewEvent("# x", "bad"), { ...valid, overview: { ...valid.overview, markdown: 7 } }, { ...valid, project_id: "" },
+    { ...valid, overview: null }, { project_id: "p_bench", ...valid.overview }]) fire(invalid);
   assertEquals(redraws, 0);
   fire(overviewEvent("# First", "a".repeat(64))); fire(overviewEvent("# First", "a".repeat(64)));
   const p = store.snapshot()!.workspace.projects[0];
@@ -629,18 +632,18 @@ Deno.test("wire: an overview receipt wins over an in-flight snapshot, and a late
   assert(model.overview(overviewEvent("# Live", "e".repeat(64)))); model.takeChanged();
   const started = model.displayRevision;
   assertEquals(model.overview(overviewEvent("# Live", "e".repeat(64))), false); assertEquals(model.takeChanged(), false);
-  raw.projects[0].overview = "# Older snapshot"; raw.projects[0].overview_meta = { digest: "d".repeat(64) };
+  raw.projects[0].overview = overviewVersion("# Older snapshot", "d".repeat(64));
   model.reference(raw, started);
   assertEquals(model.workspace().projects[0].overview, "# Live");
   // A snapshot taken after the receipt is authoritative, even with another body.
-  raw.projects[0].overview = "# Newer snapshot"; raw.projects[0].overview_meta = { digest: "f".repeat(64) };
+  raw.projects[0].overview = overviewVersion("# Newer snapshot", "f".repeat(64));
   model.reference(raw);
   assertEquals(model.workspace().projects[0].overview, "# Newer snapshot");
   // The live digest was forgotten with its body, so the same event applies again.
   assert(model.overview(overviewEvent("# Live", "e".repeat(64))));
   assertEquals(model.workspace().projects[0].overview, "# Live");
   // A snapshot that installs the same digest keeps the receipt: a repeat is a no-op.
-  raw.projects[0].overview = "# Live"; raw.projects[0].overview_meta = { digest: "e".repeat(64) };
+  raw.projects[0].overview = overviewVersion("# Live", "e".repeat(64));
   model.reference(raw); model.takeChanged();
   assertEquals(model.overview(overviewEvent("# Live", "e".repeat(64))), false);
 });

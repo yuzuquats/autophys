@@ -458,9 +458,9 @@ async fn workspace(
         let mut project = serde_json::to_value(&s.project)
             .map_err(|e| ApiError::Internal(format!("project JSON: {e}")))?;
         project["display"] = s.display.map(|d| d.body).unwrap_or(Value::Null);
-        // The Markdown the browser renders, and its version without the body.
-        project["overview_meta"] = s.overview.as_ref().map(overview::meta).unwrap_or(Value::Null);
-        project["overview"] = s.overview.map(|o| Value::String(o.markdown)).unwrap_or(Value::Null);
+        // The latest version, the same object `GET /projects/{pid}/overview`
+        // returns, or null before the first write (OV-7).
+        project["overview"] = overview::version(s.overview.as_ref());
         projects.push(project);
         invs.extend(s.investigations);
         props.extend(s.proposals);

@@ -15,9 +15,11 @@ import type {
 /** A record exactly as the daemon serves it (the SDK's 8 fields). */
 export type WireRecord = { id: string; investigation: string; seq: number; kind: string; ts: number; payload: Record<string, unknown>; prev_hash?: string; hash?: string };
 /** `display` is the project's latest display manifest (format 1), or null when none was uploaded.
- * `overview` is the latest overview's Markdown (workbook format 3) and `overview_meta` its version
- * `{seq, digest, author, created}`; both null before the first write. */
-export type WireProject = { id: string; name: string; display?: unknown; overview?: string | null; overview_meta?: { digest?: unknown } | null };
+ * `overview` is the latest overview version (workbook format 3), the same object
+ * `GET /projects/{pid}/overview` returns, or null before the first write (OV-7). */
+export type WireProject = { id: string; name: string; display?: unknown; overview?: WireOverview | null };
+/** One stored overview version: `{seq, digest, markdown, author, created}`. */
+export type WireOverview = { seq: number; digest: string; markdown: string; author: string; created: number };
 export type WireConfig = { project_id: string; version: string; config: unknown };
 /** `GET /workspace`: one consistent snapshot; resume the stream from `cursor`. */
 export type WireWorkspace = { workspace_id?: string; principal_id?: string; cursor: number | string; projects: WireProject[]; config_versions: WireConfig[]; records: WireRecord[] };
@@ -376,7 +378,7 @@ export class WireModel {
   displayRevision = 0;
   private displays = new Map<string, { digest: string; display: unknown; revision: number }>();
   /** Live `event: overview` receipts, ordered with display receipts by `displayRevision`. */
-  private overviews = new Map<string, { digest: string; markdown: string; revision: number }>();
+  private overviews = new Map<string, { overview: WireOverview; revision: number }>();
 
   /** The server validates format-1 manifests; reject malformed stream envelopes here. */
   display(event: unknown): boolean {
@@ -393,19 +395,20 @@ export class WireModel {
     this.changed = true;
     return true;
   }
-  /** An `event: overview` (`{project_id, digest, markdown, …}`): the project's latest overview.
-   * Like a display receipt, it wins over a snapshot that was already in flight when it arrived. */
+  /** An `event: overview` (`{project_id, overview: {seq, digest, markdown, author, created}}`): the
+   * project's latest overview. Like a display receipt, it wins over a snapshot that was already in
+   * flight when it arrived. */
   overview(event: unknown): boolean {
-    const e = obj(event);
-    if (typeof e.project_id !== "string" || !e.project_id || typeof e.digest !== "string" || !/^[a-f0-9]{64}$/.test(e.digest) || typeof e.markdown !== "string") return false;
+    const e = obj(event), o = obj(e.overview);
+    if (typeof e.project_id !== "string" || !e.project_id || typeof o.digest !== "string" || !/^[a-f0-9]{64}$/.test(o.digest) || typeof o.markdown !== "string") return false;
     const previous = this.overviews.get(e.project_id), revision = ++this.displayRevision;
-    if (previous?.digest === e.digest) {
+    if (previous?.overview.digest === o.digest) {
       this.overviews.set(e.project_id, { ...previous, revision });
       return false;
     }
-    this.overviews.set(e.project_id, { digest: e.digest, markdown: e.markdown, revision });
-    const markdown = e.markdown;
-    this.projects = this.projects.map((p) => p.id === e.project_id ? { ...p, overview: markdown, overview_meta: { digest: e.digest } } : p);
+    const overview = o as WireOverview;
+    this.overviews.set(e.project_id, { overview, revision });
+    this.projects = this.projects.map((p) => p.id === e.project_id ? { ...p, overview } : p);
     this.changed = true;
     return true;
   }
@@ -426,8 +429,8 @@ export class WireModel {
       // Keep it only when the snapshot installs that same presentation.
       else if (live && !sameDisplay(live.display, p.display)) this.displays.delete(p.id);
       const text = this.overviews.get(p.id);
-      if (text && text.revision > startedAt) return { ...p, overview: text.markdown, overview_meta: { digest: text.digest } };
-      if (text && text.digest !== p.overview_meta?.digest) this.overviews.delete(p.id);
+      if (text && text.revision > startedAt) return { ...p, overview: text.overview };
+      if (text && text.overview.digest !== obj(p.overview).digest) this.overviews.delete(p.id);
       return p;
     });
     for (const live of [this.displays, this.overviews]) {
@@ -479,7 +482,9 @@ export class WireModel {
     const projects: Project[] = [];
     for (const wp of this.projects) {
       const cfgs = this.configs.get(wp.id) ?? [];
-      const overview = typeof wp.overview === "string" ? { overview: wp.overview } : {};
+      // The domain keeps only the Markdown; the version stays on the wire.
+      const markdown = obj(wp.overview).markdown;
+      const overview = typeof markdown === "string" ? { overview: markdown } : {};
       if (!cfgs.length) {
         projects.push({ ...overview, id: wp.id, name: wp.name, configs: [], investigations: [] });
         // Its first streamed investigation may reference a config registered after load.

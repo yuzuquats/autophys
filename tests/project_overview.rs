@@ -26,9 +26,35 @@ fn format(p: &std::path::Path) -> i64 {
         .unwrap()
 }
 
-/// The next `event: overview`, asserting it carries no id. Record and display
-/// frames are skipped; `None` when only keep-alives arrive before the deadline.
+/// The raw body of a GET, for byte-for-byte comparisons.
+async fn raw_get<S, B>(app: &S, path: &str, key: &str) -> String
+where
+    S: actix_web::dev::Service<
+            actix_http::Request,
+            Response = actix_web::dev::ServiceResponse<B>,
+            Error = actix_web::Error,
+        >,
+    B: MessageBody,
+{
+    let resp = test::call_service(app, get(path, Some(key)).to_request()).await;
+    assert_eq!(resp.status(), 200);
+    String::from_utf8(test::read_body(resp).await.to_vec()).unwrap()
+}
+
+/// The next `event: overview`, parsed. See [`overview_frame`].
 async fn overview_event<B: MessageBody + Unpin>(body: &mut B, wait: Duration) -> Option<Value>
+where
+    B::Error: std::fmt::Debug,
+{
+    overview_frame(body, wait)
+        .await
+        .map(|data| serde_json::from_str(&data).unwrap())
+}
+
+/// The next `event: overview`'s data line, asserting the frame carries no
+/// id. Record and display frames are skipped; `None` when only keep-alives
+/// arrive before the deadline.
+async fn overview_frame<B: MessageBody + Unpin>(body: &mut B, wait: Duration) -> Option<String>
 where
     B::Error: std::fmt::Debug,
 {
@@ -44,11 +70,11 @@ where
                 let frame: String = buf.drain(..end + 2).collect();
                 if frame.starts_with("event: overview\n") {
                     assert!(!frame.contains("\nid: "), "{frame}");
-                    let data = frame
+                    return frame
                         .lines()
                         .find_map(|s| s.strip_prefix("data: "))
-                        .unwrap();
-                    return serde_json::from_str(data).unwrap();
+                        .unwrap()
+                        .to_string();
                 }
             }
         }
@@ -75,13 +101,8 @@ async fn writes_append_versions_and_the_snapshot_carries_the_latest() {
     let scoped = format!("/workspace?project={pid}");
 
     let (_, ws) = call(&app, get(&scoped, Some(&key)).to_request()).await;
-    assert_eq!(
-        (
-            &ws["projects"][0]["overview"],
-            &ws["projects"][0]["overview_meta"]
-        ),
-        (&Value::Null, &Value::Null)
-    );
+    assert_eq!(ws["projects"][0]["overview"], Value::Null);
+    assert!(ws["projects"][0].get("overview_meta").is_none());
     let (s, v) = call(
         &app,
         get(&format!("{path}/versions"), Some(&key)).to_request(),
@@ -123,9 +144,29 @@ async fn writes_append_versions_and_the_snapshot_carries_the_latest() {
     assert_eq!(first["warnings"][1]["investigation"], "inv_gone");
     assert_eq!((format(wb.path()), format(other.path())), (3, 1));
 
-    let (_, ws) = call(&app, get(&scoped, Some(&key)).to_request()).await;
-    assert_eq!(ws["projects"][0]["overview"], md.as_str());
-    assert_eq!(ws["projects"][0]["overview_meta"], first["overview"]);
+    // OV-7: `/workspace` carries the same version object as the overview
+    // route, byte for byte: field names, order and number formatting.
+    let raw_latest = raw_get(&app, &path, &key).await;
+    let object = raw_latest
+        .strip_prefix(&format!("{{\"project_id\":\"{pid}\",\"overview\":"))
+        .and_then(|rest| rest.strip_suffix('}'))
+        .unwrap_or_else(|| panic!("{raw_latest}"));
+    let raw_ws = raw_get(&app, &scoped, &key).await;
+    assert!(
+        raw_ws.contains(&format!("\"overview\":{object}")),
+        "{raw_ws}\n{object}"
+    );
+    let ws: Value = serde_json::from_str(&raw_ws).unwrap();
+    let wire = &ws["projects"][0]["overview"];
+    assert_eq!(
+        wire.as_object().unwrap().keys().collect::<Vec<_>>(),
+        ["seq", "digest", "markdown", "author", "created"]
+    );
+    assert_eq!(wire["markdown"], md.as_str());
+    assert!(ws["projects"][0].get("overview_meta").is_none());
+    for field in ["seq", "digest", "author", "created"] {
+        assert_eq!(wire[field], first["overview"][field], "{field}");
+    }
     let (_, all) = call(&app, get("/workspace", Some(&key)).to_request()).await;
     let other_row = all["projects"]
         .as_array()
@@ -304,10 +345,14 @@ async fn the_stream_sends_the_latest_overview_then_each_new_digest_without_an_id
     let url = format!("/stream?project={}&after=0", wb.id());
     let response = test::call_service(&app, get(&url, Some(&key)).to_request()).await;
     let mut body = response.into_body();
-    let first = overview_event(&mut body, Duration::from_secs(3))
+    let data = overview_frame(&mut body, Duration::from_secs(3))
         .await
         .expect("latest on connect");
+    // OV-7: the event's data is the overview route's body, byte for byte.
+    assert_eq!(data, raw_get(&app, &path, &key).await);
+    let first: Value = serde_json::from_str(&data).unwrap();
     assert_eq!(first["project_id"], wb.id());
+    let first = &first["overview"];
     assert_eq!(
         (&first["markdown"], &first["seq"], &first["author"]),
         (&json!("# First\n"), &json!(1), &json!("ada"))
@@ -359,7 +404,7 @@ async fn the_stream_sends_the_latest_overview_then_each_new_digest_without_an_id
         .await
         .unwrap();
     assert_eq!(
-        (&live["markdown"], &live["seq"]),
+        (&live["overview"]["markdown"], &live["overview"]["seq"]),
         (&json!("# Live\n"), &json!(2))
     );
     // Another process: no broadcast, so the poll must find it.
@@ -373,7 +418,7 @@ async fn the_stream_sends_the_latest_overview_then_each_new_digest_without_an_id
         .await
         .unwrap();
     assert_eq!(
-        (&ext["markdown"], &ext["author"]),
+        (&ext["overview"]["markdown"], &ext["overview"]["author"]),
         (&json!("# External\n"), &json!("bob"))
     );
 
@@ -388,7 +433,7 @@ async fn the_stream_sends_the_latest_overview_then_each_new_digest_without_an_id
     let again = overview_event(&mut resumed.into_body(), Duration::from_secs(3))
         .await
         .unwrap();
-    assert_eq!(again["markdown"], "# External\n");
+    assert_eq!(again["overview"]["markdown"], "# External\n");
 
     // Unscoped streams carry every project's overview.
     let all = test::call_service(&app, get("/stream?after=0", Some(&key)).to_request()).await;

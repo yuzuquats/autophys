@@ -19,7 +19,8 @@
 //! without an id: they leave the record cursor intact. Each connection sends
 //! the latest manifest, then changed digests (including external writers).
 //! Project overviews follow the same rules as `event: overview`, data
-//! `{project_id, seq, digest, author, created, markdown}`: the latest version
+//! `{project_id, overview}` with the version object `/workspace` and
+//! `GET /projects/{pid}/overview` carry: the latest version
 //! on connect, then each change of digest. Each read compares the latest
 //! `seq` and `digest` first and loads the Markdown only for a new digest.
 //!
@@ -226,8 +227,7 @@ impl Tail {
                 self.quiet_since = Instant::now();
                 // No id, as for display: the record resume cursor stays put.
                 let data = serde_json::json!({
-                    "project_id": pid, "seq": o.seq, "digest": o.digest, "author": o.author,
-                    "created": o.created, "markdown": o.markdown,
+                    "project_id": pid, "overview": super::overview::version(Some(&o)),
                 });
                 return Some(Bytes::from(format!("event: overview\ndata: {data}\n\n")));
             }

@@ -238,14 +238,17 @@ digest) with `{project_id, overview: {seq, digest, author, created},
 changed, warnings}`; refusals use the codes above (422 `invalid_payload`,
 413 `payload_too_large`). `GET /projects/{pid}/overview/versions` returns
 `{versions: [{seq, digest, markdown, author, created}]}`, oldest first.
-`/workspace.projects[]` carries `overview: <Markdown|null>` and
-`overview_meta: {seq, digest, author, created}|null`. `/stream` sends
-`event: overview` with `{project_id, seq, digest, author, created, markdown}`
-and no event id, on the same terms as `event: display`: the latest on
+`GET /projects/{pid}/overview` returns `{project_id, overview}`, where
+`overview` is the latest version `{seq, digest, markdown, author, created}`,
+or null before the first write. Each `/workspace.projects[]` carries the same
+`overview` object (or null), byte for byte (OV-7). `/stream` sends
+`event: overview` whose data is `{project_id, overview}`, exactly the route's
+body, with no event id, on the same terms as `event: display`: the latest on
 connect, then on each change of digest, without moving the record cursor.
 The CLI writes and reads through the SDK: `autophys overview set PROJECT
-FILE.md [--author NAME]` (default author `operator`) and `autophys overview
-show PROJECT [--json]`, both with `--target DIR|FILE|URL`. An SDK talking to
+FILE.md --author NAME` (the author is required, OV-8; `FILE` may be `-` for
+stdin) and `autophys overview show PROJECT [--json]`, both with
+`--target DIR|FILE|URL`. An SDK talking to
 a daemon without these routes gets an "upgrade the autophys daemon" error.
 
 ## Payload validation

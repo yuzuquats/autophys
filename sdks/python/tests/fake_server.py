@@ -398,9 +398,8 @@ class FakeAutophys:
                     projects = [dict(p) for p in fake.projects.values() if p["workspace"] == who["workspace"]
                                 and (pid is None or p["id"] == pid)]
                     for p in projects:
-                        latest = (fake.overviews.get(p["id"]) or [None])[-1]
-                        p["overview"] = latest and latest["markdown"]
-                        p["overview_meta"] = latest and {k: latest[k] for k in ("seq", "digest", "author", "created")}
+                        # OV-7: the same version object the overview route returns, or None.
+                        p["overview"] = (fake.overviews.get(p["id"]) or [None])[-1]
                     return self._send(200, {"projects": projects})
                 overview = re.fullmatch(r"/projects/([^/]+)/overview(/versions)?", path)
                 if overview:

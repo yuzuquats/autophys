@@ -139,15 +139,9 @@ impl Remote {
                 created: 0.0,
             })
         };
-        // `overview` is the Markdown the browser renders; `overview_meta`
-        // carries the rest of the stored version.
-        let overview = match (project["overview"].take(), project["overview_meta"].take()) {
-            (Value::String(markdown), meta) if meta.is_object() => Some(StoredOverview {
-                markdown,
-                ..decode::<OverviewMeta>(meta)?.into()
-            }),
-            _ => None,
-        };
+        // The latest stored version, as `GET /projects/{pid}/overview` sends
+        // it, or null before the first write (OV-7).
+        let overview: Option<StoredOverview> = decode(project["overview"].take())?;
         Ok(Snapshot {
             overview,
             project: decode(project.clone())?,
@@ -359,8 +353,8 @@ impl Remote {
     }
 }
 
-/// A stored overview version without its Markdown, as the daemon sends it
-/// beside the body (`overview_meta`, and a write's `overview`).
+/// A stored overview version without its Markdown, as the daemon answers a
+/// write.
 #[derive(serde::Deserialize)]
 struct OverviewMeta {
     seq: i64,

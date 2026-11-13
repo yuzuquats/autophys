@@ -56,7 +56,7 @@ pub(super) async fn get(_: Keyed, api: Data, pid: web::Path<String>) -> Result<H
     let wb = workbook(&api, &pid).await?;
     let latest = blocking(move || Ok(wb.overview()?)).await?;
     Ok(ok(
-        json!({ "project_id": pid.as_str(), "overview": latest }),
+        json!({ "project_id": pid.as_str(), "overview": version(latest.as_ref()) }),
     ))
 }
 
@@ -67,8 +67,20 @@ pub(super) async fn versions(_: Keyed, api: Data, pid: web::Path<String>) -> Res
     Ok(ok(json!({ "versions": versions })))
 }
 
-/// A version without its Markdown: `overview_meta` in `/workspace`, and a
-/// write's `overview`.
+/// One stored version with its Markdown, `{seq, digest, markdown, author,
+/// created}`, or null: the `overview` of this route, of each `/workspace`
+/// project and of `event: overview` (OV-7). One function, so the three stay
+/// byte for byte the same.
+pub(super) fn version(o: Option<&autophys::StoredOverview>) -> Value {
+    o.map_or(Value::Null, |o| {
+        json!({
+            "seq": o.seq, "digest": o.digest, "markdown": o.markdown,
+            "author": o.author, "created": o.created,
+        })
+    })
+}
+
+/// A version without its Markdown: a write's `overview`.
 pub(super) fn meta(o: &autophys::StoredOverview) -> Value {
     json!({"seq": o.seq, "digest": o.digest, "author": o.author, "created": o.created})
 }
