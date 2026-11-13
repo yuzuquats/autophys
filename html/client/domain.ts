@@ -230,7 +230,7 @@ export type Investigation = {
   reveal?: Reveal;
 };
 
-export type Project = { id: string; name: string; configs: ProjectConfig[]; investigations: Investigation[] };
+export type Project = { overview?: string; id: string; name: string; configs: ProjectConfig[]; investigations: Investigation[] };
 
 export type Workspace = { user: string; projects: Project[] };
 

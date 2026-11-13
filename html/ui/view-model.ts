@@ -12,7 +12,7 @@ export type Tone = "default" | "muted" | "ok" | "warn" | "run" | "danger";
 
 /** Glyphs the package draws (icons.ts). */
 export type IconName =
-  | "workspace" | "device" | "config" | "investigation" | "measurements" | "measurement" | "fit" | "sensitivity"
+  | "document" | "workspace" | "device" | "config" | "investigation" | "measurements" | "measurement" | "fit" | "sensitivity"
   | "proposal" | "validate" | "view" | "residuals" | "landscape" | "envelope" | "frequency" | "zoom" | "plus" | "chevron";
 
 /** A row's trailing edge: text in a tone, optionally a spinner before it, or a count badge. */
@@ -119,6 +119,7 @@ export type SetupStep = {
 export type ProjectSetupBody = { kind: "project-setup"; title: string; description: string; notice?: string; steps: SetupStep[] };
 
 export type MainBody =
+  | { kind: "document"; id: string; markdown: string }
   | ProjectSetupBody
   | { kind: "empty"; text: string }
   | Missing

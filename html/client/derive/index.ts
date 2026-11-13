@@ -58,7 +58,7 @@ export function derive(snapshot: Snapshot | null, selection: Selection, source =
           sections: [{ heading: "", blocks: [{ kind: "missing", title: "Record your configuration", description: "This project is registered. Start its first investigation from the Python SDK to record the simulator configuration." }] }, ...(dev ? [dev.section] : [])], actions: dev?.actions },
       };
     } else view = { sidebar: sidebarModel(s), main: mainModel(s), details: detailsModel(s) };
-    if (!project.investigations.length && view.main.body.kind !== "configuration") {
+    if (!project.investigations.length && view.main.body.kind !== "configuration" && view.main.body.kind !== "document") {
       view.main = { ...view.main, crumb: [{ label: project.name }], meta: "", body: onboarding(project.name) };
     }
   }

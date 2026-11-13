@@ -91,6 +91,7 @@ export function detailsModel(s: State): DetailsModel {
 function selectedDetails(s: State): DetailsModel {
   const project = projectOf(s);
   const sel = parseSel(project, s.selected[project.id] ?? "") ?? parseSel(project, defaultSelection(project))!;
+  if (sel.kind === "document") return { icon: "document", title: "Overview", status: { text: "Demo project" }, sections: [] };
   if (sel.kind === "config") return configDetails(s, project);
   const proposal = decisionProposal(sel.inv, sel);
   if (!proposal || stateOf(sel.inv) === "running" && sel.kind !== "proposal") return investigationDetails(project, sel.inv);

@@ -37,7 +37,9 @@ export function mainMarkup(model: MainModel, width: number, classes: MainClasses
   }).join(sep);
   const toolbar = `<div class="${esc([classes.toolbar ?? "", "ap-toolbar"].filter(Boolean).join(" "))}"><nav class="ap-crumb" aria-label="Selection" title="${esc(breadcrumbText(model.crumb))}">${crumb}</nav><div class="ap-right"><span class="ap-meta" id="ap-meta" title="${esc(model.metaTitle ? `${model.meta} (${model.metaTitle})` : model.meta)}">${esc(model.meta)}</span>${model.actions.map((a) => buttonMarkup(a, classes)).join("")}</div></div>`;
   let body: string;
-  if (model.body.kind === "project-setup") {
+  if (model.body.kind === "document") {
+    body = `<section class="ap-viewer ap-document-view"><div data-ap-document="${esc(model.body.markdown)}"></div></section>`;
+  } else if (model.body.kind === "project-setup") {
     body = newProjectMarkup(model.body);
   } else if (model.body.kind === "empty") {
     body = `<div class="ap-viewer ap-empty"><p>${esc(model.body.text)}</p></div>`;
@@ -153,7 +155,8 @@ export class AutophysMain {
    */
   render(model: MainModel): void {
     const previous = this.model?.body, nextBody = model.body;
-    const samePage = previous?.kind === "investigation" && nextBody.kind === "investigation" && previous.pageId === nextBody.pageId;
+    const samePage = previous?.kind === "investigation" && nextBody.kind === "investigation" && previous.pageId === nextBody.pageId
+      || previous?.kind === "document" && nextBody.kind === "document" && previous.id === nextBody.id;
     const selectionChanged = !samePage || (previous?.kind === "investigation" && nextBody.kind === "investigation" && previous.selectionId !== nextBody.selectionId);
     const disclosures = samePage ? [...this.host.querySelectorAll<HTMLDetailsElement>("[data-ap-disclosure]")].map(e => [e.id, e.open] as const) : [];
     const scroll = samePage ? this.host.querySelector(".ap-viewer")?.scrollTop ?? 0 : 0;

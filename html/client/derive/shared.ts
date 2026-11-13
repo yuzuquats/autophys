@@ -36,6 +36,7 @@ export type State = Selection & {
 export const draftKey = (inv: Investigation, p: Proposal, field: string) => `${inv.id}/${p.id}/${field}`;
 
 export type Sel =
+  | { kind: "document"; project: Project }
   | { kind: "config"; project: Project }
   | { kind: "investigation"; inv: Investigation }
   | { kind: "data"; inv: Investigation }
@@ -50,6 +51,7 @@ export type Sel =
 // ------------------------------------------------------------------------ ids and selection
 
 export const ids = {
+  overview: (p: Project) => `overview:${p.id}`,
   config: (p: Project) => `config:${p.id}`,
   inv: (i: Investigation) => i.id,
   data: (i: Investigation) => `${i.id}/data`,
@@ -73,6 +75,7 @@ export const latestConfig = (p: Project): ProjectConfig => p.configs.reduce((a, 
 export const latestFit = (inv: Investigation): Fit | null => [...inv.fits].reverse().find((f) => f.state === "converged") ?? null;
 
 export function parseSel(project: Project, id: string): Sel | null {
+  if (id === ids.overview(project) && project.overview != null) return { kind: "document", project };
   if (id === ids.config(project)) return { kind: "config", project };
   const [invId, part, ...rest] = id.split("/");
   const inv = project.investigations.find((i) => i.id === invId);
@@ -110,7 +113,7 @@ export function defaultSelection(project: Project): string {
 /** The rows a selection sits under, so selecting opens them. */
 export function ancestors(id: string): string[] {
   const parts = id.split("/");
-  if (id.startsWith("config:")) return [];
+  if (id.startsWith("config:") || id.startsWith("overview:")) return [];
   const out = [parts[0]];
   if (parts[1] === "data") out.push(`${parts[0]}/data`);
   if (parts[1]?.startsWith("fit-") && parts.length > 2) out.push(`${parts[0]}/${parts[1]}`);

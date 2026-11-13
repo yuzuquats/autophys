@@ -145,6 +145,8 @@ function selectedMain(s: State): MainModel {
   const project = projectOf(s);
   const sel = parseSel(project, s.selected[project.id] ?? "") ?? parseSel(project, defaultSelection(project))!;
   switch (sel.kind) {
+    case "document": return { crumb: [{ label: project.name }, { label: "Overview" }], meta: "", actions: [],
+      body: { kind: "document", id: ids.overview(project), markdown: project.overview! }, credit: "" };
     case "config": {
       const c = latestConfig(project);
       return { crumb: [{ label: project.name }, { label: "Configuration" }], meta: `v${c.version} · ${shortHash(c.hash)}`, actions: [],
@@ -182,7 +184,7 @@ function validationCard(c: ProjectConfig, inv: Investigation): InvestigationCard
 }
 
 /** One investigation page. Old leaf selections change the target, never the page. */
-export function investigationPage(s: State, project: Project, sel: Exclude<Sel, {kind:"config"}>): MainModel {
+export function investigationPage(s: State, project: Project, sel: Exclude<Sel, {kind:"config" | "document"}>): MainModel {
   const inv = sel.inv, c = configFor(project, inv), rounds = investigationRounds(inv);
   const target = investigationTarget(inv, sel, rounds), fit = latestFit(inv), latest = rounds.at(-1)!;
   const finished = ["validated", "inconclusive"].includes(stateOf(inv));

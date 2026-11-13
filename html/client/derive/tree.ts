@@ -186,7 +186,8 @@ export function sidebarModel(s: State): SidebarModel {
           ? { text: `v${latest.version}` }
           : { badge: "not set", tone: "muted" },
       };
-      const children = [
+      const children: TreeNode[] = [
+        ...(project.overview == null ? [] : [{ id: ids.overview(project), label: "Overview", icon: "document" as const, selectable: true, children: null }]),
         config,
         ...project.investigations.toSorted((a, b) => recency(b) - recency(a)).map((inv) => investigationNode(project, inv)),
       ];

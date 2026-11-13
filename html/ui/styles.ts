@@ -73,6 +73,9 @@ ${w} .ap-trail { display:inline-flex;align-items:center;gap:4px;font:11px/16px v
 ${w} .ap-badge { display:inline-block;min-width:16px;padding:0 6px;border-radius:999px;background:var(--hx-ink,#111);color:#fff;font:600 10.5px/16px var(--ap-font);text-align:center; }
 
 /* ---- main ---- */
+${w} .ap-document-view { display:block;background:var(--ap-card-bg); }
+${w} .ap-document-view > [data-ap-document] { max-width:800px;margin:0 auto; }
+${w} .ap-document-view std-documentation { display:block; }
 ${w} .ap-toolbar { display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;flex-shrink:0;min-height:34px; }
 ${w} .ap-crumb { display:flex;align-items:center;flex-wrap:wrap;gap:2px;min-width:0;font:13px/18px var(--ap-font);color:var(--ap-sec); }
 ${w} .ap-crumb button { padding:2px 4px;border:0;border-radius:6px;background:none;font:inherit;color:inherit;cursor:pointer; }

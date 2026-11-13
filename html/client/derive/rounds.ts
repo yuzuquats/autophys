@@ -25,7 +25,7 @@ export function investigationRounds(inv: Investigation): Round[] {
 }
 
 /** Legacy selections locate an actual card, including a measurement inside a closed older round. */
-export function investigationTarget(inv: Investigation, sel: Exclude<Sel, {kind:"config"}>, rounds = investigationRounds(inv)): string {
+export function investigationTarget(inv: Investigation, sel: Exclude<Sel, {kind:"config" | "document"}>, rounds = investigationRounds(inv)): string {
   const last = rounds.at(-1)!;
   const atFit = (n: number) => rounds.find(r => r.fit?.n === n) ?? last;
   switch (sel.kind) {

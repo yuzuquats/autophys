@@ -7,6 +7,7 @@
 import { bootstrapContext, readContext, type AppContext } from "./context.ts";
 import { Cookbook } from "@tento-cookbook/lib.ts";
 import { daemon } from "../client/api.ts";
+import { withDemoDocument } from "./demo-document.ts";
 import { selectionAddress } from "./selection-address.ts";
 import { type OpenAddress, openSelection, withoutOpen } from "./open-address.ts";
 import { followOpenLink } from "./open-link.ts";
@@ -48,7 +49,8 @@ const environment = () => ({ user: identity(), now: clock, daemonOrigin: locatio
 let sourceEpoch = 0;
 const makeStore = () => {
   const epoch = ++sourceEpoch;
-  return new Store(daemon({ user: identity(), workspaceId: context?.workspace?.id, principalId: context?.principal?.id, reauth: () => { if (epoch === sourceEpoch) reauth(); } }));
+  const source = daemon({ user: identity(), workspaceId: context?.workspace?.id, principalId: context?.principal?.id, reauth: () => { if (epoch === sourceEpoch) reauth(); } });
+  return new Store(context?.workspace?.demo ? withDemoDocument(source) : source);
 };
 /** How often the open app re-reads the devices waiting to pair (pairings have no stream). */
 const PAIRING_POLL_MS = 5000;

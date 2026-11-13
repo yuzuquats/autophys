@@ -14,7 +14,7 @@ export function freshMarkers(host: HTMLElement, selector: string): HTMLElement[]
 
 // These markers own an opaque component. Containers which adopt app children
 // (list cells, grids and setup steppers) are reconciled through their light DOM.
-const opaque = "[data-ap-icon],[data-ap-empty],[data-ap-steps],[data-ap-timeline],[data-ap-copy],[data-ap-action],[data-ap-skeleton],[data-ap-button]";
+const opaque = "[data-ap-document],[data-ap-icon],[data-ap-empty],[data-ap-steps],[data-ap-timeline],[data-ap-copy],[data-ap-action],[data-ap-skeleton],[data-ap-button]";
 function key(node: Node): string | null {
   if (!(node instanceof Element)) return null;
   const id = node.id || ["data-ap-page", "data-ap-experiment-key", "data-ap-experiment-row", "data-ap-jump", "data-ap-id", "data-ap-name"].map(name => node.getAttribute(name)).find(Boolean);

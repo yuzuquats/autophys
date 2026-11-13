@@ -1,8 +1,9 @@
+import { Documentation } from "@tento-ui/components/documentation/documentation";
 import { freshMarkers } from "./render-diff.ts";
 import { ColumnsIcon, LinkIcon, GearIcon, ComponentIcon, DatabaseIcon, FormulaIcon, BarChartIcon,
-  PlayIcon, CheckmarkIcon, EyeIcon, GridIcon, SearchIcon, PlusIcon, ChevronRightIcon } from "@tento-ui/ui/icons";
+  TextIcon, PlayIcon, CheckmarkIcon, EyeIcon, GridIcon, SearchIcon, PlusIcon, ChevronRightIcon } from "@tento-ui/ui/icons";
 export const chevronIcon = ChevronRightIcon;
-const icons: Record<string, string> = { workspace: ColumnsIcon, device: LinkIcon, config: GearIcon, investigation: ComponentIcon,
+const icons: Record<string, string> = { document: TextIcon, workspace: ColumnsIcon, device: LinkIcon, config: GearIcon, investigation: ComponentIcon,
   measurement: DatabaseIcon, fit: FormulaIcon, sensitivity: BarChartIcon, proposal: PlayIcon,
   validate: CheckmarkIcon, view: EyeIcon, landscape: GridIcon, zoom: SearchIcon, plus: PlusIcon, chevron: ChevronRightIcon };
 
@@ -20,6 +21,11 @@ import { LabelTimeline } from "./timeline.ts";
 import type { IntentHandler } from "./intent.ts";
 
 export function hydrateComponents(host: HTMLElement, onIntent: IntentHandler): void {
+  for (const marker of freshMarkers(host, "[data-ap-document]")) {
+    const doc = Documentation.make();
+    marker.replaceChildren(doc);
+    void doc.bind({ markdown: marker.dataset.apDocument! }).catch(() => { marker.textContent = "The document could not be displayed. Reload to try again."; });
+  }
   for (const marker of freshMarkers(host, "[data-ap-icon]")) {
     marker.style.cssText = "display:inline-flex;width:14px;height:14px;flex:none";
     marker.innerHTML = (icons[marker.dataset.apIcon!] ?? "").replace("<svg", '<svg width="14" height="14" aria-hidden="true"');

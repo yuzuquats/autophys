@@ -2,7 +2,7 @@
 import type { IconName } from "./view-model.ts";
 const icon = (name: string) => `<span data-ap-icon="${name}" aria-hidden="true"></span>`;
 export const ICONS: Record<IconName, string> = {
-  workspace: icon("workspace"), device: icon("device"), config: icon("config"), investigation: icon("investigation"),
+  document: icon("document"), workspace: icon("workspace"), device: icon("device"), config: icon("config"), investigation: icon("investigation"),
   measurements: icon("measurement"), measurement: icon("measurement"), fit: icon("fit"),
   sensitivity: icon("sensitivity"), proposal: icon("proposal"), validate: icon("validate"),
   view: icon("view"), residuals: icon("sensitivity"), landscape: icon("landscape"), envelope: icon("fit"),

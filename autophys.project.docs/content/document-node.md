@@ -1,14 +1,14 @@
 # A project document is Markdown rendered with std-documentation
 
-Status: revision 3, 2026-11-12. The design is simplified to Markdown and the existing
-renderer. The workbench integration is not implemented.
+Status: revision 4, 2026-11-12. The demo workbench integration is implemented;
+verification and deployment to dev--autophys.lona.so are underway.
 
 Agents maintain one Markdown document explaining what the project is doing as
 work progresses. Selecting its document node in the tree displays that Markdown
 with `std-documentation`, which Autophys already uses for its landing documentation
 (`html/routes/docs.ts`).
 
-[Example project document](project-overview.example.md)
+[Demo project Markdown](../../html/routes/demo-overview.md)
 
 ## Rendering
 
@@ -39,12 +39,17 @@ document-specific outline is needed. The earlier HTML concept is removed.
   update controls. There is no application-level revision system in this design.
 
 The sample is ordinary Markdown grounded in the bundled battery example. It
-does not represent a live project. Content storage and transport remain to be
-wired into the workbench; this simplification adopts no new persistence or API
-contract. It is cheap to change the proposed tree placement while integration
-is unimplemented.
+does not represent a live project. The demo loads a same-origin Markdown asset once, adds it only to the battery
+project in a demo workspace, and preserves it across workspace refreshes and
+record folds. Ordinary accounts keep the existing source. This is a frontend
+demo adapter; no workbook, SDK, persistence or API contract has changed. The
+Overview node uses normal selection, while the existing initial selection remains
+the investigation. D-DOC-1 is now implemented for the requested demo preview;
+the operator has not separately confirmed its final placement.
 
 Verified the existing `Documentation.bind({ markdown })` interface and its use in
 Autophys, checked references to the removed concept, and ran `git diff --check`.
-No application source, service or deployment changes. Host layout checks retain
-their pre-existing workspace and home-policy findings.
+The browser suite passes 151 tests, including demo scoping, selection and
+retention through stream updates and folds. The shared component owns all
+Markdown rendering. Host layout checks retain their pre-existing workspace and
+home-policy findings.
