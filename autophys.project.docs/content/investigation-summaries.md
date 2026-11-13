@@ -255,3 +255,38 @@ Before/after host layout checks retain the pre-existing workspace autophys
 and home-policy findings. Production was not restarted: autophys.service
 remains PID 1747, active since 2026-11-09 05:26:46 PST. No investigation,
 proposal or measurement record was changed.
+
+## Card hierarchy variations — revision 5 concepts
+
+The operator requested variations that make each investigation easier to
+summarize. [Three card concepts](investigation-card-variations.mock.html) use
+the recorded synthetic battery results from the current Overview. They retain
+the std-card surface/shadow direction; this self-contained HTML approximates
+that surface rather than importing or registering runtime components.
+
+- A leads with a finding, then gives the result, held-out evidence and grouped
+  expandable outputs. The original run name becomes secondary identity.
+- B compares the short-pulse knowledge with the pulse-ladder result. Pending
+  work instead shows the proposed next step without claiming a result.
+- C separates what was done, what was found and what was checked.
+
+Both states and all three cards can be inspected together or inside a short
+Overview excerpt. Outputs expand locally. Open investigation shows a labeled
+record preview; it does not navigate or change a live record. Editorial
+headlines are proposed summaries, not newly stored investigation titles.
+
+**D-SUM-4 — agent-chosen recommendation, pending operator review.** Recommend
+A's finding-first hierarchy and grouped outputs. Before: the recorded run name
+leads and raw output links compete with the finding. Proposed after: the
+conclusion leads and the supporting records expand on demand. B is the
+strongest alternative when the change in knowledge matters most; it takes more
+space and needs a meaningful baseline. Current state: concept only; the live
+insert and deployments are unchanged. Reversal is a small HTML/copy edit with
+no data contract or migration.
+
+Validation: inspected compare and contextual layouts at 728px and 390px. At
+each width, 84 assertions cover all state/view/variant combinations, expanded
+outputs, preview focus and focus restoration, and horizontal overflow. No
+uncaught errors were reported. The paired contextual mock is intentionally
+a single investigation excerpt, not the whole project document. Diff checks
+pass; owner workspace/home layout checks retain their existing findings.
