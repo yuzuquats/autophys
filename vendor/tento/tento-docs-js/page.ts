@@ -14,49 +14,42 @@ const PAGE_CSS = `
 .tento-docs { ${DOCUMENTATION_TOKENS}
   color-scheme: light; background: #fff; border-top: 1px solid #d9d9d9;
   padding: 80px max(24px, calc((100vw - 1080px)/2)) 112px;
-  font: 14px/1.5 system-ui, sans-serif;
+
 }
 .tento-docs * { box-sizing: border-box; }
-.tento-docs-intro { margin: 0 0 48px 224px; max-width: 800px; }
-.tento-docs-intro h2 { margin: 0 0 16px; font: 400 28px/1.2 system-ui, sans-serif; letter-spacing: -.025em; }
-.tento-docs-intro p { margin: 0; color: #424242; max-width: 48em; }
 .tento-docs-layout { display: grid; grid-template-columns: 176px minmax(0, 800px); gap: 48px; }
 .tento-docs-nav { position: sticky; top: 96px; align-self: start; display: grid; gap: 2px; font: 13px/1.5 system-ui, sans-serif; }
 .tento-docs-nav a { padding: 7px 12px; text-decoration: none; color: #5c5c5c; border-left: 2px solid transparent; }
 .tento-docs-nav a:hover, .tento-docs-nav a[aria-current="location"] { color: #141414; border-color: #4a4fc4; background: #f7f7f7; }
 .tento-docs-body { min-width: 0; }
-.tento-docs-section { scroll-margin-top: var(--documentation-scroll-offset, 88px); min-width: 0; }
-.tento-docs-section + .tento-docs-section { border-top: 1px solid #d9d9d9; padding-top: 40px; margin-top: 40px; }
-.tento-docs-section std-documentation { display: block; --editor-padding: 0px; }
+.tento-docs std-documentation { display: block; }
 .tento-docs-error { color: #8a2828; }
 @media (max-width: 800px) {
   .tento-docs { padding: 48px 24px 72px; }
-  .tento-docs-intro { margin: 0 0 32px; }
-  .tento-docs-intro h2 { font-size: 26px; }
   .tento-docs-layout { display: block; }
   .tento-docs-nav { position: static; display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 32px; }
   .tento-docs-nav a { font-size: 12px; padding: 6px 8px; }
 }
 `;
 
+// Keep Code itself as the node-view DOM, as in Autophys. Copy is an overlay
+// inside its shadow root, so it does not add a separate frame, padding or type scale.
 const COPY_CSS = `
-.tento-docs-code { position: relative; margin-block: 20px; padding-top: 28px; background: var(--code-bg, #f7f7f7); border: 1px solid #e5e5e5; }
-.tento-docs-code std-code { margin: 0; }
-.tento-docs-copy { position: absolute; top: 5px; right: 8px; padding: 3px 8px; font: 12px/1.5 system-ui, sans-serif; border: 0; background: transparent; color: #4a4fc4; cursor: pointer; }
-.tento-docs-code textarea { box-sizing: border-box; width: 100%; font: inherit; font-family: "SF Mono", Menlo, monospace; color: #141414; background: #fff; border: 1px solid #d9d9d9; padding: 12px; }
+:host { position: relative; }
+.tento-docs-copy { position: absolute; top: 4px; right: 6px; padding: 3px 8px; font: 11px/1.5 system-ui, sans-serif; border: 0; border-radius: 3px; background: #2e3440; color: #d8dee9; cursor: pointer; z-index: 1; }
 .tento-docs-copy:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.tento-docs-source { box-sizing: border-box; width: 100%; font: 12.5px/1.35 "SF Mono", Menlo, monospace; color: #141414; background: #fff; border: 1px solid #d9d9d9; padding: 12px; }
 `;
 
-class CopyableCodeBlockView {
-  dom: HTMLElement;
-  private code: StaticCodeBlockView;
+class CopyableCodeBlockView extends StaticCodeBlockView {
   private text: string;
   private reset: ReturnType<typeof setTimeout> | undefined;
   constructor(node: ProseMirrorEditor.ProseMirrorNode) {
+    super(node);
     this.text = node.textContent;
-    this.dom = document.createElement("div");
-    this.dom.className = "tento-docs-code";
-    this.code = new StaticCodeBlockView(node);
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(COPY_CSS);
+    this.dom.addStyle("tento-docs-copy", sheet);
     const button = document.createElement("button");
     button.className = "tento-docs-copy";
     button.type = "button";
@@ -68,16 +61,15 @@ class CopyableCodeBlockView {
         await navigator.clipboard.writeText(this.text);
         button.textContent = "Copied";
       } catch {
-        // Rendered Code uses zero-width placeholders for blank lines. Select
-        // the exact source, so manual copy never adds those characters.
-        let source = this.dom.querySelector<HTMLTextAreaElement>("textarea");
+        let source = this.dom.shadowRoot!.querySelector<HTMLTextAreaElement>("textarea");
         if (!source) {
           source = document.createElement("textarea");
+          source.className = "tento-docs-source";
           source.readOnly = true;
           source.wrap = "off";
           source.rows = Math.min(12, this.text.split("\n").length);
           source.setAttribute("aria-label", "Code source for manual copying");
-          this.dom.append(source);
+          this.dom.shadowRoot!.append(source);
         }
         source.value = this.text;
         source.focus();
@@ -87,22 +79,20 @@ class CopyableCodeBlockView {
       clearTimeout(this.reset);
       this.reset = setTimeout(() => { button.textContent = "Copy"; }, 2000);
     });
-    this.dom.append(button, this.code.dom);
+    this.dom.shadowRoot!.append(button);
   }
-  update(node: ProseMirrorEditor.ProseMirrorNode): boolean {
-    if (!this.code.update(node)) return false;
+  override update(node: ProseMirrorEditor.ProseMirrorNode): boolean {
+    if (!super.update(node)) return false;
     this.text = node.textContent;
     return true;
   }
   destroy(): void { clearTimeout(this.reset); }
-  stopEvent(): boolean { return true; }
-  ignoreMutation(): boolean { return true; }
 }
 
-/** Mount a complete light manual using the existing Documentation and Code components.
- * Asset contract: host /js/prosemirror.min.js, or configure InstanceUrl's static base.
- * Resolves once all Markdown is rendered, then settles any initial section deep link.
- * Returns cleanup for observers/listeners; remounting the same host cleans up first.
+/** Mount a light manual using one Documentation component, exactly as Autophys.
+ * Product sections supply Markdown and navigation IDs, not separate reading surfaces.
+ * Host /js/prosemirror.min.js or configure InstanceUrl's static base beforehand.
+ * Resolves after component layout/deep-link settlement; returns listener cleanup.
  */
 const mounted = new WeakMap<HTMLElement, () => void>();
 export async function mountDocumentation(host: HTMLElement, options: DocumentationPage): Promise<() => void> {
@@ -119,16 +109,6 @@ export async function mountDocumentation(host: HTMLElement, options: Documentati
   }
   if (!InstanceUrl.hasStaticBase()) InstanceUrl.setStaticBase("");
   host.classList.add("tento-docs");
-  const intro = document.createElement("div");
-  intro.className = "tento-docs-intro";
-  const title = document.createElement("h2");
-  title.textContent = options.title;
-  intro.append(title);
-  if (options.description) {
-    const description = document.createElement("p");
-    description.textContent = options.description;
-    intro.append(description);
-  }
   const layout = document.createElement("div");
   layout.className = "tento-docs-layout";
   const nav = document.createElement("nav");
@@ -136,64 +116,69 @@ export async function mountDocumentation(host: HTMLElement, options: Documentati
   nav.setAttribute("aria-label", `${options.title} sections`);
   const body = document.createElement("div");
   body.className = "tento-docs-body";
+  const doc = makeDocumentation();
+  body.append(doc);
   layout.append(nav, body);
-  host.replaceChildren(intro, layout);
-  const sections: HTMLElement[] = [];
-  const bindings: Promise<Documentation>[] = [];
+  host.replaceChildren(layout);
   for (const section of options.sections) {
     const link = document.createElement("a");
-    link.href = `#${section.id}`;
+    link.href = `#${encodeURIComponent(section.id)}`;
     link.textContent = section.title;
     nav.append(link);
-    const element = document.createElement("section");
-    element.className = "tento-docs-section";
-    element.id = section.id;
-    element.setAttribute("aria-label", section.title);
-    const doc = makeDocumentation();
-    const copyStyle = new CSSStyleSheet();
-    copyStyle.replaceSync(COPY_CSS);
-    doc.addStyle("tento-docs-copy", copyStyle);
-    element.append(doc);
-    body.append(element);
-    sections.push(element);
-    bindings.push(doc.bind({ markdown: section.markdown, nodeViews: {
-      code_block: node => new CopyableCodeBlockView(node),
-    } }));
   }
-  const links = [...nav.querySelectorAll("a")];
   let disposed = false;
+  let headings: HTMLElement[] = [];
+  const links = [...nav.querySelectorAll("a")];
   const updateCurrent = () => {
-    let current = sections[0];
-    for (const section of sections) {
-      const offset = parseFloat(getComputedStyle(section).scrollMarginTop) || 0;
-      if (section.getBoundingClientRect().top <= offset + 16) current = section;
+    let current = headings[0];
+    for (const heading of headings) {
+      const offset = parseFloat(getComputedStyle(heading).scrollMarginTop) || 0;
+      if (heading.getBoundingClientRect().top <= offset + 16) current = heading;
     }
-    for (const link of links) {
-      if (link.hash === `#${current?.id}`) link.setAttribute("aria-current", "location");
+    for (const [index, link] of links.entries()) {
+      if (headings[index] === current) link.setAttribute("aria-current", "location");
       else link.removeAttribute("aria-current");
     }
   };
   const settleAnchor = () => {
     let id: string;
     try { id = decodeURIComponent(location.hash.slice(1)); } catch { return; }
-    const target = id === host.id ? host : sections.find(section => section.id === id);
+    const target = id === host.id ? host : headings.find(heading => heading.id === id);
     target?.scrollIntoView({ block: "start", behavior: "instant" });
     updateCurrent();
   };
+  // The headings live in Documentation's shadow tree. Handle repeated links too:
+  // setting an already-current hash alone would not emit hashchange.
+  const followLink = (event: MouseEvent) => {
+    const link = (event.target as Element).closest<HTMLAnchorElement>("a");
+    if (!link || event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (link.hash === location.hash) { event.preventDefault(); settleAnchor(); }
+  };
   const cleanup = () => {
     disposed = true;
+    removeEventListener("hashchange", settleAnchor);
     removeEventListener("scroll", updateCurrent);
     removeEventListener("resize", updateCurrent);
-    removeEventListener("hashchange", settleAnchor);
+    nav.removeEventListener("click", followLink);
     if (mounted.get(host) === cleanup) mounted.delete(host);
   };
   mounted.set(host, cleanup);
+  const markdown = [`# ${options.title}`, options.description ?? "",
+    ...options.sections.map(section => section.markdown)].join("\n\n");
   try {
-    await Promise.all(bindings);
-    // Component styles and Code node views settle in the rendering task after bind.
+    await doc.bind({ markdown, nodeViews: { code_block: node => new CopyableCodeBlockView(node) } });
+    // RichTextEditor attaches its view through the shared mutation queue.
     await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-  }
-  catch (error) {
+    if (disposed) return cleanup;
+    headings = [...doc.shadowRoot!.querySelectorAll<HTMLElement>("h2")];
+    if (headings.length !== options.sections.length) {
+      throw new Error(`Each documentation section must have exactly one level-two heading; found ${headings.length}: ${headings.map(h => h.textContent).join(", ")}`);
+    }
+    headings.forEach((heading, index) => {
+      heading.id = options.sections[index].id;
+      heading.style.scrollMarginTop = "var(--documentation-scroll-offset, 88px)";
+    });
+  } catch (error) {
     cleanup();
     throw error;
   }
@@ -201,6 +186,7 @@ export async function mountDocumentation(host: HTMLElement, options: Documentati
     addEventListener("hashchange", settleAnchor);
     addEventListener("scroll", updateCurrent, { passive: true });
     addEventListener("resize", updateCurrent);
+    nav.addEventListener("click", followLink);
     settleAnchor();
   }
   return cleanup;

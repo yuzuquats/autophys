@@ -4,6 +4,7 @@
 import { Documentation } from "@tento-ui/components/documentation/documentation";
 import { Code } from "@tento-ui/components/code/code";
 import type { ProseMirrorEditor } from "@tento-ui/components/prosemirror";
+import { scriptTokenizer } from "./script-tokenizer";
 import { shellTokenizer } from "@tento-ui/components/code/languages/shell";
 
 /** Autophys's cap-height type scale. Override the semantic roles on a host, not individual tags. */
@@ -18,8 +19,9 @@ export const DOCUMENTATION_TOKENS = `
   --cap-height: 0.125; --baseline: 0.155;
   --font-size: var(--p-size); --line-height-ratio: 1.4;
   --text-pri: var(--ck-ink, #141414); --text-sec: var(--ck-secondary, #424242); --text-ter: var(--ck-n600, #5c5c5c);
-  --divider: var(--ck-line, #d9d9d9); --bg: #fff; --bg-surface: var(--ck-n100, #f7f7f7); --code-bg: var(--ck-n100, #f7f7f7);
-  font-family: var(--ck-font, system-ui, sans-serif); color: var(--text-pri);
+  --divider: var(--ck-line, #d9d9d9); --bg: #fff; --bg-surface: var(--ck-n100, oklch(0.97 0 0)); --code-bg: var(--ck-n100, oklch(0.97 0 0));
+  font-family: var(--ck-font, -apple-system, "system-ui", "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", Arial, sans-serif);
+  font-size: 14px; line-height: 20px; color: var(--text-pri);
   --fg-syntax-keyword: #4c6a92; --fg-syntax-function: #2b6f7d; --fg-syntax-string: #4b7037;
   --fg-syntax-number: #855380; --fg-syntax-comment: #646d80; --fg-syntax-punctuation: #2e3440;
   --fg-syntax-operator: #4c6a92; --fg-syntax-variable: #2e3440;
@@ -43,12 +45,13 @@ const NORD_CODE: Record<string, string> = {
   "--fg-syntax-operator": "#81a1c1", "--fg-syntax-variable": "#d8dee9",
 };
 
+Code.registerLanguage(["js", "javascript", "ts", "typescript", "json"], scriptTokenizer);
 Code.registerLanguage(["sh", "bash", "shell", "zsh", "console"], shellTokenizer);
 
 /** Static Code node view: avoids loading CodeMirror for a read-only manual. */
 export class StaticCodeBlockView {
   dom: Code;
-  constructor(node: ProseMirrorEditor.ProseMirrorNode, theme: "light" | "dark" = "light") {
+  constructor(node: ProseMirrorEditor.ProseMirrorNode, theme: "light" | "dark" = "dark") {
     this.dom = Code.make();
     this.dom.style.scrollbarWidth = "thin";
     this.dom.style.scrollbarColor = theme === "dark"

@@ -1385,11 +1385,11 @@
   },
   {
     "path": "vendor/tento/tento-docs-js/README.md",
-    "sha256": "1ebed7918d1e43ec7cda53e8c79c53a7517e04a1803319912e81b6a4feb322bc"
+    "sha256": "f9ab74699a767ed88e2d924ecd09a5d46a5a9ce718820b3d9951a48467d320f9"
   },
   {
     "path": "vendor/tento/tento-docs-js/documentation.ts",
-    "sha256": "83eacd4fbddd6b1fbf33db1d9114b40df8ee3b695736d657f0da222e18ed8b89"
+    "sha256": "2f4cede56aa5c85a0b081ea0ae0f791f99b558db30c43bcf7f086fc591c1297b"
   },
   {
     "path": "vendor/tento/tento-docs-js/lib.ts",
@@ -1397,7 +1397,11 @@
   },
   {
     "path": "vendor/tento/tento-docs-js/page.ts",
-    "sha256": "6584c68b59a1a2b1ba254860bfcae6b20a7de2130324da9a04d9eb9c35445bd0"
+    "sha256": "7eb1395a4b4916955f7f6e29ad1a7f972f78618b762bd58ec2570d24dd9d19a9"
+  },
+  {
+    "path": "vendor/tento/tento-docs-js/script-tokenizer.ts",
+    "sha256": "884ba636d9b876915e0d40de5f7fd2a93271aeabd4d430bf8d2ec9adae0fb4a1"
   },
   {
     "path": "vendor/tento/tento-env/Cargo.toml",

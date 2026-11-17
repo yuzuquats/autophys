@@ -105,7 +105,7 @@ missing license grant. Existing attribution and release blockers above remain.
 ## Shared documentation presentation
 
 `tento-docs-js` is vendored byte-for-byte from upstream `tento.private`
-commit `9e0f100e90cf69d85554ab719c839e6da225efe7`. It composes the existing documentation/code
+commit `1f645c9631d4c46a25302c2403fb9df8bc8aad9f`. It composes the existing documentation/code
 components and extracts the reading preset from the app. Both browser import
 maps resolve it within this checkout. The complete vendor tree is pinned by
 `pinned-20261117-docs.json` in the bundler-context provenance. Existing vendor

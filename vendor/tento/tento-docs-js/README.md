@@ -7,17 +7,17 @@ page with section navigation. Markdown, tables and prose are rendered by
 
 Product modules keep their content, section IDs and specialized diagrams.
 Autophys uses `makeDocumentation()` plus its custom node views; Signals uses
-the complete page. The palette is light; the static code view also supports
-Autophys's existing dark code blocks.
+the complete page. The prose surface is light and code uses Autophys's Nord palette by default.
+The static Code view retains an explicit light option for other consumers.
 
 ```ts
 import { mountDocumentation } from "@tento-docs/page";
 const cleanup = await mountDocumentation(host, {
   title: "Product SDK",
   sections: [{ id: "quick-start", title: "Quick start",
-    markdown: "# Quick start\n\nYour instructions here." }],
+    markdown: "## Quick start\n\nYour instructions here." }],
 });
-// Disconnect navigation observers/listeners before retiring the page.
+// Disconnect navigation listeners before retiring the page.
 cleanup();
 ```
 
@@ -36,10 +36,14 @@ needed: read-only code uses `Code.bind({ rendering: "static" })`.
 `makeDocumentation()` installs the shared cap-height scale and inline-signature
 style on the real Documentation component. `StaticCodeBlockView(node, theme)`
 can be composed with product-specific node views. `mountDocumentation()`
-accepts unique section IDs, renders sections, and settles deep links after
-Markdown/component layout. Its returned function disconnects its observers
-and hash listener; remounting a host first cleans up the old mount. Read-only
-Code controls copy source text. Clipboard refusal exposes a selected readonly
+accepts unique section IDs and renders all content in one Documentation
+component. Each section begins with exactly one level-two heading; deeper
+headings stay within it. Section IDs are assigned to the rendered shadow-tree
+headings and deep links settle after the component mutation queue attaches
+the view. Its returned function disconnects navigation listeners; remounting a host first cleans up the old mount. Read-only
+Code controls overlay the existing Code component without an extra frame,
+padding or type scale, and copy source text. JS/TS/JSON examples register a
+lightweight stream tokenizer with the same shared syntax palette. Clipboard refusal exposes a selected readonly
 source textarea, preserving blank lines exactly.
 
 The package never fetches product content, chooses app routes or controls a

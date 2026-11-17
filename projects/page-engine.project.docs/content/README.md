@@ -28,3 +28,9 @@ passes with the product import map. The bounded vendor verifier passes
 reverse/forward patch replay and checks 2447 files against the complete
 repin-20261117-docs manifest. Signals's browser tests confirm the shared preset
 runs as real Documentation/Code components. Autophys was not deployed.
+
+The rendered-parity correction refreshes the same vendor library from
+`1f645c9631d4c46a25302c2403fb9df8bc8aad9f`: full font defaults, Nord code, one continuous
+Documentation flow and overlaid copy controls. The prose surface stays light.
+The product's explicit dark code setting remains compatible. The complete
+vendor manifest is updated in the same commit.

@@ -111,10 +111,10 @@
     {
       "name": "repin-20261117-docs",
       "file": "pinned-20261117-docs.json",
-      "manifest_sha256": "cffd138245d7cd6777fc1bfef2cbf52471a7061ad6d4a674d45622b516226dad",
-      "files": 2447,
-      "upstream_commit": "9e0f100e90cf69d85554ab719c839e6da225efe7",
-      "description": "Existing vendor bytes retained; tento-docs-js added byte-for-byte from upstream tento.private 9e0f100e90cf69d85554ab719c839e6da225efe7. Shared documentation reading preset, static Code view and optional manual navigation."
+      "manifest_sha256": "74d57e5f3e49c1c7c0e0a680d8a37103ad26506ac8cd7b86892ddd9d26f09b92",
+      "files": 2448,
+      "upstream_commit": "1f645c9631d4c46a25302c2403fb9df8bc8aad9f",
+      "description": "Existing vendor bytes retained; tento-docs-js refreshed byte-for-byte from upstream tento.private 1f645c9631d4c46a25302c2403fb9df8bc8aad9f. Exact Autophys font/code defaults, one continuous document and source-copy overlays."
     }
   ]
 }
