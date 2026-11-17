@@ -34,3 +34,9 @@ The rendered-parity correction refreshes the same vendor library from
 Documentation flow and overlaid copy controls. The prose surface stays light.
 The product's explicit dark code setting remains compatible. The complete
 vendor manifest is updated in the same commit.
+
+The minimal TOC change refreshes the same vendor library from
+`399af35189f55bbbd16a671247f69d53f19af7fa`: compact text navigation and a native mobile disclosure, retaining the continuous
+Documentation flow and overlaid copy controls. The prose surface stays light.
+The product's explicit dark code setting remains compatible. The complete
+vendor manifest is updated in the same commit.

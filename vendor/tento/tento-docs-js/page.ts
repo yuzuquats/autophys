@@ -18,17 +18,23 @@ const PAGE_CSS = `
 }
 .tento-docs * { box-sizing: border-box; }
 .tento-docs-layout { display: grid; grid-template-columns: 176px minmax(0, 800px); gap: 48px; }
-.tento-docs-nav { position: sticky; top: 96px; align-self: start; display: grid; gap: 2px; font: 13px/1.5 system-ui, sans-serif; }
-.tento-docs-nav a { padding: 7px 12px; text-decoration: none; color: #5c5c5c; border-left: 2px solid transparent; }
-.tento-docs-nav a:hover, .tento-docs-nav a[aria-current="location"] { color: #141414; border-color: #4a4fc4; background: #f7f7f7; }
+.tento-docs-toc { position: sticky; top: 96px; align-self: start; }
+.tento-docs-toc > summary { display: none; }
+.tento-docs-nav { display: grid; gap: 4px; font-size: 12px; line-height: 1.5; }
+.tento-docs-nav a { padding: 5px 0; text-decoration: none; color: #737373; }
+.tento-docs-nav a:hover { color: #141414; }
+.tento-docs-nav a[aria-current="location"] { color: #141414; font-weight: 500; }
+.tento-docs-nav a:focus-visible, .tento-docs-toc > summary:focus-visible { outline: 2px solid #4a4fc4; outline-offset: 4px; }
 .tento-docs-body { min-width: 0; }
 .tento-docs std-documentation { display: block; }
 .tento-docs-error { color: #8a2828; }
 @media (max-width: 800px) {
   .tento-docs { padding: 48px 24px 72px; }
   .tento-docs-layout { display: block; }
-  .tento-docs-nav { position: static; display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 32px; }
-  .tento-docs-nav a { font-size: 12px; padding: 6px 8px; }
+  .tento-docs-toc { position: static; margin-bottom: 24px; }
+  .tento-docs-toc > summary { display: list-item; width: fit-content; padding: 8px 0; font-size: 12px; color: #5c5c5c; cursor: pointer; }
+  .tento-docs-nav { padding: 8px 0; }
+  .tento-docs-nav a { padding: 6px 0; }
 }
 `;
 
@@ -111,6 +117,15 @@ export async function mountDocumentation(host: HTMLElement, options: Documentati
   host.classList.add("tento-docs");
   const layout = document.createElement("div");
   layout.className = "tento-docs-layout";
+  const toc = document.createElement("details");
+  toc.className = "tento-docs-toc";
+  const summary = document.createElement("summary");
+  summary.textContent = "On this page";
+  toc.append(summary);
+  const smallScreen = matchMedia("(max-width: 800px)");
+  const syncToc = () => { toc.open = !smallScreen.matches; };
+  syncToc();
+  smallScreen.addEventListener("change", syncToc);
   const nav = document.createElement("nav");
   nav.className = "tento-docs-nav";
   nav.setAttribute("aria-label", `${options.title} sections`);
@@ -118,7 +133,8 @@ export async function mountDocumentation(host: HTMLElement, options: Documentati
   body.className = "tento-docs-body";
   const doc = makeDocumentation();
   body.append(doc);
-  layout.append(nav, body);
+  toc.append(nav);
+  layout.append(toc, body);
   host.replaceChildren(layout);
   for (const section of options.sections) {
     const link = document.createElement("a");
@@ -152,6 +168,7 @@ export async function mountDocumentation(host: HTMLElement, options: Documentati
   const followLink = (event: MouseEvent) => {
     const link = (event.target as Element).closest<HTMLAnchorElement>("a");
     if (!link || event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (smallScreen.matches) toc.open = false;
     if (link.hash === location.hash) { event.preventDefault(); settleAnchor(); }
   };
   const cleanup = () => {
@@ -160,6 +177,7 @@ export async function mountDocumentation(host: HTMLElement, options: Documentati
     removeEventListener("scroll", updateCurrent);
     removeEventListener("resize", updateCurrent);
     nav.removeEventListener("click", followLink);
+    smallScreen.removeEventListener("change", syncToc);
     if (mounted.get(host) === cleanup) mounted.delete(host);
   };
   mounted.set(host, cleanup);
