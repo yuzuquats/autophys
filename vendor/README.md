@@ -101,3 +101,12 @@ changes. It does not infer provenance from a reachable host or mutable branch.
 Future intentional vendor changes must update their provenance and manifest.
 This mechanism neither repairs the inherited provenance gap nor supplies any
 missing license grant. Existing attribution and release blockers above remain.
+
+## Shared documentation presentation
+
+`tento-docs-js` is vendored byte-for-byte from upstream `tento.private`
+commit `9e0f100e90cf69d85554ab719c839e6da225efe7`. It composes the existing documentation/code
+components and extracts the reading preset from the app. Both browser import
+maps resolve it within this checkout. The complete vendor tree is pinned by
+`pinned-20261117-docs.json` in the bundler-context provenance. Existing vendor
+bytes and the app-owned bundler patch are retained.

@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "paths": {
+      "@tento-docs/*": ["../vendor/tento/tento-docs-js/*"],
       "@tento-ui/*": ["../vendor/tento/tento-ui-js/*"],
       "@tento-core/*": ["../vendor/tento/tento-core-js/*"],
       "@tento-cookbook/*": ["../vendor/tento/tento-cookbook-js/*"],

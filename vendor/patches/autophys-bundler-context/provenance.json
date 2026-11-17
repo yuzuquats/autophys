@@ -107,6 +107,14 @@
       "manifest_sha256": "c26f42529c5726f45ccf2bbf5966d20a83cf75a97f9cc471bff5341c22bde160",
       "files": 2443,
       "description": "Every tracked vendor/tento file at the parent commit, with tento-web/src/client/bundler.deno.ts re-vendored and tento-web-js/build-plugins/build-switch.deno.ts and its test added from upstream tento dc0cc8b825 (2026-11-09): BuildSwitchPlugin bundles a *.switched.ts module as written only when the switch its first line names is on in html/.env or the environment, and null otherwise."
+    },
+    {
+      "name": "repin-20261117-docs",
+      "file": "pinned-20261117-docs.json",
+      "manifest_sha256": "cffd138245d7cd6777fc1bfef2cbf52471a7061ad6d4a674d45622b516226dad",
+      "files": 2447,
+      "upstream_commit": "9e0f100e90cf69d85554ab719c839e6da225efe7",
+      "description": "Existing vendor bytes retained; tento-docs-js added byte-for-byte from upstream tento.private 9e0f100e90cf69d85554ab719c839e6da225efe7. Shared documentation reading preset, static Code view and optional manual navigation."
     }
   ]
 }

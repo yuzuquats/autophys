@@ -1,5 +1,6 @@
 {
   "imports": {
+    "@tento-docs/": "../vendor/tento/tento-docs-js/",
     "@tento-ui/": "../vendor/tento/tento-ui-js/",
     "@tento-ui/ui/icons": "../vendor/tento/tento-ui-js/ui/icons.deno.ts",
     "@tento-ui/icon-exports": "../vendor/tento/tento-ui-js/icon-exports.deno.ts",

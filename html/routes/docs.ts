@@ -21,6 +21,7 @@
  */
 import "@tento-ui/components/documentation/documentation";
 import { Documentation } from "@tento-ui/components/documentation/documentation";
+import { DOCUMENTATION_TOKENS, StaticCodeBlockView, makeDocumentation } from "@tento-docs/documentation";
 import { Code } from "@tento-ui/components/code/code";
 import { shellTokenizer } from "@tento-ui/components/code/languages/shell";
 import { pythonTokenizer } from "@tento-ui/components/code/languages/python";
@@ -679,56 +680,8 @@ The modules \`simulator\`, \`models\`, \`data\`, \`fit\`, \`sensitivity\`, \`des
 
 `;
 
-/** std-documentation sizes type with Lona's cap-height scale, which tento apps get from
- * theme-base.css's :root block. That sheet also styles bare h1-h7, buttons and labels, which
- * would restyle the cookbook, so only its tokens are carried here, scoped to this section, and
- * the colours resolve to the cookbook's. The syntax colours here are Nord's accents, darkened to
- * read on light inline chips; code blocks are dark (Nord, NORD_CODE below). */
-const TOKENS = `
-  --text-8px: 0.5rem; --text-9px: 0.5625rem; --text-10px: 0.625rem; --text-11px: 0.6875rem;
-  --text-12px: 0.75rem; --text-13px: 0.8125rem; --text-14px: 0.875rem; --text-15px: 0.9375rem;
-  --text-16px: 1rem; --text-18px: 1.125rem; --text-20px: 1.25rem; --text-22px: 1.375rem;
-  --text-24px: 1.5rem; --text-28px: 1.75rem; --text-32px: 2rem;
-  --h1-size: var(--text-18px); --h2-size: var(--text-16px); --h3-size: var(--text-14px);
-  --h4-size: var(--text-12px); --h5-size: var(--text-12px); --h6-size: var(--text-12px);
-  --p-size: var(--text-10px); --caption-size: var(--text-9px); --small-size: var(--text-9px);
-  --cap-height: 0.125; --baseline: 0.155;
-  --font-size: var(--p-size); --line-height-ratio: 1.4;
-  --text-pri: var(--ck-ink, #141414); --text-sec: var(--ck-secondary, #424242); --text-ter: var(--ck-n600, #5c5c5c);
-  --divider: var(--ck-line, #d9d9d9); --bg: #fff; --bg-surface: var(--ck-n100, #f7f7f7); --code-bg: var(--ck-n100, #f7f7f7);
-  font-family: var(--ck-font, system-ui, sans-serif); color: var(--text-pri);
-  --fg-syntax-keyword: #4c6a92; --fg-syntax-function: #2b6f7d; --fg-syntax-string: #4b7037;
-  --fg-syntax-number: #855380; --fg-syntax-comment: #646d80; --fg-syntax-punctuation: #2e3440;
-  --fg-syntax-operator: #4c6a92; --fg-syntax-variable: #2e3440;
-`;
-
-/** Code is dark on the white page: Nord's palette (polar night nord0 background, snow
- * storm text, frost and aurora accents), set on each block's host (Code reads --code-bg,
- * --text-pri and the --fg-syntax-* roles there). Comments use #8590a6, a brighter nord3 than
- * the #616e88 of Nord's editor ports, which is too faint at this size. */
-const NORD_CODE: Record<string, string> = {
-  "--code-bg": "#2e3440", "--text-pri": "#d8dee9",
-  "--fg-syntax-keyword": "#81a1c1", "--fg-syntax-function": "#88c0d0",
-  "--fg-syntax-string": "#a3be8c", "--fg-syntax-number": "#b48ead",
-  "--fg-syntax-comment": "#8590a6", "--fg-syntax-punctuation": "#eceff4",
-  "--fg-syntax-operator": "#81a1c1", "--fg-syntax-variable": "#d8dee9",
-};
-
-/** Inside std-documentation's shadow root. A signature in a table's first column is one card
- * with a hanging indent instead of a chip sliced across lines, and inline code keeps colour
- * only for names and strings: punctuation, operators and literals read as text at this size.
- * Code blocks keep their full colouring (they are std-code, with their own styles). */
-const INLINE_CODE_CSS = `
-  td:first-child code {
-    display: inline-block;
-    white-space: pre-wrap;
-    overflow-wrap: normal;
-    padding: 3px 6px 3px 2.6ch;
-    text-indent: -2ch;
-    line-height: 1.5;
-  }
-  code .tok-punctuation, code .tok-operator, code .tok-number { color: inherit; }
-`;
+// Shared cap-height scale, code styling and inline signatures live upstream.
+const TOKENS = DOCUMENTATION_TOKENS;
 
 const CSS = `
 .ap-landing-docs { ${TOKENS} padding: 96px 20px 112px; background: #fff; border-top: 1px solid var(--ck-line, #d9d9d9); }
@@ -743,35 +696,6 @@ Code.registerLanguage(["toml"], tomlTokenizer);
 // Inline code picks shell, Python, Rust or plain per span (inline-code.ts).
 Code.registerLanguage(["autophys-inline"], inlineCodeTokenizer);
 
-/** std-documentation's code block view, drawing with Code's static, tokenizer-coloured path. */
-class StaticCodeBlockView {
-  dom: Code;
-  constructor(node: ProseMirrorEditor.ProseMirrorNode) {
-    this.dom = Code.make();
-    // Code scrolls wide lines on its host with the platform's scrollbar, which on Linux and
-    // Windows is a full-width grey bar with arrow buttons. A thin, faint one suits the page.
-    // Inline, because the host sits in std-documentation's shadow root, beyond this sheet.
-    this.dom.style.scrollbarWidth = "thin";
-    this.dom.style.scrollbarColor = "rgb(255 255 255 / 0.22) transparent";
-    for (const [name, value] of Object.entries(NORD_CODE)) this.dom.style.setProperty(name, value);
-    this.draw(node);
-  }
-  private draw(node: ProseMirrorEditor.ProseMirrorNode): void {
-    void this.dom.bind({ content: node.textContent, language: node.attrs.params || "plain", rendering: "static" });
-  }
-  update(node: ProseMirrorEditor.ProseMirrorNode): boolean {
-    if (node.type.name !== "code_block") return false;
-    this.draw(node);
-    return true;
-  }
-  stopEvent(): boolean {
-    return true;
-  }
-  ignoreMutation(): boolean {
-    return true;
-  }
-}
-
 /** Documentation's default views (lisp examples, code blocks), with code blocks drawn statically
  * and review-* fences drawn by tento-ui's ReviewFence. */
 const NODE_VIEWS: Documentation.Props["nodeViews"] = {
@@ -780,7 +704,7 @@ const NODE_VIEWS: Documentation.Props["nodeViews"] = {
   code_block: (node) =>
     node.attrs.params === LOOPS_FENCE
       ? new LoopsFigureView(node)
-      : ReviewFence.dispatch(node, null) ?? new StaticCodeBlockView(node),
+      : ReviewFence.dispatch(node, null) ?? new StaticCodeBlockView(node, "dark"),
 };
 
 /** Keep a closed landing section out of rendering, focus and accessibility while
@@ -815,10 +739,7 @@ export function landingDocs(): { onStage(stage: Cookbook.Stage): void; mount(): 
       const style = document.createElement("style");
       style.textContent = CSS + MUSE_PEEK_CSS + HOSTED_BADGE_CSS;
       document.head.append(style);
-      const doc = Documentation.make();
-      const inlineCode = new CSSStyleSheet();
-      inlineCode.replaceSync(INLINE_CODE_CSS);
-      doc.addStyle("ap-inline-code", inlineCode);
+      const doc = makeDocumentation();
       const badge = hostedBadge();
       if (badge) section.append(badge);
       section.append(doc);
