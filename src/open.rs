@@ -22,8 +22,8 @@
 
 use std::path::{Path, PathBuf};
 
-use actix_web::http::header;
-use actix_web::{HttpRequest, HttpResponse, web};
+use crate::http_runtime::http::header;
+use crate::http_runtime::{HttpRequest, HttpResponse, web};
 
 use crate::accounts::User;
 use crate::error::Result;
@@ -97,7 +97,7 @@ fn not_cross_site(req: &HttpRequest) -> bool {
             .and_then(|v| v.to_str().ok())
             .map(str::to_ascii_lowercase)
     };
-    if *req.method() == actix_web::http::Method::HEAD {
+    if *req.method() == crate::http_runtime::http::Method::HEAD {
         fetch("sec-fetch-site").is_none_or(|s| s == "same-origin" || s == "none")
     } else {
         fetch("sec-fetch-mode").is_none_or(|m| m == "navigate")
@@ -152,7 +152,7 @@ async fn allowed(api: &Api, req: &HttpRequest, path: &(String, String, String)) 
     .await
 }
 
-fn no_store(mut response: actix_web::HttpResponseBuilder) -> actix_web::HttpResponseBuilder {
+fn no_store(mut response: crate::http_runtime::HttpResponseBuilder) -> crate::http_runtime::HttpResponseBuilder {
     response.insert_header((header::CACHE_CONTROL, "no-store"));
     response
 }

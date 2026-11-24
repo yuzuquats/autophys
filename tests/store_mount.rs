@@ -75,8 +75,8 @@ async fn the_store_is_mounted_in_the_daemon_app() {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
     let server = http_server(listener, Arc::new(webapp(&config, info, false).unwrap())).unwrap();
-    let handle = server.handle();
-    let task = tokio::spawn(serve(server, std::future::pending()));
+    let (stop, stopped) = tokio::sync::oneshot::channel();
+    let task = tokio::spawn(serve(server, async move { let _ = stopped.await; }));
 
     let (s, _, _) = send(addr, "GET /api/healthz HTTP/1.1", "").await;
     assert_eq!(s, 200, "the daemon's own routes are untouched");
@@ -93,7 +93,7 @@ async fn the_store_is_mounted_in_the_daemon_app() {
         .lines()
         .filter(|line| line.to_ascii_lowercase().starts_with("set-cookie:"))
         .map(|line| {
-            actix_web::cookie::Cookie::parse(line.split_once(':').unwrap().1.trim()).unwrap()
+            cookie::Cookie::parse(line.split_once(':').unwrap().1.trim()).unwrap()
         })
         .collect();
     let session = cookies
@@ -103,7 +103,7 @@ async fn the_store_is_mounted_in_the_daemon_app() {
     assert_eq!(session.http_only(), Some(true));
     assert_eq!(
         session.same_site(),
-        Some(actix_web::cookie::SameSite::Strict)
+        Some(cookie::SameSite::Strict)
     );
     let retired = cookies
         .iter()
@@ -112,7 +112,7 @@ async fn the_store_is_mounted_in_the_daemon_app() {
     assert!(retired.value().is_empty());
     assert_eq!(
         retired.max_age(),
-        Some(actix_web::cookie::time::Duration::ZERO)
+        Some(cookie::time::Duration::ZERO)
     );
     let cookie = format!("{}={}", session.name(), session.value());
     let (s, _, ws) = send(
@@ -196,8 +196,7 @@ async fn the_store_is_mounted_in_the_daemon_app() {
     );
     assert!(seen.contains("id: 1\n"), "{seen}");
 
-    // No drain: an open SSE response would hold a graceful stop to its
-    // 10 s shutdown timeout.
-    handle.stop(false).await;
-    let _ = task.await;
+    drop(s);
+    stop.send(()).unwrap();
+    tokio::time::timeout(Duration::from_secs(5), task).await.unwrap().unwrap().unwrap();
 }

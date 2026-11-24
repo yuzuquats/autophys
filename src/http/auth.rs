@@ -10,15 +10,19 @@
 //! that [`Caller::Member`]. The local-Host rule is then dropped: the sign-in,
 //! not the machine, is what admits a browser, so a public proxy works.
 
-use actix_web::cookie::{Cookie, SameSite};
+use crate::http_runtime::cookie::{Cookie, SameSite};
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+#[cfg(feature = "legacy-web")]
 use actix_web::dev::Payload;
-use actix_web::http::{Method, header};
-use actix_web::{FromRequest, HttpRequest, web};
+#[cfg(all(feature = "web-next", not(feature = "legacy-web")))]
+use tento_web_next::{Payload, ResponseError};
+use crate::http_runtime::http::{Method, header};
+use crate::http_runtime::{FromRequest, HttpRequest, web};
+#[cfg(feature = "legacy-web")]
 use futures_util::future::LocalBoxFuture;
 
 use crate::accounts::User;
@@ -199,6 +203,7 @@ pub(crate) async fn request_scope(
     }
     Ok((caller, scoped))
 }
+#[cfg(feature = "legacy-web")]
 impl FromRequest for Keyed {
     type Error = ApiError;
     type Future = LocalBoxFuture<'static, Result<Self, ApiError>>;
@@ -212,12 +217,32 @@ impl FromRequest for Keyed {
         })
     }
 }
+#[cfg(feature = "legacy-web")]
 impl FromRequest for KeyOrBrowser {
     type Error = ApiError;
     type Future = LocalBoxFuture<'static, Result<Self, ApiError>>;
     fn from_request(req: &HttpRequest, _: &mut Payload) -> Self::Future {
         let req = req.clone();
         Box::pin(async move { Ok(Self(request_scope(&req, false).await?.0)) })
+    }
+}
+
+#[cfg(all(feature = "web-next", not(feature = "legacy-web")))]
+impl FromRequest for Keyed {
+    async fn from_request(req: &HttpRequest, _: &mut Payload) -> Result<Self, crate::http_runtime::HttpResponse> {
+        let caller = request_scope(req, true).await.map_err(|error| error.error_response())?.0;
+        match caller {
+            Caller::Key(key) => Ok(Self(key)),
+            _ => Err(ApiError::Unauthorized.error_response()),
+        }
+    }
+}
+
+#[cfg(all(feature = "web-next", not(feature = "legacy-web")))]
+impl FromRequest for KeyOrBrowser {
+    async fn from_request(req: &HttpRequest, _: &mut Payload) -> Result<Self, crate::http_runtime::HttpResponse> {
+        request_scope(req, false).await.map(|(caller, _)| Self(caller))
+            .map_err(|error| error.error_response())
     }
 }
 
@@ -322,12 +347,19 @@ pub fn same_origin_write(req: &HttpRequest, opts: &Options) -> Result<(), ApiErr
 
 /// The daemon's own origins, from the port it is actually bound to.
 fn own_origins(req: &HttpRequest, opts: &Options) -> Vec<String> {
-    let port = req.app_config().local_addr().port();
-    let mut out = vec![
-        format!("http://127.0.0.1:{port}"),
-        format!("http://localhost:{port}"),
-        format!("http://[::1]:{port}"),
-    ];
+    #[cfg(feature = "legacy-web")]
+    let local = Some(req.app_config().local_addr());
+    #[cfg(all(feature = "web-next", not(feature = "legacy-web")))]
+    let local = req.local_addr();
+    let mut out = Vec::new();
+    if let Some(local) = local {
+        let port = local.port();
+        out.extend([
+            format!("http://127.0.0.1:{port}"),
+            format!("http://localhost:{port}"),
+            format!("http://[::1]:{port}"),
+        ]);
+    }
     out.extend(opts.browser_origins.iter().cloned());
     out.extend(opts.public_url.iter().cloned());
     out

@@ -1,15 +1,19 @@
 //! The autophys tento-web app: one `DomainConfig` whose compiler bundles
 //! `html/routes` by file name (`index.anon.html`, `index.root.ts`), and whose
-//! `.config` registers the daemon's API on the same actix app.
+//! `.config` registers the daemon's API on the same HTTP application.
 
 use std::path::PathBuf;
 
-use actix_web::{HttpRequest, HttpResponse, web};
+use crate::http_runtime::{HttpRequest, HttpResponse, web};
 use serde::Serialize;
+#[cfg(feature = "legacy-web")]
 use tento_web::{
     DomainConfig,
     compiler::{Action, Compiler},
 };
+
+#[cfg(all(feature = "web-next", not(feature = "legacy-web")))]
+use tento_web_next::DomainConfig;
 
 use crate::http::Api;
 
@@ -69,6 +73,7 @@ struct Shell(PathBuf);
 pub fn domain(config: &AppConfig, info: BuildInfo) -> DomainConfig {
     // Compiler deps are watched relative to the html root (`html/`), not the
     // project root: the routes themselves, then the tento trees they import.
+    #[cfg(feature = "legacy-web")]
     let compiler = Compiler::builder()
         .dep((".", Action::RebuildRoutes))
         .dep((
@@ -90,11 +95,10 @@ pub fn domain(config: &AppConfig, info: BuildInfo) -> DomainConfig {
             .unwrap_or_default(),
     );
 
-    DomainConfig::builder()
-        .hostname("localhost")
-        .project_root(config.project_root.clone())
-        .compiler(Some(compiler))
-        .config(move |cfg| {
+    let builder = DomainConfig::builder().hostname("localhost");
+    #[cfg(feature = "legacy-web")]
+    let builder = builder.project_root(config.project_root.clone()).compiler(Some(compiler));
+    builder.config(move |cfg| {
             // Reserve the dependency system namespace before its SystemRouter.
             // Autophys owns its auth/API; upstream admin and UX-test handlers
             // must never run, even when they need app data we do not provide.
@@ -167,12 +171,12 @@ async fn app_document(
 }
 
 pub(crate) fn error_page(error: &crate::error::ApiError) -> HttpResponse {
-    let status = actix_web::http::StatusCode::from_u16(error.status())
-        .unwrap_or(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR);
+    let status = crate::http_runtime::http::StatusCode::from_u16(error.status())
+        .unwrap_or(crate::http_runtime::http::StatusCode::INTERNAL_SERVER_ERROR);
     let message = crate::login::escape(&error.to_string());
     let title = crate::login::escape(status.canonical_reason().unwrap_or("Error"));
     HttpResponse::build(status)
-        .insert_header((actix_web::http::header::CACHE_CONTROL, "no-store"))
+        .insert_header((crate::http_runtime::http::header::CACHE_CONTROL, "no-store"))
         .content_type("text/html; charset=utf-8")
         .body(format!(
             "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">\
@@ -238,14 +242,14 @@ async fn app_page(
                     // Retire the former /api cookie so it cannot shadow the reused /
                     // cookie on API calls after the old token's idle lease expires.
                     .cookie(
-                        actix_web::cookie::Cookie::build(crate::http::auth::SESSION_COOKIE, "")
+                        crate::http_runtime::cookie::Cookie::build(crate::http::auth::SESSION_COOKIE, "")
                             .path("/api")
-                            .max_age(actix_web::cookie::time::Duration::ZERO)
+                            .max_age(crate::http_runtime::cookie::time::Duration::ZERO)
                             .finish(),
                     );
             }
             Ok(response
-                .insert_header((actix_web::http::header::CACHE_CONTROL, "no-store"))
+                .insert_header((crate::http_runtime::http::header::CACHE_CONTROL, "no-store"))
                 // `serve --login` pages carry a password form: refuse framing.
                 .insert_header((
                     "x-frame-options",
@@ -256,7 +260,7 @@ async fn app_page(
                     },
                 ))
                 .insert_header((
-                    actix_web::http::header::CONTENT_SECURITY_POLICY,
+                    crate::http_runtime::http::header::CONTENT_SECURITY_POLICY,
                     if badge.is_some() {
                         "frame-ancestors 'none'"
                     } else {
@@ -288,8 +292,10 @@ fn with_badge(html: Vec<u8>, badge: &str) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "legacy-web")]
     use super::*;
 
+    #[cfg(feature = "legacy-web")]
     #[actix_web::test]
     async fn a_refused_app_page_is_html_with_the_reason() {
         let error = crate::error::ApiError::Forbidden(
@@ -299,7 +305,7 @@ mod tests {
         assert_eq!(response.status().as_u16(), 403);
         let content_type = response.headers().get("content-type").unwrap().to_str().unwrap();
         assert!(content_type.starts_with("text/html"), "{content_type}");
-        let body = actix_web::body::to_bytes(response.into_body()).await.unwrap();
+        let body = crate::http_runtime::body::to_bytes(response.into_body()).await.unwrap();
         let body = String::from_utf8(body.to_vec()).unwrap();
         assert!(body.contains("(403 Forbidden)"), "{body}");
         assert!(body.contains("registered workspace &lt;x&gt;."), "{body}");

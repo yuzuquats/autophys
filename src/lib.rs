@@ -1,5 +1,5 @@
 //! The autophys daemon (package `autophys-cli`, binary `autophys`), a
-//! tento-web app. `autophys serve` runs one loopback actix listener:
+//! tento-web app. `autophys serve` runs one loopback HTTP listener:
 //! `/api/healthz`, the `/api/v1` hook in [`app`], and the file-based router
 //! over `html/routes` (built on start, or prebuilt by `autophys build-web`).
 //! `/api/v1` ([`http`]) maps each route to one call into the `autophys`
@@ -23,6 +23,11 @@ pub mod embedded;
 pub mod error;
 pub mod http;
 pub mod keys;
+#[cfg(feature = "legacy-web")]
+pub(crate) use actix_web as http_runtime;
+#[cfg(all(feature = "web-next", not(feature = "legacy-web")))]
+pub(crate) use tento_web_next as http_runtime;
+
 pub mod login;
 pub mod examples;
 pub mod open;

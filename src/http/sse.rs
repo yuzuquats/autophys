@@ -32,9 +32,9 @@ use std::collections::{BTreeMap, VecDeque};
 use std::convert::Infallible;
 use std::time::Duration;
 
-use actix_web::http::header;
-use actix_web::web::{self, Bytes};
-use actix_web::{HttpRequest, HttpResponse};
+use crate::http_runtime::http::header;
+use crate::http_runtime::web::{self, Bytes};
+use crate::http_runtime::{HttpRequest, HttpResponse};
 use autophys::{Logged, Workbook};
 use serde::Deserialize;
 use tokio::sync::broadcast::{Receiver, error::RecvError};
@@ -147,6 +147,10 @@ pub(crate) async fn stream(
         let chunk = t.next().await?;
         Some((Ok::<_, Infallible>(chunk), t))
     });
+    #[cfg(all(feature = "web-next", not(feature = "legacy-web")))]
+    let events = tento_web_next::Body::stream(futures_util::StreamExt::map(events, |chunk| {
+        chunk.map_err(|never| match never {})
+    }));
     Ok(HttpResponse::Ok()
         .content_type("text/event-stream")
         .insert_header((header::CACHE_CONTROL, "no-cache"))

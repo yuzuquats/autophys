@@ -14,17 +14,23 @@ path = "src/lib.rs"
 name = "autophys"
 path = "src/main.rs"
 
+[features]
+default = ["legacy-web"]
+legacy-web = ["dep:actix-web", "dep:tento-web"]
+web-next = ["dep:tento-web-next"]
+
 [dependencies]
 zip = { version = "4.6.1", default-features = false, features = ["deflate-flate2"] }
 flate2 = "1"
 autophys = { path = "sdks/rust" }
 # The tento crates in vendor/tento: tento-web is the file-based router and
 # bundler, tento-dirs the app dirs.
-tento-web = { path = "vendor/tento/tento-web" }
+tento-web = { path = "vendor/tento/tento-web", optional = true }
+tento-web-next = { path = "vendor/tento/tento-web-next", features = ["axum"], optional = true }
 tento-dirs = { path = "vendor/tento/tento-dirs" }
 tento-sh = { path = "vendor/tento/tento-sh" }
 # The same versions the vendored tento crates resolve to.
-actix-web = "4.9.0"
+actix-web = { version = "4.9.0", optional = true }
 anyhow = "1.0.94"
 serde = { version = "1.0.216", features = ["derive"] }
 serde_json = "1.0.133"
@@ -43,6 +49,7 @@ thiserror = "1.0.61"
 
 [dev-dependencies]
 actix-http = "3"
+cookie = "0.16"
 tempfile = "3"
 
 # Replaces three crates.io packages, wherever they appear in the dependency

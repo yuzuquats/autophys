@@ -148,7 +148,8 @@ impl ResourceFile {
     match filename {
       "index.html" => Some(ResourceFile {
         requires_login: true,
-        uri: ResourceFile::make_resource_uri(&absolute_path, &routes_root_path, filename),
+        uri: crate::index_pattern(&routes_root_path, &absolute_path)
+          .expect("invalid route index path"),
         behavior: ResourceBehavior::File {
           path: absolute_path.clone(),
           is_relative: false,
@@ -157,7 +158,8 @@ impl ResourceFile {
       }),
       "index.anon.html" => Some(ResourceFile {
         requires_login: false,
-        uri: ResourceFile::make_resource_uri(&absolute_path, &routes_root_path, filename),
+        uri: crate::index_pattern(&routes_root_path, &absolute_path)
+          .expect("invalid route index path"),
         behavior: ResourceBehavior::File {
           path: absolute_path.clone(),
           is_relative: false,
@@ -166,7 +168,8 @@ impl ResourceFile {
       }),
       "index.json" => Some(ResourceFile {
         requires_login: true,
-        uri: ResourceFile::make_resource_uri(&absolute_path, &routes_root_path, filename),
+        uri: crate::index_pattern(&routes_root_path, &absolute_path)
+          .expect("invalid route index path"),
         behavior: serde_json::from_str(
           &fs::read_to_string(&absolute_path).expect("couldn't read path"),
         )
@@ -175,7 +178,8 @@ impl ResourceFile {
       }),
       "index.anon.json" => Some(ResourceFile {
         requires_login: false,
-        uri: ResourceFile::make_resource_uri(&absolute_path, &routes_root_path, filename),
+        uri: crate::index_pattern(&routes_root_path, &absolute_path)
+          .expect("invalid route index path"),
         behavior: serde_json::from_str(
           &fs::read_to_string(&absolute_path).expect("couldn't read path"),
         )
@@ -191,24 +195,6 @@ impl ResourceFile {
     req: ServiceRequest,
   ) -> actix_web::Result<ServiceResponse<BoxBody>> {
     self.behavior.to_response(req, &self.path).await
-  }
-
-  fn make_resource_uri(absolute_path: &Path, routes_root_path: &Path, filename: &str) -> String {
-    let base = absolute_path
-      .strip_prefix(routes_root_path)
-      .expect("routes_root should be a prefix of the absolute path")
-      .to_str()
-      .expect("stripped path should be a string still")
-      .strip_suffix(filename)
-      .expect("stripped path should still exist without a filename")
-      .trim_end_matches("/")
-      .to_owned();
-
-    if base.is_empty() {
-      base.to_owned()
-    } else {
-      format!("/{base}")
-    }
   }
 }
 

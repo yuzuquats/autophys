@@ -1,4 +1,4 @@
-//! `/api/v1` on actix-web over a collection of workbooks. Every handler
+//! `/api/v1` over a collection of workbooks. Every handler
 //! parses its request, makes one call into the `autophys` crate (after
 //! finding the workbook that holds the project or investigation), and
 //! serialises the result; validation, hashing, projections and their errors
@@ -29,9 +29,9 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use actix_web::http::StatusCode;
-use actix_web::web::{self, Bytes};
-use actix_web::{HttpRequest, HttpResponse, ResponseError};
+use crate::http_runtime::http::StatusCode;
+use crate::http_runtime::web::{self, Bytes};
+use crate::http_runtime::{HttpRequest, HttpResponse, ResponseError};
 use autophys::{Client, Envelope, Event, Investigation, Kind, Workbook};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -182,7 +182,7 @@ pub fn configure(cfg: &mut web::ServiceConfig, api: Api) {
 
 /// The `/api/v1` scope itself, with the [`Api`] as app data and a JSON 404
 /// for anything it does not route.
-pub fn scope(api: Api) -> actix_web::Scope {
+pub fn scope(api: Api) -> crate::http_runtime::Scope {
     web::scope(PREFIX)
         .app_data(web::Data::new(api))
         .route("/pair/start", web::post().to(pair_start))
@@ -250,12 +250,22 @@ pub fn scope(api: Api) -> actix_web::Scope {
 pub(crate) struct Data(Api);
 impl std::ops::Deref for Data { type Target = Api; fn deref(&self) -> &Api { &self.0 } }
 impl Data { fn get_ref(&self) -> &Api { &self.0 } }
+#[cfg(feature = "legacy-web")]
 impl actix_web::FromRequest for Data {
     type Error = ApiError;
     type Future = futures_util::future::LocalBoxFuture<'static, Result<Self>>;
     fn from_request(req: &HttpRequest, _: &mut actix_web::dev::Payload) -> Self::Future {
         let req = req.clone();
         Box::pin(async move { Ok(Self(auth::request_scope(&req, false).await?.1)) })
+    }
+}
+
+#[cfg(all(feature = "web-next", not(feature = "legacy-web")))]
+impl tento_web_next::FromRequest for Data {
+    async fn from_request(req: &HttpRequest, _: &mut tento_web_next::Payload) -> std::result::Result<Self, HttpResponse> {
+        auth::request_scope(req, false).await
+            .map(|(_, scoped)| Self(scoped))
+            .map_err(|error| error.error_response())
     }
 }
 
@@ -549,7 +559,7 @@ async fn put_blob(
     let hash = blob_hash(&hash)?;
     let media_type = req
         .headers()
-        .get(actix_web::http::header::CONTENT_TYPE)
+        .get(crate::http_runtime::http::header::CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
         .map(str::trim)
         .filter(|v| !v.is_empty())

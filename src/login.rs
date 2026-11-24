@@ -19,9 +19,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use actix_web::cookie::{Cookie, SameSite, time};
-use actix_web::http::header;
-use actix_web::{HttpRequest, HttpResponse, web};
+use crate::http_runtime::cookie::{Cookie, SameSite, time};
+use crate::http_runtime::http::header;
+use crate::http_runtime::{HttpRequest, HttpResponse, web};
 use serde::Deserialize;
 use serde_json::json;
 
@@ -144,7 +144,7 @@ fn page(title: &str, body: &str) -> String {
     )
 }
 
-fn html(status: actix_web::http::StatusCode, body: String) -> HttpResponse {
+fn html(status: crate::http_runtime::http::StatusCode, body: String) -> HttpResponse {
     HttpResponse::build(status)
         .insert_header((header::CACHE_CONTROL, "no-store"))
         .insert_header(("x-frame-options", "DENY"))
@@ -198,7 +198,7 @@ async fn login_page(q: web::Query<NextQuery>) -> HttpResponse {
 /// credentials and arbitrary messages never enter the URL.
 fn login_error(
     req: &HttpRequest,
-    status: actix_web::http::StatusCode,
+    status: crate::http_runtime::http::StatusCode,
     code: &str,
     message: &str,
 ) -> HttpResponse {
@@ -216,7 +216,7 @@ fn login_error(
 }
 
 async fn invite_page() -> HttpResponse {
-    html(actix_web::http::StatusCode::OK, invite_form(None))
+    html(crate::http_runtime::http::StatusCode::OK, invite_form(None))
 }
 
 #[derive(Deserialize)]
@@ -241,8 +241,8 @@ fn sign_in_failure(req: &HttpRequest, error: ApiError, code: &str, message: &str
     }
     let mut response = login_error(
         req,
-        actix_web::http::StatusCode::from_u16(error.status())
-            .unwrap_or(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR),
+        crate::http_runtime::http::StatusCode::from_u16(error.status())
+            .unwrap_or(crate::http_runtime::http::StatusCode::INTERNAL_SERVER_ERROR),
         code,
         message,
     );
@@ -295,7 +295,7 @@ async fn login_attempt(
     let refuse = |code: &str, message: &str| {
         Ok(login_error(
             &req,
-            actix_web::http::StatusCode::TOO_MANY_REQUESTS,
+            crate::http_runtime::http::StatusCode::TOO_MANY_REQUESTS,
             code,
             message,
         ))
@@ -322,7 +322,7 @@ async fn login_attempt(
     let Some(user) = user else {
         return Ok(login_error(
             &req,
-            actix_web::http::StatusCode::UNAUTHORIZED,
+            crate::http_runtime::http::StatusCode::UNAUTHORIZED,
             "invalid",
             "That email and password don't match an account.",
         ));
@@ -411,7 +411,7 @@ async fn demo_attempt(
         Some(user) => start_session(&api, &req, user, &next).await,
         None => Ok(login_error(
             &req,
-            actix_web::http::StatusCode::NOT_FOUND,
+            crate::http_runtime::http::StatusCode::NOT_FOUND,
             "demo_unavailable",
             "Demo sign-in is unavailable right now. Try again later or sign in with your account.",
         )),
@@ -438,7 +438,7 @@ async fn accept(
     } = form.into_inner();
     let again = |m: &str| {
         Ok(html(
-            actix_web::http::StatusCode::BAD_REQUEST,
+            crate::http_runtime::http::StatusCode::BAD_REQUEST,
             invite_form(Some(m)),
         ))
     };

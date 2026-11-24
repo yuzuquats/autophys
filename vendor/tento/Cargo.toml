@@ -12,6 +12,7 @@ members = [
   "tento-web-router/macros",
   "tento-web-auth",
   "tento-web",
+  "tento-web-next",
   "tento-core",
   "tento-ssr",
   "tento-web-error",
@@ -57,6 +58,9 @@ tento-exception.path = "tento-exception"
 tento-bundle-fs.path = "tento-bundle-fs"
 tento-ux-test.path = "tento-ux-test"
 tento-web-auth.path = "tento-web-auth"
+tento-web-router-macros.path = "tento-web-router/macros"
+bytes = "1"
+ntex = { version = "2.12.4", features = ["rustls", "tokio", "compress"] }
 tento-web-router.path = "tento-web-router"
 tento-openapi.path = "tento-openapi"
 tento-openapi-macros.path = "tento-openapi/macros"

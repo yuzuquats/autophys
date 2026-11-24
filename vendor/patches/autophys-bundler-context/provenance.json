@@ -115,6 +115,14 @@
       "files": 2448,
       "upstream_commit": "399af35189f55bbbd16a671247f69d53f19af7fa",
       "description": "Existing vendor bytes retained; tento-docs-js refreshed byte-for-byte from upstream tento.private 399af35189f55bbbd16a671247f69d53f19af7fa. Minimal responsive TOC; existing reading and code defaults retained."
+    },
+    {
+      "name": "repin-20261124-web-next",
+      "file": "pinned-20261124-web-next.json",
+      "upstream_commit": "f9d58c610240be7f92bb188d4213d1ef5d85fbc2",
+      "manifest_sha256": "f48d2f0b7c3c29561af63b94e476626858535c9a8fab0e935ac6dddcd4f02a57",
+      "files": 2458,
+      "description": "Scoped upstream tento-web-next intake and shared routing macro/file naming updates. Workspace manifest wires their dependencies and existing frontend compiler bytes are retained."
     }
   ]
 }

@@ -1,4 +1,4 @@
-//! `autophys serve` and `autophys build-web`: one loopback actix listener over
+//! `autophys serve` and `autophys build-web`: one loopback HTTP listener over
 //! the tento-web app in [`crate::app`]. In dev, `serve` bundles `html/routes`
 //! on start and rebuilds when anything the build read changes; with
 //! `--web-root` it serves a tree `build-web` wrote and bundles nothing.
@@ -8,12 +8,18 @@ use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+#[cfg(feature = "legacy-web")]
 use actix_web::{App, HttpServer, dev::Server, web};
 use anyhow::{Context, Result};
 use tento_dirs::AppDirs;
+#[cfg(feature = "legacy-web")]
 use tento_web::{BuildState, Bundler, DomainConfigLike, EsbuildClient, TentoWeb, Webapp};
+#[cfg(all(feature = "web-next", not(feature = "legacy-web")))]
+use tento_web_next::{BuildState, TentoWebServer, Webapp, backend::Backend};
 
-use crate::app::{APP_ID, AppConfig, BuildInfo, TENTO, domain};
+use crate::app::{APP_ID, AppConfig, BuildInfo, domain};
+#[cfg(feature = "legacy-web")]
+use crate::app::TENTO;
 use crate::http::Api;
 use crate::keys::Options;
 
@@ -85,7 +91,7 @@ fn origins(text: &str) -> Result<Vec<String>, String> {
         .filter(|o| !o.is_empty())
         .map(|o| {
             let o = o.trim_end_matches('/');
-            let uri = o.parse::<actix_web::http::Uri>().ok();
+            let uri = o.parse::<crate::http_runtime::http::Uri>().ok();
             let valid = uri.as_ref().is_some_and(|u| {
                 matches!(u.scheme_str(), Some("http" | "https"))
                     && u.authority().is_some_and(|a| !a.as_str().contains('@'))
@@ -245,6 +251,7 @@ pub fn default_web_root() -> Result<PathBuf> {
     Ok(AppDirs::resolve(APP_ID)?.cache.join("web/local.web"))
 }
 
+#[cfg(feature = "legacy-web")]
 fn build_state(root: &Path) -> BuildState {
     BuildState::new(
         root.to_path_buf(),
@@ -256,6 +263,7 @@ fn build_state(root: &Path) -> BuildState {
 
 /// tento-web's bundler (esbuild under Deno), found at `TENTO_WEB` or at
 /// `<project root>/<TENTO>/tento-web`.
+#[cfg(feature = "legacy-web")]
 fn bundler(project_root: &Path) -> Result<Bundler> {
     let tento_web_root = std::env::var_os("TENTO_WEB")
         .map(PathBuf::from)
@@ -275,6 +283,7 @@ fn bundler(project_root: &Path) -> Result<Bundler> {
 }
 
 /// The webapp over `config.web_root`, with a bundler when it will build.
+#[cfg(feature = "legacy-web")]
 pub fn webapp(config: &AppConfig, info: BuildInfo, build: bool) -> Result<Webapp> {
     Ok(Webapp::new(
         Arc::new(domain(config, info)) as Arc<dyn DomainConfigLike>,
@@ -286,6 +295,25 @@ pub fn webapp(config: &AppConfig, info: BuildInfo, build: bool) -> Result<Webapp
         build_state(&config.web_root),
     )
     .with_project_root(Some(config.project_root.clone())))
+}
+
+/// Construct the application over a prebuilt route tree.
+#[cfg(all(feature = "web-next", not(feature = "legacy-web")))]
+pub fn webapp(config: &AppConfig, info: BuildInfo, build: bool) -> Result<Webapp> {
+    anyhow::ensure!(!build, "this build serves prebuilt assets. Pass --web-root or pack a web payload.");
+    let mut state = BuildState::single_stage(config.web_root.clone());
+    if let Some(root) = config.web_root.parent().and_then(Path::parent) {
+        let modules = root.join("target.web.modules");
+        if modules.join("js/m").is_dir() {
+            state = state.with_module_store(modules);
+        }
+    }
+    Ok(Webapp::prebuilt(&domain(config, info), state)?)
+}
+
+#[cfg(all(feature = "web-next", not(feature = "legacy-web")))]
+pub async fn build_web(_project_root: PathBuf, _out: PathBuf) -> Result<PathBuf> {
+    anyhow::bail!("build-web requires an Autophys executable built with legacy-web")
 }
 
 /// tento-web deletes the output folder before every build. A hand-typed
@@ -310,6 +338,7 @@ pub fn check_out_dir(out: &Path) -> Result<()> {
 }
 
 /// `autophys build-web`: bundle `html/routes` into `out` and return it.
+#[cfg(feature = "legacy-web")]
 pub async fn build_web(project_root: PathBuf, out: PathBuf) -> Result<PathBuf> {
     check_out_dir(&out)?;
     let config = AppConfig {
@@ -496,6 +525,7 @@ pub fn check_build_status(root: &Path) -> Result<Option<String>> {
 
 /// An actix server for `webapp` on an already-bound loopback listener. It
 /// handles no signals itself: [`serve`] drains it when `shutdown` resolves.
+#[cfg(feature = "legacy-web")]
 pub fn http_server(
     listener: std::net::TcpListener,
     webapp: Arc<Webapp>,
@@ -512,6 +542,7 @@ pub fn http_server(
 
 /// Run `server` until `shutdown` resolves, then stop accepting and drain
 /// in-flight requests.
+#[cfg(feature = "legacy-web")]
 pub async fn serve(
     server: Server,
     shutdown: impl Future<Output = ()> + Send + 'static,
@@ -522,6 +553,22 @@ pub async fn serve(
         handle.stop(true).await;
     });
     server.await
+}
+
+#[cfg(all(feature = "web-next", not(feature = "legacy-web")))]
+pub type Server = (std::net::TcpListener, TentoWebServer);
+
+#[cfg(all(feature = "web-next", not(feature = "legacy-web")))]
+pub fn http_server(listener: std::net::TcpListener, webapp: Arc<Webapp>) -> std::io::Result<Server> {
+    Ok((listener, TentoWebServer::new(webapp, Backend::Axum)))
+}
+
+#[cfg(all(feature = "web-next", not(feature = "legacy-web")))]
+pub async fn serve(
+    (listener, server): Server,
+    shutdown: impl Future<Output = ()> + Send + 'static,
+) -> std::io::Result<()> {
+    server.serve(listener, shutdown).await
 }
 
 /// Resolves on SIGTERM or SIGINT.
@@ -560,6 +607,8 @@ pub async fn run(serve_config: ServeConfig) -> Result<()> {
             None => (default_web_root()?, true, None),
         },
     };
+    #[cfg(all(feature = "web-next", not(feature = "legacy-web")))]
+    anyhow::ensure!(!build, "this build serves prebuilt assets. Pass --web-root or pack a web payload.");
     let collection = serve_config.collection.unwrap_or_else(default_collection);
     // A --login server keeps the one app-data database its accounts and
     // workspace assignments live in; a local server's follows the collection.
@@ -598,6 +647,7 @@ pub async fn run(serve_config: ServeConfig) -> Result<()> {
     info.web_id = web_id;
     let webapp = Arc::new(webapp(&config, info.clone(), build)?);
     // Held for the server's lifetime: dropping it stops the dev watch.
+    #[cfg(feature = "legacy-web")]
     let _watch = if build {
         webapp.build_beta().await.context("bundle html/routes")?;
         // Keep serving a broken dev build: the watch rebuilds on the fix.

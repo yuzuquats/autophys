@@ -10,9 +10,14 @@ use crate::{
   routes::{HttpMethod, RouterBody},
 };
 
-pub fn routes_derive(input: TokenStream) -> TokenStream {
+pub fn routes_derive(input: TokenStream, portable: bool) -> TokenStream {
   let input = parse_macro_input!(input as DeriveInput);
   let struct_name = input.ident;
+  let router = if portable {
+    crate::next_crate()
+  } else {
+    quote! { tento_web_router }
+  };
 
   let routes = input
     .attrs
@@ -38,80 +43,7 @@ pub fn routes_derive(input: TokenStream) -> TokenStream {
   let flat_items = qualified_scope.flatten();
   let base_path = qualified_scope.path.value();
 
-  // Generate ordered __defs.push(...) / __defs.extend(...) statements
-  let route_definitions: proc_macro2::TokenStream = flat_items
-    .iter()
-    .map(|item| match item {
-      FlatItem::Route(flat) => {
-        let path = &flat.full_path;
-        let handler_calls: proc_macro2::TokenStream = flat
-          .handlers
-          .iter()
-          .map(|(method, handler)| {
-            let method_tokens = match method {
-              HttpMethod::Get => quote! { actix_web::http::Method::GET },
-              HttpMethod::Post => quote! { actix_web::http::Method::POST },
-              HttpMethod::Put => quote! { actix_web::http::Method::PUT },
-              HttpMethod::Patch => quote! { actix_web::http::Method::PATCH },
-              HttpMethod::Delete => quote! { actix_web::http::Method::DELETE },
-            };
-            // Generate a closure that creates the route
-            let route_call = quote! {
-              .route(#method_tokens, || actix_web::web::#method().to(#handler))
-            };
-            // GET implies HEAD (RFC 9110: HEAD is GET without the body, and
-            // actix drops the body from a HEAD response). Without this, every
-            // GET-only resource answers 405 to `curl -I` and uptime monitors —
-            // registering the same handler under HEAD is what every consumer
-            // was hand-wiring around the DSL to get.
-            match method {
-              HttpMethod::Get => quote! {
-                #route_call
-                .route(actix_web::http::Method::HEAD, || actix_web::web::head().to(#handler))
-              },
-              _ => route_call,
-            }
-          })
-          .collect();
-
-        let guard_call = match (&flat.guard, &flat.redirect) {
-          // `[guard = X] { … } else { redirect("…") }` → redirect (302) on fail.
-          (Some(guard), Some(location)) => quote! { .redirect_guard(#guard, #location) },
-          // `[guard = X] { … }` → 404 on fail.
-          (Some(guard), None) => quote! { .guard(#guard) },
-          _ => quote! {},
-        };
-
-        quote! {
-          __defs.push(
-            tento_web_router::RouteDefinition::new(#path)
-              #handler_calls
-              #guard_call
-          );
-        }
-      }
-      FlatItem::Mount(mount) => {
-        let prefix = &mount.prefix;
-        let target = &mount.target;
-        // An enclosing guard applies to the spliced routes unless they carry
-        // their own (inner wins — same precedence as nested guarded scopes).
-        let outer_guard_call = match (&mount.guard, &mount.redirect) {
-          (Some(guard), Some(location)) => {
-            quote! { .outer_redirect_guard(#guard, #location) }
-          }
-          (Some(guard), None) => quote! { .outer_guard(#guard) },
-          _ => quote! {},
-        };
-        quote! {
-          __defs.extend(
-            <#target as tento_web_router::Router>::routes()
-              .into_iter()
-              .map(|__d| __d.prefixed(#prefix) #outer_guard_call),
-          );
-        }
-      }
-    })
-    .collect();
+  let route_definitions = definitions(&flat_items, &router, portable);
 
   // Collect flattened info for OpenAPI
   let mut flattened = vec![];
@@ -151,7 +83,7 @@ pub fn routes_derive(input: TokenStream) -> TokenStream {
     .map(|(_, _, path)| {
       quote! {
         {
-          let mut __path_schemas = tento_web_router::tento_openapi::Components::default();
+          let mut __path_schemas = #router::tento_openapi::Components::default();
           #path::schemas(&mut __path_schemas);
           // Legacy hooks append per operation; collecting the vector into the
           // document's map gives the last operation with a name precedence.
@@ -173,27 +105,33 @@ pub fn routes_derive(input: TokenStream) -> TokenStream {
         let prefix = &mount.prefix;
         let target = &mount.target;
         Some(quote! {
-          let __doc = __doc.nest(#prefix, <#target as tento_web_router::Router>::apidoc());
+          let __doc = __doc.nest(#prefix, <#target as #router::Router>::apidoc());
         })
       }
     })
     .collect();
 
+  let scope = if portable {
+    quote! { #router::web::Scope }
+  } else {
+    quote! { actix_web::Scope }
+  };
+
   let expanded = quote! {
-    impl tento_web_router::Router for #struct_name {
-      fn routes() -> Vec<tento_web_router::RouteDefinition> {
-        let mut __defs: Vec<tento_web_router::RouteDefinition> = Vec::new();
+    impl #router::Router for #struct_name {
+      fn routes() -> Vec<#router::RouteDefinition> {
+        let mut __defs: Vec<#router::RouteDefinition> = Vec::new();
         #route_definitions
         __defs
       }
 
-      fn service() -> actix_web::Scope {
-        tento_web_router::build_scope(#base_path_lit, Self::routes())
+      fn service() -> #scope {
+        #router::build_scope(#base_path_lit, Self::routes())
       }
 
-      fn apidoc() -> tento_web_router::tento_openapi::OpenApi {
-        use tento_web_router::tento_openapi::{Components, OpenApi, PathItem};
-        use tento_web_router::tento_openapi::HttpMethod::{Post, Get, Put, Delete, Patch};
+      fn apidoc() -> #router::tento_openapi::OpenApi {
+        use #router::tento_openapi::{Components, OpenApi, PathItem};
+        use #router::tento_openapi::HttpMethod::{Post, Get, Put, Delete, Patch};
         let mut schemas = Components::default();
         #native_schemas
         let mut __doc = OpenApi::new();
@@ -206,4 +144,89 @@ pub fn routes_derive(input: TokenStream) -> TokenStream {
   };
 
   TokenStream::from(expanded)
+}
+
+pub(crate) fn definitions(
+  flat_items: &[FlatItem],
+  router: &proc_macro2::TokenStream,
+  portable: bool,
+) -> proc_macro2::TokenStream {
+  flat_items
+    .iter()
+    .map(|item| match item {
+      FlatItem::Route(flat) => {
+        let path = &flat.full_path;
+        let handler_calls: proc_macro2::TokenStream = flat
+          .handlers
+          .iter()
+          .map(|(method, handler)| {
+            if portable {
+              let head = matches!(method, HttpMethod::Get)
+                .then(|| quote! { .route(#router::web::head().to(#handler)) });
+              return quote! { .route(#router::web::#method().to(#handler)) #head };
+            }
+            let method_tokens = match method {
+              HttpMethod::Get => quote! { actix_web::http::Method::GET },
+              HttpMethod::Post => quote! { actix_web::http::Method::POST },
+              HttpMethod::Put => quote! { actix_web::http::Method::PUT },
+              HttpMethod::Patch => quote! { actix_web::http::Method::PATCH },
+              HttpMethod::Delete => quote! { actix_web::http::Method::DELETE },
+            };
+            // Generate a closure that creates the route
+            let route_call = quote! {
+              .route(#method_tokens, || actix_web::web::#method().to(#handler))
+            };
+            // GET implies HEAD (RFC 9110: HEAD is GET without the body, and
+            // actix drops the body from a HEAD response). Without this, every
+            // GET-only resource answers 405 to `curl -I` and uptime monitors —
+            // registering the same handler under HEAD is what every consumer
+            // was hand-wiring around the DSL to get.
+            match method {
+              HttpMethod::Get => quote! {
+                #route_call
+                .route(actix_web::http::Method::HEAD, || actix_web::web::head().to(#handler))
+              },
+              _ => route_call,
+            }
+          })
+          .collect();
+
+        let guard_call = match (&flat.guard, &flat.redirect) {
+          // `[guard = X] { … } else { redirect("…") }` → redirect (302) on fail.
+          (Some(guard), Some(location)) => quote! { .redirect_guard(#guard, #location) },
+          // `[guard = X] { … }` → 404 on fail.
+          (Some(guard), None) => quote! { .guard(#guard) },
+          _ => quote! {},
+        };
+
+        quote! {
+          __defs.push(
+            #router::RouteDefinition::new(#path)
+              #handler_calls
+              #guard_call
+          );
+        }
+      }
+      FlatItem::Mount(mount) => {
+        let prefix = &mount.prefix;
+        let target = &mount.target;
+        // An enclosing guard applies to the spliced routes unless they carry
+        // their own (inner wins — same precedence as nested guarded scopes).
+        let outer_guard_call = match (&mount.guard, &mount.redirect) {
+          (Some(guard), Some(location)) => {
+            quote! { .outer_redirect_guard(#guard, #location) }
+          }
+          (Some(guard), None) => quote! { .outer_guard(#guard) },
+          _ => quote! {},
+        };
+        quote! {
+          __defs.extend(
+            <#target as #router::Router>::routes()
+              .into_iter()
+              .map(|__d| __d.prefixed(#prefix) #outer_guard_call),
+          );
+        }
+      }
+    })
+    .collect()
 }
