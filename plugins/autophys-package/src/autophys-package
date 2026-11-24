@@ -1,0 +1,62 @@
+#!/bin/sh
+set -eu
+
+usage() {
+    printf '%s\n' 'usage: autophys-package build --out /absolute/path/to/autophys [--repo DIR]'
+}
+
+if [ "$#" -eq 2 ] && [ "$1" = --help ] && [ "$2" = --json ]; then
+    cat <<'JSON'
+{
+  "schema": "tsh.app/v1",
+  "name": "autophys-package",
+  "version": "0.1.0",
+  "entrypoint": "bin/autophys-package",
+  "transport": "streaming",
+  "commands": {
+    "build": {
+      "type": "command.doc/v1",
+      "name": "build",
+      "description": "Build a Linux Autophys executable with embedded web assets",
+      "options": [
+        {"name": "out", "kind": "named", "type": "String", "help": "Absolute path for the new executable"},
+        {"name": "repo", "kind": "named", "type": "Option<String>", "help": "Autophys checkout (defaults to the working directory)"}
+      ]
+    }
+  }
+}
+JSON
+    exit 0
+fi
+
+case "${1-}:${2-}" in
+    --help:|build:--help) usage; exit 0 ;;
+    build:*) shift ;;
+    *) usage >&2; exit 2 ;;
+esac
+
+repo=.
+out=
+while [ "$#" -gt 0 ]; do
+    if [ "$#" -lt 2 ] || [ -z "$2" ]; then
+        usage >&2
+        exit 2
+    fi
+    case "$1" in
+        --repo) repo=$2 ;;
+        --out) out=$2 ;;
+        *) usage >&2; exit 2 ;;
+    esac
+    shift 2
+done
+
+case "$out" in
+    /*) ;;
+    *) printf '%s\n' 'autophys-package: --out must be an absolute path' >&2; exit 2 ;;
+esac
+repo=$(CDPATH='' cd -- "$repo" && pwd -P)
+if [ ! -f "$repo/ops/package.sh" ]; then
+    printf 'autophys-package: missing %s/ops/package.sh\n' "$repo" >&2
+    exit 2
+fi
+exec bash "$repo/ops/package.sh" --out "$out"
