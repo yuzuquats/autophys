@@ -316,22 +316,20 @@ extractor!(Form);
 
 impl<T: serde::de::DeserializeOwned + Send> FromRequest for Path<T> {
   async fn from_request(req: &HttpRequest, _: &mut Payload) -> Result<Self, HttpResponse> {
-    let deserializer = serde::de::value::MapDeserializer::<_, serde::de::value::Error>::new(
-      req
-        .match_info()
-        .iter()
-        .map(|(name, value)| (name.as_str(), value.as_str())),
-    );
-    use serde::de::value::{Error, SeqDeserializer, StrDeserializer};
+    use crate::path_value::PathValue;
+    use serde::de::value::{Error, MapDeserializer, SeqDeserializer};
+
     let params = req.match_info();
-    let value = T::deserialize(deserializer)
+    let named = params
+      .iter()
+      .map(|(name, value)| (name.as_str(), PathValue(value)));
+    let value = T::deserialize(MapDeserializer::<_, Error>::new(named))
       .or_else(|_| {
-        T::deserialize(SeqDeserializer::<_, Error>::new(
-          params.iter().map(|(_, value)| value.as_str()),
-        ))
+        let ordered = params.iter().map(|(_, value)| PathValue(value));
+        T::deserialize(SeqDeserializer::<_, Error>::new(ordered))
       })
       .or_else(|err| match params {
-        [(_, value)] => T::deserialize(StrDeserializer::<Error>::new(value)),
+        [(_, value)] => T::deserialize(PathValue(value)),
         _ => Err(err),
       });
     value.map(Self).map_err(|_| status(StatusCode::BAD_REQUEST))

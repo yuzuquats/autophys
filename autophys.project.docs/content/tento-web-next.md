@@ -11,3 +11,5 @@ Set `AUTOPHYS_WEB_BACKEND` to `axum`, `actix`, or `ntex` before starting
 keeps Axum as its only backend and rejects a request for an unavailable backend.
 
 [Backend profile and measurement details](http-backend-profile.md)
+
+The November 24 follow-up vendors upstream `67e79f03c7`. Axum ends open event streams on shutdown and bounds ordinary response draining. Mutable frontend assets carry `Cache-Control: no-cache` and a weak ETag. The router reads typed numeric and boolean captures. All seven portable-router tests passed across the three adapters, and the Autophys store mount test passed with Axum.

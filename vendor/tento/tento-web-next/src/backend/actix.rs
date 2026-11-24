@@ -58,5 +58,11 @@ async fn dispatch(req: HttpRequest, payload: web::Payload, app: web::Data<Webapp
   for (name, value) in &parts.headers {
     response.append_header((name.as_str(), value.as_bytes()));
   }
+  if matches!(
+    parts.status,
+    http::StatusCode::NOT_MODIFIED | http::StatusCode::NO_CONTENT
+  ) {
+    return response.body(actix_web::body::None::new());
+  }
   response.streaming(body.into_stream())
 }

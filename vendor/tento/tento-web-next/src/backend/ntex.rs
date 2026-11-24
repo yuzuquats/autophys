@@ -64,6 +64,12 @@ async fn dispatch(
   for (name, value) in &parts.headers {
     response.header(name.as_str(), value.as_bytes());
   }
+  if matches!(
+    parts.status,
+    http::StatusCode::NOT_MODIFIED | http::StatusCode::NO_CONTENT
+  ) {
+    return response.body(ntex::http::body::Body::None);
+  }
   let stream = body
     .into_stream()
     .map(|chunk| chunk.map(|bytes| ntex::util::Bytes::copy_from_slice(&bytes)));

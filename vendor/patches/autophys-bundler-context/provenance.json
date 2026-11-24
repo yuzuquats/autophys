@@ -123,6 +123,14 @@
       "manifest_sha256": "f48d2f0b7c3c29561af63b94e476626858535c9a8fab0e935ac6dddcd4f02a57",
       "files": 2458,
       "description": "Scoped upstream tento-web-next intake and shared routing macro/file naming updates. Workspace manifest wires their dependencies and existing frontend compiler bytes are retained."
+    },
+    {
+      "name": "repin-20261124-web-next-http-fixes",
+      "file": "pinned-20261124-web-next-http-fixes.json",
+      "upstream_commit": "67e79f03c73770903698ef407ab2cd1854b4c718",
+      "manifest_sha256": "d028fbe262ac336d9f4eab805edee3e396aa0b26a3567ffe1b8609a363af2b67",
+      "files": 2459,
+      "description": "Upstream portable router fixes for Axum SSE shutdown, app bundle revalidation, and typed route captures."
     }
   ]
 }

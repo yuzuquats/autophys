@@ -1,6 +1,7 @@
 use std::{
   io,
   path::{Component, Path, PathBuf},
+  time::UNIX_EPOCH,
 };
 
 use http::{HeaderValue, Method, Request, StatusCode, header};
@@ -174,19 +175,29 @@ async fn file_response(
     return None;
   }
   let modified = metadata.modified().ok();
+  let etag = entity_tag(&metadata);
   let not_modified = code == StatusCode::OK
-    && modified.is_some_and(|modified| {
+    && if req.headers.contains_key(header::IF_NONE_MATCH) {
       req
         .headers
-        .get(header::IF_MODIFIED_SINCE)
-        .and_then(|value| httpdate::parse_http_date(value.to_str().ok()?).ok())
-        .is_some_and(|since| {
-          modified
-            .duration_since(since)
-            .is_ok_and(|elapsed| elapsed.as_secs() == 0)
-            || modified <= since
-        })
-    });
+        .get_all(header::IF_NONE_MATCH)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .any(|value| matches_entity_tag(value, etag.as_deref()))
+    } else {
+      modified.is_some_and(|modified| {
+        req
+          .headers
+          .get(header::IF_MODIFIED_SINCE)
+          .and_then(|value| httpdate::parse_http_date(value.to_str().ok()?).ok())
+          .is_some_and(|since| {
+            modified <= since
+              || modified
+                .duration_since(since)
+                .is_ok_and(|elapsed| elapsed.as_secs() == 0)
+          })
+      })
+    };
   let mut builder = HttpResponseBuilder::new(if not_modified {
     StatusCode::NOT_MODIFIED
   } else {
@@ -198,11 +209,23 @@ async fn file_response(
       HeaderValue::from_str(&httpdate::fmt_http_date(modified)).ok()?,
     );
   }
+  if let Some(etag) = etag {
+    builder = builder.header(
+      header::ETAG,
+      HeaderValue::from_str(&format!(r#"W/"{etag}""#)).ok()?,
+    );
+  }
   if immutable {
     builder = builder.header(
       header::CACHE_CONTROL,
       HeaderValue::from_static("public, max-age=31536000, immutable"),
     );
+  } else if path.to_str().is_some_and(|name| {
+    [".root.js", ".root.js.map", ".html", ".css"]
+      .iter()
+      .any(|suffix| name.ends_with(suffix))
+  }) {
+    builder = builder.header(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
   }
   if not_modified {
     return Some(builder.finish());
@@ -219,4 +242,48 @@ async fn file_response(
   }
   let file = File::open(&path).await.ok()?;
   Some(builder.streaming(Body::stream(ReaderStream::new(file))))
+}
+
+fn entity_tag(metadata: &std::fs::Metadata) -> Option<String> {
+  let modified = metadata.modified().ok()?.duration_since(UNIX_EPOCH).ok()?;
+  let mut tag = format!("{:x}-{:x}", metadata.len(), modified.as_nanos());
+  #[cfg(unix)]
+  {
+    use std::{fmt::Write as _, os::unix::fs::MetadataExt as _};
+    // Distinguish replacements with the same length and preserved modification time.
+    write!(
+      tag,
+      "-{:x}-{:x}-{:x}-{:x}",
+      metadata.dev(),
+      metadata.ino(),
+      metadata.ctime(),
+      metadata.ctime_nsec()
+    )
+    .expect("writing to String");
+  }
+  Some(tag)
+}
+
+fn matches_entity_tag(value: &str, etag: Option<&str>) -> bool {
+  let mut remaining = value.trim();
+  if remaining == "*" {
+    return true;
+  }
+  let Some(etag) = etag else { return false };
+  loop {
+    let item = remaining.strip_prefix("W/").unwrap_or(remaining);
+    let Some((tag, tail)) = item
+      .strip_prefix('"')
+      .and_then(|value| value.split_once('"'))
+    else {
+      return false;
+    };
+    if tag == etag {
+      return true;
+    }
+    let Some(next) = tail.trim_start().strip_prefix(',') else {
+      return false;
+    };
+    remaining = next.trim_start();
+  }
 }

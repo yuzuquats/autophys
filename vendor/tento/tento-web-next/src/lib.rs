@@ -3,6 +3,7 @@
 pub mod backend;
 mod files;
 mod message;
+mod path_value;
 mod routing;
 
 use std::{io, net::TcpListener, path::PathBuf, sync::Arc};
