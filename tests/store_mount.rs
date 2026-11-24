@@ -75,8 +75,19 @@ async fn the_store_is_mounted_in_the_daemon_app() {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
     let server = http_server(listener, Arc::new(webapp(&config, info, false).unwrap())).unwrap();
-    let (stop, stopped) = tokio::sync::oneshot::channel();
-    let task = tokio::spawn(serve(server, async move { let _ = stopped.await; }));
+    #[cfg(feature = "legacy-web")]
+    let (handle, task) = {
+        let handle = server.handle();
+        (handle, tokio::spawn(serve(server, std::future::pending())))
+    };
+    #[cfg(all(feature = "web-next", not(feature = "legacy-web")))]
+    let (stop, task) = {
+        let (stop, stopped) = tokio::sync::oneshot::channel();
+        let task = tokio::spawn(serve(server, async move {
+            let _ = stopped.await;
+        }));
+        (stop, task)
+    };
 
     let (s, _, _) = send(addr, "GET /api/healthz HTTP/1.1", "").await;
     assert_eq!(s, 200, "the daemon's own routes are untouched");
@@ -197,6 +208,10 @@ async fn the_store_is_mounted_in_the_daemon_app() {
     assert!(seen.contains("id: 1\n"), "{seen}");
 
     drop(s);
+    // Actix can keep a stream pending through its worker shutdown timeout.
+    #[cfg(feature = "legacy-web")]
+    handle.stop(false).await;
+    #[cfg(all(feature = "web-next", not(feature = "legacy-web")))]
     stop.send(()).unwrap();
     tokio::time::timeout(Duration::from_secs(5), task).await.unwrap().unwrap().unwrap();
 }
