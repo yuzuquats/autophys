@@ -9,3 +9,5 @@ For a single executable with all three backends, build with
 Set `AUTOPHYS_WEB_BACKEND` to `axum`, `actix`, or `ntex` before starting
 `autophys serve`. The choice takes effect at startup. The `web-next` build
 keeps Axum as its only backend and rejects a request for an unavailable backend.
+
+[Backend profile and measurement details](http-backend-profile.md)
