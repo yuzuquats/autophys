@@ -17,7 +17,7 @@ path = "src/main.rs"
 [features]
 default = ["legacy-web"]
 legacy-web = ["dep:actix-web", "dep:tento-web"]
-web-next = ["dep:tento-web-next"]
+web-next = ["dep:tento-env", "dep:tento-web-next"]
 web-next-all-backends = ["web-next", "tento-web-next/actix", "tento-web-next/ntex"]
 
 [dependencies]
@@ -29,6 +29,7 @@ autophys = { path = "sdks/rust" }
 tento-web = { path = "vendor/tento/tento-web", optional = true }
 tento-web-next = { path = "vendor/tento/tento-web-next", features = ["axum"], optional = true }
 tento-dirs = { path = "vendor/tento/tento-dirs" }
+tento-env = { path = "vendor/tento/tento-env", optional = true }
 tento-sh = { path = "vendor/tento/tento-sh" }
 # The same versions the vendored tento crates resolve to.
 actix-web = { version = "4.9.0", optional = true }

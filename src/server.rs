@@ -560,12 +560,15 @@ pub type Server = (std::net::TcpListener, TentoWebServer);
 
 #[cfg(all(feature = "web-next", not(feature = "legacy-web")))]
 pub fn http_server(listener: std::net::TcpListener, webapp: Arc<Webapp>) -> std::io::Result<Server> {
-    let backend = match std::env::var("AUTOPHYS_WEB_BACKEND") {
-        Ok(name) => web_backend(&name)?,
-        Err(std::env::VarError::NotPresent) => Backend::Axum,
-        Err(error) => return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, error)),
-    };
+    let backend = configured_web_backend()?;
     Ok((listener, TentoWebServer::new(webapp, backend)))
+}
+
+#[cfg(all(feature = "web-next", not(feature = "legacy-web")))]
+fn configured_web_backend() -> std::io::Result<Backend> {
+    let name = tento_env::resolve_key("AUTOPHYS_WEB_BACKEND")
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidInput, error))?;
+    web_backend(name.as_deref().unwrap_or("axum"))
 }
 
 #[cfg(all(feature = "web-next", not(feature = "legacy-web")))]
@@ -710,6 +713,27 @@ pub async fn run(serve_config: ServeConfig) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(all(feature = "web-next", not(feature = "legacy-web")))]
+    #[test]
+    fn web_backend_resolves_through_tento_env() {
+        let env = tento_env::EnvMap::new();
+        assert_eq!(
+            tento_env::with_env_map(env.clone(), configured_web_backend).unwrap(),
+            Backend::Axum,
+        );
+
+        env.set("AUTOPHYS_WEB_BACKEND", "ntex");
+        let result = tento_env::with_env_map(env.clone(), configured_web_backend);
+        #[cfg(feature = "web-next-all-backends")]
+        assert_eq!(result.unwrap(), Backend::Ntex);
+        #[cfg(not(feature = "web-next-all-backends"))]
+        assert_eq!(result.unwrap_err().kind(), std::io::ErrorKind::InvalidInput);
+
+        env.set("AUTOPHYS_WEB_BACKEND", "unknown");
+        let error = tento_env::with_env_map(env, configured_web_backend).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+    }
 
     #[test]
     fn loopback_addresses_are_accepted() {

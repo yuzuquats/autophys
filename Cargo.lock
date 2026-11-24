@@ -695,6 +695,7 @@ dependencies = [
  "sha2",
  "tempfile",
  "tento-dirs",
+ "tento-env",
  "tento-sh",
  "tento-web",
  "tento-web-next",
