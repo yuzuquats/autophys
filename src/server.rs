@@ -560,7 +560,27 @@ pub type Server = (std::net::TcpListener, TentoWebServer);
 
 #[cfg(all(feature = "web-next", not(feature = "legacy-web")))]
 pub fn http_server(listener: std::net::TcpListener, webapp: Arc<Webapp>) -> std::io::Result<Server> {
-    Ok((listener, TentoWebServer::new(webapp, Backend::Axum)))
+    let backend = match std::env::var("AUTOPHYS_WEB_BACKEND") {
+        Ok(name) => web_backend(&name)?,
+        Err(std::env::VarError::NotPresent) => Backend::Axum,
+        Err(error) => return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, error)),
+    };
+    Ok((listener, TentoWebServer::new(webapp, backend)))
+}
+
+#[cfg(all(feature = "web-next", not(feature = "legacy-web")))]
+fn web_backend(name: &str) -> std::io::Result<Backend> {
+    let error = |message: String| std::io::Error::new(std::io::ErrorKind::InvalidInput, message);
+    match name {
+        "axum" => Ok(Backend::Axum),
+        #[cfg(feature = "web-next-all-backends")]
+        "actix" => Ok(Backend::Actix),
+        #[cfg(feature = "web-next-all-backends")]
+        "ntex" => Ok(Backend::Ntex),
+        #[cfg(not(feature = "web-next-all-backends"))]
+        "actix" | "ntex" => Err(error(format!("backend {name:?} requires web-next-all-backends"))),
+        _ => Err(error(format!("unknown AUTOPHYS_WEB_BACKEND {name:?}; use axum, actix, or ntex"))),
+    }
 }
 
 #[cfg(all(feature = "web-next", not(feature = "legacy-web")))]
